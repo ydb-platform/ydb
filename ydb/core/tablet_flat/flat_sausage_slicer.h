@@ -1,7 +1,7 @@
 #pragma once
 
-#include "util_fmt_abort.h"
 #include "flat_sausage_grind.h"
+#include "util_fmt_abort.h"
 #include <ydb/core/base/tablet.h>
 #include <util/thread/singleton.h>
 #include <library/cpp/blockcodecs/codecs.h>
@@ -22,12 +22,12 @@ namespace NPageCollection {
         TGlobId One(TVector<TEvTablet::TLogEntryReference> &refs, TString body, bool lz4) const
         {
             if (body.size() > Block) {
-                Y_Fail(
+                Y_TABLET_ERROR(
                     "Cannot put " << body.size() << "b to "<< NFmt::Do(*CookieAllocator)
                     << " as single blob, block limit is " << Block << "b");
             }
 
-            Y_ABORT_UNLESS(body.size() < Block, "Too large blob to be a TGlobId");
+            Y_ENSURE(body.size() < Block, "Too large blob to be a TGlobId");
 
             if (lz4) std::exchange(body, Lz4()->Encode(body));
 
@@ -41,7 +41,7 @@ namespace NPageCollection {
         TLargeGlobId Do(TVector<TEvTablet::TLogEntryReference> &refs, TString body, bool lz4) const
         {
             if (body.size() >= Max<ui32>()) {
-                Y_Fail(
+                Y_TABLET_ERROR(
                     "Cannot put " << body.size() << "b to "<< NFmt::Do(*CookieAllocator)
                     << " as a TSloid, blob have to be less than 4GiB");
             }
@@ -55,7 +55,7 @@ namespace NPageCollection {
                 refs.push_back({ largeGlobId.Lead, std::move(body) });
             } else {
                 ui32 off = 0;
-                for (auto blobId : largeGlobId.Blobs()) {
+                for (const auto& blobId : largeGlobId.Blobs()) {
                     const ui32 chunk = Min(Block, size - off);
                     Y_DEBUG_ABORT_UNLESS(chunk == blobId.BlobSize());
                     refs.push_back({ blobId, body.substr(off, chunk) });
@@ -67,7 +67,7 @@ namespace NPageCollection {
             return largeGlobId;
         }
 
-        static inline const NBlockCodecs::ICodec* Lz4() noexcept
+        static inline const NBlockCodecs::ICodec* Lz4()
         {
             auto **lz4 = FastTlsSingleton<const NBlockCodecs::ICodec*>();
 

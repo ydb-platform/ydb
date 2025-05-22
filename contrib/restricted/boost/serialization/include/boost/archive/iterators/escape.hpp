@@ -82,7 +82,7 @@ class escape :
     }
 
    void increment(){
-        if(++m_bnext < m_bend){
+        if(m_bnext != NULL && ++m_bnext < m_bend){
             m_current_value = *m_bnext;
             return;
         }

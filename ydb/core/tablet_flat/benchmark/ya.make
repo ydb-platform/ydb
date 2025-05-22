@@ -1,12 +1,16 @@
-G_BENCHMARK()
+G_BENCHMARK(core_tablet_flat_benchmark)
 
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 SIZE(LARGE)
-TIMEOUT(1200)
+
+IF (BENCHMARK_MAKE_LARGE_PART)
+    CFLAGS(
+        -DBENCHMARK_MAKE_LARGE_PART=1
+    )
+ENDIF()
 
 SRCS(
-    b_charge.cpp
-    b_part_index.cpp
+    b_part.cpp
 )
 
 PEERDIR(

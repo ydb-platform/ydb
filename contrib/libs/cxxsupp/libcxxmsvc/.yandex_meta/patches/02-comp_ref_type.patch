@@ -1,0 +1,13 @@
+diff --git a/include/__algorithm/comp_ref_type.h b/include/__algorithm/comp_ref_type.h
+index ed0ed59..3e90e9a 100644
+--- a/include/__algorithm/comp_ref_type.h
++++ b/include/__algorithm/comp_ref_type.h
+@@ -51,7 +51,7 @@ struct __debug_less
+     _LIBCPP_CONSTEXPR_AFTER_CXX11
+     inline _LIBCPP_INLINE_VISIBILITY
+     decltype((void)declval<_Compare&>()(
+-        declval<_LHS &>(), declval<_RHS &>()))
++        declval<_LHS const&>(), declval<_RHS const&>()))
+     __do_compare_assert(int, _LHS & __l, _RHS & __r) {
+         _LIBCPP_ASSERT(!__comp_(__l, __r),
+             "Comparator does not induce a strict weak ordering");

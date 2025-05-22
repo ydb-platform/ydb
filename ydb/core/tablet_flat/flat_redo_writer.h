@@ -5,6 +5,7 @@
 #include "flat_util_binary.h"
 #include "flat_sausage_solid.h"
 #include "util_basics.h"
+#include "util_fmt_abort.h"
 
 #include <util/stream/buffer.h>
 #include <util/system/sanitizers.h>
@@ -44,8 +45,8 @@ namespace NRedo {
             single family tables but it is not scaled to multiple families.
          */
 
-        virtual TLimit Limit(ui32 table) noexcept = 0;
-        virtual TResult Place(ui32 table, TTag, TArrayRef<const char>) noexcept = 0;
+        virtual TLimit Limit(ui32 table) = 0;
+        virtual TResult Place(ui32 table, TTag, TArrayRef<const char>) = 0;
     };
 
     class TWriter {
@@ -71,8 +72,8 @@ namespace NRedo {
 
         TWriter& EvBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp)
         {
-            Y_ABORT_UNLESS(tail <= head, "Invalid ABI/API evolution span");
-            Y_ABORT_UNLESS(serial > 0, "Serial of EvBegin starts with 1");
+            Y_ENSURE(tail <= head, "Invalid ABI/API evolution span");
+            Y_ENSURE(serial > 0, "Serial of EvBegin starts with 1");
 
             const ui32 size = sizeof(TEvBegin_v1);
 
@@ -104,7 +105,7 @@ namespace NRedo {
         {
             using namespace  NUtil::NBin;
 
-            Y_ABORT_UNLESS(blobs.size() <= Max<ui32>(), "Too large blobs catalog");
+            Y_ENSURE(blobs.size() <= Max<ui32>(), "Too large blobs catalog");
 
             const ui32 size = sizeof(TEvAnnex) + SizeOf(blobs);
 
@@ -122,9 +123,9 @@ namespace NRedo {
         TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ERedo tag, ui32 tailSize, TCallback&& tailCallback)
         {
             if (TCellOp::HaveNoOps(rop) && ops) {
-                Y_ABORT("Given ERowOp cannot have update operations");
+                Y_TABLET_ERROR("Given ERowOp cannot have update operations");
             } else if (key.size() + ops.size() > Max<ui16>()) {
-                Y_ABORT("Too large key or too many operations in one ops");
+                Y_TABLET_ERROR("Too large key or too many operations in one ops");
             }
 
             const ui32 size = sizeof(TEvUpdate) + tailSize + CalcSize(key, ops);
@@ -203,7 +204,7 @@ namespace NRedo {
             return *this;
         }
 
-        TString Finish() && noexcept
+        TString Finish() &&
         {
             TString events;
             events.swap(Events);
@@ -228,7 +229,7 @@ namespace NRedo {
         {
             TotalSize += bytes;
 
-            Y_ABORT_UNLESS(Events.size() == TotalSize, "Got an inconsistent redo entry size");
+            Y_ENSURE(Events.size() == TotalSize, "Got an inconsistent redo entry size");
 
             return *this;
         }
@@ -254,7 +255,7 @@ namespace NRedo {
             return size;
         }
 
-        void Write(IOut &out, TRawVals key) noexcept
+        void Write(IOut &out, TRawVals key)
         {
             for (const auto &one : key) {
                 /* The only way of converting nulls in keys now */
@@ -268,23 +269,23 @@ namespace NRedo {
             }
         }
 
-        void Write(IOut &out, TOpsRef ops) noexcept
+        void Write(IOut &out, TOpsRef ops)
         {
             for (const auto &one: ops) {
                 /* Log enty cannot represent this ECellOp types with payload */
 
-                Y_ABORT_UNLESS(!(one.Value && TCellOp::HaveNoPayload(one.Op)));
+                Y_ENSURE(!(one.Value && TCellOp::HaveNoPayload(one.Op)));
 
                 const ui16 type = one.Value.Type();
 
                 if (one.Value.IsEmpty()) {
                     // Log entry cannot recover null value type, since we
                     // store null values using a special 0 type id.
-                    Y_ABORT_UNLESS(type == 0, "Cannot write typed null values");
+                    Y_ENSURE(type == 0, "Cannot write typed null values");
                     // Null value cannot have ECellOp::Set as its op, since we
                     // don't have the necessary type id, instead we expect
                     // it to be either ECellOp::Null or ECellOp::Reset.
-                    Y_ABORT_UNLESS(one.Op != ECellOp::Set, "Cannot write ECellOp::Set with a null value");
+                    Y_ENSURE(one.Op != ECellOp::Set, "Cannot write ECellOp::Set with a null value");
                 }
 
                 Write(out, one.Op, one.Tag, type, one.Value.AsRef());

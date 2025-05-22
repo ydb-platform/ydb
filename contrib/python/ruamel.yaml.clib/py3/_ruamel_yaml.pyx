@@ -1,4 +1,4 @@
-
+# cython: language_level=3
 
 def get_version_string():
     cdef char *value
@@ -904,7 +904,7 @@ cdef class CParser:
                 raise error
         return 1
 
-cdef int input_handler(void *data, char *buffer, int size, int *read) except 0:
+cdef int input_handler(void *data, unsigned char *buffer, size_t size, size_t *read) except 0:
     cdef CParser parser
     parser = <CParser>data
     if parser.stream_cache is None:
@@ -1514,13 +1514,13 @@ cdef class CEmitter:
             self.ascend_resolver()
         return 1
 
-cdef int output_handler(void *data, char *buffer, int size) except 0:
+cdef int output_handler(void *data, unsigned char *buffer, size_t size) except 0:
     cdef CEmitter emitter
     emitter = <CEmitter>data
     if emitter.dump_unicode == 0:
-        value = PyString_FromStringAndSize(buffer, size)
+        value = PyString_FromStringAndSize(<char *>buffer, size)
     else:
-        value = PyUnicode_DecodeUTF8(buffer, size, 'strict')
+        value = PyUnicode_DecodeUTF8(<char *>buffer, size, 'strict')
     emitter.stream.write(value)
     return 1
 

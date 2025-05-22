@@ -6,7 +6,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 class TExecStats::TImpl {
 public:
@@ -44,6 +44,16 @@ TMaybe<TString> TExecStats::GetPlan() const {
     }
 
     return proto.query_plan();
+}
+
+TMaybe<TString> TExecStats::GetAst() const {
+    auto proto = Impl_->Proto;
+
+    if (proto.query_ast().empty()) {
+        return {};
+    }
+
+    return proto.query_ast();
 }
 
 TDuration TExecStats::GetTotalDuration() const {

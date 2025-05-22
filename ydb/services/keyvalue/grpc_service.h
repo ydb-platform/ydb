@@ -17,11 +17,6 @@ public:
     ~TKeyValueGRpcService();
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
-
-    bool IncRequest();
-    void DecRequest();
-
 private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
@@ -31,7 +26,6 @@ private:
     NActors::TActorId GRpcRequestProxyId;
 
     grpc::ServerCompletionQueue* CQ = nullptr;
-    NYdbGrpc::TGlobalLimiter* Limiter = nullptr;
 };
 
 } // namespace NKikimr::NGRpcService

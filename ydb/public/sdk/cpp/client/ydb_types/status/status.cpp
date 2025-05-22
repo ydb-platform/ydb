@@ -6,7 +6,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TStatus::TImpl {
 public:
@@ -72,6 +72,12 @@ float TStatus::GetConsumedRu() const {
     return Impl_->Status.ConstInfo.consumed_units();
 }
 
+void TStatus::Out(IOutputStream& out) const {
+    out << "{ status: " << GetStatus()
+        << ", issues: " << GetIssues().ToOneLineString()
+        << " }";
+}
+
 IOutputStream& operator<<(IOutputStream& out, const TStatus& st) {
     out << "Status: " << st.GetStatus() << Endl;
     if (st.GetIssues()) {
@@ -89,6 +95,28 @@ TStreamPartStatus::TStreamPartStatus(TStatus&& status)
 
 bool TStreamPartStatus::EOS() const {
     return GetStatus() == EStatus::CLIENT_OUT_OF_RANGE;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NStatusHelpers {
+
+void ThrowOnError(TStatus status, std::function<void(TStatus)> onSuccess) {
+    if (!status.IsSuccess()) {
+        throw TYdbErrorException(status) << status;
+    } else {
+        onSuccess(status);
+    }
+}
+
+void ThrowOnErrorOrPrintIssues(TStatus status) {
+    ThrowOnError(status, [](TStatus status) {
+        if (status.GetIssues()) {
+            Cerr << status;
+        }
+    });
+}
+
 }
 
 } // namespace NYdb

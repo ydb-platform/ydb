@@ -28,25 +28,27 @@ public:
     using TParentActor = TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>;
 
     TSMPartitionChooserActor(TActorId parentId,
-                           const NKikimrSchemeOp::TPersQueueGroupDescription& config,
-                           std::shared_ptr<IPartitionChooser>& chooser,
+                           const std::shared_ptr<IPartitionChooser>& chooser,
+                           const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                            NPersQueue::TTopicConverterPtr& fullConverter,
                            const TString& sourceId,
-                           std::optional<ui32> preferedPartition)
-        : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition)
-        , Graph(MakePartitionGraph(config)) {
-
+                           std::optional<ui32> preferedPartition,
+                           NWilson::TTraceId traceId)
+        : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId))
+        , Graph(graph) {
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        if (!TThis::Initialize(ctx)) {
+            return;
+        }
         BoundaryPartition = ChoosePartitionSync();
 
         if (TThis::SourceId) {
-            TThis::Initialize(ctx);
             GetOwnershipFast(ctx);
         } else {
             TThis::Partition = BoundaryPartition;
-            TThis::StartGetOwnership(ctx);
+            TThis::StartCheckPartitionRequest(ctx);
         }
     }
 
@@ -68,16 +70,16 @@ public:
             return OnPartitionChosen(ctx);
         }
 
-        const auto* node = Graph.GetPartition(TThis::TableHelper.PartitionId().value());
+        const auto* node = Graph->GetPartition(TThis::TableHelper.PartitionId().value());
         if (!node) {
-            // The partition where the writting was performed earlier has already been deleted. 
+            // The partition where the writting was performed earlier has already been deleted.
             // We can write without taking into account the hierarchy of the partition.
             TThis::Partition = BoundaryPartition;
             return OnPartitionChosen(ctx);
         }
 
         // Choosing a partition based on the split and merge hierarchy.
-        auto activeChildren = Graph.GetActiveChildren(TThis::TableHelper.PartitionId().value());
+        auto activeChildren = Graph->GetActiveChildren(TThis::TableHelper.PartitionId().value());
         if (activeChildren.empty()) {
             return TThis::ReplyError(ErrorCode::ERROR, TStringBuilder() << "has't active partition Marker# PC01", ctx);
         }
@@ -104,46 +106,28 @@ public:
         GetOldSeqNo(ctx);
     }
 
-    void OnOwnership(const TActorContext &ctx) override {
-        DEBUG("OnOwnership");
-        TThis::ReplyResult(ctx);
-    }
-
 private:
     void GetOwnershipFast(const TActorContext &ctx) {
         TThis::Become(&TThis::StateOwnershipFast);
         if (!BoundaryPartition) {
-            return TThis::ReplyError(ErrorCode::INITIALIZING, "A partition not choosed", ctx);
+            return TThis::ReplyError(TThis::PreferedPartition ? ErrorCode::WRITE_ERROR_PARTITION_INACTIVE : ErrorCode::INITIALIZING, "A partition not choosed", ctx);
         }
 
         DEBUG("GetOwnershipFast Partition=" << BoundaryPartition->PartitionId << " TabletId=" << BoundaryPartition->TabletId);
 
         TThis::PartitionHelper.Open(BoundaryPartition->TabletId, ctx);
-        TThis::PartitionHelper.SendGetOwnershipRequest(BoundaryPartition->PartitionId, TThis::SourceId, false, ctx);
+        TThis::PartitionHelper.SendCheckPartitionStatusRequest(BoundaryPartition->PartitionId, TThis::SourceId, ctx);
     }
 
-    void HandleOwnershipFast(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-        DEBUG("HandleOwnershipFast");
-        auto& record = ev->Get()->Record;
-
-        TString error;
-        if (!BasicCheck(record, error)) {
-            return TThis::InitTable(ctx);
-        }
-
-        const auto& response = record.GetPartitionResponse();
-        if (!response.HasCmdGetOwnershipResult()) {
-            return TThis::ReplyError(ErrorCode::INITIALIZING, "Absent Ownership result", ctx);
-        }
-
-        if (NKikimrPQ::ETopicPartitionStatus::Active != response.GetCmdGetOwnershipResult().GetStatus()) {
-            return TThis::ReplyError(ErrorCode::INITIALIZING, "Configuration changed", ctx);
-        }
-
-        TThis::OwnerCookie = response.GetCmdGetOwnershipResult().GetOwnerCookie();
-
-        if (response.GetCmdGetOwnershipResult().GetSeqNo() > 0) {
+    void HandleFast(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+        TThis::PartitionHelper.Close(ctx);
+        if (NKikimrPQ::ETopicPartitionStatus::Active == ev->Get()->Record.GetStatus()
+                && ev->Get()->Record.HasSeqNo()
+                && ev->Get()->Record.GetSeqNo() > 0) {
             // Fast path: the partition ative and already written
+            TThis::Partition = BoundaryPartition;
+            TThis::SeqNo = ev->Get()->Record.GetSeqNo();
+
             TThis::SendUpdateRequests(ctx);
             return TThis::ReplyResult(ctx);
         }
@@ -154,7 +138,7 @@ private:
     STATEFN(StateOwnershipFast) {
         TRACE_EVENT(NKikimrServices::PQ_PARTITION_CHOOSER);
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvResponse, HandleOwnershipFast);
+            HFunc(NKikimr::TEvPQ::TEvCheckPartitionStatusResponse, HandleFast);
             HFunc(TEvTabletPipe::TEvClientConnected, TThis::HandleOwnership);
             HFunc(TEvTabletPipe::TEvClientDestroyed, TThis::HandleOwnership);
             SFunc(TEvents::TEvPoison, TThis::Die);
@@ -167,7 +151,7 @@ private:
         DEBUG("GetOldSeqNo");
         TThis::Become(&TThis::StateGetMaxSeqNo);
 
-        const auto* oldNode = Graph.GetPartition(TThis::TableHelper.PartitionId().value());
+        const auto* oldNode = Graph->GetPartition(TThis::TableHelper.PartitionId().value());
 
         if (!oldNode) {
             return TThis::ReplyError(ErrorCode::ERROR, TStringBuilder() << "Inconsistent status Marker# PC03", ctx);
@@ -207,7 +191,7 @@ private:
         }
 
         TThis::PartitionHelper.Close(ctx);
-        TThis::StartCheckPartitionRequest(ctx);
+        OnPartitionChosen(ctx);
     }
 
     STATEFN(StateGetMaxSeqNo) {
@@ -260,7 +244,7 @@ private:
 
 private:
     const TPartitionInfo* BoundaryPartition = nullptr;
-    const TPartitionGraph Graph;
+    const std::shared_ptr<TPartitionGraph> Graph;
 };
 
 #undef LOG_PREFIX

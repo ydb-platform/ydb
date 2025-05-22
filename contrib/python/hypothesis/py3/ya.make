@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.92.8)
+VERSION(6.112.5)
 
 LICENSE(MPL-2.0)
 
@@ -20,6 +20,7 @@ NO_CHECK_IMPORTS(
 PY_SRCS(
     TOP_LEVEL
     _hypothesis_ftz_detector.py
+    _hypothesis_globals.py
     _hypothesis_pytestplugin.py
     hypothesis/__init__.py
     hypothesis/_settings.py
@@ -66,13 +67,13 @@ PY_SRCS(
     hypothesis/internal/conjecture/pareto.py
     hypothesis/internal/conjecture/shrinker.py
     hypothesis/internal/conjecture/shrinking/__init__.py
+    hypothesis/internal/conjecture/shrinking/bytes.py
+    hypothesis/internal/conjecture/shrinking/collection.py
     hypothesis/internal/conjecture/shrinking/common.py
-    hypothesis/internal/conjecture/shrinking/dfas.py
     hypothesis/internal/conjecture/shrinking/floats.py
     hypothesis/internal/conjecture/shrinking/integer.py
-    hypothesis/internal/conjecture/shrinking/learned_dfas.py
-    hypothesis/internal/conjecture/shrinking/lexical.py
     hypothesis/internal/conjecture/shrinking/ordering.py
+    hypothesis/internal/conjecture/shrinking/string.py
     hypothesis/internal/conjecture/utils.py
     hypothesis/internal/coverage.py
     hypothesis/internal/detection.py

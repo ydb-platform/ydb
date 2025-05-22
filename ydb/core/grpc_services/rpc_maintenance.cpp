@@ -1,5 +1,6 @@
 #include "service_maintenance.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/cms.h>
 #include <ydb/core/base/domain.h>
@@ -26,24 +27,6 @@ class TMaintenanceRPC: public TRpcRequestActor<TMaintenanceRPC<TEvRequest, TEvCm
     using TThis = TMaintenanceRPC<TEvRequest, TEvCmsRequest, TEvCmsResponse>;
     using TBase = TRpcRequestActor<TThis, TEvRequest, true>;
 
-    bool CheckAccess() const {
-        if (AppData()->AdministrationAllowedSIDs.empty()) {
-            return true;
-        }
-
-        if (!this->UserToken) {
-            return false;
-        }
-
-        for (const auto& sid : AppData()->AdministrationAllowedSIDs) {
-            if (this->UserToken->IsExist(sid)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     void SendRequest() {
         auto ev = MakeHolder<TEvCmsRequest>();
         ev->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
@@ -54,13 +37,9 @@ class TMaintenanceRPC: public TRpcRequestActor<TMaintenanceRPC<TEvRequest, TEvCm
             }
         }
 
-        Y_ABORT_UNLESS(AppData()->DomainsInfo);
-        Y_ABORT_UNLESS(AppData()->DomainsInfo->Domains);
-        const auto group = AppData()->DomainsInfo->Domains.begin()->second->DefaultStateStorageGroup;
-
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
-        CmsPipe = this->RegisterWithSameMailbox(NTabletPipe::CreateClient(this->SelfId(), MakeCmsID(group), pipeConfig));
+        CmsPipe = this->RegisterWithSameMailbox(NTabletPipe::CreateClient(this->SelfId(), MakeCmsID(), pipeConfig));
 
         NTabletPipe::SendData(this->SelfId(), CmsPipe, ev.Release());
     }
@@ -101,7 +80,7 @@ public:
     using TBase::TBase;
 
     void Bootstrap() {
-        if (!CheckAccess()) {
+        if (!IsAdministrator(AppData(), this->UserToken.Get())) {
             auto error = TStringBuilder() << "Access denied";
             if (this->UserToken) {
                 error << ": '" << this->UserToken->GetUserSID() << "' is not an admin";

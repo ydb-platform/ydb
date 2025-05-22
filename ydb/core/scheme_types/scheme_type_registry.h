@@ -7,6 +7,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/singleton.h>
 #include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 
@@ -30,10 +31,10 @@ public:
 
     void RegisterType(const IType *type) {
         const TTypeId typeId = type->GetTypeId();
-        Y_ABORT_UNLESS(typeId <= Max<TTypeId>());
+        Y_ENSURE(typeId <= Max<TTypeId>());
 
-        Y_ABORT_UNLESS(TypeByIdMap.insert({ typeId, type }).second);
-        Y_ABORT_UNLESS(TypeByNameMap.insert({ type->GetName(), type }).second);
+        Y_ENSURE(TypeByIdMap.insert({ typeId, type }).second);
+        Y_ENSURE(TypeByNameMap.insert({ type->GetName(), type }).second);
 
         TypeMetadataRegistry.Register(type);
     }
@@ -43,7 +44,7 @@ public:
         if (typeId) {
             auto iter = TypeByIdMap.find(typeId);
             if (iter != TypeByIdMap.end()) {
-                Y_DEBUG_ABORT_UNLESS(iter->second);
+                Y_ENSURE(iter->second);
                 return iter->second;
             }
         }

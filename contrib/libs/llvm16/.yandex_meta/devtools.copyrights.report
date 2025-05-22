@@ -1,0 +1,1324 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07668cb5215fea6ee1517de255c09e3e
+BELONGS lib/Support/ya.make
+    License text:
+        Copyright © 1991-2022 Unicode, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/UnicodeNameToCodepointGenerated.cpp [32:32]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 09d1731fda037a42651b22724e02e848
+BELONGS tools/polly/lib/External/isl/ya.make tools/polly/lib/External/ppcg/ya.make
+    License text:
+         * Copyright 2013      Ecole Normale Superieure
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/extract_key.c [2:2]
+        tools/polly/lib/External/isl/include/isl/hmap_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_coalesce.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_dim_id_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_domain_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_move_dims_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_no_domain_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_read_no_explicit_domain_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_point.c [2:5]
+        tools/polly/lib/External/isl/isl_pw_eval.c [2:3]
+        tools/polly/lib/External/isl/isl_tab.c [2:5]
+        tools/polly/lib/External/isl/isl_type_has_space_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_union_multi.c [2:4]
+        tools/polly/lib/External/isl/isl_union_single.c [2:3]
+        tools/polly/lib/External/isl/isl_union_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_val.c [2:2]
+        tools/polly/lib/External/isl/isl_vec.c [2:3]
+        tools/polly/lib/External/ppcg/gpu_hybrid.c [2:3]
+        tools/polly/lib/External/ppcg/gpu_tree.c [2:2]
+        tools/polly/lib/External/ppcg/hybrid.c [2:3]
+        tools/polly/lib/External/ppcg/ppcg.c [2:4]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 0b6aaa97daae741e03da41749ac1d155
+BELONGS lib/IR/ya.make
+    License text:
+              Type *I32Ty = Type::getInt32Ty(C);
+              Value *Elt0 = Builder.CreateExtractElement(CI->getArgOperand(0),
+                                                         ConstantInt::get(I32Ty, 0));
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/IR/AutoUpgrade.cpp [2335:2337]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 11038801a66a8aad80a421c2e7b10837
+BELONGS tools/polly/lib/External/isl/ya.make tools/polly/lib/External/ppcg/ya.make
+    License text:
+         * Copyright 2008-2009 Katholieke Universiteit Leuven
+         * Copyright 2010      INRIA Saclay
+         * Copyright 2012      Ecole Normale Superieure
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_affine_hull.c [2:4]
+        tools/polly/lib/External/isl/isl_bernstein.c [2:4]
+        tools/polly/lib/External/isl/isl_bound.c [2:2]
+        tools/polly/lib/External/isl/isl_coalesce.c [2:7]
+        tools/polly/lib/External/isl/isl_constraint.c [2:3]
+        tools/polly/lib/External/isl/isl_equalities.c [2:3]
+        tools/polly/lib/External/isl/isl_factorization.c [2:4]
+        tools/polly/lib/External/isl/isl_farkas.c [2:2]
+        tools/polly/lib/External/isl/isl_flow.c [2:6]
+        tools/polly/lib/External/isl/isl_fold.c [2:2]
+        tools/polly/lib/External/isl/isl_input.c [2:5]
+        tools/polly/lib/External/isl/isl_map.c [2:8]
+        tools/polly/lib/External/isl/isl_map_lexopt_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_mat.c [2:5]
+        tools/polly/lib/External/isl/isl_morph.h [2:2]
+        tools/polly/lib/External/isl/isl_obj.c [2:4]
+        tools/polly/lib/External/isl/isl_output.c [2:5]
+        tools/polly/lib/External/isl/isl_point.c [2:5]
+        tools/polly/lib/External/isl/isl_polynomial.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_eval.c [2:3]
+        tools/polly/lib/External/isl/isl_pw_insert_dims_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_lift_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_morph_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_move_dims_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_neg_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_opt_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_sub_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_reordering.c [2:2]
+        tools/polly/lib/External/isl/isl_space.c [2:5]
+        tools/polly/lib/External/isl/isl_tab_lexopt_templ.c [2:4]
+        tools/polly/lib/External/isl/isl_tab_pip.c [2:4]
+        tools/polly/lib/External/isl/isl_transitive_closure.c [2:2]
+        tools/polly/lib/External/isl/isl_type_has_equal_space_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_union_eval.c [2:2]
+        tools/polly/lib/External/isl/isl_union_multi.c [2:4]
+        tools/polly/lib/External/isl/isl_union_neg.c [2:2]
+        tools/polly/lib/External/isl/isl_union_single.c [2:3]
+        tools/polly/lib/External/isl/isl_union_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_vertices.c [2:2]
+        tools/polly/lib/External/ppcg/cuda_common.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 12c13673979d84c93fb3f9aed80709bd
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1998 Todd C. Miller <Todd.Miller@courtesan.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/regstrlcpy.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 144b4e824389b748144f4e60485d3c2f
+BELONGS tools/polly/lib/External/isl/ya.make tools/polly/lib/External/ppcg/ya.make
+    License text:
+         * Copyright 2011      INRIA Saclay
+         * Copyright 2012-2013 Ecole Normale Superieure
+         * Copyright 2016      Sven Verdoolaege
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_aff_map.c [2:4]
+        tools/polly/lib/External/isl/isl_ast.c [2:2]
+        tools/polly/lib/External/isl/isl_ast_build.c [2:3]
+        tools/polly/lib/External/isl/isl_box.c [2:3]
+        tools/polly/lib/External/isl/isl_coalesce.c [2:7]
+        tools/polly/lib/External/isl/isl_input.c [2:5]
+        tools/polly/lib/External/isl/isl_list_templ.c [2:5]
+        tools/polly/lib/External/isl/isl_map_simplify.c [2:5]
+        tools/polly/lib/External/isl/isl_multi_apply_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_arith_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_dims.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_gist.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_intersect.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_tuple_id_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_output.c [2:5]
+        tools/polly/lib/External/isl/isl_stride.c [2:2]
+        tools/polly/lib/External/ppcg/gpu.c [2:4]
+        tools/polly/lib/External/ppcg/print.c [2:2]
+        tools/polly/lib/External/ppcg/util.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 18078dcc93cabe2b2081eb3e0ee92c6b
+BELONGS tools/polly/lib/External/isl/ya.make tools/polly/lib/External/ppcg/ya.make
+    License text:
+         * Copyright 2012      Ecole Normale Superieure
+         * Copyright 2015-2016 Sven Verdoolaege
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_schedule_constraints.c [2:3]
+        tools/polly/lib/External/isl/isl_scheduler.c [2:6]
+        tools/polly/lib/External/ppcg/gpu.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e274833b7fb3d36a3be23a694f46aac
+BELONGS tools/polly/lib/External/isl/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_flow.c [2:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e686ce4ffe6d63b91a69c1b26712d33
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1994
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/COPYRIGHT.regex [26:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 23befcc9a22e8ccf6e5df3134d3e033e
+BELONGS tools/polly/lib/External/isl/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_coalesce.c [2:7]
+        tools/polly/lib/External/isl/isl_multi_zero_space_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_locals_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_union_opt.c [2:4]
+        tools/polly/lib/External/isl/isl_union_locals_templ.c [2:2]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 28368d51c5dcd8ee8080c84c4f8f192e
+BELONGS lib/Target/X86/ya.make
+    License text:
+            Trampoline->setComdat(C);
+          BasicBlock *EntryBB = BasicBlock::Create(Context, "entry", Trampoline);
+          IRBuilder<> Builder(EntryBB);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Target/X86/X86WinEHState.cpp [403:405]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2a22d1f4218625c4ce9e47576ddfe109
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2012,2014 Ecole Normale Superieure
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_multi_from_base_templ.c [2:2]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 30978c73becf399db8f52c771e38e22d
+BELONGS lib/Transforms/InstCombine/ya.make
+    License text:
+          // The instruction has the form "(A op' B) op (C)".  Try to factorize common
+          // term.
+          if (Op0)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/InstCombine/InstructionCombining.cpp [754:756]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3110a89ff9a82a822a3c1cadfce9ba6d
+BELONGS include/ya.make lib/Support/ya.make
+    License text:
+         * Copyright © 1991-2015 Unicode, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/Support/ConvertUTF.h [16:16]
+        lib/Support/ConvertUTF.cpp [9:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3166dbaed102eed6d3653822d5176d42
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+        IMath is copyright &copy; 2002-2009 Michael J. Fromberger.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/imath/README.md [9:9]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 318577927099d6e8a6d11b7f87ea7da3
+BELONGS lib/Analysis/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Analysis/DependenceGraphBuilder.cpp [465:469]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 3680a79f7158604adc35f5aca3f57d93
+BELONGS lib/CodeGen/ya.make
+    License text:
+          IntegerType *WordType = DL.getIntPtrType(C);
+          PointerType *InitPtrType = InitValue ?
+              PointerType::getUnqual(InitValue->getType()) : VoidPtrType;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/LowerEmuTLS.cpp [116:118]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c354bb3a6485498273ede375ac114c2
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2008-2009 Katholieke Universiteit Leuven
+         * Copyright 2010      INRIA Saclay
+         * Copyright 2016-2017 Sven Verdoolaege
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_tab_pip.c [2:4]
+        tools/polly/lib/External/isl/isl_union_map.c [2:5]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 3e3009e9cc74d820b2d85abf2790f180
+BELONGS lib/DebugInfo/DWARF/ya.make
+    License text:
+            Value0 = Data.getULEB128(C);
+            Value1 = Data.getULEB128(C);
+            break;
+          case dwarf::DW_RLE_startx_length: {
+            Value0 = Data.getULEB128(C);
+            Value1 = Data.getULEB128(C);
+            break;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFDebugRnglists.cpp [40:46]
+        lib/DebugInfo/DWARF/DWARFDebugRnglists.cpp [49:51]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 42ae7da0badf3b2f130af3a54173f220
+BELONGS lib/DebugInfo/DWARF/ya.make
+    License text:
+            : DebugLineData(Data), Context(C) {
+          LineToUnit = buildLineToUnitMap(Units);
+          if (!DebugLineData.isValidOffset(Offset))
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFDebugLine.cpp [1459:1461]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 436fc5ecfdba3f630dca8faa57fe7939
+BELONGS tools/polly/lib/External/isl/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_aff.c [2:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 461e4cbb7bcd561964b60cfc5349b46f
+BELONGS tools/polly/lib/External/isl/ya.make tools/polly/lib/External/ppcg/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_aff.c [2:8]
+        tools/polly/lib/External/isl/isl_ast_build_expr.c [2:3]
+        tools/polly/lib/External/isl/isl_ast_codegen.c [2:3]
+        tools/polly/lib/External/isl/isl_local_space.c [2:3]
+        tools/polly/lib/External/isl/isl_map.c [2:8]
+        tools/polly/lib/External/isl/isl_multi_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_pw_templ.c [2:4]
+        tools/polly/lib/External/isl/isl_schedule.c [2:4]
+        tools/polly/lib/External/isl/isl_scheduler.c [2:6]
+        tools/polly/lib/External/ppcg/gpu_group.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 48792ca6e267c7339e5b010e5dfcf7e8
+BELONGS lib/CodeGen/MIRParser/ya.make
+    License text:
+          return isalpha(C) || isdigit(C) || C == '_' || C == '-' || C == '.' ||
+                 C == '$';
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/MIRParser/MILexer.cpp [119:120]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 54e2525236fb6c3cc97e13b6fb250b63
+BELONGS lib/DebugInfo/DWARF/ya.make
+    License text:
+              uint64_t BlockLength = Data.getULEB128(C);
+              StringRef Expression = Data.getBytes(C, BlockLength);
+              DataExtractor Extractor(Expression, Data.isLittleEndian(),
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFDebugFrame.cpp [375:377]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5655c5febb1994aec6687062b2e02bd9
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2012      Ecole Normale Superieure
+         * Copyright 2014      INRIA Rocquencourt
+         * Copyright 2019      Cerebras Systems
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_ast_graft.c [2:4]
+        tools/polly/lib/External/isl/isl_copy_tuple_id_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_ilp_opt_multi_val_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_input.c [2:5]
+        tools/polly/lib/External/isl/isl_insert_domain_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_add_constant_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_insert_domain_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_locals_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_min_max_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_unbind_params_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_output.c [2:5]
+        tools/polly/lib/External/isl/isl_point.c [2:5]
+        tools/polly/lib/External/isl/isl_pw_add_constant_multi_val_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_add_constant_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_add_constant_val_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_insert_domain_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_range_tuple_id_templ.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c85ca831b8809876c0790cfad2d8956
+BELONGS lib/Support/ya.make
+    License text:
+        Copyright 1992, 1993, 1994 Henry Spencer.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/COPYRIGHT.regex [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 63572b23fe8322d08573c7ea9280b27f
+BELONGS lib/Transforms/Utils/ya.make
+    License text:
+          Type *DsoHandleTy = Type::getInt8Ty(C);
+          Constant *DsoHandle = M.getOrInsertGlobal("__dso_handle", DsoHandleTy, [&] {
+            auto *GV = new GlobalVariable(M, DsoHandleTy, /*isConstant=*/true,
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Utils/LowerGlobalDtors.cpp [144:146]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 65ab4ffe80a963d1ba83b72e467c317b
+BELONGS tools/polly/lib/External/isl/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_map.c [2:8]
+        tools/polly/lib/External/isl/isl_space.c [2:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6889c51be687d2aa2ca198228ffada0d
+BELONGS ya.make
+    License text:
+        Copyright (c) 2003-2019 University of Illinois at Urbana-Champaign.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.TXT [242:243]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 698365507d95a4f75e3a8ada69384de8
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+          Copyright (C) 2002-2007 Michael J. Fromberger, All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/imath/imath.c [6:6]
+        tools/polly/lib/External/isl/imath/imath.h [6:6]
+        tools/polly/lib/External/isl/imath/imrat.c [6:6]
+        tools/polly/lib/External/isl/imath/imrat.h [6:6]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 6c1074072381bc6362e1b37c9f1b2256
+BELONGS lib/DebugInfo/DWARF/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFAcceleratorTable.cpp [390:398]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6c41413cfb5767906448d3945dee5b1e
+BELONGS lib/CodeGen/GlobalISel/ya.make
+    License text:
+            auto *CI = cast<ConstantInt>(C);
+            APInt Divisor = CI->getValue();
+            unsigned Shift = Divisor.countTrailingZeros();
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/GlobalISel/CombinerHelper.cpp [5145:5147]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71a5570b4ed12474c30d73d9c6d6af57
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1992 Henry Spencer.
+         * Copyright (c) 1992, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/regex_impl.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 72954459d846489a9437b458790243b4
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2008-2009 Katholieke Universiteit Leuven
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/basis_reduction_tab.c [2:2]
+        tools/polly/lib/External/isl/basis_reduction_templ.c [2:3]
+        tools/polly/lib/External/isl/include/isl/arg.h [2:2]
+        tools/polly/lib/External/isl/include/isl/constraint.h [2:2]
+        tools/polly/lib/External/isl/include/isl/ctx.h [2:2]
+        tools/polly/lib/External/isl/include/isl/hash.h [2:2]
+        tools/polly/lib/External/isl/include/isl/ilp.h [2:2]
+        tools/polly/lib/External/isl/include/isl/list.h [2:2]
+        tools/polly/lib/External/isl/include/isl/lp.h [2:2]
+        tools/polly/lib/External/isl/include/isl/map.h [2:2]
+        tools/polly/lib/External/isl/include/isl/mat.h [2:2]
+        tools/polly/lib/External/isl/include/isl/options.h [2:2]
+        tools/polly/lib/External/isl/include/isl/set.h [2:2]
+        tools/polly/lib/External/isl/include/isl/space.h [2:2]
+        tools/polly/lib/External/isl/include/isl/stream.h [2:2]
+        tools/polly/lib/External/isl/include/isl/vec.h [2:2]
+        tools/polly/lib/External/isl/isl_affine_hull.c [2:4]
+        tools/polly/lib/External/isl/isl_arg.c [2:2]
+        tools/polly/lib/External/isl/isl_basis_reduction.h [2:2]
+        tools/polly/lib/External/isl/isl_bernstein.c [2:4]
+        tools/polly/lib/External/isl/isl_blk.c [2:2]
+        tools/polly/lib/External/isl/isl_blk.h [2:2]
+        tools/polly/lib/External/isl/isl_coalesce.c [2:7]
+        tools/polly/lib/External/isl/isl_constraint.c [2:3]
+        tools/polly/lib/External/isl/isl_convex_hull.c [2:3]
+        tools/polly/lib/External/isl/isl_ctx.c [2:2]
+        tools/polly/lib/External/isl/isl_dim_map.c [2:3]
+        tools/polly/lib/External/isl/isl_equalities.c [2:3]
+        tools/polly/lib/External/isl/isl_equalities.h [2:2]
+        tools/polly/lib/External/isl/isl_factorization.c [2:4]
+        tools/polly/lib/External/isl/isl_flow.c [2:6]
+        tools/polly/lib/External/isl/isl_hash.c [2:2]
+        tools/polly/lib/External/isl/isl_id.c [2:2]
+        tools/polly/lib/External/isl/isl_id_private.h [2:2]
+        tools/polly/lib/External/isl/isl_ilp.c [2:2]
+        tools/polly/lib/External/isl/isl_input.c [2:5]
+        tools/polly/lib/External/isl/isl_int.h [2:2]
+        tools/polly/lib/External/isl/isl_list_templ.c [2:5]
+        tools/polly/lib/External/isl/isl_lp.c [2:2]
+        tools/polly/lib/External/isl/isl_map.c [2:8]
+        tools/polly/lib/External/isl/isl_map_private.h [2:2]
+        tools/polly/lib/External/isl/isl_map_simplify.c [2:5]
+        tools/polly/lib/External/isl/isl_map_subtract.c [2:2]
+        tools/polly/lib/External/isl/isl_mat.c [2:5]
+        tools/polly/lib/External/isl/isl_options.c [2:2]
+        tools/polly/lib/External/isl/isl_output.c [2:5]
+        tools/polly/lib/External/isl/isl_sample.c [2:2]
+        tools/polly/lib/External/isl/isl_sample.h [2:2]
+        tools/polly/lib/External/isl/isl_scan.c [2:2]
+        tools/polly/lib/External/isl/isl_scan.h [2:2]
+        tools/polly/lib/External/isl/isl_seq.c [2:3]
+        tools/polly/lib/External/isl/isl_seq.h [2:2]
+        tools/polly/lib/External/isl/isl_space.c [2:5]
+        tools/polly/lib/External/isl/isl_stream.c [2:2]
+        tools/polly/lib/External/isl/isl_tab.c [2:5]
+        tools/polly/lib/External/isl/isl_tab.h [2:2]
+        tools/polly/lib/External/isl/isl_tab_lexopt_templ.c [2:4]
+        tools/polly/lib/External/isl/isl_tab_pip.c [2:4]
+        tools/polly/lib/External/isl/isl_vec.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 729b0fb03d9f51f2d741dd6f8e10d012
+BELONGS lib/Transforms/Instrumentation/ya.make
+    License text:
+              GV->setComdat(C);
+              // COFF doesn't allow the comdat group leader to have private linkage, so
+              // upgrade private linkage to internal linkage to produce a symbol table
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Instrumentation/InstrProfiling.cpp [923:925]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 74cb8b1ee2bcf27ccbef2c7016611351
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2015 INRIA Paris-Rocquencourt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_int_sioimath.h [2:2]
+        tools/polly/lib/External/isl/isl_union_multi.c [2:4]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 7ab4b45edb7aa5542d2298596f7ac077
+BELONGS lib/Transforms/InstCombine/ya.make
+    License text:
+            Value *NotC = Builder.CreateNot(C);
+            Value *RHS = Builder.CreateAnd(B, NotC);
+            return BinaryOperator::CreateOr(LHS, RHS);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/InstCombine/InstCombineAndOrXor.cpp [3622:3624]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 7ade3b3e64da0b5a8c95933670bd325e
+BELONGS lib/Analysis/ya.make
+    License text:
+              // |X| < |C| --> X > -abs(C) and X < abs(C)
+              Constant *PosDivisorC = ConstantInt::get(Ty, C->abs());
+              Constant *NegDivisorC = ConstantInt::get(Ty, -C->abs());
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Analysis/InstructionSimplify.cpp [1127:1129]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e53573e64541341a91e201e6f51f486
+BELONGS include/ya.make lib/Support/ya.make
+    License text:
+           Copyright (C) 2012-2016, Yann Collet.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/Support/xxhash.h [11:11]
+        lib/Support/xxhash.cpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8227611821c29c046c24e9d2d617e4d1
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2008-2009 Katholieke Universiteit Leuven
+         * Copyright 2012-2013 Ecole Normale Superieure
+         * Copyright 2014-2015 INRIA Rocquencourt
+         * Copyright 2016      Sven Verdoolaege
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_map_simplify.c [2:5]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 86fd792ceb251fb3fcc341f66082f35f
+BELONGS lib/Analysis/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Analysis/ValueTracking.cpp [7150:7154]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8a97f85e3d546ee687a70cc1eddc6fb9
+BELONGS lib/Transforms/Coroutines/ya.make
+    License text:
+          IRBuilder<> Builder(C);
+          StructType *FrameTy = Shape.FrameTy;
+          Value *FramePtr = Shape.FramePtr;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Coroutines/CoroFrame.cpp [1589:1591]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 8b4064d8567439548a359b7b1a7a28a1
+BELONGS lib/Analysis/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Analysis/InstructionSimplify.cpp [1108:1113]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 90576b7033efccaaffbad736f1a0d521
+BELONGS lib/IR/ya.make
+    License text:
+          LLVMContext &Context = *unwrap(C);
+          SmallVector<Metadata *, 8> MDs;
+          for (auto *OV : ArrayRef(Vals, Count)) {
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/IR/Core.cpp [1155:1157]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 94704cb20c3a3607018b836f1a5d4355
+BELONGS tools/polly/lib/External/isl/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_aff.c [2:8]
+        tools/polly/lib/External/isl/isl_aff_lex_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_ast_build.c [2:3]
+        tools/polly/lib/External/isl/isl_ast_build_expr.c [2:3]
+        tools/polly/lib/External/isl/isl_ast_codegen.c [2:3]
+        tools/polly/lib/External/isl/isl_ast_graft.c [2:4]
+        tools/polly/lib/External/isl/isl_coalesce.c [2:7]
+        tools/polly/lib/External/isl/isl_convex_hull.c [2:3]
+        tools/polly/lib/External/isl/isl_map.c [2:8]
+        tools/polly/lib/External/isl/isl_obj.c [2:4]
+        tools/polly/lib/External/isl/isl_schedule_band.c [2:3]
+        tools/polly/lib/External/isl/isl_schedule_node.c [2:4]
+        tools/polly/lib/External/isl/isl_schedule_tree.c [2:4]
+        tools/polly/lib/External/isl/isl_tab.c [2:5]
+        tools/polly/lib/External/isl/isl_union_map.c [2:5]
+        tools/polly/lib/External/isl/isl_union_map_lex_templ.c [2:2]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 9834d5fa1f0986d34086e1d17571116a
+BELONGS lib/CodeGen/SelectionDAG/ya.make
+    License text:
+            Type *Ty = MemOps[0].getTypeForEVT(C);
+            Align NewAlign = DL.getABITypeAlign(Ty);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/SelectionDAG/SelectionDAG.cpp [7022:7023]
+        lib/CodeGen/SelectionDAG/SelectionDAG.cpp [7217:7218]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 9ae7967f03e7e2a04a2e21f088823a55
+BELONGS lib/DebugInfo/DWARF/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFAcceleratorTable.cpp [390:398]
+
+SKIP     COPYRIGHT_SERVICE_LABEL 9c879e80b33217edcdd9207481a44d94
+BELONGS lib/DebugInfo/DWARF/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFAcceleratorTable.cpp [390:398]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d4ec4453cbd8bf6cc9370c38dd298ed
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1992, 1993, 1994 Henry Spencer.
+         * Copyright (c) 1992, 1993, 1994
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/regcomp.c [4:6]
+        lib/Support/regengine.inc [4:6]
+        lib/Support/regerror.c [4:6]
+        lib/Support/regex2.h [4:6]
+        lib/Support/regexec.c [4:6]
+        lib/Support/regfree.c [4:6]
+        lib/Support/regutils.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a1124e6dbfac6a8682f68b97ffa3c4b7
+BELONGS tools/polly/lib/External/isl/ya.make tools/polly/lib/External/ppcg/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_aff.c [2:8]
+        tools/polly/lib/External/isl/isl_aff_map.c [2:4]
+        tools/polly/lib/External/isl/isl_map.c [2:8]
+        tools/polly/lib/External/isl/isl_map_simplify.c [2:5]
+        tools/polly/lib/External/isl/isl_multi_cmp.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_hash.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_hash.c [2:2]
+        tools/polly/lib/External/isl/isl_schedule.c [2:4]
+        tools/polly/lib/External/isl/isl_schedule_node.c [2:4]
+        tools/polly/lib/External/isl/isl_tab.c [2:5]
+        tools/polly/lib/External/ppcg/grouping.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a4b3a3b7e276c28b916f8f737b8e582b
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2012      Ecole Normale Superieure
+         * Copyright 2017      Sven Verdoolaege
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_domain_factor_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_ilp_opt_val_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_list_read_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_list_templ.c [2:5]
+        tools/polly/lib/External/isl/isl_mat.c [2:5]
+        tools/polly/lib/External/isl/isl_multi_align_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_explicit_domain.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_no_explicit_domain.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_pw_aff_explicit_domain.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_union_add_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_union_pw_aff_explicit_domain.c [2:2]
+        tools/polly/lib/External/isl/isl_scheduler.c [2:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a5abc66d4dc93961fd15d25d8a6e8d4f
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2006-2007 Universiteit Leiden
+         * Copyright 2008-2009 Katholieke Universiteit Leuven
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/basis_reduction_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_bernstein.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa55046ed38838026ba71159b2c09f09
+BELONGS lib/Transforms/InstCombine/ya.make
+    License text:
+          //   icmp <pred> iK %E, trunc(C)
+          Value *Vec;
+          ArrayRef<int> Mask;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/InstCombine/InstCombineCompares.cpp [3044:3046]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aca63d9e9935fcd3523aa703d86c95b1
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2018      Cerebras Systems
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_bind_domain_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_map_bound_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_bind_domain_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_bind_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_opt_mpa_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_bind_domain_templ.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b1eeacd142c9ee1731757d12ccdeca48
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2005-2007 Universiteit Leiden
+         * Copyright 2008-2009 Katholieke Universiteit Leuven
+         * Copyright 2010      INRIA Saclay
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_factorization.c [2:4]
+        tools/polly/lib/External/isl/isl_flow.c [2:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b3d9c252ff8f5a3a5d20c558a29e2e16
+BELONGS include/ya.make tools/llvm-cxxfilt/ya.make
+    License text:
+          static bool isChar6(char C) { return isAlnum(C) || C == '.' || C == '_'; }
+          static unsigned EncodeChar6(char C) {
+            if (C >= 'a' && C <= 'z') return C-'a';
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/Bitstream/BitCodes.h [89:91]
+        tools/llvm-cxxfilt/llvm-cxxfilt.cpp [128:129]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b7be40807046549a01a511a04d441db0
+BELONGS tools/polly/lib/External/isl/ya.make tools/polly/lib/External/ppcg/ya.make
+    License text:
+         * Copyright 2008-2009 Katholieke Universiteit Leuven
+         * Copyright 2010      INRIA Saclay
+         * Copyright 2012      Ecole Normale Superieure
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_affine_hull.c [2:4]
+        tools/polly/lib/External/isl/isl_ast_graft.c [2:4]
+        tools/polly/lib/External/isl/isl_domain_factor_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_map_lexopt_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_identity_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_product_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_splice_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_zero_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_pullback_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_pw_union_opt.c [2:4]
+        tools/polly/lib/External/isl/isl_schedule_constraints.c [2:3]
+        tools/polly/lib/External/isl/isl_tarjan.c [2:3]
+        tools/polly/lib/External/ppcg/cuda.c [2:2]
+        tools/polly/lib/External/ppcg/gpu_print.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ba76fb602cdb427419e5298f61c13346
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1992 Henry Spencer.
+         * Copyright (c) 1992, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/regex_impl.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bae2c8c0881abaf9a917b263650fe746
+BELONGS lib/Demangle/ya.make
+    License text:
+          return isDigit(C) || isLower(C) || isUpper(C) || C == '_';
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Demangle/RustDemangle.cpp [185:185]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bed102526902357f786febaf3d1184f2
+BELONGS ya.make
+    License text:
+        Copyright (c) 2009-2019 Polly Team
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/LICENSE.TXT [242:243]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c02ea0d68190938e6849401dd3849f04
+BELONGS tools/polly/lib/External/isl/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_flow.c [2:6]
+        tools/polly/lib/External/isl/isl_local.c [2:3]
+        tools/polly/lib/External/isl/isl_mat.c [2:5]
+        tools/polly/lib/External/isl/isl_morph.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_floor.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_nan_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_obj.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c4511e6caf8a6a741fb6fda077fd3335
+BELONGS tools/polly/lib/External/isl/ya.make tools/polly/lib/External/ppcg/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/include/isl/hmap_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_aff.c [2:8]
+        tools/polly/lib/External/isl/isl_aff_map.c [2:4]
+        tools/polly/lib/External/isl/isl_list_templ.c [2:5]
+        tools/polly/lib/External/isl/isl_local.c [2:3]
+        tools/polly/lib/External/isl/isl_local_space.c [2:3]
+        tools/polly/lib/External/isl/isl_pw_union_opt.c [2:4]
+        tools/polly/lib/External/isl/isl_schedule.c [2:4]
+        tools/polly/lib/External/isl/isl_scheduler.c [2:6]
+        tools/polly/lib/External/isl/isl_seq.c [2:3]
+        tools/polly/lib/External/ppcg/ppcg.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8069f9f5455fa4a970af50594daf852
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1992, 1993, 1994 Henry Spencer.
+         * Copyright (c) 1992, 1993, 1994
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/regcomp.c [4:6]
+        lib/Support/regengine.inc [4:6]
+        lib/Support/regerror.c [4:6]
+        lib/Support/regex2.h [4:6]
+        lib/Support/regexec.c [4:6]
+        lib/Support/regfree.c [4:6]
+        lib/Support/regutils.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca248aadf2ee691ae97d11398afe624b
+BELONGS lib/Transforms/Utils/ya.make
+    License text:
+              Type *SizeTy = M.getDataLayout().getIntPtrType(C);
+              Type *SizePtrTy = SizeTy->getPointerTo();
+              GlobalVariable *GV = new GlobalVariable(M, SizeTy, /*isConstant=*/false,
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Utils/EntryExitInstrumenter.cpp [40:42]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd92f11018b3e27ac7b0cc593c1c92c2
+BELONGS tools/polly/lib/External/isl/ya.make tools/polly/lib/External/ppcg/ya.make
+    License text:
+         * Copyright 2010-2011 INRIA Saclay
+         * Copyright 2012-2013 Ecole Normale Superieure
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_box.c [2:3]
+        tools/polly/lib/External/isl/isl_dim_map.c [2:3]
+        tools/polly/lib/External/isl/isl_morph.c [2:3]
+        tools/polly/lib/External/isl/isl_pw_templ.c [2:4]
+        tools/polly/lib/External/isl/isl_tarjan.c [2:3]
+        tools/polly/lib/External/isl/isl_union_map.c [2:5]
+        tools/polly/lib/External/ppcg/gpu.c [2:4]
+        tools/polly/lib/External/ppcg/gpu_group.c [2:4]
+        tools/polly/lib/External/ppcg/ppcg_options.c [2:2]
+        tools/polly/lib/External/ppcg/schedule.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d0ef211acd80f8c1a5c894ade7f87538
+BELONGS lib/Transforms/Utils/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Utils/LowerGlobalDtors.cpp [131:135]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dbc9f80f01ad96a42bc3446397c989b0
+BELONGS tools/polly/lib/External/isl/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_aff.c [2:8]
+        tools/polly/lib/External/isl/isl_align_params_templ.c [2:2]
+        tools/polly/lib/External/isl/isl_multi_apply_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_arith_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_dim_id_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_dims.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_gist.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_intersect.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_multi_tuple_id_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_pw_templ.c [2:4]
+        tools/polly/lib/External/isl/isl_tab_lexopt_templ.c [2:4]
+        tools/polly/lib/External/isl/isl_type_check_equal_space_templ.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ddd440bf10074cb20bfb5212ec27c689
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2018      Sven Verdoolaege
+         * Copyright 2019      Cerebras Systems
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_pw_range_tuple_id_templ.c [2:3]
+        tools/polly/lib/External/isl/isl_unbind_params_templ.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL deda618abf56343269e2c3dd9368f6b4
+BELONGS lib/Transforms/Utils/ya.make
+    License text:
+          if (C) {
+            ValueLatticeElement CV;
+            CV.markConstant(C);
+            mergeInValue(&I, CV);
+            return;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Utils/SCCPSolver.cpp [1332:1336]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e0df4d49b106bd82efbad864a93ffce1
+BELONGS include/ya.make
+    License text:
+        // <copyright file="Program.cpp" company="Microsoft Corporation">
+        // Copyright (C) Microsoft Corporation. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/WindowsDriver/MSVCSetupApi.h [8:9]
+        include/llvm/WindowsDriver/MSVCSetupApi.h [15:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e10011579f8ed393a2b2f8c4c64b386e
+BELONGS lib/Target/WebAssembly/ya.make
+    License text:
+          IRBuilder<> IRB(C);
+          SmallVector<Instruction *, 64> ToErase;
+          // Vector of %setjmpTable values
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Target/WebAssembly/WebAssemblyLowerEmscriptenEHSjLj.cpp [1269:1271]
+        lib/Target/WebAssembly/WebAssemblyLowerEmscriptenEHSjLj.cpp [1467:1468]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e7bd6251e104540a6ebba2803dc81206
+BELONGS lib/Support/ya.make
+    License text:
+           Copyright 2019 Jack O'Connor and Samuel Neves
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/BLAKE3/LICENSE [318:318]
+
+SKIP     COPYRIGHT_SERVICE_LABEL eb7be45e1211bdf61ad67a5266a4d362
+BELONGS lib/DebugInfo/DWARF/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFAcceleratorTable.cpp [390:398]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec68b124b848dab3076211e5404e326f
+BELONGS tools/polly/lib/External/isl/ya.make tools/polly/lib/External/ppcg/ya.make
+    License text:
+         * Copyright 2010      INRIA Saclay
+         * Copyright 2013      Ecole Normale Superieure
+         * Copyright 2015      Sven Verdoolaege
+         * Copyright 2019      Cerebras Systems
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_point.c [2:5]
+        tools/polly/lib/External/ppcg/gpu_group.c [2:4]
+        tools/polly/lib/External/ppcg/gpu_hybrid.c [2:3]
+        tools/polly/lib/External/ppcg/hybrid.c [2:3]
+        tools/polly/lib/External/ppcg/ppcg.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec84ddedf1dc5016b4ff73d6f7a41324
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+         * Copyright 2013-2014 Ecole Normale Superieure
+         * Copyright 2014      INRIA Rocquencourt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_schedule_band.c [2:3]
+        tools/polly/lib/External/isl/isl_schedule_node.c [2:4]
+        tools/polly/lib/External/isl/isl_schedule_tree.c [2:4]
+        tools/polly/lib/External/isl/isl_space.c [2:5]
+        tools/polly/lib/External/isl/isl_union_map.c [2:5]
+
+SKIP     COPYRIGHT_SERVICE_LABEL ecb0e3c869f22cc8f0b923cd3df84147
+BELONGS include/ya.make lib/Transforms/Utils/ya.make
+    License text:
+        //   if (c)                   if (c)
+        //     X1 = ...                 X1 = ...
+        //   else                     else
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/Transforms/Utils/LCSSA.h [21:23]
+        lib/Transforms/Utils/LCSSA.cpp [14:16]
+
+SKIP     COPYRIGHT_SERVICE_LABEL f2bff1d61453f018fe1397173f3dfa43
+BELONGS lib/Support/ya.make
+    License text:
+            : Code(C) {
+          ErrMsg = "Stream Error: ";
+          switch (C) {
+          case stream_error_code::unspecified:
+            ErrMsg += "An unspecified error has occurred.";
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/BinaryStreamError.cpp [23:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f38404a02e69976b94505df0c691bed0
+BELONGS include/ya.make lib/Support/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/Support/MD5.h [20:25]
+        lib/Support/MD5.cpp [13:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f44570b515bc9a09cb026ea674529c30
+BELONGS tools/polly/lib/External/isl/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_coalesce.c [2:7]
+        tools/polly/lib/External/isl/isl_map.c [2:8]
+        tools/polly/lib/External/isl/isl_schedule_tree.c [2:4]
+        tools/polly/lib/External/isl/isl_scheduler.c [2:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f45dfdcd89f19aa627fe9a2953c87df6
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+          Copyright (c) 2012 Qualcomm Innovation Center, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/imath/gmp_compat.c [6:6]
+        tools/polly/lib/External/isl/imath/gmp_compat.h [6:6]
+
+SKIP     COPYRIGHT_SERVICE_LABEL f894c606faef3610df8e9cfcc3a19c2e
+BELONGS lib/CodeGen/ya.make
+    License text:
+            // Fix (C).
+            if (Restore && (MLI->getLoopFor(Save) || MLI->getLoopFor(Restore))) {
+              if (MLI->getLoopDepth(Save) > MLI->getLoopDepth(Restore)) {
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/ShrinkWrap.cpp [418:420]
+
+SKIP     COPYRIGHT_SERVICE_LABEL fb5e17767e7a12f5b9913e726533b21e
+BELONGS lib/Transforms/Instrumentation/ya.make
+    License text:
+            Value *Sc = getShadow(C);
+            Value *Sd = getShadow(D);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Instrumentation/MemorySanitizer.cpp [4364:4365]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fd1d589caaee8f6dbff3390e3f4e472b
+BELONGS tools/polly/lib/External/isl/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/isl_aff.c [2:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fd871c9566d755e525c0d6c201633a49
+BELONGS tools/polly/lib/External/isl/ya.make
+    License text:
+        IMath is Copyright © 2002-2009 Michael J. Fromberger
+        You may use it subject to the following Licensing Terms:
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tools/polly/lib/External/isl/imath/LICENSE [1:2]

@@ -41,6 +41,7 @@ void TKesusQuoterTestSetup::SetupLogging() {
     Server->GetRuntime()->SetLogPriority(NKikimrServices::KESUS_TABLET, NActors::NLog::PRI_TRACE);
     Server->GetRuntime()->SetLogPriority(NKikimrServices::QUOTER_SERVICE, NActors::NLog::PRI_TRACE);
     Server->GetRuntime()->SetLogPriority(NKikimrServices::QUOTER_PROXY, NActors::NLog::PRI_TRACE);
+    Server->GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_TRACE);
 }
 
 void TKesusQuoterTestSetup::RegisterQuoterService() {
@@ -180,7 +181,7 @@ TKesusProxyTestSetup::TKesusProxyTestSetup() {
 }
 
 TTestActorRuntime::TEgg MakeEgg() {
-    return { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr };
+    return { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr, {} };
 }
 
 void TKesusProxyTestSetup::Start() {

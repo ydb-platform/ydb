@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(BlobDepotWithTestShard) {
         env.Sim(TDuration::Seconds(1));
 
         const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        const ui64 hiveId = MakeDefaultHiveID(1);
+        const ui64 hiveId = MakeDefaultHiveID();
         const TActorId clientId = env.Runtime->Register(NTabletPipe::CreateClient(edge, hiveId,
             NTabletPipe::TClientRetryPolicy::WithRetries()), edge.NodeId());
 

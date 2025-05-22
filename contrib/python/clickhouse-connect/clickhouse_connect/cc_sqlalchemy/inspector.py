@@ -40,7 +40,7 @@ class ChInspector(Inspector):
             raise NoResultFound(f'Table {full_table} does not exist')
         columns = []
         for row in result_set:
-            sqla_type = sqla_type_from_name(row.type)
+            sqla_type = sqla_type_from_name(row.type.replace('\n', ''))
             col = {'name': row.name,
                    'type': sqla_type,
                    'nullable': sqla_type.nullable,

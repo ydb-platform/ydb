@@ -1,11 +1,9 @@
 IF (OS_LINUX AND NOT WITH_VALGRIND)
     UNITTEST()
 
-    TIMEOUT(1200)
-
     SIZE(LARGE)
 
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
     IF (BUILD_TYPE != "DEBUG")
         SRCS(
@@ -16,6 +14,7 @@ IF (OS_LINUX AND NOT WITH_VALGRIND)
     ENDIF ()
 
     PEERDIR(
+        ydb/apps/version
         ydb/core/blobstorage
         ydb/core/blobstorage/ut_pdiskfit/lib
     )

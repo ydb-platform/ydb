@@ -1,4 +1,4 @@
-#include <ydb/library/yql/udfs/common/string/string_udf.cpp>
+#include <yql/essentials/udfs/common/string/string_udf.cpp>
 
 namespace NKikimr::NKqp {
 

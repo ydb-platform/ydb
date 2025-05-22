@@ -2,7 +2,7 @@
 
 #include "fwd.h"
 
-#include <yt/cpp/mapreduce/interface/fwd.h>
+#include <yt/cpp/mapreduce/interface/io.h>
 
 #include <util/datetime/base.h>
 
@@ -11,18 +11,16 @@
 
 #include <util/stream/fwd.h>
 
-#include <memory>
-
 namespace NYT::NHttpClient {
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 struct THttpConfig
 {
     TDuration SocketTimeout = TDuration::Zero();
 };
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class IHttpResponse
 {
@@ -44,7 +42,6 @@ public:
     virtual IHttpResponsePtr Finish() = 0;
 };
 
-
 class IHttpClient
 {
 public:
@@ -65,12 +62,40 @@ public:
     }
 };
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+class THttpResponseStream
+    : public IFileReader
+{
+public:
+    THttpResponseStream(IHttpResponsePtr response)
+        : Response_(std::move(response))
+    {
+        Underlying_ = Response_->GetResponseStream();
+    }
+
+private:
+    size_t DoRead(void *buf, size_t len) override
+    {
+        return Underlying_->Read(buf, len);
+    }
+
+    size_t DoSkip(size_t len) override
+    {
+        return Underlying_->Skip(len);
+    }
+
+private:
+    IHttpResponsePtr Response_;
+    IInputStream* Underlying_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 IHttpClientPtr CreateDefaultHttpClient();
 
 IHttpClientPtr CreateCoreHttpClient(bool useTLS, const TConfigPtr& config);
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NHttpClient

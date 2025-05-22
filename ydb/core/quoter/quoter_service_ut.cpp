@@ -5,6 +5,9 @@
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

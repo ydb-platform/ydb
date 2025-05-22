@@ -5,12 +5,13 @@
 #include "node_warden_mock.h"
 #include "timer_actor.h"
 #include "events.h"
+#include <ydb/core/base/blobstorage_common.h>
 
 struct TEnvironmentSetup {
     std::unique_ptr<TTestActorSystem> Runtime;
     const ui32 NodeCount;
     const ui32 Domain = 0;
-    const ui64 TabletId = MakeBSControllerID(Domain);
+    const ui64 TabletId = MakeBSControllerID();
     const TDuration Timeout = TDuration::Seconds(30);
     const ui32 GroupId = 0;
     const ui32 NodeId = 1;
@@ -180,7 +181,7 @@ struct TEnvironmentSetup {
 
     void SetupStorage() {
         const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
-        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(GroupId), NodeId));
+        Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(TGroupId::FromValue(GroupId)), NodeId));
 
         for (ui32 nodeId : Runtime->GetNodes()) {
             const TActorId wardenId = Runtime->Register(new TNodeWardenMock(nodeId, TabletId), nodeId);

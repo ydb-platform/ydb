@@ -18,10 +18,11 @@ namespace NKikimr {
             size_t DataSize;
 
         public:
-            TNaiveFragmentWriter()
-                : Chain({{64 << 10}}) // 64 KiB initial storage
-                , DataSize(0)
-            {}
+            TNaiveFragmentWriter() {
+                Clear();
+            }
+
+            virtual ~TNaiveFragmentWriter() = default;
 
             size_t GetSize() const {
                 return DataSize;
@@ -48,7 +49,9 @@ namespace NKikimr {
                 }
             }
 
-            void Finish(TString *respData);
+            void Clear();
+
+            virtual void Finish(TString *respData);
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -60,7 +63,7 @@ namespace NKikimr {
                 : TNaiveFragmentWriter()
             {}
 
-            void Finish(TString *respData);
+            virtual void Finish(TString *respData) override;
         };
 
         ////////////////////////////////////////////////////////////////////////////

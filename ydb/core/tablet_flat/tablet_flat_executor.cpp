@@ -1,5 +1,6 @@
 #include "tablet_flat_executor.h"
 #include "flat_executor.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -12,11 +13,16 @@ namespace NFlatExecutorSetup {
     void ITablet::SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx) {
         Y_UNUSED(snapContext);
         Y_UNUSED(ctx);
-        Y_ABORT("must be overriden if plan to use table snapshot completion");
+        Y_TABLET_ERROR("must be overriden if plan to use table snapshot completion");
     }
 
     void ITablet::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
         Y_UNUSED(tableId);
+        Y_UNUSED(ctx);
+    }
+
+    void ITablet::DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext& ctx) {
+        Y_UNUSED(dataCleanupGeneration);
         Y_UNUSED(ctx);
     }
 

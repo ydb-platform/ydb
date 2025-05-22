@@ -5,6 +5,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/base/appdata.h>
 
@@ -67,14 +68,14 @@ public:
         TSerializedCellVec fromKeyCells(Ev->Get()->Record.GetFromKey());
         keyFrom.clear();
         for (ui32 i = 0; i < fromKeyCells.GetCells().size(); ++i) {
-            keyFrom.push_back(TRawTypeValue(fromKeyCells.GetCells()[i].AsRef(), keyColumnTypes[i]));
+            keyFrom.push_back(TRawTypeValue(fromKeyCells.GetCells()[i].AsRef(), keyColumnTypes[i].GetTypeId()));
         }
         keyFrom.resize(tableInfo->KeyColumns.size());
 
         TSerializedCellVec toKeyCells(Ev->Get()->Record.GetToKey());
         keyTo.clear();
         for (ui32 i = 0; i < toKeyCells.GetCells().size(); ++i) {
-            keyTo.push_back(TRawTypeValue(toKeyCells.GetCells()[i].AsRef(), keyColumnTypes[i]));
+            keyTo.push_back(TRawTypeValue(toKeyCells.GetCells()[i].AsRef(), keyColumnTypes[i].GetTypeId()));
         }
 
         TVector<NTable::TTag> valueColumns;

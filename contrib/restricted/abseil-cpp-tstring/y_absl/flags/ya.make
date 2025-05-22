@@ -6,6 +6,8 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(20240722.1)
+
 PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/base
     contrib/restricted/abseil-cpp-tstring/y_absl/container
@@ -28,7 +30,6 @@ NO_COMPILER_WARNINGS()
 
 SRCS(
     commandlineflag.cc
-    flag.cc
     internal/commandlineflag.cc
     internal/flag.cc
     internal/private_handle_accessor.cc

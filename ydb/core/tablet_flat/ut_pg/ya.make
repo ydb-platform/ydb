@@ -9,13 +9,13 @@ SRCS(
 PEERDIR(
     ydb/core/scheme
     ydb/core/tablet_flat/test/libs/table
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql/pg
-    ydb/library/yql/parser/pg_wrapper
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
 )
 
 ADDINCL(
-    ydb/library/yql/parser/pg_wrapper/postgresql/src/include
+    yql/essentials/parser/pg_wrapper/postgresql/src/include
 )
 
 IF (OS_WINDOWS)

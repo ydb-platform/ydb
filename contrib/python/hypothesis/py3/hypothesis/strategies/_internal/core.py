@@ -21,7 +21,7 @@ import warnings
 from contextvars import ContextVar
 from decimal import Context, Decimal, localcontext
 from fractions import Fraction
-from functools import lru_cache, reduce
+from functools import reduce
 from inspect import Parameter, Signature, isabstract, isclass
 from types import FunctionType
 from typing import (
@@ -53,8 +53,16 @@ from uuid import UUID
 import attr
 
 from hypothesis._settings import note_deprecation
-from hypothesis.control import cleanup, current_build_context, note
+from hypothesis.control import (
+    RandomSeeder,
+    cleanup,
+    current_build_context,
+    deprecate_random_in_strategy,
+    note,
+    should_note,
+)
 from hypothesis.errors import (
+    HypothesisSideeffectWarning,
     HypothesisWarning,
     InvalidArgument,
     ResolutionFailed,
@@ -69,12 +77,17 @@ from hypothesis.internal.charmap import (
 from hypothesis.internal.compat import (
     Concatenate,
     ParamSpec,
+    bit_count,
     ceil,
     floor,
     get_type_hints,
     is_typed_named_tuple,
 )
-from hypothesis.internal.conjecture.utils import calc_label_from_cls, check_sample
+from hypothesis.internal.conjecture.utils import (
+    calc_label_from_cls,
+    check_sample,
+    identity,
+)
 from hypothesis.internal.entropy import get_seeder_and_restorer
 from hypothesis.internal.floats import float_of
 from hypothesis.internal.observability import TESTCASE_CALLBACKS
@@ -109,7 +122,7 @@ from hypothesis.strategies._internal.collections import (
 from hypothesis.strategies._internal.deferred import DeferredStrategy
 from hypothesis.strategies._internal.functions import FunctionStrategy
 from hypothesis.strategies._internal.lazy import LazyStrategy, unwrap_strategies
-from hypothesis.strategies._internal.misc import just, none, nothing
+from hypothesis.strategies._internal.misc import BooleansStrategy, just, none, nothing
 from hypothesis.strategies._internal.numbers import (
     IntegersStrategy,
     Real,
@@ -126,9 +139,10 @@ from hypothesis.strategies._internal.strategies import (
     one_of,
 )
 from hypothesis.strategies._internal.strings import (
-    FixedSizeBytes,
+    BytesStrategy,
     OneCharStringStrategy,
     TextStrategy,
+    _check_is_single_character,
 )
 from hypothesis.strategies._internal.utils import (
     cacheable,
@@ -150,14 +164,14 @@ else:
 
 
 @cacheable
-@defines_strategy()
+@defines_strategy(force_reusable_values=True)
 def booleans() -> SearchStrategy[bool]:
     """Returns a strategy which generates instances of :class:`python:bool`.
 
     Examples from this strategy will shrink towards ``False`` (i.e.
     shrinking will replace ``True`` with ``False`` where possible).
     """
-    return SampledFromStrategy([False, True], repr_="booleans()")
+    return BooleansStrategy()
 
 
 @overload
@@ -201,6 +215,48 @@ def sampled_from(
     that behaviour, use ``sampled_from(seq) if seq else nothing()``.
     """
     values = check_sample(elements, "sampled_from")
+    try:
+        if isinstance(elements, type) and issubclass(elements, enum.Enum):
+            repr_ = f"sampled_from({elements.__module__}.{elements.__name__})"
+        else:
+            repr_ = f"sampled_from({elements!r})"
+    except Exception:  # pragma: no cover
+        repr_ = None
+    if isclass(elements) and issubclass(elements, enum.Flag):
+        # Combinations of enum.Flag members (including empty) are also members.  We generate these
+        # dynamically, because static allocation takes O(2^n) memory.  LazyStrategy is used for the
+        # ease of force_repr.
+        # Add all named values, both flag bits (== list(elements)) and aliases. The aliases are
+        # necessary for full coverage for flags that would fail enum.NAMED_FLAGS check, and they
+        # are also nice values to shrink to.
+        flags = sorted(
+            set(elements.__members__.values()),
+            key=lambda v: (bit_count(v.value), v.value),
+        )
+        # Finally, try to construct the empty state if it is not named. It's placed at the
+        # end so that we shrink to named values.
+        flags_with_empty = flags
+        if not flags or flags[0].value != 0:
+            try:
+                flags_with_empty = [*flags, elements(0)]
+            except TypeError:  # pragma: no cover
+                # Happens on some python versions (at least 3.12) when there are no named values
+                pass
+        inner = [
+            # Consider one or no named flags set, with shrink-to-named-flag behaviour.
+            # Special cases (length zero or one) are handled by the inner sampled_from.
+            sampled_from(flags_with_empty),
+        ]
+        if len(flags) > 1:
+            inner += [
+                # Uniform distribution over number of named flags or combinations set. The overlap
+                # at r=1 is intentional, it may lead to oversampling but gives consistent shrinking
+                # behaviour.
+                integers(min_value=1, max_value=len(flags))
+                .flatmap(lambda r: sets(sampled_from(flags), min_size=r, max_size=r))
+                .map(lambda s: elements(reduce(operator.or_, s))),
+            ]
+        return LazyStrategy(one_of, args=inner, kwargs={}, force_repr=repr_)
     if not values:
         if (
             isinstance(elements, type)
@@ -216,26 +272,7 @@ def sampled_from(
         raise InvalidArgument("Cannot sample from a length-zero sequence.")
     if len(values) == 1:
         return just(values[0])
-    try:
-        if isinstance(elements, type) and issubclass(elements, enum.Enum):
-            repr_ = f"sampled_from({elements.__module__}.{elements.__name__})"
-        else:
-            repr_ = f"sampled_from({elements!r})"
-    except Exception:  # pragma: no cover
-        repr_ = None
-    if isclass(elements) and issubclass(elements, enum.Flag):
-        # Combinations of enum.Flag members are also members.  We generate
-        # these dynamically, because static allocation takes O(2^n) memory.
-        # LazyStrategy is used for the ease of force_repr.
-        inner = sets(sampled_from(list(values)), min_size=1).map(
-            lambda s: reduce(operator.or_, s)
-        )
-        return LazyStrategy(lambda: inner, args=[], kwargs={}, force_repr=repr_)
     return SampledFromStrategy(values, repr_)
-
-
-def identity(x):
-    return x
 
 
 @cacheable
@@ -754,19 +791,6 @@ characters.__signature__ = (__sig := get_signature(characters)).replace(  # type
 )
 
 
-# Cache size is limited by sys.maxunicode, but passing None makes it slightly faster.
-@lru_cache(maxsize=None)
-def _check_is_single_character(c):
-    # In order to mitigate the performance cost of this check, we use a shared cache,
-    # even at the cost of showing the culprit strategy in the error message.
-    if not isinstance(c, str):
-        type_ = get_pretty_function_description(type(c))
-        raise InvalidArgument(f"Got non-string {c!r} (type {type_})")
-    if len(c) != 1:
-        raise InvalidArgument(f"Got {c!r} (length {len(c)} != 1)")
-    return c
-
-
 @cacheable
 @defines_strategy(force_reusable_values=True)
 def text(
@@ -889,19 +913,7 @@ def from_regex(
         check_type((str, SearchStrategy), alphabet, "alphabet")
         if not isinstance(pattern, str):
             raise InvalidArgument("alphabet= is not supported for bytestrings")
-
-        if isinstance(alphabet, str):
-            alphabet = characters(categories=(), include_characters=alphabet)
-        char_strategy = unwrap_strategies(alphabet)
-        if isinstance(char_strategy, SampledFromStrategy):
-            alphabet = characters(
-                categories=(),
-                include_characters=alphabet.elements,  # type: ignore
-            )
-        elif not isinstance(char_strategy, OneCharStringStrategy):
-            raise InvalidArgument(
-                f"{alphabet=} must be a sampled_from() or characters() strategy"
-            )
+        alphabet = OneCharStringStrategy.from_alphabet(alphabet)
     elif isinstance(pattern, str):
         alphabet = characters(codec="utf-8")
 
@@ -928,11 +940,7 @@ def binary(
     values.
     """
     check_valid_sizes(min_size, max_size)
-    if min_size == max_size:
-        return FixedSizeBytes(min_size)
-    return lists(
-        integers(min_value=0, max_value=255), min_size=min_size, max_size=max_size
-    ).map(bytes)
+    return BytesStrategy(min_size, max_size)
 
 
 @cacheable
@@ -967,14 +975,6 @@ def randoms(
     return RandomStrategy(
         use_true_random=use_true_random, note_method_calls=note_method_calls
     )
-
-
-class RandomSeeder:
-    def __init__(self, seed):
-        self.seed = seed
-
-    def __repr__(self):
-        return f"RandomSeeder({self.seed!r})"
 
 
 class RandomModule(SearchStrategy):
@@ -1295,6 +1295,12 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
         if types.is_a_union(thing):
             args = sorted(thing.__args__, key=types.type_sorting_key)
             return one_of([_from_type(t) for t in args])
+        if thing in types.LiteralStringTypes:  # pragma: no cover
+            # We can't really cover this because it needs either
+            # typing-extensions or python3.11+ typing.
+            # `LiteralString` from runtime's point of view is just a string.
+            # Fallback to regular text.
+            return text()
     # We also have a special case for TypeVars.
     # They are represented as instances like `~T` when they come here.
     # We need to work with their type instead.
@@ -1340,27 +1346,68 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
         or hasattr(types.typing_extensions, "_TypedDictMeta")  # type: ignore
         and type(thing) is types.typing_extensions._TypedDictMeta  # type: ignore
     ):  # pragma: no cover
+
+        def _get_annotation_arg(key, annotation_type):
+            try:
+                return get_args(annotation_type)[0]
+            except IndexError:
+                raise InvalidArgument(
+                    f"`{key}: {annotation_type.__name__}` is not a valid type annotation"
+                ) from None
+
+        # Taken from `Lib/typing.py` and modified:
+        def _get_typeddict_qualifiers(key, annotation_type):
+            qualifiers = []
+            while True:
+                annotation_origin = types.extended_get_origin(annotation_type)
+                if annotation_origin in types.AnnotatedTypes:
+                    if annotation_args := get_args(annotation_type):
+                        annotation_type = annotation_args[0]
+                    else:
+                        break
+                elif annotation_origin in types.RequiredTypes:
+                    qualifiers.append(types.RequiredTypes)
+                    annotation_type = _get_annotation_arg(key, annotation_type)
+                elif annotation_origin in types.NotRequiredTypes:
+                    qualifiers.append(types.NotRequiredTypes)
+                    annotation_type = _get_annotation_arg(key, annotation_type)
+                elif annotation_origin in types.ReadOnlyTypes:
+                    qualifiers.append(types.ReadOnlyTypes)
+                    annotation_type = _get_annotation_arg(key, annotation_type)
+                else:
+                    break
+            return set(qualifiers), annotation_type
+
         # The __optional_keys__ attribute may or may not be present, but if there's no
         # way to tell and we just have to assume that everything is required.
         # See https://github.com/python/cpython/pull/17214 for details.
         optional = set(getattr(thing, "__optional_keys__", ()))
+        required = set(
+            getattr(thing, "__required_keys__", get_type_hints(thing).keys())
+        )
         anns = {}
         for k, v in get_type_hints(thing).items():
-            origin = get_origin(v)
-            if origin in types.RequiredTypes + types.NotRequiredTypes:
-                if origin in types.NotRequiredTypes:
-                    optional.add(k)
-                else:
-                    optional.discard(k)
-                try:
-                    v = v.__args__[0]
-                except IndexError:
-                    raise InvalidArgument(
-                        f"`{k}: {v.__name__}` is not a valid type annotation"
-                    ) from None
+            qualifiers, v = _get_typeddict_qualifiers(k, v)
+            # We ignore `ReadOnly` type for now, only unwrap it.
+            if types.RequiredTypes in qualifiers:
+                optional.discard(k)
+                required.add(k)
+            if types.NotRequiredTypes in qualifiers:
+                optional.add(k)
+                required.discard(k)
+
             anns[k] = from_type_guarded(v)
             if anns[k] is ...:
                 anns[k] = _from_type_deferred(v)
+
+        if not required.isdisjoint(optional):  # pragma: no cover
+            # It is impossible to cover, because `typing.py` or `typing-extensions`
+            # won't allow creating incorrect TypedDicts,
+            # this is just a sanity check from our side.
+            raise InvalidArgument(
+                f"Required keys overlap with optional keys in a TypedDict:"
+                f" {required=}, {optional=}"
+            )
         if (
             (not anns)
             and thing.__annotations__
@@ -1368,7 +1415,7 @@ def _from_type(thing: Type[Ex]) -> SearchStrategy[Ex]:
         ):
             raise InvalidArgument("Failed to retrieve type annotations for local type")
         return fixed_dictionaries(  # type: ignore
-            mapping={k: v for k, v in anns.items() if k not in optional},
+            mapping={k: v for k, v in anns.items() if k in required},
             optional={k: v for k, v in anns.items() if k in optional},
         )
 
@@ -1787,7 +1834,7 @@ def _composite(f):
         )
     if params[0].default is not sig.empty:
         raise InvalidArgument("A default value for initial argument will never be used")
-    if not is_first_param_referenced_in_function(f):
+    if not (f is typing._overload_dummy or is_first_param_referenced_in_function(f)):
         note_deprecation(
             "There is no reason to use @st.composite on a function which "
             "does not call the provided draw() function internally.",
@@ -1806,9 +1853,11 @@ def _composite(f):
         params = params[1:]
     newsig = sig.replace(
         parameters=params,
-        return_annotation=SearchStrategy
-        if sig.return_annotation is sig.empty
-        else SearchStrategy[sig.return_annotation],
+        return_annotation=(
+            SearchStrategy
+            if sig.return_annotation is sig.empty
+            else SearchStrategy[sig.return_annotation]
+        ),
     )
 
     @defines_strategy()
@@ -2075,6 +2124,10 @@ def runner(*, default: Any = not_set) -> SearchStrategy[Any]:
     The exact meaning depends on the entry point, but it will usually be the
     associated 'self' value for it.
 
+    If you are using this in a rule for stateful testing, this strategy
+    will return the instance of the :class:`~hypothesis.stateful.RuleBasedStateMachine`
+    that the rule is running for.
+
     If there is no current test runner and a default is provided, return
     that default. If no default is provided, raises InvalidArgument.
 
@@ -2095,21 +2148,26 @@ class DataObject:
         self.count = 0
         self.conjecture_data = data
 
+    __signature__ = Signature()  # hide internals from Sphinx introspection
+
     def __repr__(self):
         return "data(...)"
 
     def draw(self, strategy: SearchStrategy[Ex], label: Any = None) -> Ex:
         check_strategy(strategy, "strategy")
-        result = self.conjecture_data.draw(strategy)
         self.count += 1
         printer = RepresentationPrinter(context=current_build_context())
         desc = f"Draw {self.count}{'' if label is None else f' ({label})'}: "
+        with deprecate_random_in_strategy("{}from {!r}", desc, strategy):
+            result = self.conjecture_data.draw(strategy, observe_as=f"generate:{desc}")
         if TESTCASE_CALLBACKS:
             self.conjecture_data._observability_args[desc] = to_jsonable(result)
 
-        printer.text(desc)
-        printer.pretty(result)
-        note(printer.getvalue())
+        # optimization to avoid needless printer.pretty
+        if should_note():
+            printer.text(desc)
+            printer.pretty(result)
+            note(printer.getvalue())
         return result
 
 
@@ -2153,7 +2211,7 @@ def data() -> SearchStrategy[DataObject]:
     complete information.
 
     Examples from this strategy do not shrink (because there is only one),
-    but the result of calls to each draw() call shrink as they normally would.
+    but the result of calls to each ``data.draw()`` call shrink as they normally would.
     """
     return DataStrategy()
 
@@ -2196,14 +2254,25 @@ def register_type_strategy(
             f"{custom_type=} is not allowed to be registered, "
             f"because there is no such thing as a runtime instance of {custom_type!r}"
         )
-    elif not (isinstance(strategy, SearchStrategy) or callable(strategy)):
+    if not (isinstance(strategy, SearchStrategy) or callable(strategy)):
         raise InvalidArgument(
             f"{strategy=} must be a SearchStrategy, or a function that takes "
             "a generic type and returns a specific SearchStrategy"
         )
-    elif isinstance(strategy, SearchStrategy) and strategy.is_empty:
-        raise InvalidArgument(f"{strategy=} must not be empty")
-    elif types.has_type_arguments(custom_type):
+    if isinstance(strategy, SearchStrategy):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", HypothesisSideeffectWarning)
+
+            # Calling is_empty forces materialization of lazy strategies. If this is done at import
+            # time, lazy strategies will warn about it; here, we force that warning to raise to
+            # avoid the materialization. Ideally, we'd just check if the strategy is lazy, but the
+            # lazy strategy may be wrapped underneath another strategy so that's complicated.
+            try:
+                if strategy.is_empty:
+                    raise InvalidArgument(f"{strategy=} must not be empty")
+            except HypothesisSideeffectWarning:  # pragma: no cover
+                pass
+    if types.has_type_arguments(custom_type):
         raise InvalidArgument(
             f"Cannot register generic type {custom_type!r}, because it has type "
             "arguments which would not be handled.  Instead, register a function "

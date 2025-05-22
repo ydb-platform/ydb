@@ -98,9 +98,9 @@ void TSkiffTableReader::Next()
         try {
             ReadRow();
             break;
-        } catch (const std::exception& exception) {
-            YT_LOG_ERROR("Read error: %v", exception.what());
-            if (!Input_.Retry(RangeIndex_, RowIndex_)) {
+        } catch (const std::exception& ex) {
+            YT_LOG_ERROR("Read error: %v", ex.what());
+            if (!Input_.Retry(RangeIndex_, RowIndex_, std::make_exception_ptr(ex))) {
                 throw;
             }
             BufferedInput_ = TBufferedInput(&Input_);
@@ -180,10 +180,9 @@ TVector<TSkiffTableReader::TSkiffTableSchema> TSkiffTableReader::CreateSkiffTabl
             "Expected 'tuple' wire type for table schema, got '" << tableSchema->GetWireType() << "'");
         TVector<TSkiffColumnSchema> columns;
         for (const auto& columnSchema : tableSchema->GetChildren()) {
-            if (columnSchema->GetName().StartsWith("$")) {
-                auto iter = specialColumns.find(columnSchema->GetName());
-                Y_ENSURE(iter != specialColumns.end(), "Unknown special column: " << columnSchema->GetName());
-                columns.push_back(iter->second);
+            auto specialColumnIter = specialColumns.find(columnSchema->GetName());
+            if (specialColumnIter != specialColumns.end()) {
+                columns.push_back(specialColumnIter->second);
             } else {
                 auto wireType = columnSchema->GetWireType();
                 bool required = true;

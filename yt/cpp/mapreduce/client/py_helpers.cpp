@@ -4,11 +4,13 @@
 #include "operation.h"
 #include "transaction.h"
 
+#include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/helpers.h>
+
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/fluent.h>
 
-#include <yt/cpp/mapreduce/common/retry_lib.h>
-#include <yt/cpp/mapreduce/common/helpers.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -51,7 +53,7 @@ TStructuredJobTableList NodeToStructuredTablePaths(const TNode& node, const TOpe
             paths.emplace_back(inputNode.AsString());
         }
     }
-    paths = NRawClient::CanonizeYPaths(/* retryPolicy */ nullptr, preparer.GetContext(), paths);
+    paths = NRawClient::CanonizeYPaths(preparer.GetClient()->GetRawClient(), paths);
     TStructuredJobTableList result(intermediateTableCount, TStructuredJobTable::Intermediate(TUnspecifiedTableStructure()));
     for (const auto& path : paths) {
         result.emplace_back(TStructuredJobTable{TUnspecifiedTableStructure(), path});

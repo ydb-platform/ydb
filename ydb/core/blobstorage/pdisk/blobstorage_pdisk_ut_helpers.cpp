@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_ut_helpers.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
+#include <ydb/core/util/random.h>
 
 #include <util/folder/dirut.h>
 #include <util/generic/ptr.h>
@@ -12,9 +13,20 @@
 namespace NKikimr {
 
 TString PrepareData(ui32 size, ui32 flavor) {
+    constexpr size_t buffSize = 512;
+    // this buffer + memcpy speeds up large allocations x10 on plain execution and x30 under thread sanitizer
+    char buff[buffSize];
+    for (ui32 i = 0; i < std::min<ui32>(size, buffSize); ++i) {
+        buff[i] = 'a' + (i + size + flavor) % 16;
+    }
     TString data = TString::Uninitialized(size);
-    for (ui32 i = 0; i < size; ++i) {
-        data[i] = '0' + (i + size + flavor) % 8;
+
+    ui32 remainingSize = size;
+    ui8 *rawData = (ui8*)data.Detach();
+    for (ui32 i = 0; i < (size + buffSize - 1) / buffSize; ++i) {
+        memcpy(rawData, buff, std::min<ui32>(buffSize, remainingSize));
+        remainingSize -= buffSize;
+        rawData += buffSize;
     }
     return data;
 }
@@ -24,7 +36,7 @@ TString StatusToString(const NKikimrProto::EReplyStatus status) {
 }
 
 TString MakeDatabasePath(const char *dir) {
-    TString databaseDirectory = Sprintf("%s/yard", dir);
+    TString databaseDirectory = Sprintf("%s/pdisk", dir);
     return databaseDirectory;
 }
 
@@ -33,41 +45,45 @@ TString MakePDiskPath(const char *dir) {
     if (IsRealBlockDevice) {
         return RealBlockDevicePath;
     } else {
-        return databaseDirectory + "/pdisk.dat";
+        return databaseDirectory + "/data.bin";
     }
+}
+
+TString CreateFile(const char *baseDir, ui32 dataSize) {
+    TString databaseDirectory = MakeDatabasePath(baseDir);
+    MakeDirIfNotExist(databaseDirectory.c_str());
+    TString path = MakePDiskPath(baseDir);
+    {
+        TFile file(path.c_str(), OpenAlways | RdWr | Seq | Direct);
+        file.Resize(dataSize);
+        file.Close();
+    }
+    UNIT_ASSERT_EQUAL_C(NFs::Exists(path), true, "File " << path << " does not exist.");
+    return path;
 }
 
 void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization) {
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization, bool plainDataChunks) {
+    if (!diskSize) {
+        diskSize = (ui64)chunkSize * 1000;
+    }
+
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
-    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
-    if (enableSmallDiskOptimization) {
-        try {
-            FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid, chunkKey, logKey, sysLogKey,
-                    NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap,
-                    enableSmallDiskOptimization);
-        } catch (NPDisk::TPDiskFormatBigChunkException) {
-            FormatPDisk(path, diskSize, 4 << 10, NPDisk::SmallDiskMaximumChunkSize, guid, chunkKey, logKey, sysLogKey,
-                    NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap,
-                    enableSmallDiskOptimization);
-        }
-    } else {
+    try {
         FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid, chunkKey, logKey, sysLogKey,
                 NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap,
-                enableSmallDiskOptimization);
+                enableSmallDiskOptimization, {}, plainDataChunks);
+    } catch (NPDisk::TPDiskFormatBigChunkException) {
+        FormatPDisk(path, diskSize, 4 << 10, NPDisk::SmallDiskMaximumChunkSize, guid, chunkKey, logKey, sysLogKey,
+                NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap,
+                enableSmallDiskOptimization, {}, plainDataChunks);
     }
-}
-
-void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, bool isErasureEncodeUserLog,
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization) {
-    ui64 diskSizeHeuristic = (ui64)chunkSize * 1000;
-    FormatPDiskForTest(path, guid, chunkSize, diskSizeHeuristic, isErasureEncodeUserLog, sectorMap,
-            enableSmallDiskOptimization);
 }
 
 void ReadPdiskFile(TTestContext *tc, ui32 dataSize, NPDisk::TAlignedData &outData) {
@@ -182,7 +198,7 @@ void FillDeviceWithPattern(TTestContext *tc, ui64 chunkSize, ui64 pattern) {
     const ui32 formatSectorsSize = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
     NPDisk::TAlignedData data(formatSectorsSize);
 
-    Y_ABORT_UNLESS(data.Size() % sizeof(ui64) == 0);
+    Y_VERIFY(data.Size() % sizeof(ui64) == 0);
     Fill((ui64*)data.Get(), (ui64*)(data.Get() + data.Size()), pattern);
 
     {

@@ -4,10 +4,8 @@ import datetime
 import decimal
 import json
 import re
-import uuid
 
 from collections import OrderedDict
-from moto.core import get_account_id
 from moto.core import BaseBackend, BaseModel, CloudFormationModel
 from moto.core.utils import unix_time, unix_time_millis, BackendDict
 from moto.core.exceptions import JsonRESTError
@@ -34,6 +32,7 @@ from moto.dynamodb.exceptions import (
     StreamAlreadyEnabledException,
     MockValidationException,
     InvalidConversion,
+    TransactWriteSingleOpException,
 )
 from moto.dynamodb.models.utilities import bytesize
 from moto.dynamodb.models.dynamo_type import DynamoType
@@ -41,6 +40,7 @@ from moto.dynamodb.parsing.executors import UpdateExpressionExecutor
 from moto.dynamodb.parsing.expressions import UpdateExpressionParser
 from moto.dynamodb.parsing.validators import UpdateExpressionValidator
 from moto.dynamodb.limits import HASH_KEY_MAX_LENGTH, RANGE_KEY_MAX_LENGTH
+from moto.moto_api._internal import mock_random
 
 
 class DynamoJsonEncoder(json.JSONEncoder):
@@ -223,7 +223,7 @@ class StreamRecord(BaseModel):
             keys[table.range_key_attr] = rec.range_key.to_json()
 
         self.record = {
-            "eventID": uuid.uuid4().hex,
+            "eventID": mock_random.uuid4().hex,
             "eventName": event_name,
             "eventSource": "aws:dynamodb",
             "eventVersion": "1.0",
@@ -252,7 +252,8 @@ class StreamRecord(BaseModel):
 
 
 class StreamShard(BaseModel):
-    def __init__(self, table):
+    def __init__(self, account_id, table):
+        self.account_id = account_id
         self.table = table
         self.id = "shardId-00000001541626099285-f35f62ef"
         self.starting_sequence_number = 1100000000017454423009
@@ -285,7 +286,7 @@ class StreamShard(BaseModel):
                 len("arn:aws:lambda:") : arn.index(":", len("arn:aws:lambda:"))
             ]
 
-            result = lambda_backends[region].send_dynamodb_items(
+            result = lambda_backends[self.account_id][region].send_dynamodb_items(
                 arn, self.items, esm.event_source_arn
             )
 
@@ -398,6 +399,7 @@ class Table(CloudFormationModel):
     def __init__(
         self,
         table_name,
+        account_id,
         region,
         schema=None,
         attr=None,
@@ -410,6 +412,8 @@ class Table(CloudFormationModel):
         tags=None,
     ):
         self.name = table_name
+        self.account_id = account_id
+        self.region_name = region
         self.attr = attr
         self.schema = schema
         self.range_key_attr = None
@@ -467,25 +471,24 @@ class Table(CloudFormationModel):
         self.sse_specification = sse_specification
         if sse_specification and "KMSMasterKeyId" not in self.sse_specification:
             self.sse_specification["KMSMasterKeyId"] = self._get_default_encryption_key(
-                region
+                account_id, region
             )
 
-    def _get_default_encryption_key(self, region):
+    def _get_default_encryption_key(self, account_id, region):
         from moto.kms import kms_backends
 
         # https://aws.amazon.com/kms/features/#AWS_Service_Integration
         # An AWS managed CMK is created automatically when you first create
         # an encrypted resource using an AWS service integrated with KMS.
-        kms = kms_backends[region]
+        kms = kms_backends[account_id][region]
         ddb_alias = "alias/aws/dynamodb"
         if not kms.alias_exists(ddb_alias):
             key = kms.create_key(
                 policy="",
                 key_usage="ENCRYPT_DECRYPT",
-                customer_master_key_spec="SYMMETRIC_DEFAULT",
+                key_spec="SYMMETRIC_DEFAULT",
                 description="Default master key that protects my DynamoDB table storage",
                 tags=None,
-                region=region,
             )
             kms.add_alias(key.id, ddb_alias)
         ebs_key = kms.describe_key(ddb_alias)
@@ -532,7 +535,7 @@ class Table(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
         params = {}
@@ -550,27 +553,29 @@ class Table(CloudFormationModel):
         if "StreamSpecification" in properties:
             params["streams"] = properties["StreamSpecification"]
 
-        table = dynamodb_backends[region_name].create_table(
+        table = dynamodb_backends[account_id][region_name].create_table(
             name=resource_name, **params
         )
         return table
 
     @classmethod
     def delete_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name
+        cls, resource_name, cloudformation_json, account_id, region_name
     ):
-        table = dynamodb_backends[region_name].delete_table(name=resource_name)
+        table = dynamodb_backends[account_id][region_name].delete_table(
+            name=resource_name
+        )
         return table
 
     def _generate_arn(self, name):
-        return f"arn:aws:dynamodb:us-east-1:{get_account_id()}:table/{name}"
+        return f"arn:aws:dynamodb:{self.region_name}:{self.account_id}:table/{name}"
 
     def set_stream_specification(self, streams):
         self.stream_specification = streams
         if streams and (streams.get("StreamEnabled") or streams.get("StreamViewType")):
             self.stream_specification["StreamEnabled"] = True
             self.latest_stream_label = datetime.datetime.utcnow().isoformat()
-            self.stream_shard = StreamShard(self)
+            self.stream_shard = StreamShard(self.account_id, self)
         else:
             self.stream_specification = {"StreamEnabled": False}
 
@@ -1042,14 +1047,14 @@ class Table(CloudFormationModel):
 
         return results, last_evaluated_key
 
-    def delete(self, region_name):
-        dynamodb_backends[region_name].delete_table(self.name)
+    def delete(self, account_id, region_name):
+        dynamodb_backends[account_id][region_name].delete_table(self.name)
 
 
 class RestoredTable(Table):
-    def __init__(self, name, region, backup):
+    def __init__(self, name, account_id, region, backup):
         params = self._parse_params_from_backup(backup)
-        super().__init__(name, region=region, **params)
+        super().__init__(name, account_id=account_id, region=region, **params)
         self.indexes = copy.deepcopy(backup.table.indexes)
         self.global_indexes = copy.deepcopy(backup.table.global_indexes)
         self.items = copy.deepcopy(backup.table.items)
@@ -1079,9 +1084,9 @@ class RestoredTable(Table):
 
 
 class RestoredPITTable(Table):
-    def __init__(self, name, region, source):
+    def __init__(self, name, account_id, region, source):
         params = self._parse_params_from_table(source)
-        super().__init__(name, region=region, **params)
+        super().__init__(name, account_id=account_id, region=region, **params)
         self.indexes = copy.deepcopy(source.indexes)
         self.global_indexes = copy.deepcopy(source.global_indexes)
         self.items = copy.deepcopy(source.items)
@@ -1121,7 +1126,7 @@ class Backup(object):
     def _make_identifier(self):
         timestamp = int(unix_time_millis(self.creation_date_time))
         timestamp_padded = str("0" + str(timestamp))[-16:16]
-        guid = str(uuid.uuid4())
+        guid = str(mock_random.uuid4())
         guid_shortened = guid[:8]
         return "{}-{}".format(timestamp_padded, guid_shortened)
 
@@ -1129,7 +1134,7 @@ class Backup(object):
     def arn(self):
         return "arn:aws:dynamodb:{region}:{account}:table/{table_name}/backup/{identifier}".format(
             region=self.backend.region_name,
-            account=get_account_id(),
+            account=self.backend.account_id,
             table_name=self.table.name,
             identifier=self.identifier,
         )
@@ -1197,7 +1202,9 @@ class DynamoDBBackend(BaseBackend):
     def create_table(self, name, **params):
         if name in self.tables:
             raise ResourceInUseException
-        table = Table(name, region=self.region_name, **params)
+        table = Table(
+            name, account_id=self.account_id, region=self.region_name, **params
+        )
         self.tables[name] = table
         return table
 
@@ -1375,9 +1382,7 @@ class DynamoDBBackend(BaseBackend):
                 for key in keys:
                     if key in table.hash_key_names:
                         return key, None
-            # for potential_hash, potential_range in zip(table.hash_key_names, table.range_key_names):
-            #     if set([potential_hash, potential_range]) == set(keys):
-            #         return potential_hash, potential_range
+
             potential_hash, potential_range = None, None
             for key in set(keys):
                 if key in table.hash_key_names:
@@ -1483,13 +1488,6 @@ class DynamoDBBackend(BaseBackend):
 
         filter_expression = get_filter_expression(
             filter_expression, expr_names, expr_values
-        )
-
-        projection_expression = ",".join(
-            [
-                expr_names.get(attr, attr)
-                for attr in projection_expression.replace(" ", "").split(",")
-            ]
         )
 
         return table.scan(
@@ -1657,8 +1655,13 @@ class DynamoDBBackend(BaseBackend):
                 raise MultipleTransactionsException()
             target_items.add(item)
 
-        errors = []
+        errors = []  # [(Code, Message, Item), ..]
         for item in transact_items:
+            # check transact writes are not performing multiple operations
+            # in the same item
+            if len(list(item.keys())) > 1:
+                raise TransactWriteSingleOpException
+
             try:
                 if "ConditionCheck" in item:
                     item = item["ConditionCheck"]
@@ -1685,6 +1688,7 @@ class DynamoDBBackend(BaseBackend):
                     item = item["Put"]
                     attrs = item["Item"]
                     table_name = item["TableName"]
+                    check_unicity(table_name, item)
                     condition_expression = item.get("ConditionExpression", None)
                     expression_attribute_names = item.get(
                         "ExpressionAttributeNames", None
@@ -1741,14 +1745,14 @@ class DynamoDBBackend(BaseBackend):
                     )
                 else:
                     raise ValueError
-                errors.append((None, None))
+                errors.append((None, None, None))
             except MultipleTransactionsException:
                 # Rollback to the original state, and reraise the error
                 self.tables = original_table_state
                 raise MultipleTransactionsException()
             except Exception as e:  # noqa: E722 Do not use bare except
-                errors.append((type(e).__name__, e.message))
-        if set(errors) != set([(None, None)]):
+                errors.append((type(e).__name__, e.message, item))
+        if any([code is not None for code, _, _ in errors]):
             # Rollback to the original state, and reraise the errors
             self.tables = original_table_state
             raise TransactionCanceledException(errors)
@@ -1825,7 +1829,10 @@ class DynamoDBBackend(BaseBackend):
         if target_table_name in self.tables:
             raise TableAlreadyExistsException(target_table_name)
         new_table = RestoredTable(
-            target_table_name, region=self.region_name, backup=backup
+            target_table_name,
+            account_id=self.account_id,
+            region=self.region_name,
+            backup=backup,
         )
         self.tables[target_table_name] = new_table
         return new_table
@@ -1843,7 +1850,10 @@ class DynamoDBBackend(BaseBackend):
         if target_table_name in self.tables:
             raise TableAlreadyExistsException(target_table_name)
         new_table = RestoredPITTable(
-            target_table_name, region=self.region_name, source=source
+            target_table_name,
+            account_id=self.account_id,
+            region=self.region_name,
+            source=source,
         )
         self.tables[target_table_name] = new_table
         return new_table

@@ -968,10 +968,10 @@ Y_UNIT_TEST(TestMapAsObject) {
 
     auto& items = *proto.MutableItems();
     items["key1"] = "value1";
-    items["key2"] = "value2";
+    items[""] = "value2";
     items["key3"] = "value3";
 
-    TString modelStr(R"_({"Items":{"key3":"value3","key2":"value2","key1":"value1"}})_");
+    TString modelStr(R"_({"Items":{"key3":"value3","":"value2","key1":"value1"}})_");
 
     TStringStream jsonStr;
     TProto2JsonConfig config;
@@ -996,6 +996,24 @@ Y_UNIT_TEST(TestMapUsingGeneratedAsJSON) {
 
     UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
 } // TestMapUsingGeneratedAsJSON
+
+Y_UNIT_TEST(TestMapSortedKeys) {
+    TMapType proto;
+
+    auto& items = *proto.MutableItems();
+    items["key1"] = "value1";
+    items["key2"] = "value2";
+    items["key3"] = "value3";
+
+    TString modelStr(R"_({"Items":{"key1":"value1","key2":"value2","key3":"value3"}})_");
+
+    TStringStream jsonStr;
+
+    auto config = TProto2JsonConfig().SetMapAsObject(true).SetSortMapKeys(false);
+    UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
+
+    UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
+} // TestMapSortedKeys
 
 Y_UNIT_TEST(TestMapDefaultValue) {
     TMapType proto;
@@ -1086,6 +1104,199 @@ Y_UNIT_TEST(TestStringifyNumbers) {
 #undef TEST_SINGLE
 } // TestStringifyNumbers
 
+Y_UNIT_TEST(TestStringifyNumbersRepeated) {
+#define TEST_SINGLE(flag, field, value)                                          \
+    do {                                                                         \
+        TFlatRepeated proto;                                                     \
+        proto.Add##field(value);                                                 \
+                                                                                 \
+        TStringStream jsonStr;                                                   \
+        TProto2JsonConfig config;                                                \
+        config.SetStringifyNumbers(flag);                                        \
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));            \
+        UNIT_ASSERT_EQUAL(jsonStr.Str(), "{\"" #field "\":[" #value "]}");       \
+    } while (false)
+
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, SI64, 1);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, SI64, 10000000000000000);
+
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, SI64, 1);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, SI64, 10000000000000000);
+
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, SI64, 1);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, SI64, 10000000000000000);
+
+    TEST_SINGLE(TProto2JsonConfig::StringifyInt64Always, UI64, 1);
+    TEST_SINGLE(TProto2JsonConfig::StringifyInt64Always, UI64, 10000000000000000);
+
+#undef TEST_SINGLE
+} // TestStringifyNumbersRepeated
+
+Y_UNIT_TEST(TestStringifyNumbersRepeatedStringification){
+#define TEST_SINGLE(flag, field, value, expectString)                              \
+    do {                                                                           \
+        TFlatRepeated proto;                                                       \
+        proto.Add##field(value);                                                   \
+                                                                                   \
+        TStringStream jsonStr;                                                     \
+        TProto2JsonConfig config;                                                  \
+        config.SetStringifyNumbersRepeated(flag);                                  \
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));              \
+        if (expectString) {                                                        \
+            UNIT_ASSERT_EQUAL(jsonStr.Str(), "{\"" #field "\":[\"" #value "\"]}"); \
+        } else {                                                                   \
+            UNIT_ASSERT_EQUAL(jsonStr.Str(), "{\"" #field "\":[" #value "]}");     \
+        }                                                                          \
+    } while (false)
+
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, SI64, 1, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, SI64, 1000000000, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, SI64, 10000000000000000, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, SI64, -1, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, SI64, -1000000000, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, SI64, -10000000000000000, false);
+
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, SI64, 1, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, SI64, 1000000000, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, SI64, 10000000000000000, true);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, SI64, -1, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, SI64, -1000000000, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, SI64, -10000000000000000, true);
+
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, SI64, 1, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, SI64, 1000000000, true);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, SI64, 10000000000000000, true);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, SI64, -1, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, SI64, -1000000000, true);
+    TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, SI64, -10000000000000000, true);
+
+
+    TEST_SINGLE(TProto2JsonConfig::StringifyInt64Always, UI64, 1, true);
+    TEST_SINGLE(TProto2JsonConfig::StringifyInt64Always, UI32, 1000000000, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyInt64Always, UI64, 10000000000000000, true);
+    TEST_SINGLE(TProto2JsonConfig::StringifyInt64Always, SI64, -1, true);
+    TEST_SINGLE(TProto2JsonConfig::StringifyInt64Always, SI32, -1000000000, false);
+    TEST_SINGLE(TProto2JsonConfig::StringifyInt64Always, SI64, -10000000000000000, true);
+
+#undef TEST_SINGLE
+} // TestStringifyNumbersRepeatedStringification
+
+Y_UNIT_TEST(TestStringifyNumbersRepeatedStringificationList){
+    using NJson::JSON_STRING;
+    using NJson::JSON_UINTEGER;
+    using NJson::JSON_INTEGER;
+
+    TFlatRepeated proto;
+    proto.AddUI64(1);
+    proto.AddUI64(1000000000);
+    proto.AddUI64(10000000000000000);
+    proto.AddSI64(1);
+    proto.AddSI64(1000000000);
+    proto.AddSI64(10000000000000000);
+    proto.AddSI64(-1);
+    proto.AddSI64(-1000000000);
+    proto.AddSI64(-10000000000000000);
+    proto.AddUI32(1);
+    proto.AddUI32(1000000000);
+    proto.AddSI32(-1);
+    proto.AddSI32(-1000000000);
+
+    TProto2JsonConfig config;
+    NJson::TJsonValue jsonValue;
+    THashMap<TString, NJson::TJsonValue> jsonMap;
+    {
+        jsonValue = NJson::TJsonValue{};
+        config.SetStringifyNumbersRepeated(TProto2JsonConfig::StringifyLongNumbersNever);
+
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonValue, config));
+        jsonMap = jsonValue.GetMap();
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[0].GetType(), JSON_UINTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[1].GetType(), JSON_UINTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[2].GetType(), JSON_UINTEGER);
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[0].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[1].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[2].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[3].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[4].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[5].GetType(), JSON_INTEGER);
+    }
+    {
+        jsonValue = NJson::TJsonValue{};
+        config.SetStringifyNumbersRepeated(TProto2JsonConfig::StringifyLongNumbersForDouble);
+
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonValue, config));
+        jsonMap = jsonValue.GetMap();
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[0].GetType(), JSON_UINTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[1].GetType(), JSON_UINTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[2].GetType(), JSON_STRING);
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[0].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[1].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[2].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[3].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[4].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[5].GetType(), JSON_STRING);
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI32")[0].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI32")[1].GetType(), JSON_INTEGER);
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI32")[0].GetType(), JSON_UINTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI32")[1].GetType(), JSON_UINTEGER);
+    }
+    {
+        jsonValue = NJson::TJsonValue{};
+        config.SetStringifyNumbersRepeated(TProto2JsonConfig::StringifyLongNumbersForFloat);
+
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonValue, config));
+        jsonMap = jsonValue.GetMap();
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[0].GetType(), JSON_UINTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[1].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[2].GetType(), JSON_STRING);
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[0].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[1].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[2].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[3].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[4].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[5].GetType(), JSON_STRING);
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI32")[0].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI32")[1].GetType(), JSON_STRING);
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI32")[0].GetType(), JSON_UINTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI32")[1].GetType(), JSON_STRING);
+    }
+    {
+        jsonValue = NJson::TJsonValue{};
+        config.SetStringifyNumbersRepeated(TProto2JsonConfig::StringifyInt64Always);
+
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonValue, config));
+        jsonMap = jsonValue.GetMap();
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[0].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[1].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI64")[2].GetType(), JSON_STRING);
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[0].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[1].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[2].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[3].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[4].GetType(), JSON_STRING);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI64")[5].GetType(), JSON_STRING);
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI32")[0].GetType(), JSON_INTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("SI32")[1].GetType(), JSON_INTEGER);
+
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI32")[0].GetType(), JSON_UINTEGER);
+        UNIT_ASSERT_EQUAL(jsonMap.at("UI32")[1].GetType(), JSON_UINTEGER);
+    }
+
+} // TestStringifyNumbersRepeatedStringificationList
+
 Y_UNIT_TEST(TestExtension) {
     TExtensionField proto;
     proto.SetExtension(bar, 1);
@@ -1142,5 +1353,21 @@ Y_UNIT_TEST(TestFloatToString) {
 
 #undef TEST_SINGLE
 } // TestFloatToString
+
+Y_UNIT_TEST(TestAny) {
+    TProto2JsonConfig config;
+    config.SetConvertAny(true);
+
+    TString modelStr(R"_({"Any":{"@type":"type.googleapis.com/NProtobufJsonTest.TFlatOptional","String":"value\""}})_");
+
+    TFlatOptional proto;
+    proto.SetString(R"_(value")_");
+    TContainsAny protoWithAny;
+    protoWithAny.MutableAny()->PackFrom(proto);
+
+    TStringStream jsonStr;
+    UNIT_ASSERT_NO_EXCEPTION(Proto2Json(protoWithAny, jsonStr, config));
+    UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
+}
 
 } // TProto2JsonTest

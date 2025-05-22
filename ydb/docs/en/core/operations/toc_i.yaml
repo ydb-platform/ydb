@@ -1,8 +1,0 @@
-items:
-- name: Reading and writing data
-  href: crud.md
-  hidden: true
-- name: Custom attributes in tables
-  href: manage-users-attr.md
-- name: Query plans optimization
-  href: query_plans_optimization.md

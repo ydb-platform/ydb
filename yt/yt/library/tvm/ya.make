@@ -10,7 +10,7 @@ PEERDIR(
     library/cpp/yt/memory
 )
 
-IF(NOT OPENSOURCE)
+IF (NOT OPENSOURCE AND NOT USE_VANILLA_PROTOC)
     INCLUDE(ya_non_opensource.inc)
 ENDIF()
 

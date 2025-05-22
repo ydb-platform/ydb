@@ -22,7 +22,7 @@ namespace NYT::NYTProf {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#if not defined(_linux_)
+#if !defined(_linux_)
 
 TCpuProfiler::TCpuProfiler(TCpuProfilerOptions options)
     : TSignalSafeProfiler(options)
@@ -37,7 +37,7 @@ void TCpuProfiler::EnableProfiler()
 void TCpuProfiler::DisableProfiler()
 { }
 
-void TCpuProfiler::AnnotateProfile(NProto::Profile* /* profile */, const std::function<i64(const TString&)>& /* stringify */)
+void TCpuProfiler::AnnotateProfile(NProto::Profile* /*profile*/, const TStringify& /*stringify*/)
 { }
 
 i64 TCpuProfiler::EncodeValue(i64 value)
@@ -136,7 +136,7 @@ void TCpuProfiler::DisableProfiler()
     }
 }
 
-void TCpuProfiler::AnnotateProfile(NProto::Profile* profile, const std::function<i64(const TString&)>& stringify)
+void TCpuProfiler::AnnotateProfile(NProto::Profile* profile, const TStringify& stringify)
 {
     auto sampleType = profile->add_sample_type();
     sampleType->set_type(stringify("sample"));
@@ -183,7 +183,7 @@ TCpuProfilerOptions::TSampleFilter GetActionMinExecTimeFilter(TDuration minExecT
 {
     auto minCpuDuration = DurationToCpuDuration(minExecTime);
 
-    return [minCpuDuration] () {
+    return [minCpuDuration] {
         auto fiberStartTime = GetTraceContextTimingCheckpoint();
         if (fiberStartTime == 0) {
             return false;

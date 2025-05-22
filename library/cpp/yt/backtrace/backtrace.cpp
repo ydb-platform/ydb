@@ -4,9 +4,9 @@ namespace NYT::NBacktrace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString SymbolizeBacktrace(TBacktrace backtrace)
+std::string SymbolizeBacktrace(TBacktrace backtrace)
 {
-    TString result;
+    std::string result;
     SymbolizeBacktrace(
         backtrace,
         [&] (TStringBuf str) { result += str; });

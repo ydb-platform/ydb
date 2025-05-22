@@ -425,3 +425,8 @@ message TEvInterruptTransaction {
 message TEvStreamDataAck {
 }
 
+message TMessageSeqNo {
+    optional uint64 Generation = 1;
+    optional uint64 Round = 2;
+}
+

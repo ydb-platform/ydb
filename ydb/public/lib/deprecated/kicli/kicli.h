@@ -3,6 +3,10 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/ydb_result_set_old.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client_config.h>
 #include <ydb/public/lib/base/msgbus_status.h>
@@ -582,7 +586,11 @@ public:
         BlobDepot,
         ExternalTable,
         ExternalDataSource,
-        View
+        View,
+        ResourcePool,
+        BackupCollection,
+        Transfer,
+        SysView,
     };
 
     TSchemaObject(TSchemaObject&&) = default;
@@ -683,9 +691,11 @@ public:
     TString GetErrorMessage() const;
 
     const NKikimrConfig::TAppConfig &GetConfig() const;
-    bool HasYamlConfig() const;
-    const TString& GetYamlConfig() const;
+    bool HasMainYamlConfig() const;
+    const TString& GetMainYamlConfig() const;
     TMap<ui64, TString> GetVolatileYamlConfigs() const;
+    bool HasDatabaseYamlConfig() const;
+    const TString& GetDatabaseYamlConfig() const;
 
     const NKikimrClient::TConsoleResponse &Record() const;
 
@@ -856,24 +866,6 @@ protected:
     }
 
     void PrepareRequest(NKikimrClient::TSchemeOperation& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
-    void PrepareRequest(NKikimrClient::TWhoAmI& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
-    void PrepareRequest(NKikimrClient::TLocalMKQL& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
-    void PrepareRequest(NKikimrClient::TLocalSchemeTx& request) const {
         if (!SecurityToken.empty()) {
             request.SetSecurityToken(SecurityToken);
         }

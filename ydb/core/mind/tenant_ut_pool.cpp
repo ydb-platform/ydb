@@ -312,7 +312,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
 
         const TActorId& sender = runtime.Sender;
         const TActorId tenantPoolRoot = MakeTenantPoolRootID();
-        const TActorId tenantPool = MakeTenantPoolID(runtime.GetNodeId(0), 0);
+        const TActorId tenantPool = MakeTenantPoolID(runtime.GetNodeId(0));
 
         using TEvStatus = TEvTenantPool::TEvTenantPoolStatus;
         using EState = NKikimrTenantPool::EState;

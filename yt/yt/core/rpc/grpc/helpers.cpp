@@ -42,16 +42,16 @@ TGprString MakeGprString(char* str)
     return TGprString(str, gpr_free);
 }
 
+TX509Ptr MakeX509Ptr(X509* cert)
+{
+    return TX509Ptr(cert, X509_free);
+}
+
 TStringBuf ToStringBuf(const grpc_slice& slice)
 {
     return TStringBuf(
         reinterpret_cast<const char*>(GRPC_SLICE_START_PTR(slice)),
         GRPC_SLICE_LENGTH(slice));
-}
-
-TString ToString(const grpc_slice& slice)
-{
-    return TString(ToStringBuf(slice));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -68,12 +68,12 @@ TStringBuf TGrpcMetadataArray::Find(const char* key) const
     return TStringBuf();
 }
 
-THashMap<TString, TString> TGrpcMetadataArray::ToMap() const
+THashMap<std::string, std::string> TGrpcMetadataArray::ToMap() const
 {
-    THashMap<TString, TString> result;
+    THashMap<std::string, std::string> result;
     for (size_t index = 0; index < Native_.count; ++index) {
         const auto& metadata = Native_.metadata[index];
-        result[ToString(metadata.key)] = ToString(metadata.value);
+        result[NYT::ToString(metadata.key)] = NYT::ToString(metadata.value);
     }
     return result;
 }
@@ -106,14 +106,14 @@ size_t TGrpcSlice::Size() const
     return GRPC_SLICE_LENGTH(Native_);
 }
 
-TString TGrpcSlice::AsString() const
+std::string TGrpcSlice::AsString() const
 {
-    return NGrpc::ToString(Native_);
+    return NYT::ToString(Native_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TGrpcMetadataArrayBuilder::Add(const char* key, TString value)
+void TGrpcMetadataArrayBuilder::Add(const char* key, std::string value)
 {
     Strings_.push_back(TSharedRef::FromString(std::move(value)));
     grpc_metadata metadata;
@@ -134,7 +134,7 @@ grpc_metadata* TGrpcMetadataArrayBuilder::Unwrap()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGrpcChannelArgs::TGrpcChannelArgs(const THashMap<TString, NYTree::INodePtr>& args)
+TGrpcChannelArgs::TGrpcChannelArgs(const THashMap<std::string, NYTree::INodePtr>& args)
 {
     for (const auto& pair : args) {
         Items_.emplace_back();
@@ -195,7 +195,7 @@ grpc_channel_args* TGrpcChannelArgs::Unwrap()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGrpcPemKeyCertPair::TGrpcPemKeyCertPair(TString privateKey, TString certChain)
+TGrpcPemKeyCertPair::TGrpcPemKeyCertPair(std::string privateKey, std::string certChain)
     : PrivateKey_(std::move(privateKey))
     , CertChain_(std::move(certChain))
     , Native_({
@@ -267,7 +267,8 @@ struct TMessageTag
 
 TMessageWithAttachments ByteBufferToMessageWithAttachments(
     grpc_byte_buffer* buffer,
-    std::optional<ui32> messageBodySize)
+    std::optional<ui32> messageBodySize,
+    bool enveloped)
 {
     TMessageWithAttachments result;
 
@@ -279,28 +280,39 @@ TMessageWithAttachments ByteBufferToMessageWithAttachments(
         messageBodySize = bufferSize;
     }
 
-    NYT::NProto::TSerializedMessageEnvelope envelope;
-    // Codec remains "none".
+    TSharedMutableRef data;
+    char* targetMessage;
 
-    TEnvelopeFixedHeader fixedHeader;
-    fixedHeader.EnvelopeSize = envelope.ByteSize();
-    fixedHeader.MessageSize = *messageBodySize;
+    if (enveloped) {
+        NYT::NProto::TSerializedMessageEnvelope envelope;
+        // Codec remains "none".
 
-    size_t totalMessageSize =
-        sizeof (TEnvelopeFixedHeader) +
-        fixedHeader.EnvelopeSize +
-        fixedHeader.MessageSize;
+        TEnvelopeFixedHeader fixedHeader;
+        fixedHeader.EnvelopeSize = envelope.ByteSize();
+        fixedHeader.MessageSize = *messageBodySize;
 
-    auto data = TSharedMutableRef::Allocate<TMessageTag>(
-        totalMessageSize,
-        {.InitializeStorage = false});
+        size_t totalMessageSize =
+            sizeof(TEnvelopeFixedHeader) +
+            fixedHeader.EnvelopeSize +
+            fixedHeader.MessageSize;
 
-    char* targetFixedHeader = data.Begin();
-    char* targetHeader = targetFixedHeader + sizeof (TEnvelopeFixedHeader);
-    char* targetMessage = targetHeader + fixedHeader.EnvelopeSize;
+        data = TSharedMutableRef::Allocate<TMessageTag>(
+            totalMessageSize,
+            {.InitializeStorage = false});
 
-    memcpy(targetFixedHeader, &fixedHeader, sizeof (fixedHeader));
-    YT_VERIFY(envelope.SerializeToArray(targetHeader, fixedHeader.EnvelopeSize));
+        char* targetFixedHeader = data.Begin();
+        char* targetHeader = targetFixedHeader + sizeof(TEnvelopeFixedHeader);
+        targetMessage = targetHeader + fixedHeader.EnvelopeSize;
+
+        memcpy(targetFixedHeader, &fixedHeader, sizeof(fixedHeader));
+        YT_VERIFY(envelope.SerializeToArray(targetHeader, fixedHeader.EnvelopeSize));
+    } else {
+        data = TSharedMutableRef::Allocate<TMessageTag>(
+            *messageBodySize,
+            {.InitializeStorage = false});
+
+        targetMessage = data.begin();
+    }
 
     TGrpcByteBufferStream stream(buffer);
 
@@ -401,7 +413,7 @@ TSharedRef ExtractMessageFromEnvelopedMessage(const TSharedRef& data)
 
     auto compressedMessage = data.Slice(sourceMessage, sourceMessage + fixedHeader->MessageSize);
 
-    auto codecId = CheckedEnumCast<NCompression::ECodec>(envelope.codec());
+    auto codecId = FromProto<NCompression::ECodec>(envelope.codec());
     auto* codec = NCompression::GetCodec(codecId);
     return codec->Decompress(compressedMessage);
 }
@@ -432,7 +444,7 @@ TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode)
     }
 }
 
-TString SerializeError(const TError& error)
+std::string SerializeError(const TError& error)
 {
     TString serializedError;
     google::protobuf::io::StringOutputStream output(&serializedError);
@@ -515,25 +527,21 @@ TGrpcServerCredentialsPtr LoadServerCredentials(const TServerCredentialsConfigPt
         nullptr));
 }
 
-std::optional<TString> ParseIssuerFromX509(TStringBuf x509String)
+TX509Ptr ParsePemCertToX509(TStringBuf pemCert)
 {
     auto* bio = BIO_new(BIO_s_mem());
     auto bioGuard = Finally([&] {
         BIO_free(bio);
     });
 
-    BIO_write(bio, x509String.data(), x509String.length());
+    BIO_write(bio, pemCert.data(), pemCert.length());
 
-    auto* x509 = PEM_read_bio_X509(bio, nullptr, nullptr, nullptr);
-    auto x509Guard = Finally([&] {
-        X509_free(x509);
-    });
+    return MakeX509Ptr(PEM_read_bio_X509(bio, nullptr, nullptr, nullptr));
+}
 
-    if (!x509) {
-        return std::nullopt;
-    }
-
-    auto* issuerName = X509_get_issuer_name(x509);
+std::optional<std::string> ParseIssuerFromX509(const TX509Ptr& pemCertX509)
+{
+    auto* issuerName = X509_get_issuer_name(pemCertX509.get());
 
     std::array<char, 1024> buf;
     auto* issuerString = X509_NAME_oneline(issuerName, buf.data(), buf.size());
@@ -541,7 +549,30 @@ std::optional<TString> ParseIssuerFromX509(TStringBuf x509String)
         return std::nullopt;
     }
 
-    return TString(issuerString);
+    return std::string(issuerString);
+}
+
+std::optional<std::string> ParseSerialNumberFromX509(const TX509Ptr& pemCertX509)
+{
+    ASN1_STRING* serialNumber = X509_get_serialNumber(pemCertX509.get());
+    if (!serialNumber) {
+        return std::nullopt;
+    }
+    BIGNUM* bn = ASN1_INTEGER_to_BN(serialNumber, nullptr);
+    auto bnGuard = Finally([&] {
+        BN_free(bn);
+    });
+    if (!bn) {
+        return std::nullopt;
+    }
+    char* hexSerialNumber = BN_bn2hex(bn);
+    auto serialNumberGuard = Finally([&] {
+        OPENSSL_free(hexSerialNumber);
+    });
+    if (!hexSerialNumber) {
+        return std::nullopt;
+    }
+    return std::string(hexSerialNumber);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -600,3 +631,8 @@ void TGuardedGrpcCompletionQueue::Release()
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc::NGrpc
+
+void FormatValue(NYT::TStringBuilderBase* builder, const grpc_slice& slice, TStringBuf spec)
+{
+    FormatValue(builder, NYT::NRpc::NGrpc::ToStringBuf(slice), spec);
+}

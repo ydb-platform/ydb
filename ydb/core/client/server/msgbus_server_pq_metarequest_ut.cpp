@@ -169,7 +169,7 @@ protected:
         static int version = 0;
         ++version;
 
-        THolder<TEvPersQueue::TEvUpdateConfig> request(new TEvPersQueue::TEvUpdateConfig());
+        auto request = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
         for (size_t i : partitions) {
             request->Record.MutableTabletConfig()->AddPartitionIds(i);
         }
@@ -489,13 +489,13 @@ public:
         switch (topicId) {
             case 1:
                 descr.SetName(topic1);
-                descr.SetBalancerTabletID(MakeTabletID(0, 0, 100));
+                descr.SetBalancerTabletID(MakeTabletID(false, 100));
                 descr.SetAlterVersion(42);
                 descr.SetPartitionPerTablet(1);
                 break;
             case 2:
                 descr.SetName(topic2);
-                descr.SetBalancerTabletID(MakeTabletID(0, 0, 200));
+                descr.SetBalancerTabletID(MakeTabletID(false, 200));
                 descr.SetAlterVersion(5);
                 descr.SetPartitionPerTablet(3);
                 break;
@@ -509,7 +509,7 @@ public:
         for (auto i = 0u; i <  descr.GetPartitionPerTablet(); i++) {
             auto* part = descr.AddPartitions();
             part->SetPartitionId(i);
-            part->SetTabletId(MakeTabletID(0, 0, topicId * 100 + 1 + i));
+            part->SetTabletId(MakeTabletID(false, topicId * 100 + 1 + i));
         }
         entry.PQGroupInfo.Reset(pqInfo);
 
@@ -644,15 +644,15 @@ public:
     void HandlesPipeDisconnectionImpl(EDisconnectionMode disconnectionMode, std::function<void(EDisconnectionMode disconnectionMode)> dataValidationFunction, bool requestTheWholeTopic = false) {
         GetMockPQMetaCache().SetAllTopicsAnswer(true, std::forward<TSchemeCacheNavigate::TResultSet>(MakeResultSet()));
 
-        PrepareBalancer(topic1, MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
-        PreparePQTablet(topic1, MakeTabletID(0, 0, 101), {0});
+        PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
+        PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
 
-        PrepareBalancer(topic2, MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
-        PreparePQTablet(topic2, MakeTabletID(0, 0, 201), {0});
-        PreparePQTablet(topic2, MakeTabletID(0, 0, 202), {1});
-        PreparePQTablet(topic2, MakeTabletID(0, 0, 203), {2});
+        PrepareBalancer(topic2, MakeTabletID(false, 200), {{1, MakeTabletID(false, 201)}, {2, MakeTabletID(false, 202)}, {3, MakeTabletID(false, 203)}});
+        PreparePQTablet(topic2, MakeTabletID(false, 201), {0});
+        PreparePQTablet(topic2, MakeTabletID(false, 202), {1});
+        PreparePQTablet(topic2, MakeTabletID(false, 203), {2});
 
-        const ui64 tabletToDestroy = MakeTabletID(0, 0, 203);
+        const ui64 tabletToDestroy = MakeTabletID(false, 203);
 
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         RegisterActor(req);
@@ -873,13 +873,13 @@ public:
     void SuccessfullyPassesResponsesFromTablets() {
 
         GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
-        PrepareBalancer(topic1, MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
-        PreparePQTablet(topic1, MakeTabletID(0, 0, 101), {0});
+        PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
+        PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
 
-        PrepareBalancer(topic2, MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
+        PrepareBalancer(topic2, MakeTabletID(false, 200), {{1, MakeTabletID(false, 201)}, {2, MakeTabletID(false, 202)}, {3, MakeTabletID(false, 203)}});
         // Don't prepare partition 0 because it is not required in request
         // Don't prepare partition 1 to ensure that response is successfull despite the tablet is down
-        PreparePQTablet(topic2, MakeTabletID(0, 0, 203), {2});
+        PreparePQTablet(topic2, MakeTabletID(false, 203), {2});
 
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         RegisterActor(req);
@@ -1038,13 +1038,13 @@ public:
 
     void SuccessfullyPassesResponsesFromTablets() {
         GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
-        PrepareBalancer(topic1, MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
-        PreparePQTablet(topic1, MakeTabletID(0, 0, 101), {0});
+        PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
+        PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
 
-        PrepareBalancer(topic2, MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
+        PrepareBalancer(topic2, MakeTabletID(false, 200), {{1, MakeTabletID(false, 201)}, {2, MakeTabletID(false, 202)}, {3, MakeTabletID(false, 203)}});
         // Don't prepare partition 0 because it is not required in request
         // Don't prepare partition 1 to ensure that response is successfull despite the tablet is down
-        PreparePQTablet(topic2, MakeTabletID(0, 0, 203), {2});
+        PreparePQTablet(topic2, MakeTabletID(false, 203), {2});
 
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         RegisterActor(req);
@@ -1202,13 +1202,13 @@ public:
     void SuccessfullyPassesResponsesFromTablets() {
         GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
 
-        PrepareBalancer(topic1, MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
-        PreparePQTablet(topic1, MakeTabletID(0, 0, 101), {0});
+        PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
+        PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
 
-        PrepareBalancer(topic2, MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
+        PrepareBalancer(topic2, MakeTabletID(false, 200), {{1, MakeTabletID(false, 201)}, {2, MakeTabletID(false, 202)}, {3, MakeTabletID(false, 203)}});
         // Don't prepare partition 0 because it is not required in request
         // Don't prepare partition 1 to ensure that response is successfull despite the tablet is down
-        PreparePQTablet(topic2, MakeTabletID(0, 0, 203), {2});
+        PreparePQTablet(topic2, MakeTabletID(false, 203), {2});
 
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         RegisterActor(req);
@@ -1349,13 +1349,13 @@ public:
     void SuccessfullyPassesResponsesFromTablets() {
         GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
 
-        PrepareBalancer(topic1, MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
-        PreparePQTablet(topic1, MakeTabletID(0, 0, 101), {0});
+        PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
+        PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
 
-        PrepareBalancer(topic2, MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
+        PrepareBalancer(topic2, MakeTabletID(false, 200), {{1, MakeTabletID(false, 201)}, {2, MakeTabletID(false, 202)}, {3, MakeTabletID(false, 203)}});
         // Don't prepare partition 0 to test its failure processing
-        PreparePQTablet(topic2, MakeTabletID(0, 0, 202), {1});
-        PreparePQTablet(topic2, MakeTabletID(0, 0, 203), {2});
+        PreparePQTablet(topic2, MakeTabletID(false, 202), {1});
+        PreparePQTablet(topic2, MakeTabletID(false, 203), {2});
 
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         Cerr << "REQUEST " << req.DebugString() << "\n";

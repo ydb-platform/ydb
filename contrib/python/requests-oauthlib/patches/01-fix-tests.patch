@@ -1,0 +1,36 @@
+--- contrib/python/requests-oauthlib/tests/test_core.py	(index)
++++ contrib/python/requests-oauthlib/tests/test_core.py	(working tree)
+@@ -84,6 +84,7 @@ class OAuth1Test(unittest.TestCase):
+ 
+         self.assertEqual(b.headers.get("Authorization"), c.headers.get("Authorization"))
+ 
++    @unittest.skip("test uses real http://httpbin.org")
+     def testCanPostBinaryData(self, generate_nonce, generate_timestamp):
+         """
+         Test we can post binary data. Should prevent regression of the
+@@ -92,7 +93,8 @@ class OAuth1Test(unittest.TestCase):
+         generate_nonce.return_value = "abc"
+         generate_timestamp.return_value = "1"
+         oauth = requests_oauthlib.OAuth1("client_key")
+-        dirname = os.path.dirname(__file__)
++        import yatest.common
++        dirname = yatest.common.test_source_path()
+         fname = os.path.join(dirname, "test.bin")
+ 
+         with open(fname, "rb") as f:
+@@ -105,6 +107,7 @@ class OAuth1Test(unittest.TestCase):
+             )
+             self.assertEqual(r.status_code, 200)
+ 
++    @unittest.skip("test uses real http://httpbin.org")
+     def test_url_is_native_str(self, generate_nonce, generate_timestamp):
+         """
+         Test that the URL is always a native string.
+@@ -116,6 +119,7 @@ class OAuth1Test(unittest.TestCase):
+         r = requests.get("http://httpbin.org/get", auth=oauth)
+         self.assertIsInstance(r.request.url, str)
+ 
++    @unittest.skip("test uses real http://httpbin.org")
+     def test_content_type_override(self, generate_nonce, generate_timestamp):
+         """
+         Content type should only be guessed if none is given.

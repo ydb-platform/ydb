@@ -3,15 +3,7 @@
 #include <util/stream/output.h>
 #include <util/system/defaults.h>
 
-#define WITH_SCOPED(var, value) WITH_SCOPED_I(var, value, Y_GENERATE_UNIQUE_ID(WITH_SCOPED_LABEL_))
-
-#define WITH_SCOPED_I(var, value, label) \
-    if (auto var = (value)) {              \
-        Y_UNUSED(var);                   \
-        goto label;                      \
-    } else                               \
-    label                                \
-        :
+#define WITH_SCOPED(var, value) if (auto var = (value); Y_UNUSED(var), true)
 
 #define TAG(name) WITH_SCOPED(tmp, ::NMonitoring::name(__stream))
 #define TAG_CLASS(name, cls) WITH_SCOPED(tmp, ::NMonitoring::name(__stream, cls))
@@ -228,6 +220,7 @@ namespace NMonitoring {
     extern const char DListTag[3];
     extern const char DTermTag[3];
     extern const char DDescTag[3];
+    extern const char InputTag[6];
 
     typedef TTag<HtmlTag> THtml;
     typedef TTag<HeadTag> THead;
@@ -259,4 +252,5 @@ namespace NMonitoring {
     typedef TTag<DListTag> DLIST;
     typedef TTag<DTermTag> DTERM;
     typedef TTag<DDescTag> DDESC;
+    typedef TTag<InputTag> TInput;
 }

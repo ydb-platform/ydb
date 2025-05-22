@@ -2,8 +2,6 @@ UNITTEST_FOR(ydb/core/control)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
 
 PEERDIR(
@@ -14,16 +12,17 @@ PEERDIR(
     ydb/core/base
     ydb/core/mind
     ydb/core/mon
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
     ydb/services/ydb
-    ydb/library/yql/public/udf/service/exception_policy
+    ydb/services/persqueue_v1
+    ydb/services/kesus
+    ydb/services/persqueue_cluster_discovery
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/public/udf/service/exception_policy
 )
 
 SRCS(
-    immediate_control_board_ut.cpp
     immediate_control_board_actor_ut.cpp
-    immediate_control_board_sampler_ut.cpp
-    immediate_control_board_throttler_ut.cpp
 )
 
 END()

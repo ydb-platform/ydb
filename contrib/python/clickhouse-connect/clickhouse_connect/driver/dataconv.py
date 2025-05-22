@@ -122,7 +122,7 @@ def write_str_col(column: Sequence, nullable: bool, encoding: Optional[str], des
             if encoding:
                 x = x.encode(encoding)
             else:
-                x = b''
+                x = bytes(x)
             sz = len(x)
             while True:
                 b = sz & 0x7f

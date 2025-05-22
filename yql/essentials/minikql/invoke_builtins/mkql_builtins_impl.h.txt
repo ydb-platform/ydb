@@ -1,0 +1,1761 @@
+#pragma once
+
+#include "mkql_builtins_impl_common.h"
+#include <mkql_builtins.h>
+#include "mkql_builtins_codegen.h"
+#include <arrow/array/array_base.h>
+#include <arrow/array/util.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+struct TUnaryStub {
+    template<typename TFunc>
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod* args) {
+        return TFunc::Execute(*args);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    template<typename TFunc>
+    static Value* Generate(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateUnaryWithoutCheck(*args, ctx, block, &TFunc::Generate);
+    }
+#endif
+};
+
+struct TUnaryWrap {
+    template<typename TFunc>
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod* args) {
+        return *args ? TFunc::Execute(*args) : NUdf::TUnboxedValuePod();
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    template<typename TFunc>
+    static Value* Generate(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateUnaryWithCheck(*args, ctx, block, &TFunc::Generate);
+    }
+#endif
+};
+
+template<bool CheckLeft, bool CheckRight>
+struct TBinaryWrap {
+    template<typename TFunc>
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod* args) {
+        if (CheckLeft && !args[0])
+            return NUdf::TUnboxedValuePod();
+        if (CheckRight && !args[1])
+            return NUdf::TUnboxedValuePod();
+        return TFunc::Execute(args[0], args[1]);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    template<typename TFunc>
+    static Value* Generate(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateBinary<CheckLeft, CheckRight>(args[0], args[1], ctx, block, &TFunc::Generate);
+    }
+#endif
+};
+
+struct TAggregateWrap {
+    template<typename TFunc>
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod* args) {
+        if (!args[0])
+            return args[1];
+        if (!args[1])
+            return args[0];
+        return TFunc::Execute(args[0], args[1]);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    template<typename TFunc>
+    static Value* Generate(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateAggregate(args[0], args[1], ctx, block, &TFunc::Generate);
+    }
+#endif
+};
+
+struct TAggrCompareWrap {
+    template<typename TFunc>
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod* args) {
+        const bool a0(args[0]), a1(args[1]);
+        return (a0 && a1) ?
+            TFunc::Execute(args[0], args[1]) : NUdf::TUnboxedValuePod(TFunc::Simple(a0, a1));
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    template<typename TFunc>
+    static Value* Generate(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateCompareAggregate(args[0], args[1], ctx, block, &TFunc::Generate, TFunc::SimplePredicate);
+    }
+#endif
+};
+
+template<bool CheckFirst>
+struct TTernaryWrap {
+    template<typename TFunc>
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod* args) {
+        if (CheckFirst && !*args)
+            return NUdf::TUnboxedValuePod();
+        return TFunc::Execute(args[0], args[1], args[2]);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    template<typename TFunc>
+    static Value* Generate(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block) {
+        return GenerateTernary<CheckFirst>(args[0], args[1], args[2], ctx, block, &TFunc::Generate);
+    }
+#endif
+};
+
+template <typename TInput, typename TOutput>
+struct TArithmeticConstraintsUnary {
+    static_assert(std::is_arithmetic<TInput>::value, "Input type must be arithmetic!");
+    static_assert(std::is_arithmetic<TOutput>::value, "Output type must be arithmetic!");
+};
+
+template <typename TInput, typename TOutput>
+struct TArithmeticConstraintsSame {
+    static_assert(std::is_arithmetic<TInput>::value, "Input type must be arithmetic!");
+    static_assert(std::is_same<TInput, TOutput>::value, "Input and output must be same types!");
+};
+
+template <typename TLeft, typename TRight, typename TOutput>
+struct TArithmeticConstraintsBinary {
+    static_assert(std::is_arithmetic<TLeft>::value, "Left type must be arithmetic!");
+    static_assert(std::is_arithmetic<TRight>::value, "Right type must be arithmetic!");
+    static_assert(std::is_arithmetic<TOutput>::value, "Output type must be arithmetic!");
+};
+
+template <typename TInput, typename TOutput, class TImpl>
+struct TSimpleArithmeticUnary : public TArithmeticConstraintsSame<TInput, TOutput> {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
+        return NUdf::TUnboxedValuePod(TImpl::Do(arg.template Get<TInput>()));
+    }
+
+    static void DoPtr(
+        const typename TPrimitiveDataType<TInput>::TLayout* arg,
+        typename TPrimitiveDataType<TOutput>::TLayout* res) {
+        *res = TImpl::Do(*arg);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
+    {
+        auto& context = ctx.Codegen.GetContext();
+        const auto val = GetterFor<TInput>(arg, context, block);
+        const auto res = TImpl::Gen(val, ctx, block);
+        const auto wide = SetterFor<TOutput>(res, context, block);
+        return wide;
+    }
+#endif
+};
+
+template <class TImpl>
+struct TDecimalUnary {
+    static void DoPtr(
+        const NYql::NDecimal::TInt128* arg,
+        NYql::NDecimal::TInt128* res) {
+        *res = TImpl::Execute(NUdf::TUnboxedValuePod(*arg)).GetInt128();
+    }
+};
+
+template <typename TLeft, typename TRight, typename TOutput, class TImpl, bool CustomCast = false>
+struct TSimpleArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRight, TOutput> {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return NUdf::TUnboxedValuePod(TImpl::Do(left.template Get<TLeft>(), right.template Get<TRight>()));
+    }
+
+    static void DoPtr(
+        const typename TPrimitiveDataType<TLeft>::TLayout* left,
+        const typename TPrimitiveDataType<TRight>::TLayout* right,
+        typename TPrimitiveDataType<TOutput>::TLayout* res) {
+        *res = TImpl::Do(*left, *right);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
+    {
+        auto& context = ctx.Codegen.GetContext();
+        auto lhs = GetterFor<TLeft>(left, context, block);
+        auto rhs = GetterFor<TRight>(right, context, block);
+        if constexpr (!CustomCast) {
+            lhs = StaticCast<TLeft, TOutput>(lhs, context, block);
+            rhs = StaticCast<TRight, TOutput>(rhs, context, block);
+        }
+        const auto res = TImpl::Gen(lhs, rhs, ctx, block);
+        const auto wide = SetterFor<TOutput>(res, context, block);
+        return wide;
+    }
+#endif
+};
+
+template <typename TInput, typename TOutput, class TImpl>
+struct TShiftArithmeticBinary : public TArithmeticConstraintsSame<TInput, TOutput> {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return NUdf::TUnboxedValuePod(TImpl::Do(left.template Get<TInput>(), right.Get<ui8>()));
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
+    {
+        auto& context = ctx.Codegen.GetContext();
+        const auto lhs = GetterFor<TInput>(left, context, block);
+        const auto rhs = CastInst::Create(Instruction::Trunc, right, Type::getInt8Ty(context), "bits", block);
+        const auto res = TImpl::Gen(lhs, rhs, ctx, block);
+        const auto wide = SetterFor<TOutput>(res, context, block);
+        return wide;
+    }
+#endif
+};
+
+template <typename TInput, typename TOutput>
+struct TUnaryArgs {
+    static const TFunctionParamMetadata Value[3];
+};
+
+template <typename TInput, typename TOutput>
+const TFunctionParamMetadata TUnaryArgs<TInput, TOutput>::Value[3] = {
+    { TOutput::Id, 0 },
+    { TInput::Id, 0 },
+    { 0, 0 }
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+struct TUnaryArgsOpt {
+    static const TFunctionParamMetadata Value[3];
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+const TFunctionParamMetadata TUnaryArgsOpt<TInput, TOutput, IsOptional>::Value[3] = {
+    { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { 0, 0 }
+};
+
+template <typename TInput, typename TOutput>
+struct TUnaryArgsWithNullableResult {
+    static const TFunctionParamMetadata Value[3];
+};
+
+template <typename TInput, typename TOutput>
+const TFunctionParamMetadata TUnaryArgsWithNullableResult<TInput, TOutput>::Value[3] = {
+    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
+    { TInput::Id, 0 },
+    { 0, 0 }
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+struct TUnaryArgsWithNullableResultOpt {
+    static const TFunctionParamMetadata Value[3];
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+const TFunctionParamMetadata TUnaryArgsWithNullableResultOpt<TInput, TOutput, IsOptional>::Value[3] = {
+    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { 0, 0 }
+};
+
+template <typename TInput, typename TOutput>
+struct TBinaryArgs {
+    static const TFunctionParamMetadata Value[4];
+};
+
+template <typename TInput, typename TOutput>
+const TFunctionParamMetadata TBinaryArgs<TInput, TOutput>::Value[4] = {
+    { TOutput::Id, 0 },
+    { TInput::Id, 0 },
+    { TInput::Id, 0 },
+    { 0, 0 }
+};
+
+template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
+struct TBinaryArgsOpt {
+    static const TFunctionParamMetadata Value[4];
+};
+
+template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
+const TFunctionParamMetadata TBinaryArgsOpt<TInput1, TInput2, TOutput, IsLeftOptional, IsRightOptional>::Value[4] = {
+    { TOutput::Id, (IsLeftOptional || IsRightOptional) ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { 0, 0 }
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+struct TBinaryArgsSameOpt {
+    static const TFunctionParamMetadata Value[4];
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+const TFunctionParamMetadata TBinaryArgsSameOpt<TInput, TOutput, IsOptional>::Value[4] = {
+    { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { 0, 0 }
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+struct TBinaryArgsSameOptArgsWithNullableResult {
+    static const TFunctionParamMetadata Value[4];
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+const TFunctionParamMetadata TBinaryArgsSameOptArgsWithNullableResult<TInput, TOutput, IsOptional>::Value[4] = {
+    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { 0, 0 }
+};
+
+template <typename TInput, typename TOutput>
+struct TBinaryShiftArgs {
+    static const TFunctionParamMetadata Value[4];
+};
+
+template <typename TInput, typename TOutput>
+const TFunctionParamMetadata TBinaryShiftArgs<TInput, TOutput>::Value[4] = {
+    { TOutput::Id, 0 },
+    { TInput::Id, 0 },
+    { NUdf::TDataType<ui8>::Id, 0 },
+    { 0, 0 }
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+struct TBinaryShiftArgsOpt {
+    static const TFunctionParamMetadata Value[4];
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+const TFunctionParamMetadata TBinaryShiftArgsOpt<TInput, TOutput, IsOptional>::Value[4] = {
+    { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { NUdf::TDataType<ui8>::Id, 0 },
+    { 0, 0 }
+};
+
+template <typename TInput, typename TOutput>
+struct TBinaryArgsWithNullableResult {
+    static const TFunctionParamMetadata Value[4];
+};
+
+template <typename TInput, typename TOutput>
+const TFunctionParamMetadata TBinaryArgsWithNullableResult<TInput, TOutput>::Value[4] = {
+    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
+    { TInput::Id, 0 },
+    { TInput::Id, 0 },
+    { 0, 0 }
+};
+
+template <typename TOutput, typename TInput1, typename TInput2, typename TInput3, bool IsFirstOptional, bool IsSecondOptional, bool IsThirdOptional, bool IsResultOptional = IsFirstOptional>
+struct TTernaryArgs {
+    static const TFunctionParamMetadata Value[5];
+};
+
+template <typename TOutput, typename TInput1, typename TInput2, typename TInput3, bool IsFirstOptional, bool IsSecondOptional, bool IsThirdOptional, bool IsResultOptional>
+const TFunctionParamMetadata TTernaryArgs<TOutput, TInput1, TInput2, TInput3, IsFirstOptional, IsSecondOptional, IsThirdOptional, IsResultOptional>::Value[5] = {
+    { TOutput::Id, IsResultOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+    { TInput1::Id, IsFirstOptional  ? TFunctionParamMetadata::FlagIsNullable : 0},
+    { TInput2::Id, IsSecondOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+    { TInput3::Id, IsThirdOptional  ? TFunctionParamMetadata::FlagIsNullable : 0},
+    { 0, 0 }
+};
+
+template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
+struct TBinaryArgsOptWithNullableResult {
+    static const TFunctionParamMetadata Value[4];
+};
+
+template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
+const TFunctionParamMetadata TBinaryArgsOptWithNullableResult<TInput1, TInput2, TOutput, IsLeftOptional, IsRightOptional>::Value[4] = {
+    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
+    { TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { 0, 0 }
+};
+
+template <typename TFunc, typename TArgs, typename TWrap>
+void RegisterFunctionImpl(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+#ifndef MKQL_DISABLE_CODEGEN
+    const TFunctionDescriptor description(TArgs::Value, &TWrap::template Execute<TFunc>, reinterpret_cast<void*>(&TWrap::template Generate<TFunc>));
+#else
+    const TFunctionDescriptor description(TArgs::Value, &TWrap::template Execute<TFunc>);
+#endif
+    registry.Register(name, description);
+}
+
+template <
+    typename TInput, typename TOutput,
+    template<typename, typename> class TFunc,
+    template<typename, typename> class TArgs
+>
+void RegisterFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc<TInput, TOutput>, TArgs<TInput, TOutput>, TUnaryStub>(registry, name);
+}
+
+template <
+    typename TInput, typename TOutput,
+    class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc, TArgs<TInput, TOutput, false>, TUnaryStub>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<TInput, TOutput, true>, TUnaryWrap>(registry, name);
+}
+
+template <
+    typename TType,
+    template<NUdf::EDataSlot> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterCustomAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc<TType::Slot>, TArgs<TType, TType, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<TType::Slot>, TArgs<TType, TType, true>, TAggregateWrap>(registry, name);
+}
+
+template <
+    typename TType,
+    template<NUdf::EDataSlot> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterCustomSameTypesFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc<TType::Slot>, TArgs<TType, TType, TType, false, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<TType::Slot>, TArgs<TType, TType, TType, true, false>, TBinaryWrap<true, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<TType::Slot>, TArgs<TType, TType, TType, false, true>, TBinaryWrap<false, true>>(registry, name);
+    RegisterFunctionImpl<TFunc<TType::Slot>, TArgs<TType, TType, TType, true, true>, TBinaryWrap<true, true>>(registry, name);
+}
+
+template <
+    typename TType,
+    template<typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc<typename TType::TLayout>, TArgs<TType, TType, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TType::TLayout>, TArgs<TType, TType, true>, TAggregateWrap>(registry, name);
+}
+
+template <
+    typename TType,
+    template<typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterAggregateFunctionPoly(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc<TType>, TArgs<TType, TType, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<TType>, TArgs<TType, TType, true>, TAggregateWrap>(registry, name);
+}
+
+template <
+    typename TType,
+    template<typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterSameTypesFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc<typename TType::TLayout>, TArgs<TType, TType, TType, false, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TType::TLayout>, TArgs<TType, TType, TType, true, false>, TBinaryWrap<true, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TType::TLayout>, TArgs<TType, TType, TType, false, true>, TBinaryWrap<false, true>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TType::TLayout>, TArgs<TType, TType, TType, true, true>, TBinaryWrap<true, true>>(registry, name);
+}
+
+template <
+    typename TInput, typename TOutput,
+    template<typename, typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterFunctionUnOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TOutput::TLayout>, TArgs<TInput, TOutput, false>, TUnaryStub>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TOutput::TLayout>, TArgs<TInput, TOutput, true>, TUnaryWrap>(registry, name);
+}
+
+template <
+    typename TInput1, typename TInput2, typename TOutput,
+    template<typename, typename, typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterFunctionBinOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout>, TArgs<TInput1, TInput2, TOutput, false, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout>, TArgs<TInput1, TInput2, TOutput, false, true>, TBinaryWrap<false, true>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout>, TArgs<TInput1, TInput2, TOutput, true, false>, TBinaryWrap<true, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout>, TArgs<TInput1, TInput2, TOutput, true, true>, TBinaryWrap<true, true>>(registry, name);
+}
+
+template <
+    typename TInput1, typename TInput2, typename TOutput,
+    template<typename, typename, typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterFunctionBinPolyOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc<TInput1, TInput2, TOutput>, TArgs<TInput1, TInput2, TOutput, false, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<TInput1, TInput2, TOutput>, TArgs<TInput1, TInput2, TOutput, false, true>, TBinaryWrap<false, true>>(registry, name);
+    RegisterFunctionImpl<TFunc<TInput1, TInput2, TOutput>, TArgs<TInput1, TInput2, TOutput, true, false>, TBinaryWrap<true, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<TInput1, TInput2, TOutput>, TArgs<TInput1, TInput2, TOutput, true, true>, TBinaryWrap<true, true>>(registry, name);
+}
+
+
+template <
+    template<typename, typename, typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBinaryUnsignedFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui8>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui8>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui16>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui8>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui16>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui32>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    typename TInput, typename TOutput,
+    template<typename, typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterShiftFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TOutput::TLayout>, TArgs<TInput, TOutput, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TOutput::TLayout>, TArgs<TInput, TOutput, true>, TBinaryWrap<true, false>>(registry, name);
+}
+
+template <
+    template<typename, typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterUnsignedShiftFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterShiftFunctionOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, TFunc, TArgs>(registry, name);
+    RegisterShiftFunctionOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+    RegisterShiftFunctionOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterShiftFunctionOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterUnaryUnsignedFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionUnOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, TFunc, TArgs>(registry, name);
+    RegisterFunctionUnOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionUnOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionUnOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterUnaryIntegralFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterUnaryUnsignedFunctionOpt<TFunc, TArgs>(registry, name);
+
+    RegisterFunctionUnOpt<NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
+    RegisterFunctionUnOpt<NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionUnOpt<NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionUnOpt<NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterUnaryNumericFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterUnaryIntegralFunctionOpt<TFunc, TArgs>(registry, name);
+
+    RegisterFunctionUnOpt<NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionUnOpt<NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename, typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBinaryIntegralToUnsignedFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i8>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<i8>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<i16>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<i8>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<i16>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<i32>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename, typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBinaryIntegralToSignedFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i8>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<ui8>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<ui16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<i8>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<ui8>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<i16>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<ui16>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<ui32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<i8>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<ui8>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<i16>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<ui16>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<i32>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<ui32>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<ui64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename, typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBinaryIntegralFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterBinaryUnsignedFunctionOpt<TFunc, TArgs>(registry, name);
+    RegisterBinaryIntegralToUnsignedFunctionOpt<TFunc, TArgs>(registry, name);
+    RegisterBinaryIntegralToSignedFunctionOpt<TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename, typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBinaryRealFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<i8>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<ui8>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<i16>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<ui16>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<i32>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<ui32>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<i64>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<ui64>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<i8>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<ui8>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<i16>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<ui16>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<i32>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<ui32>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<i64>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<ui64>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<float>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename, typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBinaryNumericFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterBinaryIntegralFunctionOpt<TFunc, TArgs>(registry, name);
+    RegisterBinaryRealFunctionOpt<TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterNumericAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggregateFunction<NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<ui8>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterDatetimeAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
+
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TInterval>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterBigDateAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
+
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TInterval64>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterTzDatetimeAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunction<NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterDatetimeSameTypesFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterSameTypesFunction<NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
+    RegisterSameTypesFunction<NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
+    RegisterSameTypesFunction<NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterSameTypesFunction<NUdf::TDataType<NUdf::TInterval>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterTzDatetimeSameTypesFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterSameTypesFunction<NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
+    RegisterSameTypesFunction<NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
+    RegisterSameTypesFunction<NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterBooleanAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggregateFunction<NUdf::TDataType<bool>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBooleanSameTypesFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterSameTypesFunction<NUdf::TDataType<bool>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename, typename, bool, bool> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBinaryRealFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<float>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+}
+
+void RegisterAdd(IBuiltinFunctionRegistry& registry);
+void RegisterAdd(TKernelFamilyMap& kernelFamilyMap);
+void RegisterAggrAdd(IBuiltinFunctionRegistry& registry);
+void RegisterSub(IBuiltinFunctionRegistry& registry);
+void RegisterSub(TKernelFamilyMap& kernelFamilyMap);
+void RegisterMul(IBuiltinFunctionRegistry& registry);
+void RegisterMul(TKernelFamilyMap& kernelFamilyMap);
+void RegisterDiv(IBuiltinFunctionRegistry& registry);
+void RegisterDiv(TKernelFamilyMap& kernelFamilyMap);
+void RegisterMod(IBuiltinFunctionRegistry& registry);
+void RegisterMod(TKernelFamilyMap& kernelFamilyMap);
+void RegisterIncrement(IBuiltinFunctionRegistry& registry);
+void RegisterDecrement(IBuiltinFunctionRegistry& registry);
+void RegisterBitAnd(IBuiltinFunctionRegistry& registry);
+void RegisterBitOr(IBuiltinFunctionRegistry& registry);
+void RegisterBitXor(IBuiltinFunctionRegistry& registry);
+void RegisterShiftLeft(IBuiltinFunctionRegistry& registry);
+void RegisterShiftRight(IBuiltinFunctionRegistry& registry);
+void RegisterRotLeft(IBuiltinFunctionRegistry& registry);
+void RegisterRotRight(IBuiltinFunctionRegistry& registry);
+void RegisterPlus(IBuiltinFunctionRegistry& registry);
+void RegisterMinus(IBuiltinFunctionRegistry& registry);
+void RegisterMinus(TKernelFamilyMap& kernelFamilyMap);
+void RegisterBitNot(IBuiltinFunctionRegistry& registry);
+void RegisterCountBits(IBuiltinFunctionRegistry& registry);
+void RegisterAbs(IBuiltinFunctionRegistry& registry);
+void RegisterAbs(TKernelFamilyMap& kernelFamilyMap);
+void RegisterConvert(IBuiltinFunctionRegistry& registry);
+void RegisterConcat(IBuiltinFunctionRegistry& registry);
+void RegisterSubstring(IBuiltinFunctionRegistry& registry);
+void RegisterFind(IBuiltinFunctionRegistry& registry);
+void RegisterInversePresortString(IBuiltinFunctionRegistry& registry);
+void RegisterInverseString(IBuiltinFunctionRegistry& registry);
+void RegisterNanvl(IBuiltinFunctionRegistry& registry);
+void RegisterByteAt(IBuiltinFunctionRegistry& registry);
+void RegisterMax(IBuiltinFunctionRegistry& registry);
+void RegisterMin(IBuiltinFunctionRegistry& registry);
+void RegisterAggrMax(IBuiltinFunctionRegistry& registry);
+void RegisterAggrMin(IBuiltinFunctionRegistry& registry);
+void RegisterWith(IBuiltinFunctionRegistry& registry);
+
+enum class EPropagateTz {
+    None,
+    FromLeft,
+    FromRight
+};
+
+std::shared_ptr<arrow::DataType> AddTzType(bool addTz, const std::shared_ptr<arrow::DataType>& type);
+std::shared_ptr<arrow::DataType> AddTzType(EPropagateTz propagateTz, const std::shared_ptr<arrow::DataType>& type);
+
+template <typename T>
+arrow::compute::InputType GetPrimitiveInputArrowType(bool tz = false);
+
+arrow::compute::InputType GetPrimitiveInputArrowType(NUdf::EDataSlot slot);
+
+template <typename T>
+arrow::compute::OutputType GetPrimitiveOutputArrowType(bool tz = false);
+
+arrow::compute::OutputType GetPrimitiveOutputArrowType(NUdf::EDataSlot slot);
+
+std::shared_ptr<arrow::Scalar> ExtractTz(bool isTz, const std::shared_ptr<arrow::Scalar>& value);
+std::shared_ptr<arrow::ArrayData> ExtractTz(bool isTz, const std::shared_ptr<arrow::ArrayData>& value);
+std::shared_ptr<arrow::Scalar> WithTz(bool propagateTz, const std::shared_ptr<arrow::Scalar>& input,
+    const std::shared_ptr<arrow::Scalar>& value);
+
+std::shared_ptr<arrow::Scalar> WithTz(EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::Scalar>& input1,
+    const std::shared_ptr<arrow::Scalar>& input2,
+    const std::shared_ptr<arrow::Scalar>& value);
+
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, bool propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input, arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
+
+template <typename TOutput>
+inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, bool propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input, arrow::MemoryPool* pool) {
+    return CopyTzImpl(res, propagateTz, input, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
+}
+
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input1,
+    const std::shared_ptr<arrow::Scalar>& input2,
+    arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
+
+template <typename TOutput>
+inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input1,
+    const std::shared_ptr<arrow::Scalar>& input2,
+    arrow::MemoryPool* pool) {
+    return CopyTzImpl(res, propagateTz, input1, input2, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
+}
+
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::Scalar>& input1,
+    const std::shared_ptr<arrow::ArrayData>& input2,
+    arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
+
+template <typename TOutput>
+inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::Scalar>& input1,
+    const std::shared_ptr<arrow::ArrayData>& input2,
+    arrow::MemoryPool* pool) {
+    return CopyTzImpl(res, propagateTz, input1, input2, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
+}
+
+std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input1,
+    const std::shared_ptr<arrow::ArrayData>& input2,
+    arrow::MemoryPool* pool,
+    size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType);
+
+template <typename TOutput>
+inline std::shared_ptr<arrow::ArrayData> CopyTz(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
+    const std::shared_ptr<arrow::ArrayData>& input1,
+    const std::shared_ptr<arrow::ArrayData>& input2,
+    arrow::MemoryPool* pool) {
+    return CopyTzImpl(res, propagateTz, input1, input2, pool, sizeof(TOutput), GetPrimitiveDataType<TOutput>());
+}
+
+using TPrimitiveDataTypeGetter = std::shared_ptr<arrow::DataType>(*)();
+using TPrimitiveDataScalarGetter= arrow::Datum(*)();
+using TPrimitiveDataScalarGetterWithMemPool = arrow::Datum(*)(void** result, arrow::MemoryPool*);
+using TUntypedBinaryScalarFuncPtr = void(*)(const void*, const void*, void*);
+using TUntypedBinaryArrayFuncPtr = void(*)(const void*, const void*, void*, int64_t length, int64_t offset1, int64_t offset2);
+using TUntypedBinaryScalarOptFuncPtr = bool(*)(const void*, const void*, void*);
+using TUntypedBinaryArrayOptFuncPtr = void(*)(const void*, const ui8*, const void*, const ui8*, void*, ui8*, int64_t length, int64_t offset1, int64_t offset2);
+using TUntypedUnaryScalarFuncPtr = void(*)(const void*, void*);
+using TUntypedUnaryArrayFuncPtr = void(*)(const void*, void*, int64_t length, int64_t offset);
+
+
+arrow::Status ExecScalarImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, TUntypedUnaryScalarFuncPtr func,
+    bool tz, bool propagateTz);
+
+arrow::Status ExecArrayImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedUnaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz, bool propagateTz);
+
+arrow::Status ExecUnaryImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+    bool tz, bool propagateTz, size_t outputSizeOf,
+    TUntypedUnaryScalarFuncPtr scalarFunc, TUntypedUnaryArrayFuncPtr arrayFunc);
+
+arrow::Status ExecScalarScalarImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, TUntypedBinaryScalarFuncPtr func,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecScalarArrayImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecArrayScalarImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecArrayArrayImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecBinaryImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz, size_t outputSizeOf,
+    TUntypedBinaryScalarFuncPtr scalarScalarFunc,
+    TUntypedBinaryArrayFuncPtr scalarArrayFunc,
+    TUntypedBinaryArrayFuncPtr arrayScalarFunc,
+    TUntypedBinaryArrayFuncPtr arrayArrayFunc);
+
+arrow::Status ExecScalarScalarOptImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, TUntypedBinaryScalarOptFuncPtr func,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecScalarArrayOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayOptFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecArrayScalarOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayOptFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecArrayArrayOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TUntypedBinaryArrayOptFuncPtr func, size_t outputSizeOf, TPrimitiveDataTypeGetter outputTypeGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz);
+
+arrow::Status ExecBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+    bool tz1, bool tz2, EPropagateTz propagateTz, size_t outputSizeOf,
+    TUntypedBinaryScalarOptFuncPtr scalarScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr scalarArrayFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayArrayFunc);
+
+arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetterWithMemPool scalarGetter,
+    size_t outputSizeOf,
+    TUntypedBinaryScalarOptFuncPtr scalarScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr scalarArrayFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayScalarFunc,
+    TUntypedBinaryArrayOptFuncPtr arrayArrayFunc);
+
+arrow::Status ExecDecimalUnaryImpl(arrow::compute::KernelContext* kernelCtx,
+    const arrow::compute::ExecBatch& batch, arrow::Datum* res,
+    TPrimitiveDataTypeGetter typeGetter,
+    TUntypedUnaryScalarFuncPtr scalarFunc, TUntypedUnaryArrayFuncPtr arrayFunc);
+
+template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
+         typename TFuncInstance, TKernel::ENullMode NullMode>
+struct TBinaryKernelExecs;
+
+template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
+        typename TFuncInstance>
+struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::Default>
+{
+    using TTypedBinaryScalarFuncPtr = void(*)(
+        const typename TPrimitiveDataType<TInput1>::TLayout*,
+        const typename TPrimitiveDataType<TInput2>::TLayout*,
+        typename TPrimitiveDataType<TOutput>::TLayout*
+    );
+
+    using TTypedBinaryArrayFuncPtr = void(*)(
+        const typename TPrimitiveDataType<TInput1>::TLayout*,
+        const typename TPrimitiveDataType<TInput2>::TLayout*,
+        typename TPrimitiveDataType<TOutput>::TLayout*,
+        int64_t,
+        int64_t,
+        int64_t
+    );
+
+    static void ScalarArrayCore(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        int64_t length, int64_t offset1, int64_t offset2) {
+        TTypedBinaryScalarFuncPtr func = &TFuncInstance::DoPtr;
+        Y_UNUSED(offset1);
+        val2Ptr += offset2;
+        for (int64_t i = 0; i < length; ++i) {
+            func(val1Ptr, val2Ptr, resPtr);
+            ++val2Ptr;
+            ++resPtr;
+        }
+    }
+
+    static void ArrayScalarCore(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        int64_t length, int64_t offset1, int64_t offset2) {
+        TTypedBinaryScalarFuncPtr func = &TFuncInstance::DoPtr;
+        Y_UNUSED(offset2);
+        val1Ptr += offset1;
+        for (int64_t i = 0; i < length; ++i) {
+            func(val1Ptr, val2Ptr, resPtr);
+            ++val1Ptr;
+            ++resPtr;
+        }
+    }
+
+    static void ArrayArrayCore(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        int64_t length, int64_t offset1, int64_t offset2) {
+        TTypedBinaryScalarFuncPtr func = &TFuncInstance::DoPtr;
+        val1Ptr += offset1;
+        val2Ptr += offset2;
+        for (int64_t i = 0; i < length; ++i) {
+            func(val1Ptr, val2Ptr, resPtr);
+            ++val1Ptr;
+            ++val2Ptr;
+            ++resPtr;
+        }
+    }
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        TTypedBinaryScalarFuncPtr scalarScalarFunc = &TFuncInstance::DoPtr;
+        TTypedBinaryArrayFuncPtr scalarArrayFunc = &ScalarArrayCore;
+        TTypedBinaryArrayFuncPtr arrayScalarFunc = &ArrayScalarCore;
+        TTypedBinaryArrayFuncPtr arrayArrayFunc = &ArrayArrayCore;
+        return ExecBinaryImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            &MakeDefaultScalarDatum<TOutput>,
+            Tz1, Tz2, PropagateTz, sizeof(TOutput),
+            (TUntypedBinaryScalarFuncPtr)scalarScalarFunc,
+            (TUntypedBinaryArrayFuncPtr)scalarArrayFunc,
+            (TUntypedBinaryArrayFuncPtr)arrayScalarFunc,
+            (TUntypedBinaryArrayFuncPtr)arrayArrayFunc);
+    }
+};
+
+template<typename TInput1, typename TInput2, typename TOutput, typename TFuncInstance>
+struct TBinaryKernelOptExecsImpl
+{
+    using TTypedBinaryScalarOptFuncPtr = bool(*)(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr
+    );
+
+    using TTypedBinaryArrayOptFuncPtr = void(*)(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const ui8* valid1,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const ui8* valid2,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        ui8* resValid,
+        int64_t length,
+        int64_t offset1,
+        int64_t offset2
+    );
+
+    static bool ScalarScalarCoreOpt(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr) {
+        auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
+        if (!resPod) {
+            return false;
+        }
+
+        *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+        return true;
+    }
+
+    static void ScalarArrayCoreOpt(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const ui8* valid1,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const ui8* valid2,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        ui8* resValid,
+        int64_t length,
+        int64_t offset1,
+        int64_t offset2) {
+        val2Ptr += offset2;
+        Y_UNUSED(valid1);
+        Y_UNUSED(offset1);
+        for (int64_t i = 0; i < length; ++i, ++val2Ptr, ++resPtr) {
+            if (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2)) {
+                auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
+                if (resPod) {
+                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    arrow::BitUtil::SetBit(resValid, i);
+                    continue;
+                }
+            }
+
+            arrow::BitUtil::ClearBit(resValid, i);
+        }
+    }
+
+    static void ArrayScalarCoreOpt(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const ui8* valid1,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const ui8* valid2,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        ui8* resValid,
+        int64_t length,
+        int64_t offset1,
+        int64_t offset2) {
+        val1Ptr += offset1;
+        Y_UNUSED(valid2);
+        Y_UNUSED(offset2);
+        for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++resPtr) {
+            if (!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) {
+                auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
+                if (resPod) {
+                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    arrow::BitUtil::SetBit(resValid, i);
+                    continue;
+                }
+            }
+
+            arrow::BitUtil::ClearBit(resValid, i);
+        }
+    }
+
+    static void ArrayArrayCoreOpt(
+        const typename TPrimitiveDataType<TInput1>::TLayout* val1Ptr,
+        const ui8* valid1,
+        const typename TPrimitiveDataType<TInput2>::TLayout* val2Ptr,
+        const ui8* valid2,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        ui8* resValid,
+        int64_t length,
+        int64_t offset1,
+        int64_t offset2) {
+        val1Ptr += offset1;
+        val2Ptr += offset2;
+        for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++val2Ptr, ++resPtr) {
+            if ((!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) && 
+                (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2))) {
+                auto resPod = TFuncInstance::Execute(NUdf::TUnboxedValuePod(*val1Ptr), NUdf::TUnboxedValuePod(*val2Ptr));
+                if (resPod) {
+                    *resPtr = resPod.template Get<typename TPrimitiveDataType<TOutput>::TLayout>();
+                    arrow::BitUtil::SetBit(resValid, i);
+                    continue;
+                }
+            }
+
+            arrow::BitUtil::ClearBit(resValid, i);
+        }
+    }
+};
+ 
+template<typename TInput1, bool Tz1, typename TInput2, bool Tz2, typename TOutput, EPropagateTz PropagateTz,
+        typename TFuncInstance>
+struct TBinaryKernelExecs<TInput1, Tz1, TInput2, Tz2, TOutput, PropagateTz, TFuncInstance, TKernel::ENullMode::AlwaysNull>
+{
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarScalarCoreOpt;
+        auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarArrayCoreOpt;
+        auto arrayScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayScalarCoreOpt;
+        auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayArrayCoreOpt;
+        return ExecBinaryOptImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            &MakeDefaultScalarDatum<TOutput>,
+            Tz1, Tz2, PropagateTz, sizeof(TOutput),
+            (TUntypedBinaryScalarOptFuncPtr)scalarScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)scalarArrayFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayArrayFunc);
+    }
+};
+
+class TPlainKernel : public TKernel {
+public:
+    TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
+        NUdf::TDataTypeId returnType, std::unique_ptr<arrow::compute::ScalarKernel>&& arrowKernel,
+        TKernel::ENullMode nullMode);
+
+    const arrow::compute::ScalarKernel& GetArrowKernel() const final;
+    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const final;
+    bool IsPolymorphic() const final;
+
+private:
+    const std::unique_ptr<arrow::compute::ScalarKernel> ArrowKernel;
+};
+
+template<typename TInput, bool Tz, typename TOutput, bool PropagateTz, class TFuncInstance>
+struct TUnaryKernelExecs
+{
+    using TTypedUnaryScalarFuncPtr = void(*)(
+        const typename TPrimitiveDataType<TInput>::TLayout*,
+        typename TPrimitiveDataType<TOutput>::TLayout*
+    );
+
+    using TTypedUnaryArrayFuncPtr = void(*)(
+        const typename TPrimitiveDataType<TInput>::TLayout*,
+        typename TPrimitiveDataType<TOutput>::TLayout*,
+        int64_t,
+        int64_t
+    );
+
+    static void ArrayCore(
+        const typename TPrimitiveDataType<TInput>::TLayout* valPtr,
+        typename TPrimitiveDataType<TOutput>::TLayout* resPtr,
+        int64_t length, int64_t offset) {
+        TTypedUnaryScalarFuncPtr func = &TFuncInstance::DoPtr;
+        valPtr += offset;
+        for (int64_t i = 0; i < length; ++i) {
+            func(valPtr, resPtr);
+            ++valPtr;
+            ++resPtr;
+        }
+    }
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        TTypedUnaryScalarFuncPtr func = &TFuncInstance::DoPtr;
+        TTypedUnaryArrayFuncPtr arrayFunc = &ArrayCore;
+        return ExecUnaryImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            &MakeDefaultScalarDatum<TOutput>,
+            Tz, PropagateTz, sizeof(TOutput), 
+            (TUntypedUnaryScalarFuncPtr)func,
+            (TUntypedUnaryArrayFuncPtr)arrayFunc);
+    }
+};
+
+
+template<class TFuncInstance>
+struct TUnaryDecimalKernelExecs
+{
+    using TInput = NYql::NDecimal::TInt128;
+    using TOutput = NYql::NDecimal::TInt128;
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto func = &TFuncInstance::DoPtr;
+        auto arrayFunc = &TUnaryKernelExecs<TInput, false, TOutput, false, TFuncInstance>::ArrayCore;
+        return ExecDecimalUnaryImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>,
+            (TUntypedUnaryScalarFuncPtr)func,
+            (TUntypedUnaryArrayFuncPtr)arrayFunc);
+    }
+};
+
+using TStatelessArrayKernelExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
+
+void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot res,
+    TStatelessArrayKernelExec exec, TKernel::ENullMode nullMode);
+
+template<typename TInput, typename TOutput,
+    template<typename, typename> class TFunc>
+void AddUnaryKernel(TKernelFamilyBase& owner) {
+    using TInputLayout = typename TInput::TLayout;
+    using TOutputLayout = typename TOutput::TLayout;
+
+    static constexpr bool tz = (TInput::Features & NUdf::TzDateType) != 0;
+    static constexpr bool propagateTz = (TOutput::Features & NUdf::TzDateType) != 0;
+
+    using TFuncInstance = TFunc<TInputLayout, TOutputLayout>;
+    using TExecs = TUnaryKernelExecs<TInputLayout, tz, TOutputLayout, propagateTz, TFuncInstance>;
+
+    AddUnaryKernelImpl(owner, TInput::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
+}
+
+template<class TFunc>
+void AddUnaryDecimalKernels(TKernelFamilyBase& owner) {
+    using TExecs = TUnaryDecimalKernelExecs<TFunc>;
+
+    AddUnaryKernelImpl(owner, NUdf::EDataSlot::Decimal, NUdf::EDataSlot::Decimal, &TExecs::Exec, TKernel::ENullMode::Default);
+}
+
+void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::EDataSlot arg2, NUdf::EDataSlot res,
+    TStatelessArrayKernelExec exec, TKernel::ENullMode nullMode);
+
+template<typename TInput1, typename TInput2, typename TOutput,
+    template<typename, typename, typename> class TFunc>
+void AddBinaryKernel(TKernelFamilyBase& owner) {
+    using TInput1Layout = typename TInput1::TLayout;
+    using TInput2Layout = typename TInput2::TLayout;
+    using TOutputLayout = typename TOutput::TLayout;
+
+    static constexpr bool tz1 = (TInput1::Features & NUdf::TzDateType) != 0;
+    static constexpr bool tz2 = (TInput2::Features & NUdf::TzDateType) != 0;
+    static constexpr EPropagateTz propagateTz = (TOutput::Features & NUdf::TzDateType) ?
+        ((TInput1::Features & NUdf::TzDateType) ? EPropagateTz::FromLeft : EPropagateTz::FromRight) :
+        EPropagateTz::None;
+
+    using TFuncInstance = TFunc<TInput1Layout, TInput2Layout, TOutputLayout>;
+    using TExecs = TBinaryKernelExecs<TInput1Layout, tz1, TInput2Layout, tz2, TOutputLayout, propagateTz, TFuncInstance, TFuncInstance::NullMode>;
+
+    AddBinaryKernelImpl(owner, TInput1::Slot, TInput2::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
+}
+
+template<typename TInput1, typename TInput2, typename TOutput,
+    template<typename, typename, typename> class TFunc>
+void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
+    using TInput1Layout = typename TInput1::TLayout;
+    using TInput2Layout = typename TInput2::TLayout;
+    using TOutputLayout = typename TOutput::TLayout;
+
+    static constexpr bool tz1 = (TInput1::Features & NUdf::TzDateType) != 0;
+    static constexpr bool tz2 = (TInput2::Features & NUdf::TzDateType) != 0;
+    static constexpr EPropagateTz propagateTz = (TOutput::Features & NUdf::TzDateType) ?
+        ((TInput1::Features & NUdf::TzDateType) ? EPropagateTz::FromLeft : EPropagateTz::FromRight) :
+        EPropagateTz::None;
+
+    using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
+    using TExecs = TBinaryKernelExecs<TInput1Layout, tz1, TInput2Layout, tz2, TOutputLayout, propagateTz, TFuncInstance, TFuncInstance::NullMode>;
+
+    AddBinaryKernelImpl(owner, TInput1::Slot, TInput2::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
+}
+
+template<template<typename, typename> class TFunc>
+void AddUnaryIntegralKernels(TKernelFamilyBase& owner) {
+    AddUnaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc>(owner);
+
+    AddUnaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+}
+
+template<template<typename, typename> class TFunc>
+void AddUnaryRealKernels(TKernelFamilyBase& owner) {
+    AddUnaryKernel<NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc>(owner);
+    AddUnaryKernel<NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc>(owner);
+}
+
+template<template<typename, typename, typename> class TFunc>
+void AddBinaryIntegralKernels(TKernelFamilyBase& owner) {
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>,  NUdf::TDataType<ui8>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<i8>,   NUdf::TDataType<i8>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<i16>,  NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<ui8>,  NUdf::TDataType<i8>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<i8>,   NUdf::TDataType<i8>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<i16>,  NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui8>,  NUdf::TDataType<ui16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<i8>,   NUdf::TDataType<ui16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<i16>,  NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<ui8>,  NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<i8>,   NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<ui16>, NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<i16>,  NUdf::TDataType<i16>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui8>,  NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<i8>,   NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui16>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<i16>,  NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<ui8>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<i8>,   NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<ui16>, NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<i16>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<ui32>, NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<i32>,  NUdf::TDataType<i32>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui8>,  NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<i8>,   NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui16>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<i16>,  NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui32>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<i32>,  NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<ui8>,  NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<i8>,   NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<ui16>, NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<i16>,  NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<ui32>, NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<i32>,  NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<ui64>, NUdf::TDataType<i64>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<i64>,  NUdf::TDataType<i64>, TFunc>(owner);
+}
+
+template<template<typename, typename, typename> class TFunc>
+void AddBinaryRealKernels(TKernelFamilyBase& owner) {
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i8>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i8>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i8>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui8>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui8>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui8>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i16>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i16>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i16>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui16>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui16>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui16>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i32>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i32>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i32>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui32>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui32>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui32>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<i64>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<i64>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<i64>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<ui64>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<ui64>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<ui64>,  NUdf::TDataType<double>, TFunc>(owner);
+
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<float>,  NUdf::TDataType<float>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<float>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<float>,  NUdf::TDataType<double>, TFunc>(owner);
+    AddBinaryKernel<NUdf::TDataType<double>, NUdf::TDataType<double>,  NUdf::TDataType<double>, TFunc>(owner);
+}
+
+template<template<typename, typename, typename> class TFuncForIntegral, template<typename, typename, typename> class TFuncForReal>
+class TBinaryNumericKernelFamily : public TKernelFamilyBase {
+public:
+    TBinaryNumericKernelFamily()
+    {
+        AddBinaryIntegralKernels<TFuncForIntegral>(*this);
+        AddBinaryRealKernels<TFuncForReal>(*this);
+    }
+};
+
+template<template<typename, typename> class TFunc>
+class TUnaryNumericKernelFamily : public TKernelFamilyBase {
+public:
+    TUnaryNumericKernelFamily()
+    {
+        AddUnaryIntegralKernels<TFunc>(*this);
+        AddUnaryRealKernels<TFunc>(*this);
+    }
+};
+
+template<typename TInput1, typename TInput2,
+    template<typename, typename, typename> class TFunc>
+void AddBinaryPredicateKernel(TKernelFamilyBase& owner) {
+    AddBinaryKernel<TInput1, TInput2, NUdf::TDataType<bool>, TFunc>(owner);
+}
+
+template<typename TInput1, typename TInput2,
+    template<typename, typename, typename> class TFunc>
+void AddBinaryPredicateKernelPoly(TKernelFamilyBase& owner) {
+    AddBinaryKernelPoly<TInput1, TInput2, NUdf::TDataType<bool>, TFunc>(owner);
+}
+
+template<typename TLeft, template<typename, typename, typename> class TPred>
+void AddArithmeticComparisonKernels(TKernelFamilyBase& owner) {
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<ui8>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<i8>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<ui16>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<i16>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<ui32>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<i32>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<ui64>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<i64>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<float>, TPred>(owner);
+    AddBinaryPredicateKernel<TLeft, NUdf::TDataType<double>, TPred>(owner);
+}
+
+template<template<typename, typename, typename> class TPred>
+void AddNumericComparisonKernels(TKernelFamilyBase& owner) {
+    // arithmetic types (integral and floating points)
+    AddArithmeticComparisonKernels<NUdf::TDataType<ui8>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<i8>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<ui16>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<i16>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<ui32>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<i32>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<ui64>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<i64>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<float>, TPred>(owner);
+    AddArithmeticComparisonKernels<NUdf::TDataType<double>, TPred>(owner);
+
+    // bool can only be compared with itself
+    AddBinaryPredicateKernel<NUdf::TDataType<bool>, NUdf::TDataType<bool>, TPred>(owner);
+}
+
+template<typename TLeft, template<typename, typename, typename> class TPred>
+void AddDateComparisonKernelsForDate(TKernelFamilyBase& owner) {
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TDate>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TDatetime>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTimestamp>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzDate>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzDatetime>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzTimestamp>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TDate32>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TDatetime64>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTimestamp64>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzDate32>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzDatetime64>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<TLeft>, NUdf::TDataType<NUdf::TTzTimestamp64>, TPred>(owner);
+}
+
+template<template<typename, typename, typename> class TPred>
+void AddDateComparisonKernels(TKernelFamilyBase& owner) {
+    AddDateComparisonKernelsForDate<NUdf::TDate, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TDatetime, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTimestamp, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzDate, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzDatetime, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzTimestamp, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TDate32, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TDatetime64, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTimestamp64, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzDate32, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzDatetime64, TPred>(owner);
+    AddDateComparisonKernelsForDate<NUdf::TTzTimestamp64, TPred>(owner);
+
+    // Interval can only be compared with itself
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, TPred>(owner);
+    AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TPred>(owner);
+}
+
+class TDecimalKernel : public TKernel {
+public:
+    struct TKernelState : arrow::compute::KernelState {
+        ui8 Precision;
+    };
+
+    TDecimalKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
+        NUdf::TDataTypeId returnType, TStatelessArrayKernelExec exec,
+        TKernel::ENullMode nullMode);
+
+    const arrow::compute::ScalarKernel& GetArrowKernel() const final;
+    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const final;
+    bool IsPolymorphic() const final;
+
+private:
+    TStatelessArrayKernelExec Exec;
+};
+
+template<template<ui8> class TFuncInstance>
+struct TDecimalKernelExecs
+{
+    using TInput1 = NYql::NDecimal::TInt128;
+    using TInput2 = NYql::NDecimal::TInt128;
+    using TOutput = NYql::NDecimal::TInt128;
+
+    static arrow::Datum ScalarGetter(void** result, arrow::MemoryPool* memory_pool) {
+        std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, memory_pool)));
+        *result = buffer->mutable_data();
+        return arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
+    }
+
+    template<ui8 precision>
+    static arrow::Status ExecImpl(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ScalarScalarCoreOpt;
+        auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ScalarArrayCoreOpt;
+        auto arrayScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ArrayScalarCoreOpt;
+        auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance<precision>>::ArrayArrayCoreOpt;
+
+        return ExecDecimalBinaryOptImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>, &ScalarGetter,
+            sizeof(TOutput),
+            (TUntypedBinaryScalarOptFuncPtr)scalarScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)scalarArrayFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayArrayFunc);
+    }
+
+    using ExecFunc = arrow::Status(*)(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) ;
+
+    template <size_t... Is>
+    static constexpr auto GenerateTable(std::index_sequence<Is...>) {
+        return std::array<ExecFunc, sizeof...(Is)>{ExecImpl<Is+1>...};
+    }
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        ui8 precision = static_cast<TDecimalKernel::TKernelState*>(kernelCtx->state())->Precision;
+        Y_DEBUG_ABORT_UNLESS(precision >= 1&& precision <= 35);
+
+        static constexpr auto jumpTable = GenerateTable(std::make_index_sequence<35>{});
+        return jumpTable[precision-1](kernelCtx, batch, res);
+    }
+};
+
+
+template<template<ui8> class TFunc>
+void AddBinaryDecimalKernels(TKernelFamilyBase& owner) {
+    auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
+    auto type2 = type1;
+    auto returnType = type1;
+    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
+
+    using Execs = TDecimalKernelExecs<TFunc>;
+    auto kernel = std::make_unique<TDecimalKernel>(owner, argTypes, returnType, &Execs::Exec, TKernel::ENullMode::Default);
+    owner.Adopt(argTypes, returnType, std::move(kernel));
+}
+
+template<class TFuncInstance>
+struct TDecimalComparisonKernelExecs
+{
+    using TInput1 = NYql::NDecimal::TInt128;
+    using TInput2 = NYql::NDecimal::TInt128;
+    using TOutput = bool;
+
+    static arrow::Datum ScalarGetter(void** resMem, arrow::MemoryPool*) {
+        auto result = MakeDefaultScalarDatum<TOutput>();
+        *resMem = GetPrimitiveScalarValueMutablePtr(*result.scalar());
+        return result;
+    }
+
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarScalarCoreOpt;
+        auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarArrayCoreOpt;
+        auto arrayScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayScalarCoreOpt;
+        auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayArrayCoreOpt;
+
+        return ExecDecimalBinaryOptImpl(kernelCtx, batch, res,
+            &GetPrimitiveDataType<TOutput>, &ScalarGetter,
+            sizeof(TOutput),
+            (TUntypedBinaryScalarOptFuncPtr)scalarScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)scalarArrayFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayScalarFunc,
+            (TUntypedBinaryArrayOptFuncPtr)arrayArrayFunc);
+    }
+};
+
+template<class TFunc>
+void AddDecimalComparisonKernels(TKernelFamilyBase& owner) {
+    auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
+    auto type2 = type1;
+    auto returnType = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Bool).TypeId;
+    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
+
+    using Execs = TDecimalComparisonKernelExecs<TFunc>;
+    auto kernel = std::make_unique<TDecimalKernel>(owner, argTypes, returnType, &Execs::Exec, TKernel::ENullMode::Default);
+    owner.Adopt(argTypes, returnType, std::move(kernel));
+}
+
+}
+}

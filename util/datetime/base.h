@@ -190,7 +190,7 @@ namespace NDateTimeHelpers {
     struct TPrecisionHelper<double> {
         using THighPrecision = double;
     };
-}
+} // namespace NDateTimeHelpers
 
 class TDuration: public TTimeBase<TDuration> {
     using TBase = TTimeBase<TDuration>;
@@ -308,7 +308,7 @@ public:
     }
 
     /// parses strings like 10s, 15ms, 15.05s, 20us, or just 25 (s). See parser_ut.cpp for details
-    static TDuration Parse(const TStringBuf input);
+    [[nodiscard]] static TDuration Parse(const TStringBuf input);
 
     static bool TryParse(const TStringBuf input, TDuration& result);
 
@@ -576,7 +576,7 @@ namespace NPrivate {
         {
         }
     };
-}
+} // namespace NPrivate
 
 /** @name Helpers for printing local times to `IOutputStream`s.
  *        The FormatLocal* functions create an opaque object that, when written to
@@ -645,7 +645,7 @@ namespace NDateTimeHelpers {
 
         return a < b ? 0 : a - b;
     }
-}
+} // namespace NDateTimeHelpers
 
 constexpr TDuration operator-(const TInstant& l, const TInstant& r) noexcept {
     return TDuration::FromValue(::NDateTimeHelpers::DiffWithSaturation(l.GetValue(), r.GetValue()));

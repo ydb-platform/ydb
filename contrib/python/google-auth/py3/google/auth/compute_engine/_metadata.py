@@ -28,11 +28,13 @@ from google.auth import _helpers
 from google.auth import environment_vars
 from google.auth import exceptions
 from google.auth import metrics
+from google.auth import transport
+from google.auth._exponential_backoff import ExponentialBackoff
 
 _LOGGER = logging.getLogger(__name__)
 
 # Environment variable GCE_METADATA_HOST is originally named
-# GCE_METADATA_ROOT. For compatiblity reasons, here it checks
+# GCE_METADATA_ROOT. For compatibility reasons, here it checks
 # the new variable first; if not set, the system falls back
 # to the old variable.
 _GCE_METADATA_HOST = os.getenv(environment_vars.GCE_METADATA_HOST, None)
@@ -119,11 +121,12 @@ def ping(request, timeout=_METADATA_DEFAULT_TIMEOUT, retry_count=3):
     #       could lead to false negatives in the event that we are on GCE, but
     #       the metadata resolution was particularly slow. The latter case is
     #       "unlikely".
-    retries = 0
     headers = _METADATA_HEADERS.copy()
     headers[metrics.API_CLIENT_HEADER] = metrics.mds_ping()
 
-    while retries < retry_count:
+    backoff = ExponentialBackoff(total_attempts=retry_count)
+
+    for attempt in backoff:
         try:
             response = request(
                 url=_METADATA_IP_ROOT, method="GET", headers=headers, timeout=timeout
@@ -139,11 +142,10 @@ def ping(request, timeout=_METADATA_DEFAULT_TIMEOUT, retry_count=3):
             _LOGGER.warning(
                 "Compute Engine Metadata server unavailable on "
                 "attempt %s of %s. Reason: %s",
-                retries + 1,
+                attempt,
                 retry_count,
                 e,
             )
-            retries += 1
 
     return False
 
@@ -157,6 +159,7 @@ def get(
     retry_count=5,
     headers=None,
     return_none_for_not_found_error=False,
+    timeout=_METADATA_DEFAULT_TIMEOUT,
 ):
     """Fetch a resource from the metadata server.
 
@@ -176,10 +179,11 @@ def get(
         headers (Optional[Mapping[str, str]]): Headers for the request.
         return_none_for_not_found_error (Optional[bool]): If True, returns None
             for 404 error instead of throwing an exception.
+        timeout (int): How long to wait, in seconds for the metadata server to respond.
 
     Returns:
         Union[Mapping, str]: If the metadata server returns JSON, a mapping of
-            the decoded JSON is return. Otherwise, the response content is
+            the decoded JSON is returned. Otherwise, the response content is
             returned as a string.
 
     Raises:
@@ -198,35 +202,50 @@ def get(
 
     url = _helpers.update_query(base_url, query_params)
 
-    retries = 0
-    while retries < retry_count:
+    backoff = ExponentialBackoff(total_attempts=retry_count)
+    failure_reason = None
+    for attempt in backoff:
         try:
-            response = request(url=url, method="GET", headers=headers_to_use)
-            break
+            response = request(
+                url=url, method="GET", headers=headers_to_use, timeout=timeout
+            )
+            if response.status in transport.DEFAULT_RETRYABLE_STATUS_CODES:
+                _LOGGER.warning(
+                    "Compute Engine Metadata server unavailable on "
+                    "attempt %s of %s. Response status: %s",
+                    attempt,
+                    retry_count,
+                    response.status,
+                )
+                failure_reason = (
+                    response.data.decode("utf-8")
+                    if hasattr(response.data, "decode")
+                    else response.data
+                )
+                continue
+            else:
+                break
 
         except exceptions.TransportError as e:
             _LOGGER.warning(
                 "Compute Engine Metadata server unavailable on "
                 "attempt %s of %s. Reason: %s",
-                retries + 1,
+                attempt,
                 retry_count,
                 e,
             )
-            retries += 1
+            failure_reason = e
     else:
         raise exceptions.TransportError(
             "Failed to retrieve {} from the Google Compute Engine "
-            "metadata service. Compute Engine Metadata server unavailable".format(url)
+            "metadata service. Compute Engine Metadata server unavailable due to {}".format(
+                url, failure_reason
+            )
         )
 
     content = _helpers.from_bytes(response.data)
 
     if response.status == http_client.NOT_FOUND and return_none_for_not_found_error:
-        _LOGGER.info(
-            "Compute Engine Metadata server call to %s returned 404, reason: %s",
-            path,
-            content,
-        )
         return None
 
     if response.status == http_client.OK:
@@ -287,7 +306,7 @@ def get_universe_domain(request):
             404 occurs while retrieving metadata.
     """
     universe_domain = get(
-        request, "universe/universe_domain", return_none_for_not_found_error=True
+        request, "universe/universe-domain", return_none_for_not_found_error=True
     )
     if not universe_domain:
         return "googleapis.com"

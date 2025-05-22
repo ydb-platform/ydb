@@ -67,7 +67,7 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
                         << " to=" << rsKey.To << "origin=" << rsKey.Origin);
             InReadSets()[it->first].emplace_back(TRSData(readSet, rsKey.Origin));
             if (it->second->IsComplete()) {
-                Y_ABORT_UNLESS(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
+                Y_ENSURE(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
                 --InputDataRef().RemainReadSets;
             }
         }
@@ -79,7 +79,7 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
 }
 
 void TOperation::AddDependency(const TOperation::TPtr &op) {
-    Y_ABORT_UNLESS(this != op.Get());
+    Y_ENSURE(this != op.Get());
 
     if (Dependencies.insert(op).second) {
         op->Dependents.insert(this);
@@ -87,7 +87,7 @@ void TOperation::AddDependency(const TOperation::TPtr &op) {
 }
 
 void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
-    Y_ABORT_UNLESS(this != op.Get());
+    Y_ENSURE(this != op.Get());
 
     if (SpecialDependencies.insert(op).second) {
         op->SpecialDependents.insert(this);
@@ -95,7 +95,7 @@ void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
 }
 
 void TOperation::AddImmediateConflict(const TOperation::TPtr &op) {
-    Y_ABORT_UNLESS(this != op.Get());
+    Y_ENSURE(this != op.Get());
     Y_DEBUG_ABORT_UNLESS(!IsImmediate());
     Y_DEBUG_ABORT_UNLESS(op->IsImmediate());
 
@@ -183,6 +183,40 @@ void TOperation::ClearImmediateConflicts() {
     ImmediateConflicts.clear();
 }
 
+void TOperation::AddRepeatableReadConflict(const TOperation::TPtr &op) {
+    Y_ENSURE(this != op.Get());
+    Y_DEBUG_ABORT_UNLESS(IsImmediate());
+    Y_DEBUG_ABORT_UNLESS(!op->IsImmediate());
+
+    if (IsMvccSnapshotRepeatable()) {
+        AddDependency(op);
+        return;
+    }
+
+    if (RepeatableReadConflicts.insert(op).second) {
+        op->RepeatableReadConflicts.insert(this);
+    }
+}
+
+void TOperation::PromoteRepeatableReadConflicts() {
+    Y_ENSURE(IsImmediate());
+
+    for (auto& op : RepeatableReadConflicts) {
+        Y_DEBUG_ABORT_UNLESS(op->RepeatableReadConflicts.contains(this));
+        op->RepeatableReadConflicts.erase(this);
+        AddDependency(op);
+    }
+    RepeatableReadConflicts.clear();
+}
+
+void TOperation::ClearRepeatableReadConflicts() {
+    for (auto& op : RepeatableReadConflicts) {
+        Y_DEBUG_ABORT_UNLESS(op->RepeatableReadConflicts.contains(this));
+        op->RepeatableReadConflicts.erase(this);
+    }
+    RepeatableReadConflicts.clear();
+}
+
 void TOperation::AddVolatileDependency(ui64 txId) {
     VolatileDependencies.insert(txId);
 }
@@ -245,7 +279,7 @@ void TOperation::AdvanceExecutionPlan()
     profile.WaitTime = now - ExecutionProfile.StartUnitAt - profile.ExecuteTime
         - profile.CommitTime - profile.CompleteTime - profile.DelayedCommitTime;
 
-    Y_ABORT_UNLESS(!IsExecutionPlanFinished());
+    Y_ENSURE(!IsExecutionPlanFinished());
     ++CurrentUnit;
 
     ExecutionProfile.StartUnitAt = now;
@@ -287,6 +321,18 @@ bool TOperation::HasRuntimeConflicts() const noexcept
 void TOperation::SetFinishProposeTs() noexcept
 {
     SetFinishProposeTs(AppData()->MonotonicTimeProvider->Now());
+}
+
+bool TOperation::OnStopping(TDataShard&, const TActorContext&)
+{
+    // By default operations don't do anything when stopping
+    // However they may become ready so add to candidates
+    return true;
+}
+
+void TOperation::OnCleanup(TDataShard&, std::vector<std::unique_ptr<IEventHandle>>&)
+{
+    // By default operation does nothing
 }
 
 } // namespace NDataShard

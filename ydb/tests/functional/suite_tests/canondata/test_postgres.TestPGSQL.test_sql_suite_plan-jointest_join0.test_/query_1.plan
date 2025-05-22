@@ -39,16 +39,16 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[Arg.i1.q1,Arg.i1.q2]"
                                             },
                                             {
-                                                "Condition": "q2 = i2_1.q2",
+                                                "Condition": "i1.q2 = i2_1.q2",
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 6
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 4
+                                                        "ExternalPlanNodeId": 3
                                                     }
                                                 ],
                                                 "Name": "LeftJoin (MapJoin)"
@@ -57,62 +57,37 @@
                                         "PlanNodeId": 7,
                                         "Plans": [
                                             {
-                                                "Node Type": "Broadcast",
-                                                "PlanNodeId": 4,
+                                                "Node Type": "Map",
+                                                "PlanNodeId": 6,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Collect",
-                                                        "PlanNodeId": 3,
+                                                        "Node Type": "Stage",
+                                                        "PlanNodeId": 5,
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "UnionAll",
-                                                                "PlanNodeId": 2,
-                                                                "PlanNodeType": "Connection",
-                                                                "Plans": [
+                                                                "Node Type": "TableFullScan",
+                                                                "Operators": [
                                                                     {
-                                                                        "Node Type": "InnerJoin (MapJoin)-Filter-TableFullScan",
-                                                                        "Operators": [
-                                                                            {
-                                                                                "Condition": "q1 = x",
-                                                                                "Inputs": [
-                                                                                    {
-                                                                                        "InternalOperatorId": 1
-                                                                                    },
-                                                                                    {
-                                                                                        "Other": "ConstantExpression"
-                                                                                    }
-                                                                                ],
-                                                                                "Name": "InnerJoin (MapJoin)"
-                                                                            },
-                                                                            {
-                                                                                "Inputs": [
-                                                                                    {
-                                                                                        "InternalOperatorId": 2
-                                                                                    }
-                                                                                ],
-                                                                                "Name": "Filter",
-                                                                                "Predicate": "Exist(item.q1)"
-                                                                            },
-                                                                            {
-                                                                                "Inputs": [],
-                                                                                "Name": "TableFullScan",
-                                                                                "ReadColumns": [
-                                                                                    "q1",
-                                                                                    "q2"
-                                                                                ],
-                                                                                "ReadRanges": [
-                                                                                    "q1 (-\u221e, +\u221e)",
-                                                                                    "q2 (-\u221e, +\u221e)"
-                                                                                ],
-                                                                                "Table": "postgres_jointest/join0.test_plan/int8_tbl"
-                                                                            }
+                                                                        "Inputs": [],
+                                                                        "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
+                                                                        "ReadColumns": [
+                                                                            "q1",
+                                                                            "q2"
                                                                         ],
-                                                                        "PlanNodeId": 1,
-                                                                        "Tables": [
-                                                                            "postgres_jointest/join0.test_plan/int8_tbl"
-                                                                        ]
+                                                                        "ReadRanges": [
+                                                                            "q1 (-\u221e, +\u221e)",
+                                                                            "q2 (-\u221e, +\u221e)"
+                                                                        ],
+                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                        "Scan": "Parallel",
+                                                                        "Table": "postgres_jointest/join0.test_plan/int8_tbl"
                                                                     }
+                                                                ],
+                                                                "PlanNodeId": 4,
+                                                                "Tables": [
+                                                                    "postgres_jointest/join0.test_plan/int8_tbl"
                                                                 ]
                                                             }
                                                         ]
@@ -120,30 +95,62 @@
                                                 ]
                                             },
                                             {
-                                                "Node Type": "Map",
-                                                "PlanNodeId": 6,
+                                                "Node Type": "Broadcast",
+                                                "PlanNodeId": 3,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "TableFullScan",
+                                                        "Node Type": "InnerJoin (MapJoin)-Filter",
                                                         "Operators": [
                                                             {
-                                                                "Inputs": [],
-                                                                "Name": "TableFullScan",
-                                                                "ReadColumns": [
-                                                                    "q1",
-                                                                    "q2"
+                                                                "Condition": "i2_1.q1 = ss.x",
+                                                                "Inputs": [
+                                                                    {
+                                                                        "InternalOperatorId": 1
+                                                                    },
+                                                                    {
+                                                                        "Other": "ConstantExpression"
+                                                                    }
                                                                 ],
-                                                                "ReadRanges": [
-                                                                    "q1 (-\u221e, +\u221e)",
-                                                                    "q2 (-\u221e, +\u221e)"
+                                                                "Name": "InnerJoin (MapJoin)"
+                                                            },
+                                                            {
+                                                                "Inputs": [
+                                                                    {
+                                                                        "ExternalPlanNodeId": 1
+                                                                    }
                                                                 ],
-                                                                "Table": "postgres_jointest/join0.test_plan/int8_tbl"
+                                                                "Name": "Filter",
+                                                                "Predicate": "Exist(item.q1)"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 5,
-                                                        "Tables": [
-                                                            "postgres_jointest/join0.test_plan/int8_tbl"
+                                                        "PlanNodeId": 2,
+                                                        "Plans": [
+                                                            {
+                                                                "Node Type": "TableFullScan",
+                                                                "Operators": [
+                                                                    {
+                                                                        "Inputs": [],
+                                                                        "Name": "TableFullScan",
+                                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int8_tbl",
+                                                                        "ReadColumns": [
+                                                                            "q1",
+                                                                            "q2"
+                                                                        ],
+                                                                        "ReadRanges": [
+                                                                            "q1 (-\u221e, +\u221e)",
+                                                                            "q2 (-\u221e, +\u221e)"
+                                                                        ],
+                                                                        "ReadRangesPointPrefixLen": "0",
+                                                                        "Scan": "Parallel",
+                                                                        "Table": "postgres_jointest/join0.test_plan/int8_tbl"
+                                                                    }
+                                                                ],
+                                                                "PlanNodeId": 1,
+                                                                "Tables": [
+                                                                    "postgres_jointest/join0.test_plan/int8_tbl"
+                                                                ]
+                                                            }
                                                         ]
                                                     }
                                                 ]
@@ -160,7 +167,10 @@
                     }
                 ]
             }
-        ]
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
     },
     "meta": {
         "type": "query",

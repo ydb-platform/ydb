@@ -39,9 +39,16 @@ namespace NKikimr::NBsController {
             for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
                 if (slot->Group) {
                     TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
+                    GroupFailureModelChanged.insert(group->ID);
                     group->CalculateGroupStatus();
                 }
             }
+        }
+
+        if (const auto mr = cmd.GetMaintenanceStatus();
+            mr != NKikimrBlobStorage::TMaintenanceStatus::NOT_SET &&
+            mr != pdisk->MaintenanceStatus) {
+            pdisk->MaintenanceStatus = mr;
         }
 
         if (fitGroups) {

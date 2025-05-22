@@ -2,13 +2,18 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 
-#include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tx/data_events/common/error_codes.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr::NEvents {
 
@@ -38,14 +43,31 @@ struct TDataEvents {
     public:
         TEvWrite() = default;
 
-        TEvWrite(ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
-            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
 
+        TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
+            Record.SetTxMode(txMode);
             Record.SetTxId(txId);
+        }
+
+        TEvWrite(NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+            Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
         }
 
-        void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds,
+        TEvWrite& SetTxId(const ui64 txId) {
+            Record.SetTxId(txId);
+            return *this;
+        }
+
+        TEvWrite& SetLockId(const ui64 lockTxId, const ui64 lockNodeId) {
+            Record.SetLockTxId(lockTxId);
+            Record.SetLockNodeId(lockNodeId);
+            return *this;
+        }
+
+        NKikimrDataEvents::TEvWrite::TOperation& AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType,
+            const TTableId& tableId, const std::vector<ui32>& columnIds,
             ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat) {
             Y_ABORT_UNLESS(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
             Y_ABORT_UNLESS(payloadFormat != NKikimrDataEvents::FORMAT_UNSPECIFIED);
@@ -58,10 +80,10 @@ struct TDataEvents {
             operation->MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
             operation->MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
             operation->MutableColumnIds()->Assign(columnIds.begin(), columnIds.end());
+            return *operation;
         }
 
         ui64 GetTxId() const {
-            Y_ABORT_UNLESS(Record.HasTxId());
             return Record.GetTxId();
         }
 
@@ -78,20 +100,41 @@ struct TDataEvents {
 
         static std::unique_ptr<TEvWriteResult> BuildError(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
             auto result = std::make_unique<TEvWriteResult>();
-            ACFL_ERROR("event", "ev_write_error")("status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status))("details", errorMsg)("tx_id", txId);
+            ACFL_WARN("event", "ev_write_error")("status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(status))("details", errorMsg)("tx_id", txId);
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(status);
-            auto issue = result->Record.AddIssues();
-            issue->set_message(errorMsg);
+            NYql::TIssue issue(errorMsg);
+            if (const auto statusConclusion = NKikimr::NEvWrite::NErrorCodes::TOperator::GetStatusInfo(status); statusConclusion.IsSuccess()) {
+                NYql::SetIssueCode(statusConclusion->GetIssueCode(), issue);
+            }
+            NYql::IssueToMessage(issue, result->Record.AddIssues());
             return result;
         }
 
-        static std::unique_ptr<TEvWriteResult> BuildCommited(const ui64 origin, const ui64 txId) {
+        static std::unique_ptr<TEvWriteResult> BuildCompleted(const ui64 origin) {
+            auto result = std::make_unique<TEvWriteResult>();
+            result->Record.SetOrigin(origin);
+            result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            return result;
+        }
+
+        static std::unique_ptr<TEvWriteResult> BuildCompleted(const ui64 origin, const ui64 txId) {
             auto result = std::make_unique<TEvWriteResult>();
             result->Record.SetOrigin(origin);
             result->Record.SetTxId(txId);
             result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            return result;
+        }
+
+        static std::unique_ptr<TEvWriteResult> BuildCompleted(const ui64 origin, const ui64 txId, const NKikimrDataEvents::TLock& lock) {
+            auto result = std::make_unique<TEvWriteResult>();
+            result->Record.SetOrigin(origin);
+            result->Record.SetTxId(txId);
+            result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            auto& lockResult = *result->Record.AddTxLocks();
+            lockResult = lock;
+            lockResult.SetHasWrites(true);
             return result;
         }
 
@@ -105,6 +148,19 @@ struct TDataEvents {
             result->Record.SetMaxStep(transactionInfo.GetMaxStep());
             result->Record.MutableDomainCoordinators()->CopyFrom(transactionInfo.GetDomainCoordinators());
             return result;
+        }
+
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
+            auto entry = Record.AddTxLocks();
+            entry->SetLockId(lockId);
+            entry->SetDataShard(shard);
+            entry->SetGeneration(generation);
+            entry->SetCounter(counter);
+            entry->SetSchemeShard(ssId);
+            entry->SetPathId(pathId);
+            if (hasWrites) {
+                entry->SetHasWrites(true);
+            }
         }
 
         TString GetError() const {

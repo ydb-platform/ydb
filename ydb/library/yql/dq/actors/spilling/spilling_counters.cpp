@@ -10,6 +10,8 @@ TSpillingCounters::TSpillingCounters(const TIntrusivePtr<::NMonitoring::TDynamic
     SpillingTooBigFileErrors = counters->GetCounter("Spilling/TooBigFileErrors", true);
     SpillingNoSpaceErrors = counters->GetCounter("Spilling/NoSpaceErrors", true);
     SpillingIoErrors = counters->GetCounter("Spilling/IoErrors", true);
+    SpillingFileDescriptors = counters->GetCounter("Spilling/FileDescriptors", false);
+    SpillingIOQueueSize = counters->GetCounter("Spilling/IOQueueSize", false);
 }
 
 } // namespace NYql::NDq

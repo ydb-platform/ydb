@@ -4,8 +4,27 @@
 #include "ypath_detail.h"
 
 #include <yt/yt/core/yson/producer.h>
+#include <yt/yt/core/yson/async_writer.h>
 
 namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TVirtualCompositeNodeReadOffloadGuard
+{
+public:
+    virtual ~TVirtualCompositeNodeReadOffloadGuard() = default;
+};
+
+struct TVirtualCompositeNodeReadOffloadParams
+{
+    IInvokerPtr OffloadInvoker;
+    NConcurrency::EWaitForStrategy WaitForStrategy = NConcurrency::EWaitForStrategy::WaitFor;
+    i64 BatchSize = 10'000;
+    // Unless empty, called inside the offload thread to set up any necessary context before the actual reading is done.
+    // NB: std::function would've sufficed here but TCallback makes it easier to handle propagating storage correctly.
+    TCallback<std::unique_ptr<TVirtualCompositeNodeReadOffloadGuard>()> CreateReadOffloadGuard;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,13 +36,15 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(bool, Opaque, true);
 
 protected:
-    TVirtualMapBase();
-    explicit TVirtualMapBase(INodePtr owningNode);
+    explicit TVirtualMapBase(INodePtr owningNode = nullptr);
 
-    virtual std::vector<TString> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const = 0;
+    virtual std::optional<TVirtualCompositeNodeReadOffloadParams> GetReadOffloadParams() const;
+
+    virtual std::vector<std::string> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const = 0;
+
     virtual i64 GetSize() const = 0;
 
-    virtual IYPathServicePtr FindItemService(TStringBuf key) const = 0;
+    virtual IYPathServicePtr FindItemService(const std::string& key) const = 0;
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override;
 
@@ -60,12 +81,11 @@ class TCompositeMapService
 {
 public:
     TCompositeMapService();
-
     ~TCompositeMapService();
 
-    std::vector<TString> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const override;
+    std::vector<std::string> GetKeys(i64 limit = std::numeric_limits<i64>::max()) const override;
     i64 GetSize() const override;
-    IYPathServicePtr FindItemService(TStringBuf key) const override;
+    IYPathServicePtr FindItemService(const std::string& key) const override;
     void ListSystemAttributes(std::vector<TAttributeDescriptor>* descriptors) override;
     bool GetBuiltinAttribute(TInternedAttributeKey key, NYson::IYsonConsumer* consumer) override;
 
@@ -93,7 +113,10 @@ public:
     DEFINE_BYVAL_RW_PROPERTY(bool, Opaque, true);
 
 protected:
+    virtual std::optional<TVirtualCompositeNodeReadOffloadParams> GetReadOffloadParams() const;
+
     virtual i64 GetSize() const = 0;
+
     virtual IYPathServicePtr FindItemService(int index) const = 0;
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override;

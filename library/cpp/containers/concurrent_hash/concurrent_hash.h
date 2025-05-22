@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/hash.h>
+#include <util/generic/utility.h>
 #include <util/system/spinlock.h>
 
 #include <array>
@@ -12,11 +13,12 @@ namespace NPrivate {
     };
 }
 
-template <typename K, typename V, size_t BucketCount = 64, typename L = TAdaptiveLock>
+template <typename K, typename V, size_t BucketCount = 64, typename L = TAdaptiveLock, class TLockOps = TCommonLockOps<L>>
 class TConcurrentHashMap {
 public:
     using TActualMap = THashMap<K, V>;
     using TLock = L;
+    using TBucketGuard = TGuard<TLock, TLockOps>;
 
     struct TBucket {
         friend class TConcurrentHashMap;
@@ -57,6 +59,16 @@ public:
             return r;
         }
 
+        bool TryRemoveUnsafe(const K& key, V& result) {
+            typename TActualMap::iterator it = Map.find(key);
+            if (it == Map.end()) {
+                return false;
+            }
+            result = std::move(it->second);
+            Map.erase(it);
+            return true;
+        }
+
         bool HasUnsafe(const K& key) const {
             typename TActualMap::const_iterator it = Map.find(key);
             return (it != Map.end());
@@ -88,13 +100,19 @@ public:
 
     void Insert(const K& key, const V& value) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         bucket.Map[key] = value;
+    }
+
+    void Exchange(const K& key, V& value) {
+        TBucket& bucket = GetBucketForKey(key);
+        TBucketGuard guard(bucket.Mutex);
+        DoSwap(bucket.Map[key], value);
     }
 
     void InsertUnique(const K& key, const V& value) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         if (!bucket.Map.insert(std::make_pair(key, value)).second) {
             Y_ABORT("non-unique key");
         }
@@ -102,14 +120,14 @@ public:
 
     V& InsertIfAbsent(const K& key, const V& value) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         return bucket.Map.insert(std::make_pair(key, value)).first->second;
     }
 
     template <typename TKey, typename... Args>
     V& EmplaceIfAbsent(TKey&& key, Args&&... args) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         if (V* value = bucket.TryGetUnsafe(key)) {
             return *value;
         }
@@ -123,7 +141,7 @@ public:
     template <typename Callable>
     V& InsertIfAbsentWithInit(const K& key, Callable initFunc) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         if (V* value = bucket.TryGetUnsafe(key)) {
             return *value;
         }
@@ -133,13 +151,13 @@ public:
 
     V Get(const K& key) const {
         const TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         return bucket.GetUnsafe(key);
     }
 
     bool Get(const K& key, V& result) const {
         const TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         if (const V* value = bucket.TryGetUnsafe(key)) {
             result = *value;
             return true;
@@ -149,13 +167,19 @@ public:
 
     V Remove(const K& key) {
         TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         return bucket.RemoveUnsafe(key);
+    }
+
+    bool TryRemove(const K& key, V& result) {
+        TBucket& bucket = GetBucketForKey(key);
+        TBucketGuard guard(bucket.Mutex);
+        return bucket.TryRemoveUnsafe(key, result);
     }
 
     bool Has(const K& key) const {
         const TBucket& bucket = GetBucketForKey(key);
-        TGuard<TLock> guard(bucket.Mutex);
+        TBucketGuard guard(bucket.Mutex);
         return bucket.HasUnsafe(key);
     }
 };

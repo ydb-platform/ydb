@@ -1,7 +1,9 @@
-import os
-from distutils import log
 import itertools
+import os
 
+from .compat import py312
+
+from distutils import log
 
 flatten = itertools.chain.from_iterable
 
@@ -9,7 +11,7 @@ flatten = itertools.chain.from_iterable
 class Installer:
     nspkg_ext = '-nspkg.pth'
 
-    def install_namespaces(self):
+    def install_namespaces(self) -> None:
         nsp = self._get_all_ns_packages()
         if not nsp:
             return
@@ -23,10 +25,12 @@ class Installer:
             list(lines)
             return
 
-        with open(filename, 'wt') as f:
+        with open(filename, 'wt', encoding=py312.PTH_ENCODING) as f:
+            # Python<3.13 requires encoding="locale" instead of "utf-8"
+            # See: python/cpython#77102
             f.writelines(lines)
 
-    def uninstall_namespaces(self):
+    def uninstall_namespaces(self) -> None:
         filename = self._get_nspkg_file()
         if not os.path.exists(filename):
             return
@@ -42,18 +46,17 @@ class Installer:
 
     _nspkg_tmpl = (
         "import sys, types, os",
-        "has_mfs = sys.version_info > (3, 5)",
         "p = os.path.join(%(root)s, *%(pth)r)",
-        "importlib = has_mfs and __import__('importlib.util')",
-        "has_mfs and __import__('importlib.machinery')",
+        "importlib = __import__('importlib.util')",
+        "__import__('importlib.machinery')",
         (
-            "m = has_mfs and "
+            "m = "
             "sys.modules.setdefault(%(pkg)r, "
             "importlib.util.module_from_spec("
             "importlib.machinery.PathFinder.find_spec(%(pkg)r, "
             "[os.path.dirname(p)])))"
         ),
-        ("m = m or " "sys.modules.setdefault(%(pkg)r, types.ModuleType(%(pkg)r))"),
+        ("m = m or sys.modules.setdefault(%(pkg)r, types.ModuleType(%(pkg)r))"),
         "mp = (m or []) and m.__dict__.setdefault('__path__',[])",
         "(p not in mp) and mp.append(p)",
     )

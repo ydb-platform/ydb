@@ -10,8 +10,8 @@ PEERDIR(
     ydb/core/mind
     ydb/library/aclib
     ydb/public/api/grpc
-    ydb/public/lib/operation_id
-    ydb/public/sdk/cpp/client/resources
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/client/resources
 )
 
 END()

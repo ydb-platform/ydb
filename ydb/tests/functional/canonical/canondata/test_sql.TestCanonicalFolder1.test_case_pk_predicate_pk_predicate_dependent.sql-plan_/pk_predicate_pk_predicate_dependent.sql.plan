@@ -14,7 +14,8 @@
                         "Group",
                         "Name"
                     ],
-                    "type": "Lookup"
+                    "limit": "1001",
+                    "type": "Scan"
                 }
             ]
         },
@@ -24,6 +25,10 @@
                 {
                     "columns": [
                         "Value2"
+                    ],
+                    "limit": "1",
+                    "lookup_by": [
+                        "Key (101)"
                     ],
                     "type": "Lookup"
                 }

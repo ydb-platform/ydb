@@ -417,7 +417,6 @@ template<typename T, typename Traits> class ConcurrentQueue;
 template<typename T, typename Traits> class BlockingConcurrentQueue;
 class ConcurrentQueueTests;
 
-
 namespace details
 {
     struct ConcurrentQueueProducerTypelessBase
@@ -3217,7 +3216,7 @@ private:
         for (auto ptr = producerListTail.load(std::memory_order::acquire); ptr != nullptr; ptr = ptr->next_prod()) {
             if (ptr->inactive.load(std::memory_order::relaxed) && ptr->isExplicit == isExplicit) {
                 bool expected = true;
-                if (ptr->inactive.compare_exchange_strong(expected, /* desired */ false, std::memory_order::acquire, std::memory_order::relaxed)) {
+                if (ptr->inactive.compare_exchange_strong(expected, /*desired*/ false, std::memory_order::acquire, std::memory_order::relaxed)) {
                     // We caught one! It's been marked as activated, the caller can have it
                     recycled = true;
                     return ptr;

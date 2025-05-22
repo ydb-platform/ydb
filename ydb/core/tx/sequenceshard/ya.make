@@ -17,6 +17,7 @@ SRCS(
     tx_create_sequence.cpp
     tx_drop_sequence.cpp
     tx_freeze_sequence.cpp
+    tx_get_sequence.cpp
     tx_init.cpp
     tx_init_schema.cpp
     tx_mark_schemeshard_pipe.cpp

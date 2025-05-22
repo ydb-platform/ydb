@@ -4,8 +4,6 @@
 #include <yt/cpp/mapreduce/interface/fwd.h>
 #include <yt/cpp/mapreduce/interface/node.h>
 
-#include <yt/cpp/mapreduce/http/requests.h>
-
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/ptr.h>
@@ -18,13 +16,8 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TResponseInfo;
 class TClient;
 using TClientPtr = ::TIntrusivePtr<TClient>;
-
-namespace NRawClient {
-    class TRawBatchRequest;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -119,12 +112,12 @@ public:
     virtual void ExecuteBatch(const TExecuteBatchOptions& executeBatch) override;
 
 private:
-    TBatchRequest(NDetail::NRawClient::TRawBatchRequest* impl, ::TIntrusivePtr<TClient> client);
+    TBatchRequest(IRawBatchRequest* impl, ::TIntrusivePtr<TClient> client);
 
 private:
     TTransactionId DefaultTransaction_;
-    ::TIntrusivePtr<NDetail::NRawClient::TRawBatchRequest> Impl_;
-    THolder<TBatchRequest> TmpWithTransaction_;
+    IRawBatchRequestPtr Impl_;
+    std::unique_ptr<TBatchRequest> TmpWithTransaction_;
     ::TIntrusivePtr<TClient> Client_;
 
 private:

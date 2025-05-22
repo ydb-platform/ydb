@@ -1,0 +1,280 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 000aa9c39050337adeb86ee6154db231
+BELONGS ya.make
+    License text:
+        /* Copyright 2003-2015 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/ord_index_impl_fwd.hpp [1:3]
+        include/boost/multi_index/detail/raw_ptr.hpp [1:3]
+        include/boost/multi_index/detail/rnd_index_ops.hpp [1:3]
+        include/boost/multi_index/detail/value_compare.hpp [1:3]
+        include/boost/multi_index/ordered_index.hpp [1:3]
+        include/boost/multi_index/ordered_index_fwd.hpp [1:3]
+        include/boost/multi_index/ranked_index_fwd.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 018af39cb212e993217cd92660bc4796
+BELONGS ya.make
+    License text:
+        /* Copyright 2003-2021 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/any_container_view.hpp [1:3]
+        include/boost/multi_index/detail/index_access_sequence.hpp [1:3]
+        include/boost/multi_index/detail/index_base.hpp [1:3]
+        include/boost/multi_index/detail/invalidate_iterators.hpp [1:3]
+        include/boost/multi_index/detail/rnd_index_node.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 05a5f756ebc9a3840cb40447549b686b
+BELONGS ya.make
+    License text:
+        /* Copyright 2003-2022 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/composite_key.hpp [1:3]
+        include/boost/multi_index/detail/auto_space.hpp [1:3]
+        include/boost/multi_index/detail/copy_map.hpp [1:3]
+        include/boost/multi_index/detail/define_if_constexpr_macro.hpp [1:3]
+        include/boost/multi_index/detail/hash_index_args.hpp [1:3]
+        include/boost/multi_index/detail/header_holder.hpp [1:3]
+        include/boost/multi_index/detail/index_matcher.hpp [1:3]
+        include/boost/multi_index/detail/is_transparent.hpp [1:3]
+        include/boost/multi_index/detail/node_handle.hpp [1:3]
+        include/boost/multi_index/detail/rnd_index_loader.hpp [1:3]
+        include/boost/multi_index/detail/rnd_index_ptr_array.hpp [1:3]
+        include/boost/multi_index/detail/scoped_bilock.hpp [1:3]
+        include/boost/multi_index/global_fun.hpp [1:3]
+        include/boost/multi_index/identity.hpp [1:3]
+        include/boost/multi_index/mem_fun.hpp [1:3]
+        include/boost/multi_index/member.hpp [1:3]
+        include/boost/multi_index/ranked_index.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a7ad4244a4100f9dcda594b21cd0a89
+BELONGS ya.make
+    License text:
+         * Copyright 2003-2023 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/archive_constructed.hpp [1:3]
+        include/boost/multi_index/detail/bad_archive_exception.hpp [1:3]
+        include/boost/multi_index/detail/bidir_node_iterator.hpp [1:3]
+        include/boost/multi_index/detail/bucket_array.hpp [1:3]
+        include/boost/multi_index/detail/hash_index_iterator.hpp [1:3]
+        include/boost/multi_index/detail/index_loader.hpp [1:3]
+        include/boost/multi_index/detail/index_node_base.hpp [1:3]
+        include/boost/multi_index/detail/index_saver.hpp [1:3]
+        include/boost/multi_index/detail/ord_index_impl.hpp [1:3]
+        include/boost/multi_index/detail/rnd_node_iterator.hpp [1:3]
+        include/boost/multi_index/detail/safe_mode.hpp [1:3]
+        include/boost/multi_index/detail/serialization_version.hpp [1:3]
+        include/boost/multi_index/hashed_index.hpp [1:3]
+        include/boost/multi_index/random_access_index.hpp [1:3]
+        include/boost/multi_index/sequenced_index.hpp [1:3]
+        include/boost/multi_index_container.hpp [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 315a7554fc178f85d65ddbb338fd58a5
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996,1997
+         * Silicon Graphics Computer Systems, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/ord_index_impl.hpp [11:12]
+        include/boost/multi_index/detail/ord_index_node.hpp [11:12]
+        include/boost/multi_index/detail/ord_index_ops.hpp [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4f5d57c8559aaf8bf412ae6bc295ec7e
+BELONGS ya.make
+    License text:
+        /* Copyright 2003-2013 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/access_specifier.hpp [1:3]
+        include/boost/multi_index/detail/adl_swap.hpp [1:3]
+        include/boost/multi_index/detail/base_type.hpp [1:3]
+        include/boost/multi_index/detail/do_not_copy_elements_tag.hpp [1:3]
+        include/boost/multi_index/detail/has_tag.hpp [1:3]
+        include/boost/multi_index/detail/invariant_assert.hpp [1:3]
+        include/boost/multi_index/detail/is_index_list.hpp [1:3]
+        include/boost/multi_index/detail/iter_adaptor.hpp [1:3]
+        include/boost/multi_index/detail/modify_key_adaptor.hpp [1:3]
+        include/boost/multi_index/detail/no_duplicate_tags.hpp [1:3]
+        include/boost/multi_index/detail/node_type.hpp [1:3]
+        include/boost/multi_index/detail/ord_index_args.hpp [1:3]
+        include/boost/multi_index/detail/uintptr_type.hpp [1:3]
+        include/boost/multi_index/detail/unbounded.hpp [1:3]
+        include/boost/multi_index/detail/vartempl_support.hpp [1:3]
+        include/boost/multi_index/hashed_index_fwd.hpp [1:3]
+        include/boost/multi_index/identity_fwd.hpp [1:3]
+        include/boost/multi_index/indexed_by.hpp [1:3]
+        include/boost/multi_index/key_extractors.hpp [1:3]
+        include/boost/multi_index/random_access_index_fwd.hpp [1:3]
+        include/boost/multi_index/sequenced_index_fwd.hpp [1:3]
+        include/boost/multi_index/tag.hpp [1:3]
+        include/boost/multi_index_container_fwd.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c4c34d83e3e76251c0e7ed4342f17c8
+BELONGS ya.make
+    License text:
+        /* Copyright 2003-2020 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/allocator_traits.hpp [1:3]
+        include/boost/multi_index/detail/converter.hpp [1:3]
+        include/boost/multi_index/detail/hash_index_node.hpp [1:3]
+        include/boost/multi_index/detail/ord_index_node.hpp [1:3]
+        include/boost/multi_index/detail/scope_guard.hpp [1:3]
+        include/boost/multi_index/detail/seq_index_ops.hpp [1:3]
+        include/boost/multi_index/detail/undef_if_constexpr_macro.hpp [1:3]
+        include/boost/multi_index/safe_mode_errors.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7a92fca234fbb2ec58839a022533d6cb
+BELONGS ya.make
+    License text:
+        /* Copyright 2003-2016 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/ignore_wstrict_aliasing.hpp [1:3]
+        include/boost/multi_index/detail/restore_wstrict_aliasing.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9890bd67cdd35de988039eaab34c8a02
+BELONGS ya.make
+    License text:
+        /* Copyright 2003-2014 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/cons_stdtuple.hpp [1:3]
+        include/boost/multi_index/detail/ord_index_ops.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a7831931571cb11df5942e281a68009f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1994
+         * Hewlett-Packard Company
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/ord_index_impl.hpp [23:24]
+        include/boost/multi_index/detail/ord_index_node.hpp [23:24]
+        include/boost/multi_index/detail/ord_index_ops.hpp [23:24]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b1d8599132305166f8d3329e2357d761
+BELONGS ya.make
+    License text:
+        /* Copyright 2003-2017 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/promotes_arg.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b39477fb74de6923f82fd930b22fa1ef
+BELONGS ya.make
+    License text:
+        /* Copyright 2003-2018 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/duplicates_iterator.hpp [1:3]
+        include/boost/multi_index/detail/rnk_index_ops.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dbf0629fd3ff68055ae1d75560ba3a6a
+BELONGS ya.make
+    License text:
+        /* Copyright 2003-2019 Joaquin M Lopez Munoz.
+         * Distributed under the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/multi_index/detail/is_function.hpp [1:3]
+        include/boost/multi_index/detail/seq_index_node.hpp [1:3]
+        include/boost/multi_index/key.hpp [1:3]

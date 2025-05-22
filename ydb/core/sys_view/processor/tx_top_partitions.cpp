@@ -15,15 +15,27 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
     void ProcessTop(NIceDb::TNiceDb& db, NKikimrSysView::EStatsType statsType,
         TPartitionTop& top)
     {
+        using TPartitionTopKey = std::pair<ui64, ui32>;
+
+        const bool isTopByCpu = statsType == NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE || statsType == NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR;
+
         TPartitionTop result;
         result.reserve(TOP_PARTITIONS_COUNT);
-        std::unordered_set<ui64> seen;
+        std::unordered_set<TPartitionTopKey> seen;
         size_t index = 0;
         auto topIt = top.begin();
 
+        auto getPartition = [&] () {
+            return isTopByCpu ? Record.GetPartitionsByCpu(index) : Record.GetPartitionsByTli(index);
+        };
+        auto getPartitionSize = [&] () {
+            return isTopByCpu ? Record.PartitionsByCpuSize() : Record.PartitionsByTliSize();
+        };
+
         auto copyNewPartition = [&] () {
-            const auto& newPartition = Record.GetPartitions(index);
-            auto tabletId = newPartition.GetTabletId();
+            const auto& newPartition = getPartition();
+            const ui64 tabletId = newPartition.GetTabletId();
+            const ui32 followerId = newPartition.GetFollowerId();
 
             TString data;
             Y_PROTOBUF_SUPPRESS_NODISCARD newPartition.SerializeToString(&data);
@@ -32,44 +44,57 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
             partition->CopyFrom(newPartition);
             result.emplace_back(std::move(partition));
 
-            db.Table<Schema::IntervalPartitionTops>().Key((ui32)statsType, tabletId).Update(
-                NIceDb::TUpdate<Schema::IntervalPartitionTops::Data>(data));
+            if (followerId == 0) {
+                db.Table<Schema::IntervalPartitionTops>().Key((ui32)statsType, tabletId).Update(
+                    NIceDb::TUpdate<Schema::IntervalPartitionTops::Data>(data));
+            } else {
+                db.Table<Schema::IntervalPartitionFollowerTops>().Key((ui32)statsType, tabletId, followerId).Update(
+                    NIceDb::TUpdate<Schema::IntervalPartitionFollowerTops::Data>(data));            
+            }
 
-            seen.insert(tabletId);
+            seen.insert({tabletId, followerId});
             ++index;
         };
 
         while (result.size() < TOP_PARTITIONS_COUNT) {
             if (topIt == top.end()) {
-                if (index == Record.PartitionsSize()) {
+                if (index == getPartitionSize()) {
                     break;
                 }
-                auto tabletId = Record.GetPartitions(index).GetTabletId();
-                if (seen.find(tabletId) != seen.end()) {
+                const auto& partition = getPartition();
+                const ui64 tabletId = partition.GetTabletId();
+                const ui32 followerId = partition.GetFollowerId();
+                if (seen.contains({tabletId, followerId})) {
                     ++index;
                     continue;
                 }
                 copyNewPartition();
             } else {
-                auto topTabletId = (*topIt)->GetTabletId();
-                if (seen.find(topTabletId) != seen.end()) {
+                const ui64 topTabletId = (*topIt)->GetTabletId();
+                const ui32 topFollowerId = (*topIt)->GetFollowerId();
+                if (seen.contains({topTabletId, topFollowerId})) {
                     ++topIt;
                     continue;
                 }
-                if (index == Record.PartitionsSize()) {
+                if (index == getPartitionSize()) {
                     result.emplace_back(std::move(*topIt++));
-                    seen.insert(topTabletId);
+                    seen.insert({topTabletId, topFollowerId});
                     continue;
                 }
-                auto& newPartition = Record.GetPartitions(index);
-                auto tabletId = newPartition.GetTabletId();
-                if (seen.find(tabletId) != seen.end()) {
+                const auto& newPartition = getPartition();
+                const ui64 tabletId = newPartition.GetTabletId();
+                const ui32 followerId = newPartition.GetFollowerId();
+                if (seen.contains({tabletId, followerId})) {
                     ++index;
                     continue;
                 }
-                if ((*topIt)->GetCPUCores() >= newPartition.GetCPUCores()) {
+                const bool isOverloadedByCpu = (statsType == NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE || statsType == NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR) 
+                    && (*topIt)->GetCPUCores() >= newPartition.GetCPUCores();
+                const bool isOverloadedByTli = (statsType == NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_MINUTE || statsType == NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR) 
+                    && (*topIt)->GetLocksBroken() >= newPartition.GetLocksBroken();
+                if (isOverloadedByCpu || isOverloadedByTli) {
                     result.emplace_back(std::move(*topIt++));
-                    seen.insert(topTabletId);
+                    seen.insert({topTabletId, topFollowerId});
                 } else {
                     copyNewPartition();
                 }
@@ -77,11 +102,17 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
         }
 
         for (; topIt != top.end(); ++topIt) {
-            auto topTabletId = (*topIt)->GetTabletId();
-            if (seen.find(topTabletId) != seen.end()) {
+            const ui64 topTabletId = (*topIt)->GetTabletId();
+            const ui64 topFollowerId = (*topIt)->GetFollowerId();
+            if (seen.contains({topTabletId, topFollowerId})) {
                 continue;
             }
-            db.Table<Schema::IntervalPartitionTops>().Key((ui32)statsType, topTabletId).Delete();
+
+            if (topFollowerId == 0) {
+                db.Table<Schema::IntervalPartitionTops>().Key((ui32)statsType, topTabletId).Delete();
+            } else {
+                db.Table<Schema::IntervalPartitionFollowerTops>().Key((ui32)statsType, topTabletId, topFollowerId).Delete();
+            }
         }
 
         top.swap(result);
@@ -89,11 +120,15 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         SVLOG_D("[" << Self->TabletID() << "] TTxTopPartitions::Execute: "
-            << "partition count# " << Record.PartitionsSize());
+            << ", partition by CPU count# " << Record.PartitionsByCpuSize()
+            << ", partition by TLI count# " << Record.PartitionsByTliSize()
+        );
 
         NIceDb::TNiceDb db(txc.DB);
-        ProcessTop(db, NKikimrSysView::TOP_PARTITIONS_ONE_MINUTE, Self->PartitionTopMinute);
-        ProcessTop(db, NKikimrSysView::TOP_PARTITIONS_ONE_HOUR, Self->PartitionTopHour);
+        ProcessTop(db, NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE, Self->PartitionTopByCpuMinute);
+        ProcessTop(db, NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR, Self->PartitionTopByCpuHour);
+        ProcessTop(db, NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_MINUTE, Self->PartitionTopByTliMinute);
+        ProcessTop(db, NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR, Self->PartitionTopByTliHour);
 
         return true;
     }
@@ -107,6 +142,8 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendTopPartitions::TPtr& ev) {
     auto& record = ev->Get()->Record;
     auto timeUs = record.GetTimeUs();
     auto partitionIntervalEnd = IntervalEnd + TotalInterval;
+
+    SVLOG_T("TEvSysView::TEvSendTopPartitions: " << " record " << record.ShortDebugString());
 
     if (timeUs < IntervalEnd.MicroSeconds() || timeUs >= partitionIntervalEnd.MicroSeconds()) {
         SVLOG_W("[" << TabletID() << "] TEvSendTopPartitions, time mismath: "

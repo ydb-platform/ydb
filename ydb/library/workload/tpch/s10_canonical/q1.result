@@ -1,0 +1,3 @@
+l_returnflag,l_linestatus,sum_qty,sum_base_price,sum_disc_price,sum_charge,avg_qty,avg_price,avg_disc,count_order
+A,F,377518399,566065727797+-1,537759104278+-1,559276670892+-1,25.5+-0.01,38237.15+-0.01,0.05+-0.01,14804077
+...

@@ -617,8 +617,9 @@ void readBackQuotedStringWithSQLStyle(String & s, ReadBuffer & buf)
 template <typename Vector>
 void readCSVStringInto(Vector & s, ReadBuffer & buf, const FormatSettings::CSV & settings)
 {
+    /// Empty string
     if (buf.eof())
-        throwReadAfterEOF();
+        return;
 
     const char delimiter = settings.delimiter;
     const char maybe_quote = *buf.position();
@@ -770,6 +771,20 @@ template bool readJSONStringInto<PaddedPODArray<UInt8>, bool>(PaddedPODArray<UIn
 template void readJSONStringInto<NullOutput>(NullOutput & s, ReadBuffer & buf);
 template void readJSONStringInto<String>(String & s, ReadBuffer & buf);
 
+void readDateTextFormatImpl(LocalDate & date, ReadBuffer & buf, const String& format)
+{
+    struct tm input_tm;
+    memset(&input_tm, 0, sizeof(tm));
+    input_tm.tm_mday = 1;
+
+    auto ptr = strptime(buf.position(), format.c_str(), &input_tm);
+    if (ptr == nullptr) {
+        ythrow yexception() << "Can't parse date " << buf.position() << " in " << format << " format";
+    }
+
+    buf.position() = ptr;
+    date = LocalDate(input_tm.tm_year + 1900, input_tm.tm_mon + 1, input_tm.tm_mday);
+}
 
 template <typename ReturnType>
 ReturnType readDateTextFallback(LocalDate & date, ReadBuffer & buf)

@@ -1,17 +1,11 @@
 #pragma once
-#include <unordered_map>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/protos/node_whiteboard.pb.h>
-#include <ydb/core/viewer/protos/viewer.pb.h>
-#include "viewer.h"
-#include "viewer_helper.h"
 #include "json_pipe_req.h"
-#include "json_vdiskinfo.h"
-#include "json_pdiskinfo.h"
+#include "viewer.h"
+#include "viewer_bsgroupinfo.h"
+#include "viewer_vdiskinfo.h"
+#include "viewer_pdiskinfo.h"
+#include "viewer_helper.h"
+#include "wb_merge.h"
 
 template<>
 struct std::hash<NKikimrBlobStorage::TVSlotId> {
@@ -31,17 +25,16 @@ struct std::equal_to<NKikimrBlobStorage::TVSlotId> {
     }
 };
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
 
 using ::google::protobuf::FieldDescriptor;
 
-class TJsonStorageBase : public TViewerPipeClient<TJsonStorageBase> {
+class TJsonStorageBase : public TViewerPipeClient {
 protected:
-    using TBase = TViewerPipeClient<TJsonStorageBase>;
+    using TBase = TViewerPipeClient;
     using TThis = TJsonStorageBase;
 
     using TNodeId = ui32;
@@ -62,6 +55,7 @@ protected:
 
     struct TStoragePoolInfo {
         TString Kind;
+        TString MediaType;
         TSet<TString> Groups;
         NKikimrViewer::EFlag Overall = NKikimrViewer::EFlag::Grey;
     };
@@ -71,10 +65,11 @@ protected:
     ui32 Timeout = 0;
     TString FilterTenant;
     THashSet<TString> FilterStoragePools;
-    TVector<TString> FilterGroupIds;
     TString Filter;
+    std::unordered_set<TString> FilterGroupIds;
     std::unordered_set<TNodeId> FilterNodeIds;
-    THashSet<TString> EffectiveFilterGroupIds;
+    std::unordered_set<ui32> FilterPDiskIds;
+    THashSet<TString> EffectiveGroupFilter;
     std::unordered_set<TNodeId> NodeIds;
     bool NeedAdditionalNodesRequests;
 
@@ -98,13 +93,14 @@ protected:
         TString PoolName;
         TString GroupId;
         TString Kind;
+        TString MediaType;
         TString Erasure;
         ui32 Degraded;
         float Usage;
-        uint64 Used;
-        uint64 Limit;
-        uint64 Read;
-        uint64 Write;
+        ui64 Used;
+        ui64 Limit;
+        ui64 Read;
+        ui64 Write;
 
         TGroupRow()
             : Used(0)
@@ -131,9 +127,9 @@ protected:
             FilterStoragePools.emplace(filterStoragePool);
         }
         SplitIds(params.Get("node_id"), ',', FilterNodeIds);
+        SplitIds(params.Get("pdisk_id"), ',', FilterPDiskIds);
         NeedAdditionalNodesRequests = !FilterNodeIds.empty();
         SplitIds(params.Get("group_id"), ',', FilterGroupIds);
-        Sort(FilterGroupIds);
         Filter = params.Get("filter");
         if (params.Get("with") == "missing") {
             With = EWith::MissingDisks;
@@ -143,11 +139,7 @@ protected:
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::VIEWER_HANDLER;
-    }
-
-    virtual void Bootstrap() {
+    void Bootstrap() override {
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
 
         if (FilterTenant.empty()) {
@@ -167,12 +159,12 @@ public:
                 SendNodeRequests(nodeId);
             }
         }
-        if (Requests == 0) {
+        if (!WaitingForResponse()) {
             ReplyAndPassAway();
             return;
         }
 
-        RequestBSControllerConfig();
+        RequestBSControllerConfigWithStoragePools();
 
         TBase::Become(&TThis::StateWork);
         Schedule(TDuration::MilliSeconds(Timeout / 100 * 70), new TEvents::TEvWakeup(TimeoutBSC)); // 70% timeout (for bsc)
@@ -205,10 +197,21 @@ public:
         RequestDone();
     }
 
+    TString GetMediaType(const NKikimrBlobStorage::TDefineStoragePool& pool) const {
+        for (const NKikimrBlobStorage::TPDiskFilter& filter : pool.GetPDiskFilter()) {
+            for (const NKikimrBlobStorage::TPDiskFilter::TRequiredProperty& property : filter.GetProperty()) {
+                if (property.HasType()) {
+                    return ToString(property.GetType());
+                }
+            }
+        }
+        return TString();
+    }
+
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
         const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(ev->Get()->Record);
 
-        if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 0) {
+        if (pbRecord.HasResponse() && pbRecord.GetResponse().StatusSize() > 1) {
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
             if (pbStatus.HasBaseConfig()) {
                 BaseConfig = ev->Release();
@@ -231,6 +234,10 @@ public:
                         SendNodeRequests(nodeId);
                     }
                 }
+            }
+            const NKikimrBlobStorage::TConfigResponse::TStatus& spStatus(pbRecord.GetResponse().GetStatus(1));
+            for (const NKikimrBlobStorage::TDefineStoragePool& pool : spStatus.GetStoragePool()) {
+                StoragePoolInfo[pool.GetName()].MediaType = GetMediaType(pool);
             }
         }
         RequestDone();
@@ -339,6 +346,14 @@ public:
         for (auto& vDiskStateInfo : *(vDiskInfo.MutableVDiskStateInfo())) {
             vDiskStateInfo.SetNodeId(nodeId);
             VDiskId2vDiskStateInfo[VDiskIDFromVDiskID(vDiskStateInfo.GetVDiskId())] = &vDiskStateInfo;
+
+            bool isNodeIdValid = FilterNodeIds.empty() || FilterNodeIds.contains(nodeId);
+            bool isPDiskIdValid = FilterNodeIds.empty() || FilterPDiskIds.empty() || FilterPDiskIds.contains(vDiskStateInfo.GetPDiskId());
+            bool isGroupIdValid = FilterGroupIds.empty() || FilterGroupIds.contains(ToString(vDiskStateInfo.GetVDiskId().GetGroupID()));
+
+            if (isNodeIdValid && isPDiskIdValid && isGroupIdValid) {
+                EffectiveGroupFilter.insert(ToString(vDiskStateInfo.GetVDiskId().GetGroupID()));
+            }
         }
         RequestDone();
     }
@@ -358,10 +373,6 @@ public:
             }
             if (FilterNodeIds.empty() || FilterNodeIds.contains(info.GetNodeId())) {
                 StoragePoolInfo[storagePoolName].Groups.emplace(ToString(info.GetGroupID()));
-                TString groupId(ToString(info.GetGroupID()));
-                if (FilterGroupIds.empty() || BinarySearch(FilterGroupIds.begin(), FilterGroupIds.end(), groupId)) {
-                    EffectiveFilterGroupIds.insert(groupId);
-                }
             }
             for (const auto& vDiskNodeId : info.GetVDiskNodeIds()) {
                 Group2NodeId[info.GetGroupID()].push_back(vDiskNodeId);
@@ -428,7 +439,7 @@ public:
                 }
             }
         }
-        return Requests != 0;
+        return WaitingForResponse();
     }
 
     void CollectDiskInfo(bool needDonors) {
@@ -528,7 +539,7 @@ public:
         }
     }
 
-    virtual void ReplyAndPassAway() {}
+    void ReplyAndPassAway() override {}
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr& ev) {
         switch (ev->Get()->Tag) {
@@ -542,5 +553,4 @@ public:
     }
 };
 
-}
 }

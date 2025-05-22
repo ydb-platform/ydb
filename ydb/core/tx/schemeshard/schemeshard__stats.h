@@ -1,10 +1,5 @@
 #pragma once
 
-#include "schemeshard.h"
-#include "schemeshard_private.h"
-#include "schemeshard_tx_infly.h"
-#include "schemeshard__operation.h"
-
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 namespace NKikimr {
@@ -13,20 +8,22 @@ namespace NSchemeShard {
 struct TStatsId {
     TPathId PathId;
     TTabletId Datashard;
+    ui32 FollowerId;
 
-    TStatsId(const TPathId& pathId, const TTabletId datashard = TTabletId(0))
+    TStatsId(const TPathId& pathId, const TTabletId datashard = TTabletId(0), ui32 followerId = 0)
         : PathId(pathId)
         , Datashard(datashard)
+        , FollowerId(followerId)
     {
     }
 
     bool operator==(const TStatsId& rhs) const {
-        return PathId == rhs.PathId && Datashard == rhs.Datashard;
+        return PathId == rhs.PathId && Datashard == rhs.Datashard & FollowerId == rhs.FollowerId;
     }
 
     struct THash {
         inline size_t operator()(const TStatsId& obj) const {
-            return MultiHash(obj.PathId.Hash(), obj.Datashard);
+            return MultiHash(obj.PathId.Hash(), obj.Datashard, obj.FollowerId);
         }
     };
 };

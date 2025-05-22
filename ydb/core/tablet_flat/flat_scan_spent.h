@@ -21,21 +21,23 @@ namespace NTable {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             const auto now = Time->Now();
 
             out
-                << "Spent{" << NFmt::TDelay(now - Fired)
-                << " wa " << NFmt::TDelay(Waits + (now - Since)) << "}";
+                << "Spent{time=" << NFmt::TDelay(now - Fired)
+                << ",wait=" << NFmt::TDelay(Waits + (now - Since))
+                << ",interrupts=" << Interrupts << "}";
         }
 
-        void Alter(bool available) noexcept
+        void Alter(bool available)
         {
             if (bool(available) == bool(Since == TInstant::Max())) {
                 /* State isn't changed since last Alter(...) */
             } else if (Since == TInstant::Max()) {
                 Since = Time->Now();
+                Interrupts++;
             } else {
                 Waits += Time->Now() - std::exchange(Since, TInstant::Max());
             }
@@ -47,6 +49,7 @@ namespace NTable {
         TInstant Fired = TInstant::Max();
         TInstant Since = TInstant::Max();
         TDuration Waits = TDuration::Zero();
+        ui64 Interrupts = 0;
     };
 
 }

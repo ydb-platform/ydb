@@ -29,13 +29,3 @@ class TEvTabletStateResponseMatcher(AbstractProtobufMatcher):
     def tablet_state_info(self, set_of_tablet_states):
         self.expected_protobuf.TabletStateInfo = contains_inanyorder(*set_of_tablet_states)
         return self
-
-
-class TLocalEnumerateTabletsResultMatcher(AbstractProtobufMatcher):
-    def __init__(self):
-        super(TLocalEnumerateTabletsResultMatcher, self).__init__()
-        self.expected_protobuf.Status = MessageBusStatus.MSTATUS_OK
-
-    def tablet_info(self, set_of_tablet_info):
-        self.expected_protobuf.TabletInfo = contains_inanyorder(*set_of_tablet_info)
-        return self

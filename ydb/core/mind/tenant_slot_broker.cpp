@@ -413,10 +413,7 @@ void TTenantSlotBroker::OnActivateExecutor(const TActorContext &ctx)
 {
     RequestId = Now().GetValue();
 
-    auto domains = AppData(ctx)->DomainsInfo;
-    DomainId = domains->GetDomainUidByTabletId(TabletID());
-    Y_ABORT_UNLESS(DomainId != TDomainsInfo::BadDomainId);
-    DomainName = domains->Domains.at(DomainId)->Name;
+    DomainName = AppData()->DomainsInfo->GetDomain()->Name;
 
     auto tabletCounters = GetServiceCounters(AppData(ctx)->Counters, "tablets");
     tabletCounters->RemoveSubgroup("type", "TENANT_SLOT_BROKER");
@@ -451,7 +448,7 @@ bool TTenantSlotBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
     TStringStream str;
     HTML(str) {
         PRE() {
-            str << "Served domain: " << AppData(ctx)->DomainsInfo->Domains.at(DomainId)->Name << Endl
+            str << "Served domain: " << AppData(ctx)->DomainsInfo->GetDomain()->Name << Endl
                 << "Used timeout for pending slots: " << PendingTimeout.ToString() << Endl
                 << "PendingAssignFreeSlots: " << PendingAssignFreeSlots << Endl;
 
@@ -1515,7 +1512,7 @@ void TTenantSlotBroker::SendConfigureSlot(TSlot::TPtr slot,
     LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                 "Send configuration request " << slot->LastRequestId << " for " << slot->IdString(true));
 
-    auto serviceId = MakeTenantPoolID(slot->Id.NodeId, DomainId);
+    auto serviceId = MakeTenantPoolID(slot->Id.NodeId);
     ctx.Send(serviceId, event.Release(), IEventHandle::FlagTrackDelivery, slot->LastRequestId);
     ctx.Schedule(PendingTimeout, new TEvPrivate::TEvCheckSlotStatus(slot, slot->LastRequestId));
 }
@@ -1648,7 +1645,7 @@ void TTenantSlotBroker::Handle(TEvents::TEvUndelivered::TPtr &ev,
 {
     ui32 nodeId = ev->Sender.NodeId();
 
-    if (ev->Sender != MakeTenantPoolID(nodeId, DomainId))
+    if (ev->Sender != MakeTenantPoolID(nodeId))
         return;
 
     DisconnectNodeSlots(nodeId, ctx);
@@ -1684,7 +1681,7 @@ void TTenantSlotBroker::Handle(TEvTenantPool::TEvLostOwnership::TPtr &ev,
     LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                 "Re-taking ownership of tenant pool on node " << nodeId);
 
-    ctx.Send(MakeTenantPoolID(nodeId, DomainId), new TEvTenantPool::TEvTakeOwnership(Generation()));
+    ctx.Send(MakeTenantPoolID(nodeId), new TEvTenantPool::TEvTakeOwnership(Generation()));
 }
 
 void TTenantSlotBroker::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev,

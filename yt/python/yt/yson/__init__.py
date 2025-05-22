@@ -22,7 +22,7 @@ Examples:
 >>> yson.dumps(True)
 '"true"'
 
->>> number = yson.YsonInteger(10)
+>>> number = yson.YsonInt64(10)
 >>> number.attributes["my_attr"] = "hello"
 >>> yson.dumps(number)
 '<"attr"="hello">10'
@@ -39,9 +39,10 @@ from . import yson_types  # noqa
 
 TYPE = None
 HAS_PARQUET = False
+HAS_ORC = False
 
 try:
-    from yt_yson_bindings import load, loads, dump, dumps  # noqa
+    from yt_yson_bindings import load, loads, dump, dumps # noqa
     TYPE = "BINARY"
 except ImportError as error:
     # XXX(asaitgalin): Sometimes module can't be imported because
@@ -53,17 +54,16 @@ except ImportError as error:
         print("Warning! Failed to import YSON bindings: " + message, file=_sys.stderr)
 
 try:
-    from yt_yson_bindings import dump_parquet  # noqa
+    from yt_yson_bindings import upload_parquet, dump_parquet, async_dump_parquet # noqa
     HAS_PARQUET = True
-except ImportError:
-    try:
-        from yt_yson_bindings import dump_parquete as dump_parquet # noqa
-        HAS_PARQUET = True
-    except ImportError as error:
-        message = str(error)
-        if "No module named" not in message:
-            import sys as _sys
-            print("Warning! Failed to import dump_parquet binding: " + message, file=_sys.stderr)
+except Exception:
+    pass
+
+try:
+    from yt_yson_bindings import dump_orc, upload_orc, async_dump_orc # noqa
+    HAS_ORC = True
+except Exception:
+    pass
 
 if TYPE is None:
     from .parser import load, loads  # noqa

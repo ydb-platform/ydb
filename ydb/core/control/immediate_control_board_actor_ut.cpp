@@ -1,6 +1,5 @@
 #include "defs.h"
 #include "immediate_control_board_actor.h"
-#include "immediate_control_board_wrapper.h"
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/mon/mon.h>
@@ -8,6 +7,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
+
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -19,7 +20,6 @@
 
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
-
 
 namespace NKikimr {
 
@@ -147,7 +147,7 @@ static void Run(i64 instances = 1) {
 
         VERBOSE_COUT("Sending TEvBoot to test");
         for (ui32 i = 0; i < instances; ++i) {
-            ActorSystem->Send(testIds[i], new TEvTablet::TEvBoot(MakeTabletID(0, 0, 1), 0, nullptr, TActorId(), nullptr));
+            ActorSystem->Send(testIds[i], new TEvTablet::TEvBoot(MakeTabletID(false, 1), 0, nullptr, TActorId(), nullptr));
         }
 
         TAtomicBase doneCount = 0;
@@ -276,7 +276,7 @@ struct THttpRequest : NMonitoring::IHttpRequest {
     }
 
     TStringBuf GetPostContent() const override {
-        return TString();
+        return TStringBuf();
     }
 
     HTTP_METHOD GetMethod() const override {

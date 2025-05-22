@@ -1,6 +1,7 @@
 import io
 import re
 import typing as t
+import warnings
 from functools import partial
 from functools import update_wrapper
 from itertools import chain
@@ -126,16 +127,10 @@ def get_content_length(environ: "WSGIEnvironment") -> t.Optional[int]:
 
     :param environ: the WSGI environ to fetch the content length from.
     """
-    if environ.get("HTTP_TRANSFER_ENCODING", "") == "chunked":
-        return None
-
-    content_length = environ.get("CONTENT_LENGTH")
-    if content_length is not None:
-        try:
-            return max(0, int(content_length))
-        except (ValueError, TypeError):
-            pass
-    return None
+    return _sansio_utils.get_content_length(
+        http_content_length=environ.get("CONTENT_LENGTH"),
+        http_transfer_encoding=environ.get("HTTP_TRANSFER_ENCODING", ""),
+    )
 
 
 def get_input_stream(
@@ -183,8 +178,16 @@ def get_query_string(environ: "WSGIEnvironment") -> str:
 
     :param environ: WSGI environment to get the query string from.
 
+    .. deprecated:: 2.2
+        Will be removed in Werkzeug 2.3.
+
     .. versionadded:: 0.9
     """
+    warnings.warn(
+        "'get_query_string' is deprecated and will be removed in Werkzeug 2.3.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     qs = environ.get("QUERY_STRING", "").encode("latin1")
     # QUERY_STRING really should be ascii safe but some browsers
     # will send us some unicode stuff (I am looking at you IE).
@@ -220,8 +223,16 @@ def get_script_name(
         should be performed.
     :param errors: The decoding error handling.
 
+    .. deprecated:: 2.2
+        Will be removed in Werkzeug 2.3.
+
     .. versionadded:: 0.9
     """
+    warnings.warn(
+        "'get_script_name' is deprecated and will be removed in Werkzeug 2.3.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     path = environ.get("SCRIPT_NAME", "").encode("latin1")
     return _to_str(path, charset, errors, allow_none_charset=True)  # type: ignore
 
@@ -247,6 +258,9 @@ def pop_path_info(
     >>> env['SCRIPT_NAME']
     '/foo/a/b'
 
+    .. deprecated:: 2.2
+        Will be removed in Werkzeug 2.3.
+
     .. versionadded:: 0.5
 
     .. versionchanged:: 0.9
@@ -259,6 +273,12 @@ def pop_path_info(
     :param errors: The ``errors`` paramater passed to
         :func:`bytes.decode`.
     """
+    warnings.warn(
+        "'pop_path_info' is deprecated and will be removed in Werkzeug 2.3.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     path = environ.get("PATH_INFO")
     if not path:
         return None
@@ -299,6 +319,9 @@ def peek_path_info(
 
     If the `charset` is set to `None` bytes are returned.
 
+    .. deprecated:: 2.2
+        Will be removed in Werkzeug 2.3.
+
     .. versionadded:: 0.5
 
     .. versionchanged:: 0.9
@@ -307,6 +330,12 @@ def peek_path_info(
 
     :param environ: the WSGI environment that is checked.
     """
+    warnings.warn(
+        "'peek_path_info' is deprecated and will be removed in Werkzeug 2.3.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     segments = environ.get("PATH_INFO", "").lstrip("/").split("/", 1)
     if segments:
         return _to_str(  # type: ignore
@@ -354,12 +383,21 @@ def extract_path_info(
                                   same server point to the same
                                   resource.
 
+    .. deprecated:: 2.2
+        Will be removed in Werkzeug 2.3.
+
     .. versionchanged:: 0.15
         The ``errors`` parameter defaults to leaving invalid bytes
         quoted instead of replacing them.
 
     .. versionadded:: 0.6
+
     """
+    warnings.warn(
+        "'extract_path_info' is deprecated and will be removed in Werkzeug 2.3.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     def _normalize_netloc(scheme: str, netloc: str) -> str:
         parts = netloc.split("@", 1)[-1].split(":", 1)
@@ -573,9 +611,7 @@ class _RangeWrapper:
             self.end_byte = start_byte + byte_range
 
         self.read_length = 0
-        self.seekable = (
-            hasattr(iterable, "seekable") and iterable.seekable()  # type: ignore
-        )
+        self.seekable = hasattr(iterable, "seekable") and iterable.seekable()
         self.end_reached = False
 
     def __iter__(self) -> "_RangeWrapper":
@@ -627,7 +663,7 @@ class _RangeWrapper:
 
     def close(self) -> None:
         if hasattr(self.iterable, "close"):
-            self.iterable.close()  # type: ignore
+            self.iterable.close()
 
 
 def _make_chunk_iter(
@@ -892,37 +928,77 @@ class LimitedStream(io.IOBase):
 
         raise ClientDisconnected()
 
-    def exhaust(self, chunk_size: int = 1024 * 64) -> None:
-        """Exhaust the stream.  This consumes all the data left until the
-        limit is reached.
+    def _exhaust_chunks(self, chunk_size: int = 1024 * 64) -> t.Iterator[bytes]:
+        """Exhaust the stream by reading until the limit is reached or the client
+        disconnects, yielding each chunk.
 
-        :param chunk_size: the size for a chunk.  It will read the chunk
-                           until the stream is exhausted and throw away
-                           the results.
+        :param chunk_size: How many bytes to read at a time.
+
+        :meta private:
+
+        .. versionadded:: 2.2.3
         """
         to_read = self.limit - self._pos
-        chunk = chunk_size
+
         while to_read > 0:
-            chunk = min(to_read, chunk)
-            self.read(chunk)
-            to_read -= chunk
+            chunk = self.read(min(to_read, chunk_size))
+            yield chunk
+            to_read -= len(chunk)
+
+    def exhaust(self, chunk_size: int = 1024 * 64) -> None:
+        """Exhaust the stream by reading until the limit is reached or the client
+        disconnects, discarding the data.
+
+        :param chunk_size: How many bytes to read at a time.
+
+        .. versionchanged:: 2.2.3
+            Handle case where wrapped stream returns fewer bytes than requested.
+        """
+        for _ in self._exhaust_chunks(chunk_size):
+            pass
 
     def read(self, size: t.Optional[int] = None) -> bytes:
-        """Read `size` bytes or if size is not provided everything is read.
+        """Read up to ``size`` bytes from the underlying stream. If size is not
+        provided, read until the limit.
 
-        :param size: the number of bytes read.
+        If the limit is reached, :meth:`on_exhausted` is called, which returns empty
+        bytes.
+
+        If no bytes are read and the limit is not reached, or if an error occurs during
+        the read, :meth:`on_disconnect` is called, which raises
+        :exc:`.ClientDisconnected`.
+
+        :param size: The number of bytes to read. ``None``, default, reads until the
+            limit is reached.
+
+        .. versionchanged:: 2.2.3
+            Handle case where wrapped stream returns fewer bytes than requested.
         """
         if self._pos >= self.limit:
             return self.on_exhausted()
-        if size is None or size == -1:  # -1 is for consistence with file
-            size = self.limit
+
+        if size is None or size == -1:  # -1 is for consistency with file
+            # Keep reading from the wrapped stream until the limit is reached. Can't
+            # rely on stream.read(size) because it's not guaranteed to return size.
+            buf = bytearray()
+
+            for chunk in self._exhaust_chunks():
+                buf.extend(chunk)
+
+            return bytes(buf)
+
         to_read = min(self.limit - self._pos, size)
+
         try:
             read = self._read(to_read)
         except (OSError, ValueError):
             return self.on_disconnect()
-        if to_read and len(read) != to_read:
+
+        if to_read and not len(read):
+            # If no data was read, treat it as a disconnect. As long as some data was
+            # read, a subsequent call can still return more before reaching the limit.
             return self.on_disconnect()
+
         self._pos += len(read)
         return read
 

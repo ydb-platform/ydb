@@ -1,0 +1,96 @@
+package NKikimrArrowAccessorProto;
+
+message TDataExtractor {
+    optional string ClassName = 1;
+
+    message TJsonScanner {
+        optional bool FirstLevelOnly = 1 [default = false];
+        optional bool ForceSIMDJsonParsing = 2 [default = false];
+    }
+
+    message TSIMDJsonScanner {
+        optional bool FirstLevelOnly = 1 [default = false];
+    }
+
+    oneof Implementation {
+        TJsonScanner JsonScanner = 20;
+        TSIMDJsonScanner SIMDJsonScanner = 21;
+    }
+}
+
+message TRequestedConstructor {
+    optional string ClassName = 1;
+
+    message TPlain {
+    }
+
+    message TSparsed {
+    }
+
+    message TDictionary {
+    }
+
+    message TSubColumns {
+        message TSettings {
+            optional uint32 SparsedDetectorKff = 1 [default = 20];
+            optional uint32 ColumnsLimit = 2 [default = 1024];
+            optional uint32 ChunkMemoryLimit = 3 [default = 50000000];
+            optional double OthersAllowedFraction = 4 [default = 0.05];
+            optional TDataExtractor DataExtractor = 5;
+        }
+        optional TSettings Settings = 1;
+    }
+
+    oneof Implementation {
+        TPlain Plain = 10;
+        TSparsed Sparsed = 11;
+        TSubColumns SubColumns = 12;
+        TDictionary Dictionary = 13;
+    }
+}
+
+message TConstructor {
+    optional string ClassName = 1;
+
+    message TPlain {
+    }
+
+    message TSparsed {
+    }
+
+    message TDictionary {
+    }
+
+    message TSubColumns {
+        message TSettings {
+            optional uint32 SparsedDetectorKff = 1 [default = 20];
+            optional uint32 ColumnsLimit = 2 [default = 1024];
+            optional uint32 ChunkMemoryLimit = 3 [default = 50000000];
+            optional double OthersAllowedFraction = 4 [default = 0.05];
+            optional TDataExtractor DataExtractor = 5;
+        }
+        optional TSettings Settings = 1;
+    }
+    oneof Implementation {
+        TPlain Plain = 10;
+        TSparsed Sparsed = 11;
+        TSubColumns SubColumns = 12;
+        TDictionary Dictionary = 13;
+    }
+}
+
+message TSubColumnsAccessor {
+    optional uint32 ColumnStatsSize = 1;
+    optional uint32 OtherStatsSize = 2;
+    message TColumn {
+        optional uint32 Size = 1;
+    }
+    repeated TColumn KeyColumns = 3;
+    repeated TColumn OtherColumns = 4;
+    optional uint32 OtherRecordsCount = 5;
+}
+
+message TDictionaryAccessor {
+    optional uint32 VariantsBlobSize = 1;
+    optional uint32 RecordsBlobSize = 2;
+}

@@ -1,4 +1,4 @@
-import "ydb/core/protos/flat_tx_scheme.proto";
+import "ydb/core/scheme/protos/pathid.proto";
 
 package NKikimrSchemeBoard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -13,22 +13,76 @@ message TEvHandshake {
     optional uint64 Generation = 2;
 }
 
-// here and below
-// Owner is the tablet id of schemeshard witch holds the records
-// LocalPathId is a second part of TPathId
-// PathOwnerId is a first part of TPathId
+// Here and below.
+// Owner is the tablet id of schemeshard which holds the records.
+// (PathOwnerId, LocalPathId) constitute TPathId of the object.
 
+// TEvUpdate.DescribeSchemeResultSerialized is a NKikimrScheme.TEvDescribeSchemeResult
+// in the form of opaque payload.
+// Originally, that field existed as a properly typed TEvDescribeSchemeResult message.
+// However, that induce additional overhead to serialize and deserialize this message
+// when transferring over wire.
+// This performance cost is usually either negligible or imperceptible.
+// But in specific situations, particularly when rapidly updating partitioning information
+// for tables with huge number of shards, this overhead could lead to significant issues.
+// Schemeboard replicas could get overloaded and become unresponsive to further requests.
+// This is problematic, especially considering the schemeboard subsystem's critical role
+// in servicing all databases within a cluster, making it a Single Point of Failure (SPOF).
+//
+// The core realization is that the schemeboard components do not require the full content of
+// a TEvDescribeSchemeResult message to operate efficiently. Instead, only a limited set of
+// fields (path, path-id, version and info about subdomain/database) is required for processing.
+// And a whole TEvDescribeSchemeResult could be passed through as an opaque payload.
+//
+// Type change from TEvDescribeSchemeResult to (repeated) bytes without changing field number
+// is a safe move. Actual value of the field remains unchanged at the wire-format level.
+// Thus, older implementations will interpret the payload as a TEvDescribeSchemeResult message
+// and proceed with deserialization as usual. And newer implementations will recognize the data
+// as a binary blob and will deserialize it explicitly only when necessary.
+//
+// Note that the `repeated` label for the `DescribeSchemeResultSerialized` field is essential
+// to remain backward-compatible with the previous implementation. This is because even if
+// DescribeSchemeResult previously was labeled `optional` but actual value used at
+// the wire-format level was (and is) a pack of TEvDescribeSchemeResult messages.
+// Automerge of consecutive messages for the same field is a prominent feature of the protobuf.
+// Schemeshard use that feature to supply full TEvDescribeSchemeResult as a sequence of
+// partially filled TEvDescribeSchemeResult's.
+//
+// - Path
+// - PathOwnerId, LocalPathId
+// - PathDirEntryPathVersion
+// - PathSubdomainPathId
+// - PathAbandonedTenantsSchemeShards
+// are taken from the original TEvDescribeSchemeResult (one way or another).
+//
 message TEvUpdate {
     optional uint64 Owner = 1;
     optional uint64 Generation = 2;
     optional TLocalPathIdRange DeletedLocalPathIds = 3;
-    optional string Path = 4;
-    optional uint64 LocalPathId = 5;
+
+    optional string Path = 4;  // extracted from DescribeSchemeResult.Path
+    optional uint64 LocalPathId = 5;  // extracted from DescribeSchemeResult.PathId
+
     optional bool IsDeletion = 6 [default = false];
-    optional NKikimrScheme.TEvDescribeSchemeResult DescribeSchemeResult = 7;
+
+    repeated bytes DescribeSchemeResultSerialized = 7;
+
     optional bool NeedAck = 8 [default = false];
-    optional uint64 PathOwnerId = 9;
+
+    optional uint64 PathOwnerId = 9;  // extracted from DescribeSchemeResult.PathOwnerId, DescribeSchemeResult.PathDescription.Self.SchemeshardId in order of presence
+
     optional TLocalPathIdRange MigratedLocalPathIds = 10;
+
+    // Explicit values extracted from DescribeSchemeResultSerialized
+
+    //  DescribeSchemeResult.PathDescription.Self.PathVersion
+    optional uint64 PathDirEntryPathVersion = 11;
+
+    //  DescribeSchemeResult.PathDescription.DomainDescription.DomainKey
+    optional NKikimrProto.TPathID PathSubdomainPathId = 13;
+
+    //  DescribeSchemeResult.PathDescription.AbandonedTenantsSchemeShards
+    repeated uint64 PathAbandonedTenantsSchemeShards = 14;
 }
 
 message TEvUpdateAck {
@@ -65,6 +119,7 @@ message TEvUnsubscribe {
     optional uint64 LocalPathId = 3;
 }
 
+ // See comments for TEvUpdate.
 message TEvNotify {
     optional string Path = 1;
     // and/or
@@ -72,9 +127,14 @@ message TEvNotify {
     optional uint64 LocalPathId = 3;
     // common fields
     optional bool IsDeletion = 4 [default = false];
-    optional NKikimrScheme.TEvDescribeSchemeResult DescribeSchemeResult = 5;
-    optional uint64 Version = 6;
+
+    optional bytes DescribeSchemeResultSerialized = 5;
+
+    optional uint64 Version = 6;  // same as TEvUpdate.PathDirEntryPathVersion
     optional bool Strong = 7 [default = false];
+
+    optional NKikimrProto.TPathID PathSubdomainPathId = 8;
+    repeated uint64 PathAbandonedTenantsSchemeShards = 9;
 }
 
 message TEvNotifyAck {

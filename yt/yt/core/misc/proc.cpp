@@ -42,6 +42,7 @@
     #include <unistd.h>
 #endif
 #ifdef _linux_
+    #include <fcntl.h>
     #include <pty.h>
     #include <pwd.h>
     #include <grp.h>
@@ -58,15 +59,20 @@
 
 #ifdef _linux_
 extern "C" int memfd_create(const char *name, unsigned flags);
+
+#if !defined(F_SET_PIPE_WAKE_WRITER)
+    #define F_SET_PIPE_WAKE_WRITER 0x59410005
+#endif
+
 #endif
 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static inline const NLogging::TLogger Logger("Proc");
+namespace {
 
-////////////////////////////////////////////////////////////////////////////////
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
 
 TString LinuxErrorCodeFormatter(int code)
 {
@@ -74,6 +80,8 @@ TString LinuxErrorCodeFormatter(int code)
 }
 
 YT_DEFINE_ERROR_CODE_RANGE(4200, 4399, "NYT::ELinuxErrorCode", LinuxErrorCodeFormatter);
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -94,6 +102,53 @@ bool IsSystemError(const TError& error)
     }
 
     return false;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptor fd) noexcept
+    : FD_(fd)
+{}
+
+TFileDescriptorGuard::~TFileDescriptorGuard()
+{
+    Reset();
+}
+
+TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcept
+    : FD_(other.FD_)
+{
+    other.FD_ = -1;
+}
+
+TFileDescriptorGuard& TFileDescriptorGuard::operator = (TFileDescriptorGuard&& other) noexcept
+{
+    if (this != &other) {
+        Reset();
+        FD_ = other.FD_;
+        other.FD_ = -1;
+    }
+    return *this;
+}
+
+TFileDescriptor TFileDescriptorGuard::Get() const noexcept
+{
+    return FD_;
+}
+
+TFileDescriptor TFileDescriptorGuard::Release() noexcept
+{
+    TFileDescriptor fd = FD_;
+    FD_ = -1;
+    return fd;
+}
+
+void TFileDescriptorGuard::Reset() noexcept
+{
+    if (FD_ != -1) {
+        YT_VERIFY(TryClose(FD_, false));
+        FD_ = -1;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -523,6 +578,20 @@ TCgroupMemoryStat GetCgroupMemoryStat(
 #endif
 }
 
+std::optional<i64> GetCgroupAnonymousMemoryLimit(
+    const TString& cgroupPath,
+    const TString& cgroupMountPoint)
+{
+#ifdef _linux_
+    TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
+    auto content = Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
+    return FromString<i64>(content);
+#else
+    Y_UNUSED(cgroupPath, cgroupMountPoint);
+    return {};
+#endif
+}
+
 THashMap<TString, i64> GetVmstat()
 {
 #ifdef _linux_
@@ -935,6 +1004,36 @@ void SafeSetPipeCapacity(int fd, int capacity)
     }
 }
 
+bool TryEnableEmptyPipeEpollEvent(TFileDescriptor fd)
+{
+// TODO(arkady-e1ppa): To not waste gpu we swallow an error
+// resulting in a potentially broken behavior.
+// if F_SET_PIPE_WAKE_WRITER is not defined and/or properly
+// implemented we should return false.
+#if defined(_linux_)
+    int res = ::fcntl(fd, F_SET_PIPE_WAKE_WRITER, 1);
+
+    // TODO(arkady-e1ppa): Once kernel version is fresh enough
+    // remove this branch altogether.
+    if (res == -1) {
+        return errno == EINVAL;
+    }
+
+    return res != -1;
+#else
+    Y_UNUSED(fd);
+    return true;
+#endif
+}
+
+void SafeEnableEmptyPipeEpollEvent(TFileDescriptor fd)
+{
+    if (!TryEnableEmptyPipeEpollEvent(fd)) {
+        THROW_ERROR_EXCEPTION("Failed to enable empty pipe epoll event for descriptor %v", fd)
+            << TError::FromSystem();
+    }
+}
+
 bool TrySetUid(int uid)
 {
 #ifdef _linux_
@@ -991,17 +1090,17 @@ bool TryClose(TFileDescriptor fd, bool ignoreBadFD)
     return false;
 }
 
-bool TryDup2(TFileDescriptor /* oldFD */, TFileDescriptor /* newFD */)
+bool TryDup2(TFileDescriptor /*oldFD*/, TFileDescriptor /*newFD*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeDup2(TFileDescriptor /* oldFD */, TFileDescriptor /* newFD */)
+void SafeDup2(TFileDescriptor /*oldFD*/, TFileDescriptor /*newFD*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeSetCloexec(TFileDescriptor /* fd */)
+void SafeSetCloexec(TFileDescriptor /*fd*/)
 {
     YT_UNIMPLEMENTED();
 }
@@ -1011,7 +1110,7 @@ bool TryExecve(const char /* *path */, const char* /* argv[] */, const char* /* 
     YT_UNIMPLEMENTED();
 }
 
-TError StatusToError(int /* status */)
+TError StatusToError(int /*status*/)
 {
     YT_UNIMPLEMENTED();
 }
@@ -1021,47 +1120,47 @@ void CloseAllDescriptors()
     YT_UNIMPLEMENTED();
 }
 
-void SafePipe(TFileDescriptor /* fd */ [2])
+void SafePipe(TFileDescriptor /*fd*/ [2])
 {
     YT_UNIMPLEMENTED();
 }
 
-TFileDescriptor SafeDup(TFileDescriptor /* fd */)
+TFileDescriptor SafeDup(TFileDescriptor /*fd*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeOpenPty(TFileDescriptor* /* masterFD */, TFileDescriptor* /* slaveFD */, int /* height */, int /* width */)
+void SafeOpenPty(TFileDescriptor* /*masterFD*/, TFileDescriptor* /*slaveFD*/, int /*height*/, int /*width*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeLoginTty(TFileDescriptor /* slaveFD */)
+void SafeLoginTty(TFileDescriptor /*slaveFD*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeSetTtyWindowSize(TFileDescriptor /* slaveFD */, int /* height */, int /* width */)
+void SafeSetTtyWindowSize(TFileDescriptor /*slaveFD*/, int /*height*/, int /*width*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-bool TryMakeNonblocking(TFileDescriptor /* fd */)
+bool TryMakeNonblocking(TFileDescriptor /*fd*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeMakeNonblocking(TFileDescriptor /* fd */)
+void SafeMakeNonblocking(TFileDescriptor /*fd*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-void SafeSetUid(int /* uid */)
+void SafeSetUid(int /*uid*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-TString SafeGetUsernameByUid(int /* uid */)
+TString SafeGetUsernameByUid(int /*uid*/)
 {
     YT_UNIMPLEMENTED();
 }
@@ -1183,7 +1282,7 @@ TNetworkInterfaceStatisticsMap GetNetworkInterfaceStatistics()
         XX(Tx.Carrier);
         XX(Tx.Compressed);
 #undef XX
-        // NB: data is racy; duplicates are possible; just deal with it.
+        // NB: Data is racy; duplicates are possible; just deal with it.
         interfaceToStatistics.emplace(interfaceName, statistics);
     }
     return interfaceToStatistics;
@@ -1199,7 +1298,7 @@ void SendSignal(const std::vector<int>& pids, const TString& signalName)
     auto sig = FindSignalIdBySignalName(signalName);
     for (int pid : pids) {
         if (kill(pid, *sig) != 0 && errno != ESRCH) {
-            THROW_ERROR_EXCEPTION("Unable to kill process %d", pid)
+            THROW_ERROR_EXCEPTION("Unable to kill process %v", pid)
                 << TError::FromSystem();
         }
     }
@@ -1423,13 +1522,15 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps)
                 TStringBuf majorStr;
                 TStringBuf minorStr;
                 verify(device.TrySplit(':', majorStr, minorStr));
-                ui16 major;
-                ui16 minor;
+                ui32 major;
+                ui32 minor;
                 verify(TryIntFromString<16>(majorStr, major));
                 verify(TryIntFromString<16>(minorStr, minor));
+                // NB: 0:0 - anonymous, 0:m - virtual fs (tmpfs, overlayfs, etc)
+                // TODO(khlebnikov): Remove std::optional
                 if (major != 0 || minor != 0) {
 #ifdef _linux_
-                    memoryMapping.DeviceId = makedev(major, minor);
+                    memoryMapping.DeviceId = {major, minor};
 #endif
                 }
             }
@@ -1480,53 +1581,88 @@ static bool TryParseField(const TVector<TString>& fields, int index, TDuration& 
     return false;
 }
 
-TDiskStat ParseDiskStat(const TString& statLine)
+TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine)
 {
     auto buffer = SplitString(statLine, " ");
-    TDiskStat result;
-    TryParseField(buffer, 0, result.MajorNumber);
-    TryParseField(buffer, 1, result.MinorNumber);
-    TryParseField(buffer, 2, result.DeviceName);
-    TryParseField(buffer, 3, result.ReadsCompleted);
-    TryParseField(buffer, 4, result.ReadsMerged);
-    TryParseField(buffer, 5, result.SectorsRead);
-    TryParseField(buffer, 6, result.TimeSpentReading);
-    TryParseField(buffer, 7, result.WritesCompleted);
-    TryParseField(buffer, 8, result.WritesMerged);
-    TryParseField(buffer, 9, result.SectorsWritten);
-    TryParseField(buffer, 10, result.TimeSpentWriting);
-    TryParseField(buffer, 11, result.IOCurrentlyInProgress);
-    TryParseField(buffer, 12, result.TimeSpentDoingIO);
-    TryParseField(buffer, 13, result.WeightedTimeSpentDoingIO);
-    TryParseField(buffer, 14, result.DiscardsCompleted);
-    TryParseField(buffer, 15, result.DiscardsMerged);
-    TryParseField(buffer, 16, result.SectorsDiscarded);
-    TryParseField(buffer, 17, result.TimeSpentDiscarding);
+    TBlockDeviceStat result;
+    TryParseField(buffer, 0, result.ReadsCompleted);
+    TryParseField(buffer, 1, result.ReadsMerged);
+    TryParseField(buffer, 2, result.SectorsRead);
+    TryParseField(buffer, 3, result.TimeSpentReading);
+    TryParseField(buffer, 4, result.WritesCompleted);
+    TryParseField(buffer, 5, result.WritesMerged);
+    TryParseField(buffer, 6, result.SectorsWritten);
+    TryParseField(buffer, 7, result.TimeSpentWriting);
+    TryParseField(buffer, 8, result.IOCurrentlyInProgress);
+    TryParseField(buffer, 9, result.TimeSpentDoingIO);
+    TryParseField(buffer, 10, result.WeightedTimeSpentDoingIO);
+    TryParseField(buffer, 11, result.DiscardsCompleted);
+    TryParseField(buffer, 12, result.DiscardsMerged);
+    TryParseField(buffer, 13, result.SectorsDiscarded);
+    TryParseField(buffer, 14, result.TimeSpentDiscarding);
+    TryParseField(buffer, 15, result.FlushesCompleted);
+    TryParseField(buffer, 16, result.TimeSpentFlushing);
     return result;
 }
 
-THashMap<TString, TDiskStat> GetDiskStats()
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(const TString& deviceName)
 {
 #ifdef _linux_
-    THashMap<TString, TDiskStat> result;
-    static const TString path("/proc/diskstats");
+    const TString path = Format("/sys/block/%v/stat", deviceName);
     TFileInput diskStatsFile(path);
     auto data = diskStatsFile.ReadAll();
-    auto lines = SplitString(data, "\n");
-
-    for (const auto& line : lines) {
-        auto strippedLine = Strip(line);
-        if (strippedLine.empty()) {
-            continue;
-        }
-        auto parsed = ParseDiskStat(line);
-        result[parsed.DeviceName] = parsed;
-    }
-
-    return result;
+    return ParseBlockDeviceStat(Strip(data));
 #else
-    return {};
+    Y_UNUSED(deviceName);
+    return std::nullopt;
 #endif
+}
+
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(NFS::TDeviceId deviceId)
+{
+#ifdef _linux_
+    if (deviceId.first != NFS::UnnamedDeviceMajor) {
+        const TString path = Format("/sys/dev/block/%v:%v/stat", deviceId.first, deviceId.second);
+        TFileInput diskStatsFile(path);
+        auto data = diskStatsFile.ReadAll();
+        return ParseBlockDeviceStat(Strip(data));
+    }
+#else
+    Y_UNUSED(deviceId);
+#endif
+    return std::nullopt;
+}
+
+NFS::TDeviceId GetBlockDeviceId(const TString& deviceName)
+{
+#ifdef _linux_
+    const TString path = Format("/sys/block/%v/dev", deviceName);
+    TFileInput blockDevFile(path);
+    auto majorMinor = SplitString(Strip(blockDevFile.ReadAll()), ":", 2);
+    ui32 major, minor;
+    if (majorMinor.size() == 2 &&
+        TryFromString(majorMinor[0], major) &&
+        TryFromString(majorMinor[1], minor))
+    {
+        return {major, minor};
+    }
+#else
+    Y_UNUSED(deviceName);
+#endif
+    return {0, 0};
+}
+
+TString GetBlockDeviceName(NFS::TDeviceId deviceId)
+{
+#ifdef _linux_
+    if (deviceId.first != NFS::UnnamedDeviceMajor) {
+        auto link = NFs::ReadLink(Format("/sys/dev/block/%v:%v", deviceId.first, deviceId.second));
+        return NFS::GetFileName(link);
+    }
+#else
+    Y_UNUSED(deviceId);
+#endif
+    return "";
 }
 
 std::vector<TString> ListDisks()
@@ -1553,24 +1689,36 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
 {
 #ifdef _linux_
     static const TString path = "/proc/thread-self/io";
+    static std::atomic<bool> supported = true;
 
     TTaskDiskStatistics stat;
 
-    TIFStream ioFile(path);
-    for (TString line; ioFile.ReadLine(line); ) {
-        if (line.empty()) {
-            continue;
-        }
+    if (supported) {
+        try {
+            TIFStream ioFile(path);
+            for (TString line; ioFile.ReadLine(line); ) {
+                if (line.empty()) {
+                    continue;
+                }
 
-        auto fields = SplitString(line, " ", 2);
-        if (fields.size() != 2) {
-            continue;
-        }
+                auto fields = SplitString(line, " ", 2);
+                if (fields.size() != 2) {
+                    continue;
+                }
 
-        if (fields[0] == "read_bytes:") {
-            TryFromString(fields[1], stat.ReadBytes);
-        } else if (fields[0] == "write_bytes:") {
-            TryFromString(fields[1], stat.ReadBytes);
+                if (fields[0] == "read_bytes:") {
+                    TryFromString(fields[1], stat.ReadBytes);
+                } else if (fields[0] == "write_bytes:") {
+                    TryFromString(fields[1], stat.WriteBytes);
+                }
+            }
+        } catch (const TSystemError& ex) {
+            if (ex.Status() == ENOENT) {
+                supported = false;
+                YT_LOG_WARNING(ex, "Task I/O accounting is not supported by kernel");
+            } else {
+                throw;
+            }
         }
     }
 
@@ -1604,7 +1752,7 @@ TFile MemfdCreate(const TString& name)
 const TString& GetLinuxKernelVersion()
 {
 #ifdef _linux_
-    static TString release = []() -> TString {
+    static TString release = [] () -> TString {
         utsname buf{};
         if (uname(&buf) != 0) {
             return "unknown";

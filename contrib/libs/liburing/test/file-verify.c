@@ -29,7 +29,7 @@
 #define MAX_VECS	16
 
 /*
- * Can be anything, let's just do something for a bit of parallellism
+ * Can be anything, let's just do something for a bit of parallelism
  */
 #define READ_BATCH	16
 
@@ -91,6 +91,8 @@ static int test_truncate(struct io_uring *ring, const char *fname, int buffered,
 	else
 		fd = open(fname, O_DIRECT | O_RDWR);
 	if (fd < 0) {
+		if (!buffered && errno == EINVAL)
+			return T_EXIT_SKIP;
 		perror("open");
 		return 1;
 	}
@@ -347,6 +349,8 @@ static int test(struct io_uring *ring, const char *fname, int buffered,
 		flags |= O_DIRECT;
 	fd = open(fname, flags);
 	if (fd < 0) {
+		if (errno == EINVAL || errno == EPERM || errno == EACCES)
+			return T_EXIT_SKIP;
 		perror("open");
 		return 1;
 	}
@@ -506,6 +510,8 @@ static int fill_pattern(const char *fname)
 
 	fd = open(fname, O_WRONLY);
 	if (fd < 0) {
+		if (errno == EPERM || errno == EACCES)
+			return T_EXIT_SKIP;
 		perror("open");
 		return 1;
 	}
@@ -558,89 +564,94 @@ int main(int argc, char *argv[])
 		goto err;
 	}
 
-	if (fill_pattern(fname))
+	ret = fill_pattern(fname);
+	if (ret == T_EXIT_SKIP)
+		return T_EXIT_SKIP;
+	else if (ret)
 		goto err;
 
 	ret = test(&ring, fname, 1, 0, 0, 0, 0);
+	if (ret == T_EXIT_SKIP)
+		return T_EXIT_SKIP;
 	if (ret) {
 		fprintf(stderr, "Buffered novec test failed\n");
 		goto err;
 	}
 	ret = test(&ring, fname, 1, 0, 0, 1, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "Buffered novec reg test failed\n");
 		goto err;
 	}
 	ret = test(&ring, fname, 1, 0, 0, 0, 1);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "Buffered novec provide test failed\n");
 		goto err;
 	}
 	ret = test(&ring, fname, 1, 1, 0, 0, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "Buffered vec test failed\n");
 		goto err;
 	}
 	ret = test(&ring, fname, 1, 1, 1, 0, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "Buffered small vec test failed\n");
 		goto err;
 	}
 
 	ret = test(&ring, fname, 0, 0, 0, 0, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "O_DIRECT novec test failed\n");
 		goto err;
 	}
 	ret = test(&ring, fname, 0, 0, 0, 1, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "O_DIRECT novec reg test failed\n");
 		goto err;
 	}
 	ret = test(&ring, fname, 0, 0, 0, 0, 1);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "O_DIRECT novec provide test failed\n");
 		goto err;
 	}
 	ret = test(&ring, fname, 0, 1, 0, 0, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "O_DIRECT vec test failed\n");
 		goto err;
 	}
 	ret = test(&ring, fname, 0, 1, 1, 0, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "O_DIRECT small vec test failed\n");
 		goto err;
 	}
 
 	ret = test_truncate(&ring, fname, 1, 0, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "Buffered end truncate read failed\n");
 		goto err;
 	}
 	ret = test_truncate(&ring, fname, 1, 1, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "Buffered end truncate vec read failed\n");
 		goto err;
 	}
 	ret = test_truncate(&ring, fname, 1, 0, 1);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "Buffered end truncate pbuf read failed\n");
 		goto err;
 	}
 
 	ret = test_truncate(&ring, fname, 0, 0, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "O_DIRECT end truncate read failed\n");
 		goto err;
 	}
 	ret = test_truncate(&ring, fname, 0, 1, 0);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "O_DIRECT end truncate vec read failed\n");
 		goto err;
 	}
 	ret = test_truncate(&ring, fname, 0, 0, 1);
-	if (ret) {
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "O_DIRECT end truncate pbuf read failed\n");
 		goto err;
 	}

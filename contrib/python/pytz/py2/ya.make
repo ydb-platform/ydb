@@ -2,7 +2,7 @@
 
 PY2_LIBRARY()
 
-VERSION(2023.3.post1)
+VERSION(2025.2)
 
 LICENSE(MIT)
 
@@ -125,6 +125,7 @@ RESOURCE_FILES(
     pytz/zoneinfo/America/Coral_Harbour
     pytz/zoneinfo/America/Cordoba
     pytz/zoneinfo/America/Costa_Rica
+    pytz/zoneinfo/America/Coyhaique
     pytz/zoneinfo/America/Creston
     pytz/zoneinfo/America/Cuiaba
     pytz/zoneinfo/America/Curacao
@@ -628,6 +629,7 @@ RESOURCE_FILES(
     pytz/zoneinfo/tzdata.zi
     pytz/zoneinfo/zone.tab
     pytz/zoneinfo/zone1970.tab
+    pytz/zoneinfo/zonenow.tab
 )
 
 END()

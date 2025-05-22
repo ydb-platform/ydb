@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -82,7 +82,10 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     }
 
     Y_UNIT_TEST(LocksAbortOnCommit) {
-        auto kikimr = DefaultKikimrRunner();
+        NKikimrConfig::TAppConfig app;
+        // See KqpSinkTx::LocksAbortOnCommit for sink version of this test
+        app.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         {

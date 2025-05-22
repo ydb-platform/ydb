@@ -1,53 +1,18 @@
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.h>
 
-#include <optional>
-
-namespace NYdb::NFederatedTopic {
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Helpers
-
-std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index) {
-    if (dataReceivedEvent.HasCompressedMessages()) {
-        const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
-        return {msg.GetOffset(), msg.GetOffset() + 1};
-    }
-    const auto& msg = dataReceivedEvent.GetMessages()[index];
-    return {msg.GetOffset(), msg.GetOffset() + 1};
-}
-
-TReadSessionEvent::TDataReceivedEvent Federate(NTopic::TReadSessionEvent::TDataReceivedEvent event, std::shared_ptr<TDbInfo> db) {
-    return {std::move(event), std::move(db)};
-}
-
-TReadSessionEvent::TEvent Federate(NTopic::TReadSessionEvent::TEvent event, std::shared_ptr<TDbInfo> db) {
-    return std::visit([db = std::move(db)](auto&& arg) {
-        using T = std::decay_t<decltype(arg)>;
-        std::optional<TReadSessionEvent::TEvent> ev;
-        if constexpr (std::is_same_v<T, NTopic::TReadSessionEvent::TDataReceivedEvent>) {
-            ev = TReadSessionEvent::TDataReceivedEvent(std::move(arg), std::move(db));
-        } else if constexpr (std::is_same_v<T, NTopic::TSessionClosedEvent>) {
-            ev = std::move(arg);
-        } else {
-            ev = TReadSessionEvent::TFederated(std::move(arg), std::move(db));
-        }
-        return *ev;
-    }, event);
-}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Printable specializations
 
-}
-
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 using namespace NFederatedTopic;
 
 using TCommitOffsetAcknowledgementEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>;
 using TStartPartitionSessionEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>;
 using TStopPartitionSessionEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>;
+using TEndPartitionSessionEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TEndPartitionSessionEvent>;
 using TPartitionSessionStatusEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>;
 using TPartitionSessionClosedEvent = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>;
 using TMessage = NFederatedTopic::TReadSessionEvent::TFederated<NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>;
@@ -115,6 +80,20 @@ void TPrintable<TStopPartitionSessionEvent>::DebugString(TStringBuilder& ret, bo
         << " }";
 }
 
+void JoinIds(TStringBuilder& ret, const std::vector<ui32> ids);
+
+template<>
+void TPrintable<TEndPartitionSessionEvent>::DebugString(TStringBuilder& ret, bool) const {
+    const auto* self = static_cast<const TEndPartitionSessionEvent*>(this);
+    ret << "EndPartitionSession {";
+    self->GetFederatedPartitionSession()->DebugString(ret);
+    ret << " AdjacentPartitionIds: ";
+    JoinIds(ret, self->GetAdjacentPartitionIds());
+    ret << " ChildPartitionIds: ";
+    JoinIds(ret, self->GetChildPartitionIds());
+    ret << " }";
+}
+
 template<>
 void TPrintable<TPartitionSessionStatusEvent>::DebugString(TStringBuilder& ret, bool) const {
     const auto* self = static_cast<const TPartitionSessionStatusEvent*>(this);
@@ -155,50 +134,31 @@ void TPrintable<TDataReceivedEvent>::DebugString(TStringBuilder& ret, bool print
     ret << " }";
 }
 
-
 }
 
-namespace NYdb::NFederatedTopic {
+namespace NYdb::inline V2::NFederatedTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NFederatedTopic::TReadSessionEvent::TDataReceivedEvent
 
-TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(NTopic::TReadSessionEvent::TDataReceivedEvent event, std::shared_ptr<TDbInfo> db)
+TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(NTopic::TReadSessionEvent::TDataReceivedEvent event, TFederatedPartitionSession::TPtr federatedPartitionSession)
     : NTopic::TReadSessionEvent::TPartitionSessionAccessor(event.GetPartitionSession())
-    , TFederatedPartitionSessionAccessor(event.GetPartitionSession(), db)
+    , TFederatedPartitionSessionAccessor(federatedPartitionSession)
 {
     if (event.HasCompressedMessages()) {
         for (auto& msg : event.GetCompressedMessages()) {
-            CompressedMessages.emplace_back(std::move(msg), db);
+            CompressedMessages.emplace_back(std::move(msg), federatedPartitionSession);
         }
     } else {
         for (auto& msg : event.GetMessages()) {
-            Messages.emplace_back(std::move(msg), db);
-        }
-    }
-}
-
-TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(
-    TVector<TMessage> messages, TVector<TCompressedMessage> compressedMessages,
-    NTopic::TPartitionSession::TPtr partitionSession, std::shared_ptr<TDbInfo> db)
-    : NTopic::TReadSessionEvent::TPartitionSessionAccessor(partitionSession)
-    , TFederatedPartitionSessionAccessor(partitionSession, db)
-    , Messages(std::move(messages))
-    , CompressedMessages(std::move(compressedMessages))
-{
-    for (size_t i = 0; i < GetMessagesCount(); ++i) {
-        auto [from, to] = GetMessageOffsetRange(*this, i);
-        if (OffsetRanges.empty() || OffsetRanges.back().second != from) {
-            OffsetRanges.emplace_back(from, to);
-        } else {
-            OffsetRanges.back().second = to;
+            Messages.emplace_back(std::move(msg), federatedPartitionSession);
         }
     }
 }
 
 void TReadSessionEvent::TDataReceivedEvent::Commit() {
     for (auto [from, to] : OffsetRanges) {
-        static_cast<NPersQueue::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        static_cast<NTopic::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
     }
 }
 

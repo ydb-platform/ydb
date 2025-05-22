@@ -27,8 +27,8 @@
 Команда | Описание
 ---|---
 `SET param = value` | Команда `SET` устанавливает значение [внутренней переменной](#internal-vars) `param` в `value`.
-`EXPLAIN query-text` | Выводит план запроса `query-text`. Эквивалентна команде [ydb table query explain](commands/explain-plan.md#explain-plan).
-`EXPLAIN AST query-text` | Выводит план запроса `query-text` вместе с [AST](commands/explain-plan.md). Эквивалентна команде [ydb table query explain --ast](commands/explain-plan.md#ast).
+`EXPLAIN query-text` | Выводит план запроса `query-text`. Эквивалентна команде [ydb sql --explain](sql.md).
+`EXPLAIN AST query-text` | Выводит план запроса `query-text` вместе с [AST](commands/explain-plan.md). Эквивалентна команде [ydb sql --explain-ast](sql.md).
 
 ### Список внутренних переменных {#internal-vars}
 
@@ -36,7 +36,7 @@
 
 Переменная | Описание
 ---|---
-`stats` | Режим сбора статистики для последующих запросов.<br>Возможные значения:<ul><li>`none` (по умолчанию) — не собирать;</li><li>`basic` — собирать статистику;</li><li>`full` — собирать статистику и план запроса.</li></ul>
+`stats` | Режим сбора статистики для последующих запросов.<br/>Возможные значения:<ul><li>`none` (по умолчанию) — не собирать;</li><li>`basic` — собирать статистику;</li><li>`full` — собирать статистику и план запроса.</li></ul>
 
 ## Примеры {#examples}
 

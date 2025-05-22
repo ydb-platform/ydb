@@ -11,6 +11,14 @@ TAsyncSemaphore::TAsyncSemaphore(i64 totalSlots)
     YT_VERIFY(TotalSlots_ >= 0);
 }
 
+TAsyncSemaphore::TAsyncSemaphore(i64 totalSlots, bool enableOverdraft)
+    : TotalSlots_(totalSlots)
+    , FreeSlots_(totalSlots)
+    , EnableOverdraft_(enableOverdraft)
+{
+    YT_VERIFY(TotalSlots_ >= 0);
+}
+
 void TAsyncSemaphore::SetTotal(i64 totalSlots)
 {
     YT_VERIFY(totalSlots >= 0);
@@ -33,7 +41,11 @@ void TAsyncSemaphore::Release(i64 slots)
         auto guard = WriterGuard(SpinLock_);
 
         FreeSlots_ += slots;
-        YT_ASSERT(FreeSlots_ <= TotalSlots_);
+        if (EnableOverdraft_) {
+            FreeSlots_ = std::min(FreeSlots_, TotalSlots_);
+        }
+
+        YT_VERIFY(FreeSlots_ <= TotalSlots_);
 
         if (Releasing_) {
             return;
@@ -48,9 +60,17 @@ void TAsyncSemaphore::Release(i64 slots)
 
         {
             auto guard = WriterGuard(SpinLock_);
+            auto frontWaiterOverflowsSlots = [&] {
+                return EnableOverdraft_ && !Waiters_.empty() && Waiters_.front().Slots > TotalSlots_ && FreeSlots_ == TotalSlots_;
+            };
 
-            while (!Waiters_.empty() && FreeSlots_ >= Waiters_.front().Slots) {
+            while (!Waiters_.empty() && FreeSlots_ >= Waiters_.front().Slots || frontWaiterOverflowsSlots()) {
                 auto& waiter = Waiters_.front();
+                if (frontWaiterOverflowsSlots()) {
+                    // For "fat" request we need to acquire all total slots in semaphore.
+                    YT_ASSERT(FreeSlots_ == TotalSlots_);
+                    waiter.Slots = FreeSlots_;
+                }
                 FreeSlots_ -= waiter.Slots;
                 waitersToRelease.push_back(std::move(waiter));
                 Waiters_.pop();
@@ -67,8 +87,8 @@ void TAsyncSemaphore::Release(i64 slots)
         }
 
         for (const auto& waiter : waitersToRelease) {
-            // NB: This may lead to a reentrant invocation of Release if the invoker discards the callback.
-            waiter.Handler(TAsyncSemaphoreGuard(this, waiter.Slots));
+            // NB: This may lead to a reentrant invocation of Release if the invoker discards the subscriber.
+            waiter.Promise.TrySet(TAsyncSemaphoreGuard(this, waiter.Slots));
         }
 
         if (readyEventToSet) {
@@ -77,19 +97,29 @@ void TAsyncSemaphore::Release(i64 slots)
     }
 }
 
-void TAsyncSemaphore::Acquire(i64 slots /* = 1 */)
+bool TAsyncSemaphore::Acquire(i64 slots)
 {
     YT_VERIFY(slots >= 0);
 
     auto guard = WriterGuard(SpinLock_);
+    if (EnableOverdraft_) {
+        slots = std::min(slots, TotalSlots_);
+    }
+
     FreeSlots_ -= slots;
+
+    return FreeSlots_ >= 0;
 }
 
-bool TAsyncSemaphore::TryAcquire(i64 slots /*= 1*/)
+bool TAsyncSemaphore::TryAcquire(i64 slots)
 {
     YT_VERIFY(slots >= 0);
 
     auto guard = WriterGuard(SpinLock_);
+    if (EnableOverdraft_) {
+        slots = std::min(slots, TotalSlots_);
+    }
+
     if (FreeSlots_ < slots) {
         return false;
     }
@@ -97,19 +127,22 @@ bool TAsyncSemaphore::TryAcquire(i64 slots /*= 1*/)
     return true;
 }
 
-void TAsyncSemaphore::AsyncAcquire(
-    const TCallback<void(TAsyncSemaphoreGuard)>& handler,
-    i64 slots)
+TFuture<TAsyncSemaphoreGuard> TAsyncSemaphore::AsyncAcquire(i64 slots)
 {
     YT_VERIFY(slots >= 0);
 
     auto guard = WriterGuard(SpinLock_);
+    if (EnableOverdraft_) {
+        slots = std::min(slots, TotalSlots_);
+    }
+
     if (FreeSlots_ >= slots) {
         FreeSlots_ -= slots;
-        guard.Release();
-        handler(TAsyncSemaphoreGuard(this, slots));
+        return MakeFuture(TAsyncSemaphoreGuard(this, slots));
     } else {
-        Waiters_.push(TWaiter{handler, slots});
+        auto promise = NewPromise<TAsyncSemaphoreGuard>();
+        Waiters_.push(TWaiter{promise, slots});
+        return promise.ToFuture();
     }
 }
 
@@ -158,7 +191,7 @@ TFuture<void> TAsyncSemaphore::GetReadyEvent()
         ReadyEvent_ = NewPromise<void>();
     }
 
-    return ReadyEvent_;
+    return ReadyEvent_.ToFuture().ToUncancelable();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -170,19 +203,22 @@ TProfiledAsyncSemaphore::TProfiledAsyncSemaphore(
     , Gauge_(std::move(gauge))
 { }
 
-void TProfiledAsyncSemaphore::Release(i64 slots /* = 1 */)
+void TProfiledAsyncSemaphore::Release(i64 slots)
 {
     TAsyncSemaphore::Release(slots);
     Profile();
 }
 
-void TProfiledAsyncSemaphore::Acquire(i64 slots /* = 1 */)
+bool TProfiledAsyncSemaphore::Acquire(i64 slots)
 {
-    TAsyncSemaphore::Acquire(slots);
+    auto result = TAsyncSemaphore::Acquire(slots);
+
     Profile();
+
+    return result;
 }
 
-bool TProfiledAsyncSemaphore::TryAcquire(i64 slots /* = 1 */)
+bool TProfiledAsyncSemaphore::TryAcquire(i64 slots)
 {
     if (TAsyncSemaphore::TryAcquire(slots)) {
         Profile();

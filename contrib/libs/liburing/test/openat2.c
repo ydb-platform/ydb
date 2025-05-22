@@ -1,7 +1,7 @@
 #include "../config-host.h"
 /* SPDX-License-Identifier: MIT */
 /*
- * Description: run various openat(2) tests
+ * Description: run various openat2(2) tests
  *
  */
 #include <errno.h>
@@ -16,25 +16,32 @@
 #include "liburing.h"
 
 static int test_openat2(struct io_uring *ring, const char *path, int dfd,
-			bool direct, int fixed_index)
+			bool direct, int fixed_index, int bad_how)
 {
 	struct io_uring_cqe *cqe;
 	struct io_uring_sqe *sqe;
-	struct open_how how;
+	struct open_how __how, *how;
 	int ret;
+
+	if (bad_how)
+		how = (struct open_how *) (uintptr_t) 0x1234;
+	else
+		how = &__how;
 
 	sqe = io_uring_get_sqe(ring);
 	if (!sqe) {
 		fprintf(stderr, "get sqe failed\n");
 		return -1;
 	}
-	memset(&how, 0, sizeof(how));
-	how.flags = O_RDWR;
+	if (!bad_how) {
+		memset(how, 0, sizeof(*how));
+		how->flags = O_RDWR;
+	}
 
 	if (!direct)
-		io_uring_prep_openat2(sqe, dfd, path, &how);
+		io_uring_prep_openat2(sqe, dfd, path, how);
 	else
-		io_uring_prep_openat2_direct(sqe, dfd, path, &how, fixed_index);
+		io_uring_prep_openat2_direct(sqe, dfd, path, how, fixed_index);
 
 	ret = io_uring_submit(ring);
 	if (ret <= 0) {
@@ -73,11 +80,13 @@ static int test_open_fixed(const char *path, int dfd)
 	}
 	ret = io_uring_register_files(&ring, &fd, 1);
 	if (ret) {
+		if (ret == -EINVAL || ret == -EBADF)
+			return 0;
 		fprintf(stderr, "%s: register ret=%d\n", __FUNCTION__, ret);
 		return -1;
 	}
 
-	ret = test_openat2(&ring, path, dfd, true, 0);
+	ret = test_openat2(&ring, path, dfd, true, 0, 0);
 	if (ret == -EINVAL) {
 		printf("fixed open isn't supported\n");
 		return 1;
@@ -134,7 +143,7 @@ static int test_open_fixed_fail(const char *path, int dfd)
 		return -1;
 	}
 
-	ret = test_openat2(&ring, path, dfd, true, 0);
+	ret = test_openat2(&ring, path, dfd, true, 0, 0);
 	if (ret != -ENXIO) {
 		fprintf(stderr, "install into not existing table, %i\n", ret);
 		return 1;
@@ -142,23 +151,25 @@ static int test_open_fixed_fail(const char *path, int dfd)
 
 	ret = io_uring_register_files(&ring, &fd, 1);
 	if (ret) {
+		if (ret == -EINVAL || ret == -EBADF)
+			return 0;
 		fprintf(stderr, "%s: register ret=%d\n", __FUNCTION__, ret);
 		return -1;
 	}
 
-	ret = test_openat2(&ring, path, dfd, true, 1);
+	ret = test_openat2(&ring, path, dfd, true, 1, 0);
 	if (ret != -EINVAL) {
 		fprintf(stderr, "install out of bounds, %i\n", ret);
 		return -1;
 	}
 
-	ret = test_openat2(&ring, path, dfd, true, (1u << 16));
+	ret = test_openat2(&ring, path, dfd, true, (1u << 16), 0);
 	if (ret != -EINVAL) {
 		fprintf(stderr, "install out of bounds or u16 overflow, %i\n", ret);
 		return -1;
 	}
 
-	ret = test_openat2(&ring, path, dfd, true, (1u << 16) + 1);
+	ret = test_openat2(&ring, path, dfd, true, (1u << 16) + 1, 0);
 	if (ret != -EINVAL) {
 		fprintf(stderr, "install out of bounds or u16 overflow, %i\n", ret);
 		return -1;
@@ -193,7 +204,7 @@ static int test_direct_reinstall(const char *path, int dfd)
 	}
 
 	/* reinstall into the second slot */
-	ret = test_openat2(&ring, path, dfd, true, 1);
+	ret = test_openat2(&ring, path, dfd, true, 1, 0);
 	if (ret != 0) {
 		fprintf(stderr, "reinstall failed, %i\n", ret);
 		return -1;
@@ -261,18 +272,22 @@ int main(int argc, char *argv[])
 	if (do_unlink)
 		t_create_file(path_rel, 4096);
 
-	ret = test_openat2(&ring, path, -1, false, 0);
+	ret = test_openat2(&ring, path, -1, false, 0, 0);
 	if (ret < 0) {
 		if (ret == -EINVAL) {
 			fprintf(stdout, "openat2 not supported, skipping\n");
 			goto done;
 		}
+		if (ret == -EPERM || ret == -EACCES)
+			return T_EXIT_SKIP;
 		fprintf(stderr, "test_openat2 absolute failed: %d\n", ret);
 		goto err;
 	}
 
-	ret = test_openat2(&ring, path_rel, AT_FDCWD, false, 0);
+	ret = test_openat2(&ring, path_rel, AT_FDCWD, false, 0, 0);
 	if (ret < 0) {
+		if (ret == -EPERM || ret == -EACCES)
+			return T_EXIT_SKIP;
 		fprintf(stderr, "test_openat2 relative failed: %d\n", ret);
 		goto err;
 	}
@@ -293,6 +308,18 @@ int main(int argc, char *argv[])
 	ret = test_direct_reinstall(path, -1);
 	if (ret) {
 		fprintf(stderr, "test_direct_reinstall failed\n");
+		goto err;
+	}
+
+	ret = test_openat2(&ring, (const char *) (uintptr_t) 0x1234, AT_FDCWD, false, 0, 0);
+	if (ret != -EFAULT) {
+		fprintf(stderr, "test_openat2 bad address failed: %d\n", ret);
+		goto err;
+	}
+
+	ret = test_openat2(&ring, path_rel, AT_FDCWD, false, 0, 1);
+	if (ret != -EFAULT) {
+		fprintf(stderr, "test_openat2 bad how failed: %d\n", ret);
 		goto err;
 	}
 

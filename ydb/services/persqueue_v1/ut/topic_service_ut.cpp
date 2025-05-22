@@ -1,9 +1,9 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <ydb/library/services/services.pb.h>
 
@@ -147,17 +147,19 @@ protected:
                            , NKikimrServices::KQP_EXECUTER
                            , NKikimrServices::KQP_SESSION}, NActors::NLog::PRI_DEBUG);
 
+        server->AnnoyingClient->GrantConnect(AUTH_TOKEN);   
+
         auto partsCount = 5u;
         server->AnnoyingClient->CreateTopicNoLegacy(VALID_TOPIC_PATH, partsCount,
                                                     true,
                                                     true,
-                                                    Nothing(),
+                                                    std::nullopt,
                                                     {"c0nsumer", "consumer-1", "consumer-2"});
 
         NACLib::TDiffACL acl;
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, AUTH_TOKEN);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, AUTH_TOKEN);
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::WriteAttributes, AUTH_TOKEN);
+        // in future use right UseConsumer
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, AUTH_TOKEN);
         server->AnnoyingClient->ModifyACL(TOPIC_PARENT, VALID_TOPIC_NAME, acl.SerializeAsString());
 
         auto driverCfg = NYdb::TDriverConfig()
@@ -182,7 +184,7 @@ protected:
         Ydb::Topic::UpdateOffsetsInTransactionResponse response;
 
         grpc::Status status = stub->UpdateOffsetsInTransaction(&rcontext,
-                                                               CreateRequest(session->GetId(), tx->GetId(),
+                                                               CreateRequest(TString{session->GetId()}, TString{tx->GetId()},
                                                                              consumer, topics),
                                                                &response);
         UNIT_ASSERT(status.ok());
@@ -328,7 +330,8 @@ Y_UNIT_TEST_F(AccessRights, TUpdateOffsetsInTransactionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
     NACLib::TDiffACL acl;
-    acl.RemoveAccess(NACLib::EAccessType::Allow, NACLib::ReadAttributes, AUTH_TOKEN);
+    // in future use right UseConsumer
+    acl.RemoveAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, AUTH_TOKEN);
     server->AnnoyingClient->ModifyACL(TOPIC_PARENT, VALID_TOPIC_NAME, acl.SerializeAsString());
 
     response = Call_UpdateOffsetsInTransaction({
@@ -409,7 +412,11 @@ Y_UNIT_TEST_F(MultiplePartitionsAndNoGapsInTheOffsets, TUpdateOffsetsInTransacti
     auto result = tx->Commit().ExtractValueSync();
     Cerr << ">>> CommitTx >>>" << Endl;
     UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::ABORTED);
+    if (server->ServerSettings.AppConfig->GetTableServiceConfig().GetEnableOltpSink()) {
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::ABORTED);
+    }
 }
 
 }

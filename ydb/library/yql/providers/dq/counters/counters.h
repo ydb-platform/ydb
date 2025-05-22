@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_execution.h>
+#include <yql/essentials/core/yql_execution.h>
 
 #include <util/string/split.h>
 
@@ -59,6 +59,10 @@ struct TCounters {
     template<typename T>
     void SetCounter(const TString& name, T value) const {
         Counters[name] = TEntry(value);
+    }
+
+    void SetTimeCounter(const TString& name, i64 value) const {
+        SetCounter(name, value * 1000); // ms => us
     }
 
     THashMap<i64, ui64>& GetHistogram(const TString& name) {

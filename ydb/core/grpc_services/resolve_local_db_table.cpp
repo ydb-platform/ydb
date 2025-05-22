@@ -45,17 +45,10 @@ namespace NGRpcService {
         const NTable::TScheme::TTableInfo* tableInfo = scheme.Tables.FindPtr(*ti);
 
         for (const auto& col : tableInfo->Columns) {
-            entry.Columns[col.first] = TSysTables::TTableColumnInfo(col.second.Name, col.first, col.second.PType, col.second.PTypeMod, col.second.KeyOrder);
+            entry.Columns[col.first] = TSysTables::TTableColumnInfo(
+                col.second.Name, col.first, col.second.PType, col.second.PTypeMod, col.second.KeyOrder,
+                {}, TSysTables::TTableColumnInfo::EDefaultKind::DEFAULT_UNDEFINED, {}, false, col.second.NotNull);
         }
-    }
-
-    bool IsSuperUser(const NACLib::TUserToken& userToken, const TAppData& appData) {
-        const auto& adminSids = appData.AdministrationAllowedSIDs;
-        for (const auto& sid : adminSids) {
-            if (userToken.IsExist(sid))
-                return true;
-        }
-        return false;
     }
 
 } // namespace NKikimr

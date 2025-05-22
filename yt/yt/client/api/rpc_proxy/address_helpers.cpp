@@ -10,7 +10,7 @@ using namespace NNet;
 ////////////////////////////////////////////////////////////////////////////////
 
 const EAddressType DefaultAddressType(EAddressType::InternalRpc);
-const TString DefaultNetworkName("default");
+const std::string DefaultNetworkName("default");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -31,10 +31,10 @@ TAddressMap GetLocalAddresses(const NNodeTrackerClient::TNetworkAddressList& add
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<TString> GetAddressOrNull(
+std::optional<std::string> GetAddressOrNull(
     const TProxyAddressMap& addresses,
     EAddressType type,
-    const TString& network)
+    const std::string& network)
 {
     auto typeAddressesIt = addresses.find(type);
     if (typeAddressesIt != addresses.end()) {
@@ -48,11 +48,11 @@ std::optional<TString> GetAddressOrNull(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<std::vector<TString>> GetBalancersOrNull(
+std::optional<std::vector<std::string>> GetBalancersOrNull(
     const TBalancersMap& balancers,
-    const TString& role,
+    const std::string& role,
     EAddressType addressType,
-    const TString& network)
+    const std::string& network)
 {
     auto roleBalancersIt = balancers.find(role);
     if (roleBalancersIt != balancers.end()) {

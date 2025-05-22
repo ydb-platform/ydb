@@ -9,11 +9,25 @@
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
-namespace NYdb {
+#include <util/string/join.h>
+
+namespace NYdb::inline V2 {
 namespace NScheme {
 
 using namespace NThreading;
 using namespace Ydb::Scheme;
+
+TPermissions::TPermissions(const ::Ydb::Scheme::Permissions& proto)
+    : Subject(proto.subject())
+    , PermissionNames(proto.permission_names().begin(), proto.permission_names().end())
+{}
+
+void TPermissions::SerializeTo(::Ydb::Scheme::Permissions& proto) const {
+    proto.set_subject(Subject);
+    for (const auto& name : PermissionNames) {
+        proto.add_permission_names(name);
+    }
+}
 
 TVirtualTimestamp::TVirtualTimestamp(ui64 planStep, ui64 txId)
     : PlanStep(planStep)
@@ -31,10 +45,10 @@ TString TVirtualTimestamp::ToString() const {
     return result;
 }
 
-void TVirtualTimestamp::Out(IOutputStream& o) const {
-    o << "{ plan_step: " << PlanStep
-      << ", tx_id: " << TxId
-      << " }";
+void TVirtualTimestamp::Out(IOutputStream& out) const {
+    out << "{ plan_step: " << PlanStep
+        << ", tx_id: " << TxId
+        << " }";
 }
 
 bool TVirtualTimestamp::operator<(const TVirtualTimestamp& rhs) const {
@@ -93,6 +107,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::ExternalDataSource;
     case ::Ydb::Scheme::Entry::VIEW:
         return ESchemeEntryType::View;
+    case ::Ydb::Scheme::Entry::RESOURCE_POOL:
+        return ESchemeEntryType::ResourcePool;
     default:
         return ESchemeEntryType::Unknown;
     }
@@ -107,6 +123,43 @@ TSchemeEntry::TSchemeEntry(const ::Ydb::Scheme::Entry& proto)
 {
     PermissionToSchemeEntry(proto.effective_permissions(), &EffectivePermissions);
     PermissionToSchemeEntry(proto.permissions(), &Permissions);
+}
+
+void TSchemeEntry::Out(IOutputStream& out) const {
+    out << "{ name: " << Name
+        << ", owner: " << Owner
+        << ", type: " << Type
+        << ", size_bytes: " << SizeBytes
+        << ", created_at: " << CreatedAt
+        << " }";
+}
+
+void TSchemeEntry::SerializeTo(::Ydb::Scheme::ModifyPermissionsRequest& request) const {
+    request.mutable_actions()->Add()->set_change_owner(Owner);
+    for (const auto& permission : Permissions) {
+        permission.SerializeTo(*request.mutable_actions()->Add()->mutable_grant());
+    }
+}
+
+TModifyPermissionsSettings::TModifyPermissionsSettings(const ::Ydb::Scheme::ModifyPermissionsRequest& request) {
+    for (const auto& action : request.actions()) {
+        switch (action.GetActionCase()) {
+            case Ydb::Scheme::PermissionsAction::kGrant:
+                AddGrantPermissions(action.grant());
+                break;
+            case Ydb::Scheme::PermissionsAction::kRevoke:
+                AddRevokePermissions(action.revoke());
+                break;
+            case Ydb::Scheme::PermissionsAction::kSet:
+                AddSetPermissions(action.set());
+                break;
+            case Ydb::Scheme::PermissionsAction::kChangeOwner:
+                AddChangeOwner(action.change_owner());
+                break;
+            case Ydb::Scheme::PermissionsAction::ACTION_NOT_SET:
+                break;
+        }
+    }
 }
 
 class TSchemeClient::TImpl : public TClientImplCommon<TSchemeClient::TImpl> {
@@ -194,18 +247,14 @@ public:
 
     }
 
-    void PermissionsToRequest(const TPermissions& permissions, Permissions* to) {
-        to->set_subject(permissions.Subject);
-        for (const auto& perm : permissions.PermissionNames) {
-            to->add_permission_names(perm);
-        }
-    }
-
     TAsyncStatus ModifyPermissions(const TString& path, const TModifyPermissionsSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Scheme::ModifyPermissionsRequest>(settings);
         request.set_path(path);
         if (settings.ClearAcl_) {
             request.set_clear_permissions(true);
+        }
+        if (settings.SetInterruptInheritance_) {
+            request.set_interrupt_inheritance(settings.InterruptInheritanceValue_);
         }
 
         for (const auto& action : settings.Actions_) {
@@ -216,15 +265,15 @@ public:
                 }
                 break;
                 case EModifyPermissionsAction::Grant: {
-                    PermissionsToRequest(action.second, protoAction->mutable_grant());
+                    action.second.SerializeTo(*protoAction->mutable_grant());
                 }
                 break;
                 case EModifyPermissionsAction::Revoke: {
-                    PermissionsToRequest(action.second, protoAction->mutable_revoke());
+                    action.second.SerializeTo(*protoAction->mutable_revoke());
                 }
                 break;
                 case EModifyPermissionsAction::Set: {
-                    PermissionsToRequest(action.second, protoAction->mutable_set());
+                    action.second.SerializeTo(*protoAction->mutable_set());
                 }
                 break;
             }
@@ -250,6 +299,14 @@ const TSchemeEntry& TDescribePathResult::GetEntry() const {
     return Entry_;
 }
 
+void TDescribePathResult::Out(IOutputStream& out) const {
+    if (IsSuccess()) {
+        return Entry_.Out(out);
+    } else {
+        return TStatus::Out(out);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TListDirectoryResult::TListDirectoryResult(TStatus&& status, const TSchemeEntry& self, TVector<TSchemeEntry>&& children)
@@ -260,6 +317,14 @@ TListDirectoryResult::TListDirectoryResult(TStatus&& status, const TSchemeEntry&
 const TVector<TSchemeEntry>& TListDirectoryResult::GetChildren() const {
     CheckStatusOk("TListDirectoryResult::GetChildren");
     return Children_;
+}
+
+void TListDirectoryResult::Out(IOutputStream& out) const {
+    if (IsSuccess()) {
+        out << "{ children [" << JoinSeq(", ", Children_) << "] }";
+    } else {
+        return TStatus::Out(out);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -294,7 +359,3 @@ TAsyncStatus TSchemeClient::ModifyPermissions(const TString& path,
 
 } // namespace NScheme
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(, NYdb::NScheme::TVirtualTimestamp, o, x) {
-    return x.Out(o);
-}

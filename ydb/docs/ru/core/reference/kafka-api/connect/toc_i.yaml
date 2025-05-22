@@ -1,0 +1,5 @@
+items:
+  - name: Настройка Kafka Connect. Пошаговая инструкция
+    href: connect-step-by-step.md
+  - name: Примеры настройки коннекторов
+    href: connect-examples.md

@@ -1,0 +1,533 @@
+select jsonb '{"a": 12}' @? '$';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": 12}' @? '1';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": 12}' @? '$.a.b';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"a": 12}' @? '$.b';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"a": 12}' @? '$.a + 2';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": 12}' @? '$.b + 2';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '{"a": {"a": 12}}' @? '$.a.a';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"a": 12}}' @? '$.*.a';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"b": {"a": 12}}' @? '$.*.a';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"b": {"a": 12}}' @? '$.*.b';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"b": {"a": 12}}' @? 'strict $.*.b';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '{}' @? '$.*';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"a": 1}' @? '$.*';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"b": 1}}' @? 'lax $.**{1}';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"b": 1}}' @? 'lax $.**{2}';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"b": 1}}' @? 'lax $.**{3}';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '[]' @? '$[*]';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '[1]' @? '$[*]';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '[1]' @? '$[1]';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '[1]' @? 'strict $[1]';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '[1]' @? 'lax $[10000000000000000]';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '[1]' @? 'strict $[10000000000000000]';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '[1]' @? '$[0]';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '[1]' @? '$[0.3]';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '[1]' @? '$[0.5]';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '[1]' @? '$[0.9]';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '[1]' @? '$[1.2]';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '[1]' @? 'strict $[1.2]';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '{"a": [1,2,3], "b": [3,4,5]}' @? '$ ? (@.a[*] >  @.b[*])';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"a": [1,2,3], "b": [3,4,5]}' @? '$ ? (@.a[*] >= @.b[*])';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": [1,2,3], "b": [3,4,"5"]}' @? '$ ? (@.a[*] >= @.b[*])';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": [1,2,3], "b": [3,4,"5"]}' @? 'strict $ ? (@.a[*] >= @.b[*])';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"a": [1,2,3], "b": [3,4,null]}' @? '$ ? (@.a[*] >= @.b[*])';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '1' @? '$ ? ((@ == "1") is unknown)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '1' @? '$ ? ((@ == 1) is unknown)';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '[{"a": 1}, {"a": 2}]' @? '$[0 to 1] ? (@.a > 1)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"b": 1}}' @? '$.**.b ? ( @ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"b": 1}}' @? '$.**{0}.b ? ( @ > 0)';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"a": {"b": 1}}' @? '$.**{1}.b ? ( @ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"b": 1}}' @? '$.**{0 to last}.b ? ( @ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"b": 1}}' @? '$.**{1 to last}.b ? ( @ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"b": 1}}' @? '$.**{1 to 2}.b ? ( @ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**.b ? ( @ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{0}.b ? ( @ > 0)';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1}.b ? ( @ > 0)';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{0 to last}.b ? ( @ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1 to last}.b ? ( @ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1 to 2}.b ? ( @ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{2 to 3}.b ? ( @ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": 1, "b":1}' @? '$ ? (@.a == @.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": 1, "b":1}}' @? '$ ? (@.a == @.b)';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '{"c": {"a": 1, "b":1}}' @? '$.c ? (@.a == @.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": 1, "b":1}}' @? '$.c ? ($.c.a == @.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": 1, "b":1}}' @? '$.* ? (@.a == @.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": 1, "b":1}' @? '$.** ? (@.a == @.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": 1, "b":1}}' @? '$.** ? (@.a == @.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == - 1)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == -1)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == -@.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == - @.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": 0, "b":1}}' @? '$.** ? (@.a == 1 - @.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": 2, "b":1}}' @? '$.** ? (@.a == 1 - - @.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"c": {"a": 0, "b":1}}' @? '$.** ? (@.a == 1 - +@.b)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '[1,2,3]' @? '$ ? (+@[*] > +2)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '[1,2,3]' @? '$ ? (+@[*] > +3)';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '[1,2,3]' @? '$ ? (-@[*] < -2)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '[1,2,3]' @? '$ ? (-@[*] < -3)';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '1' @? '$ ? ($ > 0)';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '["1",2,0,3]' @? '-$[*]';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '[1,"2",0,3]' @? '-$[*]';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '["1",2,0,3]' @? 'strict -$[*]';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '[1,"2",0,3]' @? 'strict -$[*]';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '2' @? '$ == "2"';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '2' @@ '$ > 1';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '2' @@ '$ <= 1';
+ ?column? 
+----------
+ f
+(1 row)
+
+select jsonb '2' @@ '$ == "2"';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '2' @@ '1';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '{}' @@ '$';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '[]' @@ '$';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '[1,2,3]' @@ '$[*]';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '[]' @@ '$[*]';
+ ?column? 
+----------
+ 
+(1 row)
+
+select jsonb '{"a": 1, "b": [1, 2]}' @? 'lax $.keyvalue()';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '{"a": 1, "b": [1, 2]}' @? 'lax $.keyvalue().key';
+ ?column? 
+----------
+ t
+(1 row)
+
+select jsonb '"10-03-2017"' @? '$.datetime("dd-mm-yyyy")';
+ ?column? 
+----------
+ t
+(1 row)
+
+set time zone '+00';
+set time zone '+10';
+set time zone default;
+set time zone '+00';
+set time zone default;
+SELECT jsonb '[{"a": 1}, {"a": 2}]' @? '$[*].a ? (@ > 1)';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT jsonb '[{"a": 1}, {"a": 2}]' @? '$[*] ? (@.a > 2)';
+ ?column? 
+----------
+ f
+(1 row)
+
+SELECT jsonb '[{"a": 1}, {"a": 2}]' @@ '$[*].a > 1';
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT jsonb '[{"a": 1}, {"a": 2}]' @@ '$[*].a > 2';
+ ?column? 
+----------
+ f
+(1 row)
+

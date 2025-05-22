@@ -15,7 +15,7 @@ struct TQueryTrackerOptions
     TString QueryTrackerStage = "production";
 };
 
-DEFINE_ENUM(ContentType,
+DEFINE_ENUM(EContentType,
     ((RawInlineData)   (0))
     ((Url)   (1))
 );
@@ -25,7 +25,7 @@ struct TQueryFile
 {
     TString Name;
     TString Content;
-    ContentType Type;
+    EContentType Type;
 
     REGISTER_YSON_STRUCT(TQueryFile);
 
@@ -33,6 +33,21 @@ struct TQueryFile
 };
 
 DEFINE_REFCOUNTED_TYPE(TQueryFile)
+
+struct TQuerySecret
+    : public NYTree::TYsonStruct
+{
+    TString Id;
+    TString Category;
+    TString Subcategory;
+    TString YPath;
+
+    REGISTER_YSON_STRUCT(TQuerySecret);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TQuerySecret)
 
 struct TStartQueryOptions
     : public TTimeoutOptions
@@ -42,7 +57,9 @@ struct TStartQueryOptions
     bool Draft = false;
     NYTree::IMapNodePtr Annotations;
     std::vector<TQueryFilePtr> Files;
-    std::optional<TString> AccessControlObject;
+    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
+    std::optional<std::vector<TString>> AccessControlObjects;
+    std::vector<TQuerySecretPtr> Secrets;
 };
 
 struct TAbortQueryOptions
@@ -61,7 +78,7 @@ struct TReadQueryResultOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
 {
-    std::optional<std::vector<TString>> Columns;
+    std::optional<std::vector<std::string>> Columns;
     std::optional<i64> LowerRowIndex;
     std::optional<i64> UpperRowIndex;
 };
@@ -82,7 +99,7 @@ struct TListQueriesOptions
     std::optional<TInstant> ToTime;
     std::optional<TInstant> CursorTime;
     EOperationSortDirection CursorDirection = EOperationSortDirection::Past;
-    std::optional<TString> UserFilter;
+    std::optional<std::string> UserFilter;
 
     std::optional<NQueryTrackerClient::EQueryState> StateFilter;
     std::optional<NQueryTrackerClient::EQueryEngine> EngineFilter;
@@ -101,14 +118,16 @@ struct TQuery
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
     NYson::TYsonString Settings;
-    std::optional<TString> User;
-    std::optional<TString> AccessControlObject;
+    std::optional<std::string> User;
+    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
+    std::optional<NYson::TYsonString> AccessControlObjects;
     std::optional<NQueryTrackerClient::EQueryState> State;
     std::optional<i64> ResultCount;
     NYson::TYsonString Progress;
     std::optional<TError> Error;
     NYson::TYsonString Annotations;
     NYTree::IAttributeDictionaryPtr OtherAttributes;
+    std::optional<NYson::TYsonString> Secrets;
 };
 
 void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer);
@@ -121,6 +140,7 @@ struct TQueryResult
     NTableClient::TTableSchemaPtr Schema;
     NChunkClient::NProto::TDataStatistics DataStatistics;
     bool IsTruncated;
+    NYson::TYsonString FullResult;
 };
 
 void Serialize(const TQueryResult& queryResult, NYson::IYsonConsumer* consumer);
@@ -137,7 +157,24 @@ struct TAlterQueryOptions
     , public TQueryTrackerOptions
 {
     NYTree::IMapNodePtr Annotations;
-    std::optional<TString> AccessControlObject;
+    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
+    std::optional<std::vector<TString>> AccessControlObjects;
+};
+
+struct TGetQueryTrackerInfoOptions
+    : public TTimeoutOptions
+    , public TQueryTrackerOptions
+{
+    NYTree::TAttributeFilter Attributes;
+};
+
+struct TGetQueryTrackerInfoResult
+{
+    TString QueryTrackerStage;
+    std::string ClusterName;
+    NYson::TYsonString SupportedFeatures;
+    std::vector<TString> AccessControlObjects;
+    std::vector<std::string> Clusters;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -174,6 +211,8 @@ struct IQueryTrackerClient
     virtual TFuture<void> AlterQuery(
         NQueryTrackerClient::TQueryId queryId,
         const TAlterQueryOptions& options = {}) = 0;
+
+    virtual TFuture<TGetQueryTrackerInfoResult> GetQueryTrackerInfo(const TGetQueryTrackerInfoOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -87,11 +87,13 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
                     }
 
                     TBuffer buf(SafeIntegerCast<size_t>(contentLength));
-                    buf.Resize(Input().Load(buf.Data(), (size_t)contentLength));
+                    Input().LoadOrFail(buf.Data(), (size_t)contentLength);
+                    buf.Resize((size_t)contentLength);
                     postData = TBlob::FromBuffer(buf);
                 } else {
                     postData = TBlob::FromStream(Input());
                 }
+                rd.SetBody(postData);
             } catch (...) {
                 Output() << "HTTP/1.1 400 Bad request\r\n\r\n";
                 return false;

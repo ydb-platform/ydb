@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 
@@ -55,10 +56,10 @@ namespace NFake {
         TMap<TLogoBlobID, TBlob> Blobs;
         // By default only NKikimrBlobStorage::StatusIsValid is set
         TStorageStatusFlags StorageStatusFlags = TStorageStatusFlags(NKikimrBlobStorage::StatusIsValid);
-        const ui32 GroupId;
+        const TGroupId GroupId;
 
     public:
-        TProxyDS(ui32 groupId = 0)
+        TProxyDS(TGroupId groupId = TGroupId::Zero())
             : GroupId(groupId)
         {}
 
@@ -105,6 +106,19 @@ namespace NFake {
         }
 
         TEvBlobStorage::TEvGetResult* Handle(TEvBlobStorage::TEvGet *msg) {
+            if (const auto& blk = msg->ReaderTabletData) {
+                if (IsBlocked(blk->Id, blk->Generation)) {
+                    auto response = msg->MakeErrorResponse(NKikimrProto::BLOCKED, "block race detected", GroupId);
+                    return response.release();
+                }
+            }
+            if (const auto& blk = msg->ForceBlockTabletData; blk && blk->Generation) {
+                auto it = Blocks.find(blk->Id);
+                Y_VERIFY_S(it != Blocks.end() && it->second == blk->Generation, "incorrect ForceBlockTabletData"
+                    << " expected Generation# " << blk->Generation
+                    << " having Generation# " << (it != Blocks.end() ? ToString(it->second) : "none"));
+            }
+
             // prepare result structure holding the returned data
             auto result = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg->QuerySize, GroupId);
 
@@ -138,15 +152,70 @@ namespace NFake {
                     const ui32 offset = size ? query.Shift : 0;
                     response.Buffer = TRope(data.Buffer.Position(offset), data.Buffer.Position(offset + size));
                 } else {
-                    // ensure this blob is not under GC
-                    Y_ABORT_UNLESS(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
-
                     // reply with NODATA -- we haven't got this blob
                     response.Status = NKikimrProto::NODATA;
                 }
             }
 
             return result.release();
+        }
+
+        TEvBlobStorage::TEvPatchResult* Handle(TEvBlobStorage::TEvPatch *msg) {
+            // ensure we have full blob id, with PartId set to zero
+            const TLogoBlobID& id = msg->PatchedId;
+            Y_ABORT_UNLESS(id == id.FullID());
+
+            // validate put against set blocks
+            if (IsBlocked(id.TabletID(), id.Generation())) {
+                return new TEvBlobStorage::TEvPatchResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), GroupId, 0.f);
+            }
+
+            // check if this blob is not being collected -- writing such blob is a violation of BS contract
+            Y_ABORT_UNLESS(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
+
+
+            const TLogoBlobID& originalId = msg->OriginalId;
+            auto it = Blobs.find(originalId);
+            if (it == Blobs.end()) {
+                // ensure this blob is not under GC
+                Y_ABORT_UNLESS(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
+                return new TEvBlobStorage::TEvPatchResult(NKikimrProto::ERROR, id, GetStorageStatusFlags(), GroupId, 0.f);
+            }
+
+            auto& data = it->second;
+            // TODO(kruall): check bad diffs
+            TString buffer = TString::Uninitialized(data.Buffer.GetSize());
+            auto originalBuffer = data.Buffer.GetContiguousSpan();
+            memcpy(buffer.Detach(), originalBuffer.data(), buffer.size());
+            for (ui32 diffIdx = 0; diffIdx < msg->DiffCount; ++diffIdx) {
+                auto &diff = msg->Diffs[diffIdx];
+                auto diffBuffer = diff.Buffer.GetContiguousSpan();
+                memcpy(buffer.Detach() + diff.Offset, diffBuffer.data(), diffBuffer.size());
+            }
+
+
+            // validate that there are no blobs with the same gen/step, channel, cookie, but with different size
+            const TLogoBlobID base(id.TabletID(), id.Generation(), id.Step(), id.Channel(), 0, id.Cookie());
+            auto iter = Blobs.lower_bound(base);
+            if (iter != Blobs.end()) {
+                const TLogoBlobID& existing = iter->first;
+                Y_ABORT_UNLESS(
+                    id.TabletID() != existing.TabletID() ||
+                    id.Generation() != existing.Generation() ||
+                    id.Step() != existing.Step() ||
+                    id.Cookie() != existing.Cookie() ||
+                    id.Channel() != existing.Channel() ||
+                    id == existing,
+                    "id# %s existing# %s", id.ToString().data(), existing.ToString().data());
+                if (id == existing) {
+                    Y_ABORT_UNLESS(iter->second.Buffer == buffer);
+                }
+            }
+
+            // put an entry into logo blobs database and reply with success
+            Blobs.emplace(id, TRope(buffer));
+    
+            return new TEvBlobStorage::TEvPatchResult(NKikimrProto::OK, id, GetStorageStatusFlags(), GroupId, 0.f);
         }
 
         TEvBlobStorage::TEvBlockResult* Handle(TEvBlobStorage::TEvBlock *msg) {
@@ -162,6 +231,20 @@ namespace NFake {
             }
 
             return new TEvBlobStorage::TEvBlockResult(status);
+        }
+
+        TEvBlobStorage::TEvGetBlockResult* Handle(TEvBlobStorage::TEvGetBlock *msg) {
+            NKikimrProto::EReplyStatus status = NKikimrProto::OK;
+            ui32 generation = 0;
+
+            auto it = Blocks.find(msg->TabletId);
+            if (it != Blocks.end()) {
+                generation = it->second;
+            } else {
+                status = NKikimrProto::NODATA;
+            }
+
+            return new TEvBlobStorage::TEvGetBlockResult(status, msg->TabletId, generation);
         }
 
         TEvBlobStorage::TEvDiscoverResult* Handle(TEvBlobStorage::TEvDiscover *msg) {
@@ -206,8 +289,7 @@ namespace NFake {
 
             Y_ABORT_UNLESS(from.TabletID() == to.TabletID());
             Y_ABORT_UNLESS(from.Channel() == to.Channel());
-            Y_ABORT_UNLESS(from.TabletID() == msg->TabletId);
-
+            Y_ABORT_UNLESS(from.TabletID() == msg->TabletId); 
             auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, from, to, GroupId);
 
             auto process = [&](const TLogoBlobID& id, const TString& buffer) {
@@ -331,6 +413,14 @@ namespace NFake {
                     msg->RecordGeneration, msg->PerGenerationCounter, msg->Channel);
         }
 
+        TEvBlobStorage::TEvCheckIntegrityResult* Handle(TEvBlobStorage::TEvCheckIntegrity *msg) {
+            auto* result = new TEvBlobStorage::TEvCheckIntegrityResult(NKikimrProto::OK);
+            result->Id = msg->Id;
+            result->PlacementStatus = TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN;
+            result->DataStatus = TEvBlobStorage::TEvCheckIntegrityResult::DS_UNKNOWN;
+            return result;
+        }
+
     public: // Non-event model interaction methods
         TStorageStatusFlags GetStorageStatusFlags() const noexcept {
             return StorageStatusFlags;
@@ -346,6 +436,10 @@ namespace NFake {
 
         const TMap<TLogoBlobID, TBlob>& AllMyBlobs() const noexcept {
             return Blobs;
+        }
+
+        TGroupId GetGroupId() const {
+            return GroupId;
         }
 
     private:

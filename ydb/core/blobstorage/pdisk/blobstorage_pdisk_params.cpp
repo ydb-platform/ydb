@@ -11,7 +11,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     TPDiskParams::TPDiskParams(NPDisk::TOwner owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize,
                                ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize,
-                               ui64 writeBlockSize, ui64 bulkWriteBlockSize)
+                               ui64 writeBlockSize, ui64 bulkWriteBlockSize, NPDisk::EDeviceType trueMediaType)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , ChunkSize(chunkSize)
@@ -25,8 +25,9 @@ namespace NKikimr {
         , BulkWriteBlockSize(bulkWriteBlockSize)
         , PrefetchSizeBytes(CalculatePrefetchSizeBytes(seekTimeUs, readSpeedBps))
         , GlueRequestDistanceBytes(CalculateGlueRequestDistanceBytes(seekTimeUs, readSpeedBps))
+        , TrueMediaType(trueMediaType)
     {
-        Y_DEBUG_ABORT_UNLESS(AppendBlockSize <= ChunkSize);
+        Y_VERIFY_DEBUG(AppendBlockSize <= ChunkSize);
     }
 
     // Read size that allows pdisk to spend at least 50% actually reading the data (not seeking)

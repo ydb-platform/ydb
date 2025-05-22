@@ -55,56 +55,56 @@ select
  	,warehouse.w_county w_county
  	,warehouse.w_state w_state
  	,warehouse.w_country w_country
- 	,'MSC' || ',' || 'GERMA' as ship_carriers
+ 	,'DHL' || ',' || 'BARIAN' as ship_carriers
        ,date_dim.d_year as year
  	,sum(case when d_moy = 1
- 		then ws_sales_price* ws_quantity else 0 end) as jan_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as jan_sales
  	,sum(case when d_moy = 2
- 		then ws_sales_price* ws_quantity else 0 end) as feb_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as feb_sales
  	,sum(case when d_moy = 3
- 		then ws_sales_price* ws_quantity else 0 end) as mar_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as mar_sales
  	,sum(case when d_moy = 4
- 		then ws_sales_price* ws_quantity else 0 end) as apr_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as apr_sales
  	,sum(case when d_moy = 5
- 		then ws_sales_price* ws_quantity else 0 end) as may_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as may_sales
  	,sum(case when d_moy = 6
- 		then ws_sales_price* ws_quantity else 0 end) as jun_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as jun_sales
  	,sum(case when d_moy = 7
- 		then ws_sales_price* ws_quantity else 0 end) as jul_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as jul_sales
  	,sum(case when d_moy = 8
- 		then ws_sales_price* ws_quantity else 0 end) as aug_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as aug_sales
  	,sum(case when d_moy = 9
- 		then ws_sales_price* ws_quantity else 0 end) as sep_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as sep_sales
  	,sum(case when d_moy = 10
- 		then ws_sales_price* ws_quantity else 0 end) as oct_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as oct_sales
  	,sum(case when d_moy = 11
- 		then ws_sales_price* ws_quantity else 0 end) as nov_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as nov_sales
  	,sum(case when d_moy = 12
- 		then ws_sales_price* ws_quantity else 0 end) as dec_sales
+ 		then $upscale(ws_ext_sales_price)* $upscale(ws_quantity) else $upscale($z0) end) as dec_sales
  	,sum(case when d_moy = 1
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as jan_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as jan_net
  	,sum(case when d_moy = 2
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as feb_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as feb_net
  	,sum(case when d_moy = 3
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as mar_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as mar_net
  	,sum(case when d_moy = 4
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as apr_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as apr_net
  	,sum(case when d_moy = 5
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as may_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as may_net
  	,sum(case when d_moy = 6
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as jun_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as jun_net
  	,sum(case when d_moy = 7
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as jul_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as jul_net
  	,sum(case when d_moy = 8
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as aug_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as aug_net
  	,sum(case when d_moy = 9
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as sep_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as sep_net
  	,sum(case when d_moy = 10
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as oct_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as oct_net
  	,sum(case when d_moy = 11
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as nov_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as nov_net
  	,sum(case when d_moy = 12
- 		then ws_net_paid_inc_ship_tax * ws_quantity else 0 end) as dec_net
+ 		then $upscale(ws_net_paid)* $upscale(ws_quantity) else $upscale($z0) end) as dec_net
      from
           {{web_sales}} as web_sales
          cross join {{warehouse}} as warehouse
@@ -117,8 +117,8 @@ select
         and ws_sold_time_sk = t_time_sk
  	and ws_ship_mode_sk = sm_ship_mode_sk
         and d_year = 2001
- 	and t_time between 9453 and 9453+28800
- 	and sm_carrier in ('MSC','GERMA')
+ 	and t_time between 30838 and 30838+28800
+ 	and sm_carrier in ('DHL','BARIAN')
      group by
         warehouse.w_warehouse_name
  	,warehouse.w_warehouse_sq_ft
@@ -135,56 +135,56 @@ select
  	,warehouse.w_county w_county
  	,warehouse.w_state w_state
  	,warehouse.w_country w_country
- 	,'MSC' || ',' || 'GERMA' as ship_carriers
+ 	,'DHL' || ',' || 'BARIAN' as ship_carriers
        ,date_dim.d_year as year
  	,sum(case when d_moy = 1
- 		then cs_ext_list_price* cs_quantity else 0 end) as jan_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as jan_sales
  	,sum(case when d_moy = 2
- 		then cs_ext_list_price* cs_quantity else 0 end) as feb_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as feb_sales
  	,sum(case when d_moy = 3
- 		then cs_ext_list_price* cs_quantity else 0 end) as mar_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as mar_sales
  	,sum(case when d_moy = 4
- 		then cs_ext_list_price* cs_quantity else 0 end) as apr_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as apr_sales
  	,sum(case when d_moy = 5
- 		then cs_ext_list_price* cs_quantity else 0 end) as may_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as may_sales
  	,sum(case when d_moy = 6
- 		then cs_ext_list_price* cs_quantity else 0 end) as jun_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as jun_sales
  	,sum(case when d_moy = 7
- 		then cs_ext_list_price* cs_quantity else 0 end) as jul_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as jul_sales
  	,sum(case when d_moy = 8
- 		then cs_ext_list_price* cs_quantity else 0 end) as aug_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as aug_sales
  	,sum(case when d_moy = 9
- 		then cs_ext_list_price* cs_quantity else 0 end) as sep_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as sep_sales
  	,sum(case when d_moy = 10
- 		then cs_ext_list_price* cs_quantity else 0 end) as oct_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as oct_sales
  	,sum(case when d_moy = 11
- 		then cs_ext_list_price* cs_quantity else 0 end) as nov_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as nov_sales
  	,sum(case when d_moy = 12
- 		then cs_ext_list_price* cs_quantity else 0 end) as dec_sales
+ 		then $upscale(cs_sales_price)* $upscale(cs_quantity) else $upscale($z0) end) as dec_sales
  	,sum(case when d_moy = 1
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as jan_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as jan_net
  	,sum(case when d_moy = 2
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as feb_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as feb_net
  	,sum(case when d_moy = 3
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as mar_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as mar_net
  	,sum(case when d_moy = 4
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as apr_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as apr_net
  	,sum(case when d_moy = 5
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as may_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as may_net
  	,sum(case when d_moy = 6
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as jun_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as jun_net
  	,sum(case when d_moy = 7
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as jul_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as jul_net
  	,sum(case when d_moy = 8
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as aug_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as aug_net
  	,sum(case when d_moy = 9
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as sep_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as sep_net
  	,sum(case when d_moy = 10
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as oct_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as oct_net
  	,sum(case when d_moy = 11
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as nov_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as nov_net
  	,sum(case when d_moy = 12
- 		then cs_net_paid_inc_ship * cs_quantity else 0 end) as dec_net
+ 		then $upscale(cs_net_paid_inc_tax)* $upscale(cs_quantity) else $upscale($z0) end) as dec_net
      from
           {{catalog_sales}} as catalog_sales
          cross join {{warehouse}} as warehouse
@@ -197,8 +197,8 @@ select
         and cs_sold_time_sk = t_time_sk
  	and cs_ship_mode_sk = sm_ship_mode_sk
         and d_year = 2001
- 	and t_time between 9453 AND 9453+28800
- 	and sm_carrier in ('MSC','GERMA')
+ 	and t_time between 30838 AND 30838+28800
+ 	and sm_carrier in ('DHL','BARIAN')
      group by
         warehouse.w_warehouse_name
  	,warehouse.w_warehouse_sq_ft

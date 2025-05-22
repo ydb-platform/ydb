@@ -4,13 +4,14 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/string_helpers.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <thread>
 #include <unordered_map>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 constexpr int PESSIMIZATION_DISCOVERY_THRESHOLD = 50; // percent of endpoints pessimized by transport error to start recheck
 constexpr TDuration ENDPOINT_UPDATE_PERIOD = TDuration::Minutes(1); // period to perform endpoints update in "normal" case

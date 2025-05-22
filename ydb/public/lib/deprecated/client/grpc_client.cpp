@@ -316,38 +316,22 @@ namespace NKikimr {
             Impl->Issue(request, std::move(callback), &TImpl::TStub::Async ## NAME); \
         }
 
-        IMPL_REQUEST(Request, TRequest, TResponse)
         IMPL_REQUEST(SchemeOperation, TSchemeOperation, TResponse)
         IMPL_REQUEST(SchemeOperationStatus, TSchemeOperationStatus, TResponse)
         IMPL_REQUEST(SchemeDescribe, TSchemeDescribe, TResponse)
         IMPL_REQUEST(PersQueueRequest, TPersQueueRequest, TResponse)
         IMPL_REQUEST(SchemeInitRoot, TSchemeInitRoot, TResponse)
-        IMPL_REQUEST(BSAdm, TBSAdm, TResponse)
         IMPL_REQUEST(BlobStorageConfig, TBlobStorageConfigRequest, TResponse)
         IMPL_REQUEST(ResolveNode, TResolveNodeRequest, TResponse)
         IMPL_REQUEST(HiveCreateTablet, THiveCreateTablet, TResponse)
-        IMPL_REQUEST(LocalEnumerateTablets, TLocalEnumerateTablets, TResponse)
-        IMPL_REQUEST(KeyValue, TKeyValueRequest, TResponse)
         IMPL_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse)
         IMPL_REQUEST(CmsRequest, TCmsRequest, TCmsResponse)
-        IMPL_REQUEST(SqsRequest, TSqsRequest, TSqsResponse)
-        IMPL_REQUEST(LocalMKQL, TLocalMKQL, TResponse)
-        IMPL_REQUEST(LocalSchemeTx, TLocalSchemeTx, TResponse)
-        IMPL_REQUEST(TabletKillRequest, TTabletKillRequest, TResponse)
         IMPL_REQUEST(InterconnectDebug, TInterconnectDebug, TResponse)
         IMPL_REQUEST(TabletStateRequest, TTabletStateRequest, TResponse)
-        IMPL_REQUEST(DataShardLoadRequest, TDsTestLoadRequest, TResponse)
-        IMPL_REQUEST(BlobStorageLoadRequest, TBsTestLoadRequest, TResponse)
-        IMPL_REQUEST(BlobStorageGetRequest, TBsGetRequest, TResponse)
-        IMPL_REQUEST(DbSchema, TJSON, TJSON)
-        IMPL_REQUEST(DbOperation, TJSON, TJSON)
-        IMPL_REQUEST(DbBatch, TJSON, TJSON)
         IMPL_REQUEST(ChooseProxy, TChooseProxyRequest, TResponse)
         IMPL_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse)
-        IMPL_REQUEST(WhoAmI, TWhoAmI, TResponse)
         IMPL_REQUEST(FillNode, TFillNodeRequest, TResponse)
         IMPL_REQUEST(DrainNode, TDrainNodeRequest, TResponse)
-        IMPL_REQUEST(LoginRequest, TLoginRequest, TResponse)
 
         } // NGRpcProxy
 } // NKikimr

@@ -15,7 +15,8 @@ NActors::IActor* MakeDqExecuter(
     const TDqConfiguration::TPtr& settings,
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     TInstant requestStartTime = TInstant::Now(),
-    bool createTaskSuspended = false
+    bool createTaskSuspended = false,
+    ui64 executionTimeout = 0
 );
 
 } // namespace NDq

@@ -94,7 +94,7 @@ static inline void FixIPv6ListenSocket(SOCKET s) {
 
 namespace NAddr {
     class IRemoteAddr;
-}
+} // namespace NAddr
 
 void SetSocketTimeout(SOCKET s, long timeout);
 void SetSocketTimeout(SOCKET s, long sec, long msec);
@@ -423,5 +423,5 @@ private:
     TSocket S_;
 };
 
-//return -(error code) if error occured, or number of ready fds
+// return -(error code) if error occured, or number of ready fds
 ssize_t PollD(struct pollfd fds[], nfds_t nfds, const TInstant& deadLine) noexcept;

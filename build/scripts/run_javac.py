@@ -1,17 +1,26 @@
 import sys
 import subprocess
 import optparse
+import os
 import re
+
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import build_java_with_error_prone2 as java_error_prone
+import setup_java_tmpdir as java_tmpdir
 
 
 def parse_args():
     parser = optparse.OptionParser()
     parser.disable_interspersed_args()
     parser.add_option('--sources-list')
+    parser.add_option('--error-prone')
     parser.add_option('--verbose', default=False, action='store_true')
     parser.add_option('--remove-notes', default=False, action='store_true')
     parser.add_option('--ignore-errors', default=False, action='store_true')
     parser.add_option('--kotlin', default=False, action='store_true')
+    parser.add_option('--with-setup-java-tmpdir', default=False, action='store_true')
     return parser.parse_args()
 
 
@@ -42,50 +51,14 @@ def remove_notes(err):
     return '\n'.join([line for line in err.split('\n') if not line.startswith('Note:')])
 
 
-def find_javac(cmd):
-    if not cmd:
-        return None
-    if cmd[0].endswith('javac') or cmd[0].endswith('javac.exe'):
-        return cmd[0]
-    if len(cmd) > 2 and cmd[1].endswith('build_java_with_error_prone.py'):
-        for javas in ('java', 'javac'):
-            if cmd[2].endswith(javas) or cmd[2].endswith(javas + '.exe'):
-                return cmd[2]
-    return None
-
-
-# temporary, for jdk8/jdk9+ compatibility
-def fix_cmd(cmd):
-    if not cmd:
-        return cmd
-    javac = find_javac(cmd)
-    if not javac:
-        return cmd
-    p = subprocess.Popen([javac, '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out, err = p.communicate()
-    out, err = out.strip(), err.strip()
-    for prefix in ('javac 1.8', 'java version "1.8'):
-        for raw_out in ((out or ''), (err or '')):
-            for line in raw_out.split('\n'):
-                if line.startswith(prefix):
-                    res = []
-                    i = 0
-                    while i < len(cmd):
-                        for option in ('--add-exports', '--add-modules'):
-                            if cmd[i] == option:
-                                i += 1
-                                break
-                            elif cmd[i].startswith(option + '='):
-                                break
-                        else:
-                            res.append(cmd[i])
-                        i += 1
-                    return res
-    return cmd
-
-
 def main():
     opts, cmd = parse_args()
+
+    if opts.with_setup_java_tmpdir:
+        cmd = java_tmpdir.fix_tmpdir(cmd)
+
+    if opts.error_prone:
+        cmd = java_error_prone.fix_cmd_line(opts.error_prone, cmd)
 
     with open(opts.sources_list) as f:
         input_files = f.read().strip().split()
@@ -98,7 +71,7 @@ def main():
             sys.stderr.write('No files to compile, javac is not launched.\n')
 
     else:
-        p = subprocess.Popen(fix_cmd(cmd), stderr=subprocess.PIPE)
+        p = subprocess.Popen(cmd, stderr=subprocess.PIPE)
         _, err = p.communicate()
         rc = p.wait()
 

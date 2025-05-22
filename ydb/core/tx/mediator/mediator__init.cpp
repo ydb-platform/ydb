@@ -48,11 +48,7 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
     }
 
     bool IsTabletInStaticDomain(const TAppData *appdata) {
-        const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
-        Y_ABORT_UNLESS(selfDomain != appdata->DomainsInfo->BadDomainId);
-        const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain);
-
-        for (auto domainMediatorId: domain.Mediators) {
+        for (auto domainMediatorId: appdata->DomainsInfo->GetDomain()->Mediators) {
             if (Self->TabletID() == domainMediatorId) {
                 return true;
             }
@@ -80,7 +76,7 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
             LOG_INFO_S(ctx, NKikimrServices::TX_MEDIATOR,
                  "tablet# " << Self->TabletID() <<
                  " CreateTxInit initialize himself");
-            Self->DoConfigure(*CreateDomainConfigurationFromStatic(appData, Self->TabletID()), ctx);
+            Self->DoConfigure(*CreateDomainConfigurationFromStatic(appData), ctx);
             return;
         }
 

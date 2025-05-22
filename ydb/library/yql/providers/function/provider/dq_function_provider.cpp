@@ -1,10 +1,10 @@
 #include "dq_function_provider.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NYql {
 
@@ -24,7 +24,8 @@ TDataProviderInitializer GetDqFunctionDataProviderInitializer(
                 TIntrusivePtr<TTypeAnnotationContext> typeCtx,
                 const TOperationProgressWriter& progressWriter,
                 const TYqlOperationOptions& operationOptions,
-                THiddenQueryAborter)
+                THiddenQueryAborter hiddenAborter,
+                const TQContext& qContext)
         {
 
             Y_UNUSED(userName);
@@ -33,6 +34,8 @@ TDataProviderInitializer GetDqFunctionDataProviderInitializer(
             Y_UNUSED(randomProvider);
             Y_UNUSED(progressWriter);
             Y_UNUSED(operationOptions);
+            Y_UNUSED(hiddenAborter);
+            Y_UNUSED(qContext);
 
             auto state = MakeIntrusive<TDqFunctionState>();
             state->SessionId = sessionId;

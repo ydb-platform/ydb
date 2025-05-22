@@ -64,6 +64,8 @@ Y_ABSL_NAMESPACE_BEGIN
 //   --my_log_level=info
 //   --my_log_level=0
 //
+// `DFATAL` and `kLogDebugFatal` are similarly accepted.
+//
 // Unparsing a flag produces the same result as `y_absl::LogSeverityName()` for
 // the standard levels and a base-ten integer otherwise.
 enum class LogSeverity : int {
@@ -82,18 +84,28 @@ constexpr std::array<y_absl::LogSeverity, 4> LogSeverities() {
            y_absl::LogSeverity::kError, y_absl::LogSeverity::kFatal}};
 }
 
+// `y_absl::kLogDebugFatal` equals `y_absl::LogSeverity::kFatal` in debug builds
+// (i.e. when `NDEBUG` is not defined) and `y_absl::LogSeverity::kError`
+// otherwise.  Avoid ODR-using this variable as it has internal linkage and thus
+// distinct storage in different TUs.
+#ifdef NDEBUG
+static constexpr y_absl::LogSeverity kLogDebugFatal = y_absl::LogSeverity::kError;
+#else
+static constexpr y_absl::LogSeverity kLogDebugFatal = y_absl::LogSeverity::kFatal;
+#endif
+
 // LogSeverityName()
 //
 // Returns the all-caps string representation (e.g. "INFO") of the specified
 // severity level if it is one of the standard levels and "UNKNOWN" otherwise.
 constexpr const char* LogSeverityName(y_absl::LogSeverity s) {
-  return s == y_absl::LogSeverity::kInfo
-             ? "INFO"
-             : s == y_absl::LogSeverity::kWarning
-                   ? "WARNING"
-                   : s == y_absl::LogSeverity::kError
-                         ? "ERROR"
-                         : s == y_absl::LogSeverity::kFatal ? "FATAL" : "UNKNOWN";
+  switch (s) {
+    case y_absl::LogSeverity::kInfo: return "INFO";
+    case y_absl::LogSeverity::kWarning: return "WARNING";
+    case y_absl::LogSeverity::kError: return "ERROR";
+    case y_absl::LogSeverity::kFatal: return "FATAL";
+  }
+  return "UNKNOWN";
 }
 
 // NormalizeLogSeverity()
@@ -101,9 +113,10 @@ constexpr const char* LogSeverityName(y_absl::LogSeverity s) {
 // Values less than `kInfo` normalize to `kInfo`; values greater than `kFatal`
 // normalize to `kError` (**NOT** `kFatal`).
 constexpr y_absl::LogSeverity NormalizeLogSeverity(y_absl::LogSeverity s) {
-  return s < y_absl::LogSeverity::kInfo
-             ? y_absl::LogSeverity::kInfo
-             : s > y_absl::LogSeverity::kFatal ? y_absl::LogSeverity::kError : s;
+  y_absl::LogSeverity n = s;
+  if (n < y_absl::LogSeverity::kInfo) n = y_absl::LogSeverity::kInfo;
+  if (n > y_absl::LogSeverity::kFatal) n = y_absl::LogSeverity::kError;
+  return n;
 }
 constexpr y_absl::LogSeverity NormalizeLogSeverity(int s) {
   return y_absl::NormalizeLogSeverity(static_cast<y_absl::LogSeverity>(s));

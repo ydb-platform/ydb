@@ -8,7 +8,7 @@
 
 #include <yt/yt/core/yson/writer.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 namespace NYT::NTableClient {
 
@@ -129,7 +129,8 @@ public:
     explicit TWritingValueConsumer(
         IUnversionedWriterPtr writer,
         TTypeConversionConfigPtr typeConversionConfig = New<TTypeConversionConfig>(),
-        i64 maxRowBufferSize = 1_MB);
+        i64 maxRowBufferSize = 1_MB,
+        IMemoryUsageTrackerPtr tracker = GetNullMemoryUsageTracker());
 
     TFuture<void> Flush() override;
     const TNameTablePtr& GetNameTable() const override;

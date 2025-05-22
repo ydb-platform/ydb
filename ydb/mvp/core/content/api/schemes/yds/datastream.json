@@ -1,0 +1,211 @@
+{
+  "get": {
+    "consumes": [
+      "application/json"
+    ],
+    "description": "describe datastream",
+    "parameters": [
+      {
+        "description": "database location",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "database with stream",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "stream name",
+        "in": "query",
+        "name": "name",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "stream name",
+        "in": "query",
+        "name": "name",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "produces": [
+      "application/json"
+    ],
+    "responses": {
+      "200": {
+        "description": "successfull operation",
+        "schema": {
+          "properties": {
+            "databaseId": {
+              "type": "string"
+            },
+            "folderId": {
+              "type": "string"
+            },
+            "alternativeEndpoint": {
+              "type": "string"
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "alternativeRegion": {
+              "type": "string"
+            },
+            "streamDescription": {
+              "properties": {
+                "owner": {
+                  "type": "string"
+                },
+                "alternativeStreamName": {
+                  "type": "string"
+                },
+                "streamModeDetails": {
+                  "properties": {
+                    "streamMode": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "storageLimitMb": {
+                  "description": "returned only for memory-limited datastreams",
+                  "type": "number"
+                },
+                "streamStatus": {
+                  "type": "string"
+                },
+                "totalWriteQuotaKbPerSec": {
+                  "type": "number"
+                },
+                "retentionPeriodHours": {
+                  "type": "number"
+                },
+                "streamCreationTimestamp": {
+                  "type": "number"
+                },
+                "shards": {
+                  "items": {
+                    "properties": {
+                      "hashKeyRange": {
+                        "properties": {
+                          "endingHashKey": {
+                            "type": "string"
+                          },
+                          "startingHashKey": {
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "shardId": {
+                        "type": "string"
+                      },
+                      "sequenceNumberRange": {
+                        "properties": {
+                          "startingSequenceNumber": {
+                            "type": "string"
+                          },
+                          "endingSequenceNumber": {
+                            "description": "not returned if empty",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "writeQuotaKbPerSec": {
+                  "type": "number"
+                },
+                "streamName": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "cloudId": {
+              "type": "string"
+            },
+            "region": {
+              "type": "string"
+            },
+            "databaseName": {
+              "type": "string"
+            }
+          },
+          "type": "object",
+          "title": "Describe Datastream Response"
+        }
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    },
+    "summary": "describe datastream",
+    "tags": [
+      "YDBC"
+    ]
+  },
+  "delete": {
+    "description": "delete datastream",
+    "parameters": [
+      {
+        "description": "database location",
+        "in": "path",
+        "name": "location",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "database with stream",
+        "in": "query",
+        "name": "databaseId",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "description": "stream name",
+        "in": "query",
+        "name": "name",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "default": true,
+        "description": "enforce consumers deletion if there are any",
+        "in": "query",
+        "name": "enforceConsumerDeletion",
+        "required": false,
+        "type": "boolean"
+      }
+    ],
+    "produces": [
+      "application/json"
+    ],
+    "responses": {
+      "200": {
+        "description": "successfull operation"
+      },
+      "400": {
+        "description": "bad request"
+      },
+      "503": {
+        "description": "service unavailable (some errors occurred)"
+      }
+    },
+    "summary": "delete datastream",
+    "tags": [
+      "YDBC"
+    ]
+  }
+}
+

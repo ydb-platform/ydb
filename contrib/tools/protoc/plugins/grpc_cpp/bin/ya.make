@@ -1,5 +1,7 @@
 PROGRAM(grpc_cpp)
 
+VERSION(Service-proxy-version)
+
 LICENSE(Apache-2.0)
 
 PEERDIR(

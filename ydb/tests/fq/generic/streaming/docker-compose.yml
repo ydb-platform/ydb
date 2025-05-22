@@ -1,0 +1,25 @@
+services:
+  fq-connector-go:
+    container_name: tests-fq-generic-streaming-fq-connector-go
+    entrypoint: |
+      sh -c "
+        echo \"$$(dig tests-fq-generic-streaming-ydb +short) tests-fq-generic-streaming-ydb\" >> /etc/hosts; cat /etc/hosts;
+        /opt/ydb/bin/fq-connector-go server -c /opt/ydb/cfg/fq-connector-go.yaml"
+    image: ghcr.io/ydb-platform/fq-connector-go:v0.7.2-rc.4@sha256:3dd675ebdba9ff4a1933443d801ba121d11a9eec20a6da8f0fa5dddc4ba97c0f
+    ports:
+      - "2130"
+    volumes:
+      - ../../../../library/yql/providers/generic/connector/tests/fq-connector-go/:/opt/ydb/cfg/
+  ydb:
+    container_name: tests-fq-generic-streaming-ydb
+    environment:
+      DB_USE_IN_MEMORY_PDISKS: "true"
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: user
+      YDB_DEFAULT_LOG_LEVEL: DEBUG
+    hostname: tests-fq-generic-streaming-ydb
+    image: ghcr.io/ydb-platform/local-ydb:latest@sha256:9045e00afec1923dc3277564c7b2f829087c2115f45f18e1d38b80bb89f98be6
+    volumes:
+      - ./ydb/init_ydb:/init_ydb
+      - ./ydb/01_basic.sh:/01_basic.sh
+version: "3.4"

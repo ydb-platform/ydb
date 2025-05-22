@@ -68,7 +68,7 @@ def refactor(code: str) -> str:
     transforms: List[VisitorBasedCodemodCommand] = [
         HypothesisFixPositionalKeywonlyArgs(context),
         HypothesisFixComplexMinMagnitude(context),
-        HypothesisFixHealthcheckAll(context),
+        HypothesisFixHealthCheckAll(context),
         HypothesisFixCharactersArguments(context),
     ]
     for transform in transforms:
@@ -218,24 +218,26 @@ class HypothesisFixPositionalKeywonlyArgs(VisitorBasedCodemodCommand):
             whitespace_after=cst.SimpleWhitespace(""),
         )
         newargs = [
-            arg
-            if arg.keyword or arg.star or p.kind is not Parameter.KEYWORD_ONLY
-            else arg.with_changes(keyword=cst.Name(p.name), equal=assign_nospace)
+            (
+                arg
+                if arg.keyword or arg.star or p.kind is not Parameter.KEYWORD_ONLY
+                else arg.with_changes(keyword=cst.Name(p.name), equal=assign_nospace)
+            )
             for p, arg in zip(params, updated_node.args)
         ]
         return updated_node.with_changes(args=newargs)
 
 
-class HypothesisFixHealthcheckAll(VisitorBasedCodemodCommand):
-    """Replace Healthcheck.all() with list(Healthcheck)"""
+class HypothesisFixHealthCheckAll(VisitorBasedCodemodCommand):
+    """Replace HealthCheck.all() with list(HealthCheck)"""
 
-    DESCRIPTION = "Replace Healthcheck.all() with list(Healthcheck)"
+    DESCRIPTION = "Replace HealthCheck.all() with list(HealthCheck)"
 
-    @m.leave(m.Call(func=m.Attribute(m.Name("Healthcheck"), m.Name("all")), args=[]))
+    @m.leave(m.Call(func=m.Attribute(m.Name("HealthCheck"), m.Name("all")), args=[]))
     def replace_healthcheck(self, original_node, updated_node):
         return updated_node.with_changes(
             func=cst.Name("list"),
-            args=[cst.Arg(value=cst.Name("Healthcheck"))],
+            args=[cst.Arg(value=cst.Name("HealthCheck"))],
         )
 
 

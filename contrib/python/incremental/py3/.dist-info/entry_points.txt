@@ -1,2 +1,8 @@
 [distutils.setup_keywords]
-use_incremental = incremental:_get_version
+use_incremental = incremental:_get_distutils_version
+
+[hatch]
+incremental = incremental._hatch
+
+[setuptools.finalize_distribution_options]
+incremental = incremental:_get_setuptools_version

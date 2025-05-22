@@ -9,20 +9,22 @@ def pointToString(pt, ntos=str):
 class SVGPathPen(BasePen):
     """Pen to draw SVG path d commands.
 
-    Example::
-        >>> pen = SVGPathPen(None)
-        >>> pen.moveTo((0, 0))
-        >>> pen.lineTo((1, 1))
-        >>> pen.curveTo((2, 2), (3, 3), (4, 4))
-        >>> pen.closePath()
-        >>> pen.getCommands()
-        'M0 0 1 1C2 2 3 3 4 4Z'
-
     Args:
         glyphSet: a dictionary of drawable glyph objects keyed by name
             used to resolve component references in composite glyphs.
         ntos: a callable that takes a number and returns a string, to
             customize how numbers are formatted (default: str).
+
+    :Example:
+        .. code-block::
+
+            >>> pen = SVGPathPen(None)
+            >>> pen.moveTo((0, 0))
+            >>> pen.lineTo((1, 1))
+            >>> pen.curveTo((2, 2), (3, 3), (4, 4))
+            >>> pen.closePath()
+            >>> pen.getCommands()
+            'M0 0 1 1C2 2 3 3 4 4Z'
 
     Note:
         Fonts have a coordinate system where Y grows up, whereas in SVG,
@@ -30,6 +32,7 @@ class SVGPathPen(BasePen):
         SVG typically results in upside-down glyphs.  You can fix this
         by wrapping the data from this pen in an SVG group element with
         transform, or wrap this pen in a transform pen.  For example:
+        .. code-block:: python
 
             spen = svgPathPen.SVGPathPen(glyphset)
             pen= TransformPen(spen , (1, 0, 0, -1, 0, 0))
@@ -220,11 +223,17 @@ def main(args=None):
         "fonttools pens.svgPathPen", description="Generate SVG from text"
     )
     parser.add_argument("font", metavar="font.ttf", help="Font file.")
-    parser.add_argument("text", metavar="text", help="Text string.")
+    parser.add_argument("text", metavar="text", nargs="?", help="Text string.")
     parser.add_argument(
         "-y",
         metavar="<number>",
         help="Face index into a collection to open. Zero based.",
+    )
+    parser.add_argument(
+        "--glyphs",
+        metavar="whitespace-separated list of glyph names",
+        type=str,
+        help="Glyphs to show. Exclusive with text option",
     )
     parser.add_argument(
         "--variations",
@@ -241,6 +250,7 @@ def main(args=None):
 
     font = TTFont(options.font, fontNumber=fontNumber)
     text = options.text
+    glyphs = options.glyphs
 
     location = {}
     for tag_v in options.variations.split():
@@ -255,10 +265,17 @@ def main(args=None):
     glyphset = font.getGlyphSet(location=location)
     cmap = font["cmap"].getBestCmap()
 
+    if glyphs is not None and text is not None:
+        raise ValueError("Options --glyphs and --text are exclusive")
+
+    if glyphs is None:
+        glyphs = " ".join(cmap[ord(u)] for u in text)
+
+    glyphs = glyphs.split()
+
     s = ""
     width = 0
-    for u in text:
-        g = cmap[ord(u)]
+    for g in glyphs:
         glyph = glyphset[g]
 
         pen = SVGPathPen(glyphset)

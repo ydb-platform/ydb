@@ -7,9 +7,11 @@
     #error YT requires 64-bit platform
 #endif
 
-// This define enables tracking of reference-counted objects to provide
-// various insightful information on memory usage and object creation patterns.
-#define YT_ENABLE_REF_COUNTED_TRACKING
+#ifndef YT_DISABLE_REF_COUNTED_TRACKING
+    // This define enables tracking of reference-counted objects to provide
+    // various insightful information on memory usage and object creation patterns.
+    #define YT_ENABLE_REF_COUNTED_TRACKING
+#endif
 
 // This define enables logging with TRACE level. You can still disable trace logging
 // for particular TU by discarding this macro identifier.
@@ -32,11 +34,6 @@
 
     // Detects deadlocks caused by recursive acquisitions of (non-recursive) spin locks.
     #define YT_ENABLE_SPIN_LOCK_OWNERSHIP_TRACKING
-#endif
-
-// Configure SSE usage.
-#ifdef SSE42_ENABLED
-    #define YT_USE_SSE42
 #endif
 
 #ifdef _win_
@@ -68,4 +65,10 @@
     #define YT_ATTRIBUTE_USED
 #else
     #error Unsupported compiler
+#endif
+
+#if defined(_unix_)
+    #define YT_ATTRIBUTE_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#else
+    #define YT_ATTRIBUTE_NO_UNIQUE_ADDRESS
 #endif

@@ -44,19 +44,14 @@ namespace NKikimr {
                 if (item.Status == NKikimrProto::UNKNOWN) {
                     item.Status = NKikimrProto::DEADLINE;
                 }
-                it->second->SendResult(SelfId());
             }
+            it->second->SendResult(SelfId());
         }
         InFlight.erase(InFlight.begin(), it);
 
-        TInstant deadline = TInstant::Max(); // next deadline
-        if (it != InFlight.end()) {
-            deadline = it->first;
-        }
-
         // reschedule timer
-        if (deadline != TInstant::Max()) {
-            Schedule(deadline, new TEvents::TEvWakeup);
+        if (it != InFlight.end()) {
+            Schedule(it->first, new TEvents::TEvWakeup);
         } else {
             WakeupScheduled = false;
         }

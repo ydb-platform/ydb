@@ -40,12 +40,12 @@ std::vector<int> AllocateFreePorts(
             YT_LOG_DEBUG("Making a preliminary port bind (Port: %v, Socket: %v)", port, socket);
             BindSocket(socket, TNetworkAddress::CreateIPv6Any(port));
         } catch (const std::exception& ex) {
-            SafeClose(socket, false /* ignoreBadFD */);
+            SafeClose(socket, false /*ignoreBadFD*/);
             YT_LOG_DEBUG(ex, "Error while trying making a preliminary port bind, skipping it (Port: %v, Socket: %v)", port, socket);
             continue;
         }
 
-        SafeClose(socket, false /* ignoreBadFD */);
+        SafeClose(socket, false /*ignoreBadFD*/);
         YT_LOG_DEBUG("Socket used in preliminary bind is closed (Port: %v, Socket: %v)", port, socket);
 
         allocatedPorts.push_back(port);

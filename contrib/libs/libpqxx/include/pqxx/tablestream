@@ -1,6 +1,0 @@
-/** pqxx::tablestream class.
- *
- * pqxx::tablestream provides optimized batch access to a database table.
- */
-// Actual definitions in .hxx file so editors and such recognize file type.
-#include "pqxx/tablestream.hxx"

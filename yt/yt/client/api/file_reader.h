@@ -6,6 +6,7 @@
 #include <yt/yt/client/object_client/public.h>
 
 #include <yt/yt/core/concurrency/public.h>
+#include <yt/yt/core/concurrency/async_stream.h>
 
 namespace NYT::NApi {
 

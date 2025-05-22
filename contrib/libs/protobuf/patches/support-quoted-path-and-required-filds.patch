@@ -1,0 +1,42 @@
+--- a/src/google/protobuf/json/internal/parser.cc
++++ b/src/google/protobuf/json/internal/parser.cc
+@@ -972,13 +972,29 @@
+     // Assume approximately six-letter words, so add one extra space for an
+     // underscore for every six bytes.
+     snake_path.reserve(path.size() * 7 / 6);
++    // Port from protobuf 21.x
++    bool is_quoted = false;
++    bool is_escaping = false;
+     for (char c : path) {
++      // Outputs quoted string as-is.
++      if (is_quoted) {
++        snake_path.push_back(c);
++        if (is_escaping) {
++          is_escaping = false;
++        } else if (c == '\\') {
++          is_escaping = true;
++        } else if (c == '\"') {
++          is_quoted = false;
++        }
++        continue;
++      }
+       if (absl::ascii_isdigit(c) || absl::ascii_islower(c) || c == '.') {
+         snake_path.push_back(c);
+       } else if (absl::ascii_isupper(c)) {
+         snake_path.push_back('_');
+         snake_path.push_back(absl::ascii_tolower(c));
+       } else if (lex.options().allow_legacy_syntax) {
++        is_quoted = c == '\"';
+         snake_path.push_back(c);
+       } else {
+         return str->loc.Invalid("unexpected character in FieldMask");
+@@ -1314,6 +1330,9 @@
+     s = absl::InvalidArgumentError(
+         "extraneous characters after end of JSON object");
+   }
++  if (s.ok() && !message->IsInitialized()) {
++    s = absl::InvalidArgumentError("Not all fileds are sets");
++  }
+ 
+   PROTOBUF_DLOG(INFO) << "json2/status: " << s;
+   PROTOBUF_DLOG(INFO) << "json2/output: " << message->DebugString();

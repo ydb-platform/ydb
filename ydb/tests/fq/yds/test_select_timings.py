@@ -5,23 +5,19 @@ import pytest
 import os
 import time
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
-import ydb.tests.library.common.yatest_common as yatest_common
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 
 class TestSelectTimings(TestYdsBase):
     @yq_v1
-    @pytest.mark.parametrize(
-        "success",
-        [True, False],
-        ids=["finished", "aborted"]
-    )
+    @pytest.mark.parametrize("success", [True, False], ids=["finished", "aborted"])
     @pytest.mark.parametrize(
         "query_type",
         [fq.QueryContent.QueryType.ANALYTICS, fq.QueryContent.QueryType.STREAMING],
-        ids=["analytics", "streaming"]
+        ids=["analytics", "streaming"],
     )
     def test_select_timings(self, kikimr, client, success, query_type):
         suffix = (str(query_type)[0] + str(success)[0]).lower()
@@ -58,7 +54,7 @@ class TestSelectTimings(TestYdsBase):
             assert meta.finished_at.seconds == 0, "Must not set finished_at"
 
         # will wait 30 sec for lease expiration, reduce timeout when is congifurable
-        wait_query_timeout = yatest_common.plain_or_under_sanitizer(120, 300)
+        wait_query_timeout = plain_or_under_sanitizer(120, 300)
         if success:
             time.sleep(2)  # Workaround race between write and read "from now". Remove when YQ-589 will be done.
             self.write_stream(["Message"])

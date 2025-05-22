@@ -1,11 +1,15 @@
 #include "event.h"
 #include "event_pb.h"
 
+#include <ydb/library/actors/protos/actors.pb.h>
+
 namespace NActors {
 
     const TScopeId TScopeId::LocallyGenerated{
         Max<ui64>(), Max<ui64>()
     };
+
+    const TEventSerializedData IEventHandle::EmptyBuffer;
 
     TString IEventHandle::GetTypeName() const {
         return HasEvent() ? TypeName(*(const_cast<IEventHandle*>(this)->GetBase())) : TypeName(*this);
@@ -48,4 +52,11 @@ namespace NActors {
         }
         return new TEventSerializedData;
     }
+
+#ifndef NDEBUG
+    void IEventHandle::DoTrackNextEvent() {
+        TrackNextEvent = true;
+    }
+#endif
+
 }

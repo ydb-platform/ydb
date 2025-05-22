@@ -2,15 +2,15 @@
 #include "yql_generic_dq_integration.h"
 #include "yql_generic_provider_impl.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -117,7 +117,8 @@ namespace NYql {
                 return false;
             }
 
-            void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
+            ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, bool withLimits) override {
+                Y_UNUSED(withLimits);
                 if (auto maybeRead = TMaybeNode<TGenReadTable>(&node)) {
                     if (auto maybeTable = maybeRead.Table()) {
                         TStringBuilder tableNameBuilder;
@@ -125,11 +126,13 @@ namespace NYql {
                             auto cluster = dataSource.Cast().Cluster();
                             tableNameBuilder << cluster.Value() << ".";
                         }
-                        tableNameBuilder << '`' << maybeTable.Cast().Value() << '`';
+                        tableNameBuilder << '`' << maybeTable.Cast().Name().Value() << '`';
                         inputs.push_back(
                             TPinInfo(maybeRead.DataSource().Raw(), nullptr, maybeTable.Cast().Raw(), tableNameBuilder, false));
+                        return 1;
                     }
                 }
+                return 0;
             }
 
             IDqIntegration* GetDqIntegration() override {
@@ -153,7 +156,7 @@ namespace NYql {
             const THolder<IDqIntegration> DqIntegration_;
         };
 
-    }
+    } // namespace
 
     TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state) {
         return new TGenericDataSource(std::move(state));

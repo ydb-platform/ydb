@@ -3,6 +3,8 @@
 #include "scheme_type_id.h"
 #include "scheme_type_info.h"
 
+#include <util/generic/yexception.h>
+
 namespace NKikimr {
 namespace NScheme {
 
@@ -21,14 +23,14 @@ public:
     /**
      * This allows implicit conversions from TTypeId
      */
-    TTypeIdOrder(TTypeId typeId, EOrder order = EOrder::Ascending) noexcept {
+    TTypeIdOrder(TTypeId typeId, EOrder order = EOrder::Ascending) {
         Set(typeId, order);
     }
 
     /**
      * This allows implicit conversions from TTypeId
      */
-    TTypeIdOrder& operator=(TTypeId typeId) noexcept {
+    TTypeIdOrder& operator=(TTypeId typeId) {
         return Set(typeId);
     }
 
@@ -37,8 +39,8 @@ public:
     bool IsAscending() const noexcept { return !Descending_; }
     bool IsDescending() const noexcept { return Descending_; }
 
-    TTypeIdOrder& Set(TTypeId typeId, EOrder order = EOrder::Ascending) noexcept {
-        Y_ABORT_UNLESS(typeId <= 0x7FFF, "Type id is out of bounds");
+    TTypeIdOrder& Set(TTypeId typeId, EOrder order = EOrder::Ascending) {
+        Y_ENSURE(typeId <= 0x7FFF, "Type id " << typeId << " is out of bounds");
 
         TypeId_ = typeId;
         Descending_ = ui16(order);
@@ -52,17 +54,11 @@ private:
 };
 
 struct TTypeInfoOrder {
-    TTypeInfoOrder()
-    {}
-
-    TTypeInfoOrder(TTypeIdOrder typeIdOrder, void* typeDesc = {})
-        : TypeIdOrder(typeIdOrder)
-        , TypeDesc(typeDesc)
-    {}
+    TTypeInfoOrder() = default;
 
     TTypeInfoOrder(TTypeInfo typeInfo, EOrder order = EOrder::Ascending)
         : TypeIdOrder(typeInfo.GetTypeId(), order)
-        , TypeDesc(typeInfo.GetTypeDesc())
+        , RawDesc(typeInfo.RawDesc)
     {}
 
     TTypeId GetTypeId() const {
@@ -81,17 +77,17 @@ struct TTypeInfoOrder {
         return TypeIdOrder.IsDescending();
     }
 
-    void* GetTypeDesc() const {
-        return TypeDesc;
-    }
-
     TTypeInfo ToTypeInfo() const {
-        return TTypeInfo(GetTypeId(), GetTypeDesc());
+        return TTypeInfo(GetTypeId(), RawDesc);
     }
+    
+    const NPg::ITypeDesc* GetPgTypeDesc() const {
+        return reinterpret_cast<const NPg::ITypeDesc*>(RawDesc);
+    }    
 
 private:
     TTypeIdOrder TypeIdOrder;
-    void* TypeDesc = {};
+    TTypeInfo::TRawTypeDesc RawDesc;
 };
 
 }

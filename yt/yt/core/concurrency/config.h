@@ -20,8 +20,13 @@ struct TPeriodicExecutorOptions
     TDuration Splay;
     double Jitter = 0.0;
 
-    //! Sets #Period and Applies set#DefaultJitter.
+    bool operator==(const TPeriodicExecutorOptions& other) const = default;
+
+    //! Sets #Period and applies #DefaultJitter.
     static TPeriodicExecutorOptions WithJitter(TDuration period);
+
+    //! Generates the delay for the next invocation from #Period and #Jitter.
+    TDuration GenerateDelay() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -37,10 +42,9 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPeriodicExecutorOptionsSerializer
+struct TPeriodicExecutorOptionsSerializer
     : public virtual NYTree::TExternalizedYsonStruct
 {
-public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TPeriodicExecutorOptions, TPeriodicExecutorOptionsSerializer);
 
     static void Register(TRegistrar registrar);
@@ -48,11 +52,10 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRetryingPeriodicExecutorOptionsSerializer
+struct TRetryingPeriodicExecutorOptionsSerializer
     : public TPeriodicExecutorOptionsSerializer
     , public ::NYT::NDetail::TExponentialBackoffOptionsSerializer
 {
-public:
     REGISTER_DERIVED_EXTERNALIZED_YSON_STRUCT(
         TRetryingPeriodicExecutorOptions,
         TRetryingPeriodicExecutorOptionsSerializer,
@@ -66,12 +69,14 @@ public:
 
 } // namespace NDetail
 
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TPeriodicExecutorOptions, NDetail::TPeriodicExecutorOptionsSerializer);
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TRetryingPeriodicExecutorOptions, NDetail::TRetryingPeriodicExecutorOptionsSerializer);
+
 ////////////////////////////////////////////////////////////////////////////////
 
-class TThroughputThrottlerConfig
+struct TThroughputThrottlerConfig
     : public NYTree::TYsonStruct
 {
-public:
     //! Limit on average throughput (per sec). Null means unlimited.
     std::optional<double> Limit;
 
@@ -97,10 +102,9 @@ DEFINE_REFCOUNTED_TYPE(TThroughputThrottlerConfig)
 //! (e.g. in network bandwidth limit on nodes).
 //! The exact logic of limit/relative_limit clash resolution
 //! and the parameter access are external to the config itself.
-class TRelativeThroughputThrottlerConfig
+struct TRelativeThroughputThrottlerConfig
     : public TThroughputThrottlerConfig
 {
-public:
     std::optional<double> RelativeLimit;
 
     static TRelativeThroughputThrottlerConfigPtr Create(std::optional<double> limit);
@@ -114,10 +118,9 @@ DEFINE_REFCOUNTED_TYPE(TRelativeThroughputThrottlerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPrefetchingThrottlerConfig
+struct TPrefetchingThrottlerConfig
     : public NYTree::TYsonStruct
 {
-public:
     //! RPS limit for requests to the underlying throttler.
     double TargetRps;
 
@@ -146,7 +149,36 @@ DEFINE_REFCOUNTED_TYPE(TPrefetchingThrottlerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NConcurrency
+struct TFiberManagerConfig
+    : public NYTree::TYsonStruct
+{
+    THashMap<EExecutionStackKind, int> FiberStackPoolSizes;
+    int MaxIdleFibers;
 
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::NConcurrency::TPeriodicExecutorOptions, NYT::NConcurrency::NDetail::TPeriodicExecutorOptionsSerializer);
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::NConcurrency::TRetryingPeriodicExecutorOptions, NYT::NConcurrency::NDetail::TRetryingPeriodicExecutorOptionsSerializer);
+    TFiberManagerConfigPtr ApplyDynamic(const TFiberManagerDynamicConfigPtr& dynamicConfig) const;
+
+    REGISTER_YSON_STRUCT(TFiberManagerConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TFiberManagerConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TFiberManagerDynamicConfig
+    : public NYTree::TYsonStruct
+{
+    THashMap<EExecutionStackKind, int> FiberStackPoolSizes;
+    std::optional<int> MaxIdleFibers;
+
+    REGISTER_YSON_STRUCT(TFiberManagerDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TFiberManagerDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NConcurrency

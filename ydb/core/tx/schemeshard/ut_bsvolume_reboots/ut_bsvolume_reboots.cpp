@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
 
 #include <google/protobuf/text_format.h>
 

@@ -3,6 +3,14 @@ import logging
 import time
 import typing
 
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+)
+
 import ydb
 
 from ydb import issues, settings as settings_impl, table
@@ -13,6 +21,7 @@ from ydb.table import (
     _scan_query_request_factory,
     _wrap_scan_query_response,
     BaseTxContext,
+    TableDescription,
 )
 from . import _utilities
 from ydb import _apis, _session_impl
@@ -139,6 +148,18 @@ class Session(BaseSession):
 
 
 class TableClient(BaseTableClient):
+    def __init__(self, driver, table_client_settings=None):
+        # type:(ydb.Driver, ydb.TableClientSettings) -> None
+        super().__init__(driver=driver, table_client_settings=table_client_settings)
+        self._pool: Optional[SessionPool] = None
+
+    def __del__(self):
+        if self._pool is not None and not self._pool._terminating:
+            try:
+                asyncio.get_running_loop().create_task(self._stop_pool_if_needed())
+            except Exception:
+                pass
+
     def session(self):
         return Session(self._driver, self._table_client_settings)
 
@@ -157,6 +178,214 @@ class TableClient(BaseTableClient):
             response,
             lambda resp: _wrap_scan_query_response(resp, self._table_client_settings),
         )
+
+    def _init_pool_if_needed(self):
+        if self._pool is None:
+            self._pool = SessionPool(self._driver, 10)
+
+    async def _stop_pool_if_needed(self, timeout=10):
+        if self._pool is not None and not self._pool._terminating:
+            await self._pool.stop(timeout=timeout)
+            self._pool = None
+
+    async def create_table(
+        self,
+        path: str,
+        table_description: "TableDescription",
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Create a YDB table.
+
+        :param path: A table path
+        :param table_description: TableDescription instanse.
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        async def callee(session: Session):
+            return await session.create_table(path=path, table_description=table_description, settings=settings)
+
+        return await self._pool.retry_operation(callee)
+
+    async def drop_table(
+        self,
+        path: str,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Drop a YDB table.
+
+        :param path: A table path
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        async def callee(session: Session):
+            return await session.drop_table(path=path, settings=settings)
+
+        return await self._pool.retry_operation(callee)
+
+    async def alter_table(
+        self,
+        path: str,
+        add_columns: Optional[List["ydb.Column"]] = None,
+        drop_columns: Optional[List[str]] = None,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+        alter_attributes: Optional[Optional[Dict[str, str]]] = None,
+        add_indexes: Optional[List["ydb.TableIndex"]] = None,
+        drop_indexes: Optional[List[str]] = None,
+        set_ttl_settings: Optional["ydb.TtlSettings"] = None,
+        drop_ttl_settings: Optional[Any] = None,
+        add_column_families: Optional[List["ydb.ColumnFamily"]] = None,
+        alter_column_families: Optional[List["ydb.ColumnFamily"]] = None,
+        alter_storage_settings: Optional["ydb.StorageSettings"] = None,
+        set_compaction_policy: Optional[str] = None,
+        alter_partitioning_settings: Optional["ydb.PartitioningSettings"] = None,
+        set_key_bloom_filter: Optional["ydb.FeatureFlag"] = None,
+        set_read_replicas_settings: Optional["ydb.ReadReplicasSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Alter a YDB table.
+
+        :param path: A table path
+        :param add_columns: List of ydb.Column to add
+        :param drop_columns: List of column names to drop
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+        :param alter_attributes: Dict of attributes to alter
+        :param add_indexes: List of ydb.TableIndex to add
+        :param drop_indexes: List of index names to drop
+        :param set_ttl_settings: ydb.TtlSettings to set
+        :param drop_ttl_settings: Any to drop
+        :param add_column_families: List of ydb.ColumnFamily to add
+        :param alter_column_families: List of ydb.ColumnFamily to alter
+        :param alter_storage_settings: ydb.StorageSettings to alter
+        :param set_compaction_policy: Compaction policy
+        :param alter_partitioning_settings: ydb.PartitioningSettings to alter
+        :param set_key_bloom_filter: ydb.FeatureFlag to set key bloom filter
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        async def callee(session: Session):
+            return await session.alter_table(
+                path=path,
+                add_columns=add_columns,
+                drop_columns=drop_columns,
+                settings=settings,
+                alter_attributes=alter_attributes,
+                add_indexes=add_indexes,
+                drop_indexes=drop_indexes,
+                set_ttl_settings=set_ttl_settings,
+                drop_ttl_settings=drop_ttl_settings,
+                add_column_families=add_column_families,
+                alter_column_families=alter_column_families,
+                alter_storage_settings=alter_storage_settings,
+                set_compaction_policy=set_compaction_policy,
+                alter_partitioning_settings=alter_partitioning_settings,
+                set_key_bloom_filter=set_key_bloom_filter,
+                set_read_replicas_settings=set_read_replicas_settings,
+            )
+
+        return await self._pool.retry_operation(callee)
+
+    async def describe_table(
+        self,
+        path: str,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.TableSchemeEntry":
+        """
+        Describe a YDB table.
+
+        :param path: A table path
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: TableSchemeEntry or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        async def callee(session: Session):
+            return await session.describe_table(path=path, settings=settings)
+
+        return await self._pool.retry_operation(callee)
+
+    async def copy_table(
+        self,
+        source_path: str,
+        destination_path: str,
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Copy a YDB table.
+
+        :param source_path: A table path
+        :param destination_path: Destination table path
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        async def callee(session: Session):
+            return await session.copy_table(
+                source_path=source_path,
+                destination_path=destination_path,
+                settings=settings,
+            )
+
+        return await self._pool.retry_operation(callee)
+
+    async def copy_tables(
+        self,
+        source_destination_pairs: List[Tuple[str, str]],
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Copy a YDB tables.
+
+        :param source_destination_pairs: List of tuples (source_path, destination_path)
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        async def callee(session: Session):
+            return await session.copy_tables(source_destination_pairs=source_destination_pairs, settings=settings)
+
+        return await self._pool.retry_operation(callee)
+
+    async def rename_tables(
+        self,
+        rename_items: List[Tuple[str, str]],
+        settings: Optional["settings_impl.BaseRequestSettings"] = None,
+    ) -> "ydb.Operation":
+        """
+        Rename a YDB tables.
+
+        :param rename_items: List of tuples (current_name, desired_name)
+        :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
+
+        :return: Operation or YDB error otherwise.
+        """
+
+        self._init_pool_if_needed()
+
+        async def callee(session: Session):
+            return await session.rename_tables(rename_items=rename_items, settings=settings)
+
+        return await self._pool.retry_operation(callee)
 
 
 class TxContext(BaseTxContext):
@@ -221,7 +450,7 @@ async def retry_operation(callee, retry_settings=None, *args, **kwargs):  # pyli
         else:
             try:
                 return await next_opt.result
-            except Exception as e:  # pylint: disable=W0703
+            except BaseException as e:  # pylint: disable=W0703
                 next_opt.set_exception(e)
 
 
@@ -236,7 +465,7 @@ class SessionCheckout:
         :param blocking: A flag that specifies that session acquire method should blocks
         :param timeout: A timeout in seconds for session acquire
         """
-        self._pool = pool
+        self._pool: SessionPool = pool
         self._acquired = None
         self._timeout = timeout
         self._retry_timeout = retry_timeout
@@ -251,7 +480,7 @@ class SessionCheckout:
 
 
 class SessionPool:
-    def __init__(self, driver: ydb.pool.IConnectionPool, size: int, min_pool_size: int = 0):
+    def __init__(self, driver: "ydb.aio.Driver", size: int, min_pool_size: int = 0):
         self._driver_await_timeout = 3
         self._should_stop = asyncio.Event()
         self._waiters = 0
@@ -286,7 +515,7 @@ class SessionPool:
 
         return await retry_operation(wrapper_callee, retry_settings)
 
-    def _create(self) -> ydb.ISession:
+    def _create(self) -> Session:
         self._active_count += 1
         session = self._driver.table_client.session()
         self._logger.debug("Created session %s", session)
@@ -301,6 +530,9 @@ class SessionPool:
             self._logger.error("Failed to create session. Reason: %s", str(e))
         except Exception as e:  # pylint: disable=W0703
             self._logger.exception("Failed to create session. Reason: %s", str(e))
+        except BaseException as e:  # pylint: disable=W0703
+            self._logger.exception("Failed to create session. Reason (base exception): %s", str(e))
+            raise
 
         return None
 
@@ -324,21 +556,28 @@ class SessionPool:
             if not new_sess:
                 self._destroy(session)
             return new_sess
-        except Exception as e:
+        except BaseException as e:
             self._destroy(session)
             raise e
 
     async def _get_session_from_queue(self, timeout: float):
         task_wait = asyncio.ensure_future(asyncio.wait_for(self._active_queue.get(), timeout=timeout))
         task_should_stop = asyncio.ensure_future(self._should_stop.wait())
-        done, _ = await asyncio.wait((task_wait, task_should_stop), return_when=asyncio.FIRST_COMPLETED)
+        try:
+            done, _ = await asyncio.wait((task_wait, task_should_stop), return_when=asyncio.FIRST_COMPLETED)
+        except asyncio.CancelledError:
+            cancelled = task_wait.cancel()
+            if not cancelled:
+                priority, session = task_wait.result()
+                self._active_queue.put_nowait((priority, session))
+            raise
         if task_should_stop in done:
             task_wait.cancel()
             return self._create()
         _, session = task_wait.result()
         return session
 
-    async def acquire(self, timeout: float = None, retry_timeout: float = None, retry_num: int = None) -> ydb.ISession:
+    async def acquire(self, timeout: float = None, retry_timeout: float = None, retry_num: int = None) -> Session:
 
         if self._should_stop.is_set():
             self._logger.error("Take session from closed session pool")
@@ -408,7 +647,10 @@ class SessionPool:
                 asyncio.ensure_future(coro)
         return None
 
-    async def release(self, session: ydb.ISession):
+    async def release(self, session: Session):
+        self._release_nowait(session)
+
+    def _release_nowait(self, session: Session):
         self._logger.debug("Put on session %s", session.session_id)
         if session.closing():
             self._destroy(session)
@@ -421,7 +663,8 @@ class SessionPool:
             self._destroy(session)
             return False
 
-        await self._active_queue.put((time.time() + 10 * 60, session))
+        # self._active_queue has no size limit, it means that put_nowait will be successfully always
+        self._active_queue.put_nowait((time.time() + 10 * 60, session))
         self._logger.debug("Session returned to queue: %s", session.session_id)
 
     async def _pick_for_keepalive(self):
@@ -445,7 +688,7 @@ class SessionPool:
         await session.keep_alive(self._req_settings)
         try:
             await self.release(session)
-        except Exception:  # pylint: disable=W0703
+        except BaseException:  # pylint: disable=W0703
             self._destroy(session)
 
     async def _keep_alive_loop(self):

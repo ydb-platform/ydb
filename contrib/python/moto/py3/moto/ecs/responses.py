@@ -5,6 +5,9 @@ from .models import ecs_backends
 
 
 class EC2ContainerServiceResponse(BaseResponse):
+    def __init__(self):
+        super().__init__(service_name="ecs")
+
     @property
     def ecs_backend(self):
         """
@@ -13,7 +16,7 @@ class EC2ContainerServiceResponse(BaseResponse):
         :return: ECS Backend object
         :rtype: moto.ecs.models.EC2ContainerServiceBackend
         """
-        return ecs_backends[self.region]
+        return ecs_backends[self.current_account][self.region]
 
     @property
     def request_params(self):
@@ -142,6 +145,7 @@ class EC2ContainerServiceResponse(BaseResponse):
         started_by = self._get_param("startedBy")
         tags = self._get_param("tags")
         launch_type = self._get_param("launchType")
+        network_configuration = self._get_param("networkConfiguration")
         tasks = self.ecs_backend.run_task(
             cluster_str,
             task_definition_str,
@@ -150,6 +154,7 @@ class EC2ContainerServiceResponse(BaseResponse):
             started_by,
             tags,
             launch_type,
+            network_configuration,
         )
         return json.dumps(
             {"tasks": [task.response_object for task in tasks], "failures": []}

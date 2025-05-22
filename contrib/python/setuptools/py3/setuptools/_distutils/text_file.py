@@ -97,7 +97,7 @@ class TextFile:
         # sanity check client option hash
         for opt in options.keys():
             if opt not in self.default_options:
-                raise KeyError("invalid TextFile option '%s'" % opt)
+                raise KeyError(f"invalid TextFile option '{opt}'")
 
         if file is None:
             self.open(filename)
@@ -115,7 +115,7 @@ class TextFile:
         """Open a new file named 'filename'.  This overrides both the
         'filename' and 'file' arguments to the constructor."""
         self.filename = filename
-        self.file = open(self.filename, errors=self.errors)
+        self.file = open(self.filename, errors=self.errors, encoding='utf-8')
         self.current_line = 0
 
     def close(self):
@@ -133,9 +133,9 @@ class TextFile:
             line = self.current_line
         outmsg.append(self.filename + ", ")
         if isinstance(line, (list, tuple)):
-            outmsg.append("lines %d-%d: " % tuple(line))
+            outmsg.append("lines {}-{}: ".format(*line))
         else:
-            outmsg.append("line %d: " % line)
+            outmsg.append(f"line {int(line)}: ")
         outmsg.append(str(msg))
         return "".join(outmsg)
 
@@ -220,7 +220,7 @@ class TextFile:
             if self.join_lines and buildup_line:
                 # oops: end of file
                 if line is None:
-                    self.warn("continuation line immediately precedes " "end-of-file")
+                    self.warn("continuation line immediately precedes end-of-file")
                     return buildup_line
 
                 if self.collapse_join:

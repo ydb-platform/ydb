@@ -1,0 +1,77 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 487f5db7281296f7145a1268d0f46773
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2005-2009 Gokulakannan Somasundaram, ElectronDB
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/antlr3.hpp [5:5]
+        include/antlr3baserecognizer.hpp [11:11]
+        include/antlr3bitset.hpp [12:12]
+        include/antlr3collections.hpp [5:5]
+        include/antlr3commontoken.hpp [15:15]
+        include/antlr3commontree.hpp [9:9]
+        include/antlr3commontreeadaptor.hpp [9:9]
+        include/antlr3commontreenodestream.hpp [9:9]
+        include/antlr3cyclicdfa.hpp [10:10]
+        include/antlr3debugeventlistener.hpp [19:19]
+        include/antlr3defs.hpp [8:8]
+        include/antlr3errors.hpp [5:5]
+        include/antlr3exception.hpp [19:19]
+        include/antlr3filestream.hpp [5:5]
+        include/antlr3input.hpp [12:12]
+        include/antlr3interfaces.hpp [11:11]
+        include/antlr3intstream.hpp [35:35]
+        include/antlr3lexer.hpp [34:34]
+        include/antlr3memory.hpp [5:5]
+        include/antlr3parser.hpp [10:10]
+        include/antlr3recognizersharedstate.hpp [18:18]
+        include/antlr3rewriterulesubtreestream.hpp [5:5]
+        include/antlr3rewriteruletokenstream.hpp [5:5]
+        include/antlr3rewritestreams.hpp [5:5]
+        include/antlr3tokenstream.hpp [10:10]
+        include/antlr3treeparser.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 945f656078309035caf01d2420f95535
+BELONGS ya.make
+    License text:
+         * Copyright 2001-2004 Unicode, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/antlr3convertutf.hpp [2:2]

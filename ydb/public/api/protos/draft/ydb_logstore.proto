@@ -60,10 +60,6 @@ message Tier {
     Ydb.Table.TtlSettings eviction = 2; // When to evict data to the next tier (or remove if none)
 }
 
-message TieringSettings {
-    optional string tiering_id = 2;
-}
-
 message CreateLogStoreRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
@@ -135,8 +131,8 @@ message CreateLogTableRequest {
     };
     oneof ttl_specification {
         Ydb.Table.TtlSettings ttl_settings = 5;
-        TieringSettings tiering_settings = 6;
     };
+    reserved 6;
 
     // Specifies the desired number of ColumnShards for this table
     uint32 shards_count = 7;
@@ -160,9 +156,9 @@ message DescribeLogTableResult {
 
     string schema_preset_name = 2;
     Schema schema = 3;
+    reserved 4;
     oneof ttl_specification {
         Ydb.Table.TtlSettings ttl_settings = 5;
-        TieringSettings tiering_settings = 4;
     }
 
     // Specifies the desired number of ColumnShards for this table
@@ -195,9 +191,9 @@ message AlterLogTableRequest {
     oneof ttl_action {
         google.protobuf.Empty drop_ttl_settings = 3;
         Ydb.Table.TtlSettings set_ttl_settings = 4;
-        TieringSettings set_tiering_settings = 5;
         google.protobuf.Empty drop_tiering_settings = 6;
     }
+    reserved 5;
 }
 
 message AlterLogTableResponse {

@@ -1,0 +1,5097 @@
+Registering pre-existing tables
+	onek
+	int4_tbl
+	INT4_TBL
+	tenk1
+	text_tbl
+	float8_tbl
+	INT2_TBL
+	tenk2
+	int2_tbl
+	TEXT_TBL
+	FLOAT8_TBL
+	int8_tbl
+<sql-statement>
+--
+-- JOIN
+-- Test JOIN clauses
+--
+CREATE TABLE J1_TBL (
+  i integer,
+  j integer,
+  t text
+);
+</sql-statement>
+<sql-statement>
+CREATE TABLE J2_TBL (
+  i integer,
+  k integer
+);
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (1, 4, 'one');
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (2, 3, 'two');
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (3, 2, 'three');
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (4, 1, 'four');
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (5, 0, 'five');
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (6, 6, 'six');
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (7, 7, 'seven');
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (8, 8, 'eight');
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (0, NULL, 'zero');
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (NULL, NULL, 'null');
+</sql-statement>
+<sql-statement>
+INSERT INTO J1_TBL VALUES (NULL, 0, 'zero');
+</sql-statement>
+<sql-statement>
+INSERT INTO J2_TBL VALUES (1, -1);
+</sql-statement>
+<sql-statement>
+INSERT INTO J2_TBL VALUES (2, 2);
+</sql-statement>
+<sql-statement>
+INSERT INTO J2_TBL VALUES (3, -3);
+</sql-statement>
+<sql-statement>
+INSERT INTO J2_TBL VALUES (2, 4);
+</sql-statement>
+<sql-statement>
+INSERT INTO J2_TBL VALUES (5, -5);
+</sql-statement>
+<sql-statement>
+INSERT INTO J2_TBL VALUES (5, -5);
+</sql-statement>
+<sql-statement>
+INSERT INTO J2_TBL VALUES (0, NULL);
+</sql-statement>
+<sql-statement>
+INSERT INTO J2_TBL VALUES (NULL, NULL);
+</sql-statement>
+<sql-statement>
+INSERT INTO J2_TBL VALUES (NULL, 0);
+</sql-statement>
+<sql-statement>
+-- useful in some tests below
+create temp table onerow();
+</sql-statement>
+<sql-statement>
+insert into onerow default values;
+</sql-statement>
+-stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'default_values' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+
+<sql-statement>
+analyze onerow;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze onerow;
+	^
+<sql-statement>
+--
+-- CORRELATION NAMES
+-- Make sure that table/column aliases are supported
+-- before diving into more complex join syntax.
+--
+SELECT *
+  FROM J1_TBL AS tx;
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL tx;
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL AS t1 (a, b, c);
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL t1 (a, b, c);
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL t1 (a, b, c), J2_TBL t2 (d, e);
+</sql-statement>
+<sql-statement>
+SELECT t1.a, t2.e
+  FROM J1_TBL t1 (a, b, c), J2_TBL t2 (d, e)
+  WHERE t1.a = t2.d;
+</sql-statement>
+<sql-statement>
+--
+-- CROSS JOIN
+-- Qualifications are not allowed on cross joins,
+-- which degenerate into a standard unqualified inner join.
+--
+SELECT *
+  FROM J1_TBL CROSS JOIN J2_TBL;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: i
+        	--
+	^
+<sql-statement>
+-- ambiguous column
+SELECT i, k, t
+  FROM J1_TBL CROSS JOIN J2_TBL;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- ambiguous column
+	^
+        -stdin-:<main>:2:8: Error: Column reference is ambiguous: i
+        	SELECT i, k, t
+	       ^
+<sql-statement>
+-- resolve previous ambiguity by specifying the table name
+SELECT t1.i, k, t
+  FROM J1_TBL t1 CROSS JOIN J2_TBL t2;
+</sql-statement>
+<sql-statement>
+SELECT ii, tt, kk
+  FROM (J1_TBL CROSS JOIN J2_TBL)
+    AS tx (ii, jj, tt, ii2, kk);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	SELECT ii, tt, kk
+	^
+<sql-statement>
+SELECT tx.ii, tx.jj, tx.kk
+  FROM (J1_TBL t1 (a, b, c) CROSS JOIN J2_TBL t2 (d, e))
+    AS tx (ii, jj, tt, ii2, kk);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	SELECT tx.ii, tx.jj, tx.kk
+	^
+<sql-statement>
+SELECT *
+  FROM J1_TBL CROSS JOIN J2_TBL a CROSS JOIN J2_TBL b;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT *
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: i
+        	SELECT *
+	^
+<sql-statement>
+--
+--
+-- Inner joins (equi-joins)
+--
+--
+--
+-- Inner joins (equi-joins) with USING clause
+-- The USING syntax changes the shape of the resulting table
+-- by including a column in the USING clause only once in the result.
+--
+-- Inner equi-join on specified column
+SELECT *
+  FROM J1_TBL INNER JOIN J2_TBL USING (i);
+</sql-statement>
+<sql-statement>
+-- Same as above, slightly different syntax
+SELECT *
+  FROM J1_TBL JOIN J2_TBL USING (i);
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, d) USING (a)
+  ORDER BY a, d;
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, b) USING (b)
+  ORDER BY b, t1.a;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT *
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: a
+        	SELECT *
+	^
+<sql-statement>
+-- test join using aliases
+SELECT * FROM J1_TBL JOIN J2_TBL USING (i) WHERE J1_TBL.t = 'one';  -- ok
+</sql-statement>
+<sql-statement>
+SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';  -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
+    	SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';  -- ok
+	^
+<sql-statement>
+SELECT * FROM (J1_TBL JOIN J2_TBL USING (i)) AS x WHERE J1_TBL.t = 'one';  -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	SELECT * FROM (J1_TBL JOIN J2_TBL USING (i)) AS x WHERE J1_TBL.t = 'one';  -- error
+	^
+<sql-statement>
+SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE x.i = 1;  -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
+    	SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE x.i = 1;  -- ok
+	^
+<sql-statement>
+SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE x.t = 'one';  -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
+    	SELECT * FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE x.t = 'one';  -- error
+	^
+<sql-statement>
+SELECT * FROM (J1_TBL JOIN J2_TBL USING (i) AS x) AS xx WHERE x.i = 1;  -- error (XXX could use better hint)
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	SELECT * FROM (J1_TBL JOIN J2_TBL USING (i) AS x) AS xx WHERE x.i = 1;  -- error (XXX could use better hint)
+	^
+<sql-statement>
+SELECT * FROM J1_TBL a1 JOIN J2_TBL a2 USING (i) AS a1;  -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
+    	SELECT * FROM J1_TBL a1 JOIN J2_TBL a2 USING (i) AS a1;  -- error
+	^
+<sql-statement>
+SELECT x.* FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
+    	SELECT x.* FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
+	^
+<sql-statement>
+SELECT ROW(x.*) FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
+    	SELECT ROW(x.*) FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
+	^
+<sql-statement>
+SELECT row_to_json(x.*) FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
+    	SELECT row_to_json(x.*) FROM J1_TBL JOIN J2_TBL USING (i) AS x WHERE J1_TBL.t = 'one';
+	^
+<sql-statement>
+--
+-- NATURAL JOIN
+-- Inner equi-join on all columns with the same name
+--
+SELECT *
+  FROM J1_TBL NATURAL JOIN J2_TBL;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	--
+	^
+<sql-statement>
+SELECT *
+  FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (a, d);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	SELECT *
+	^
+<sql-statement>
+SELECT *
+  FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (d, a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	SELECT *
+	^
+<sql-statement>
+-- mismatch number of columns
+-- currently, Postgres will fill in with underlying names
+SELECT *
+  FROM J1_TBL t1 (a, b) NATURAL JOIN J2_TBL t2 (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	-- mismatch number of columns
+	^
+<sql-statement>
+--
+-- Inner joins (equi-joins)
+--
+SELECT *
+  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = J2_TBL.i);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: i
+        	--
+	^
+<sql-statement>
+SELECT *
+  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = J2_TBL.k);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT *
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: i
+        	SELECT *
+	^
+<sql-statement>
+--
+-- Non-equi-joins
+--
+SELECT *
+  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i <= J2_TBL.k);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: i
+        	--
+	^
+<sql-statement>
+--
+-- Outer joins
+-- Note that OUTER is a noise word
+--
+SELECT *
+  FROM J1_TBL LEFT OUTER JOIN J2_TBL USING (i)
+  ORDER BY i, k, t;
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL LEFT JOIN J2_TBL USING (i)
+  ORDER BY i, k, t;
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL RIGHT OUTER JOIN J2_TBL USING (i);
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL RIGHT JOIN J2_TBL USING (i);
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL FULL OUTER JOIN J2_TBL USING (i)
+  ORDER BY i, k, t;
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL FULL JOIN J2_TBL USING (i)
+  ORDER BY i, k, t;
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (k = 1);
+</sql-statement>
+<sql-statement>
+SELECT *
+  FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (i = 1);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT *
+	^
+        -stdin-:<main>:2:49: Error: Column reference is ambiguous: i
+        	  FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (i = 1);
+	                                                ^
+<sql-statement>
+--
+-- semijoin selectivity for <>
+--
+explain (costs off)
+select * from int4_tbl i4, tenk1 a
+where exists(select * from tenk1 b
+             where a.twothousand = b.twothousand and a.fivethous <> b.fivethous)
+      and i4.f1 = a.tenthous;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+--
+-- More complicated constructs
+--
+--
+-- Multiway full join
+--
+CREATE TABLE t1 (name TEXT, n INTEGER);
+</sql-statement>
+<sql-statement>
+CREATE TABLE t2 (name TEXT, n INTEGER);
+</sql-statement>
+<sql-statement>
+CREATE TABLE t3 (name TEXT, n INTEGER);
+</sql-statement>
+<sql-statement>
+INSERT INTO t1 VALUES ( 'bb', 11 );
+</sql-statement>
+<sql-statement>
+INSERT INTO t2 VALUES ( 'bb', 12 );
+</sql-statement>
+<sql-statement>
+INSERT INTO t2 VALUES ( 'cc', 22 );
+</sql-statement>
+<sql-statement>
+INSERT INTO t2 VALUES ( 'ee', 42 );
+</sql-statement>
+<sql-statement>
+INSERT INTO t3 VALUES ( 'bb', 13 );
+</sql-statement>
+<sql-statement>
+INSERT INTO t3 VALUES ( 'cc', 23 );
+</sql-statement>
+<sql-statement>
+INSERT INTO t3 VALUES ( 'dd', 33 );
+</sql-statement>
+<sql-statement>
+SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name);
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: n
+        	SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name);
+	^
+<sql-statement>
+--
+-- Test interactions of join syntax and subqueries
+--
+-- Basic cases (we expect planner to pull up the subquery here)
+SELECT * FROM
+(SELECT * FROM t2) as s2
+INNER JOIN
+(SELECT * FROM t3) s3
+USING (name);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: n
+        	--
+	^
+<sql-statement>
+SELECT * FROM
+(SELECT * FROM t2) as s2
+LEFT JOIN
+(SELECT * FROM t3) s3
+USING (name);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT * FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: n
+        	SELECT * FROM
+	^
+<sql-statement>
+SELECT * FROM
+(SELECT * FROM t2) as s2
+FULL JOIN
+(SELECT * FROM t3) s3
+USING (name);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT * FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: n
+        	SELECT * FROM
+	^
+<sql-statement>
+-- Cases with non-nullable expressions in subquery results;
+-- make sure these go to null as expected
+SELECT * FROM
+(SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2
+NATURAL INNER JOIN
+(SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	-- Cases with non-nullable expressions in subquery results;
+	^
+<sql-statement>
+SELECT * FROM
+(SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2
+NATURAL LEFT JOIN
+(SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	SELECT * FROM
+	^
+<sql-statement>
+SELECT * FROM
+(SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2
+NATURAL FULL JOIN
+(SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	SELECT * FROM
+	^
+<sql-statement>
+SELECT * FROM
+(SELECT name, n as s1_n, 1 as s1_1 FROM t1) as s1
+NATURAL INNER JOIN
+(SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2
+NATURAL INNER JOIN
+(SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	SELECT * FROM
+	^
+<sql-statement>
+SELECT * FROM
+(SELECT name, n as s1_n, 1 as s1_1 FROM t1) as s1
+NATURAL FULL JOIN
+(SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2
+NATURAL FULL JOIN
+(SELECT name, n as s3_n, 3 as s3_2 FROM t3) s3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	SELECT * FROM
+	^
+<sql-statement>
+SELECT * FROM
+(SELECT name, n as s1_n FROM t1) as s1
+NATURAL FULL JOIN
+  (SELECT * FROM
+    (SELECT name, n as s2_n FROM t2) as s2
+    NATURAL FULL JOIN
+    (SELECT name, n as s3_n FROM t3) as s3
+  ) ss2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	SELECT * FROM
+	^
+<sql-statement>
+SELECT * FROM
+(SELECT name, n as s1_n FROM t1) as s1
+NATURAL FULL JOIN
+  (SELECT * FROM
+    (SELECT name, n as s2_n, 2 as s2_2 FROM t2) as s2
+    NATURAL FULL JOIN
+    (SELECT name, n as s3_n FROM t3) as s3
+  ) ss2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported isNatural
+    	SELECT * FROM
+	^
+<sql-statement>
+-- Constants as join keys can also be problematic
+SELECT * FROM
+  (SELECT name, n as s1_n FROM t1) as s1
+FULL JOIN
+  (SELECT name, 2 as s2_n FROM t2) as s2
+ON (s1_n = s2_n);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- Constants as join keys can also be problematic
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: name
+        	-- Constants as join keys can also be problematic
+	^
+<sql-statement>
+-- Test for propagation of nullability constraints into sub-joins
+create temp table x (x1 int, x2 int);
+</sql-statement>
+<sql-statement>
+insert into x values (1,11);
+</sql-statement>
+<sql-statement>
+insert into x values (2,22);
+</sql-statement>
+<sql-statement>
+insert into x values (3,null);
+</sql-statement>
+<sql-statement>
+insert into x values (4,44);
+</sql-statement>
+<sql-statement>
+insert into x values (5,null);
+</sql-statement>
+<sql-statement>
+create temp table y (y1 int, y2 int);
+</sql-statement>
+<sql-statement>
+insert into y values (1,111);
+</sql-statement>
+<sql-statement>
+insert into y values (2,222);
+</sql-statement>
+<sql-statement>
+insert into y values (3,333);
+</sql-statement>
+<sql-statement>
+insert into y values (4,null);
+</sql-statement>
+<sql-statement>
+select * from x;
+</sql-statement>
+<sql-statement>
+select * from y;
+</sql-statement>
+<sql-statement>
+select * from x left join y on (x1 = y1 and x2 is not null);
+</sql-statement>
+<sql-statement>
+select * from x left join y on (x1 = y1 and y2 is not null);
+</sql-statement>
+<sql-statement>
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1);
+</sql-statement>
+<sql-statement>
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1 and x2 is not null);
+</sql-statement>
+<sql-statement>
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1 and y2 is not null);
+</sql-statement>
+<sql-statement>
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1 and xx2 is not null);
+</sql-statement>
+<sql-statement>
+-- these should NOT give the same answers as above
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1) where (x2 is not null);
+</sql-statement>
+<sql-statement>
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1) where (y2 is not null);
+</sql-statement>
+<sql-statement>
+select * from (x left join y on (x1 = y1)) left join x xx(xx1,xx2)
+on (x1 = xx1) where (xx2 is not null);
+</sql-statement>
+<sql-statement>
+--
+-- regression test: check for bug with propagation of implied equality
+-- to outside an IN
+--
+select count(*) from tenk1 a where unique1 in
+  (select unique1 from tenk1 b join tenk1 c using (unique1)
+   where b.unique2 = 42);
+</sql-statement>
+<sql-statement>
+--
+-- regression test: check for failure to generate a plan with multiple
+-- degenerate IN clauses
+--
+select count(*) from tenk1 x where
+  x.unique1 in (select a.f1 from int4_tbl a,float8_tbl b where a.f1=b.f1) and
+  x.unique1 = 0 and
+  x.unique1 in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=bb.f1);
+</sql-statement>
+<sql-statement>
+-- try that with GEQO too
+begin;
+</sql-statement>
+<sql-statement>
+set geqo = on;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: geqo
+    	set geqo = on;
+	^
+<sql-statement>
+set geqo_threshold = 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: geqo_threshold
+    	set geqo_threshold = 2;
+	^
+<sql-statement>
+select count(*) from tenk1 x where
+  x.unique1 in (select a.f1 from int4_tbl a,float8_tbl b where a.f1=b.f1) and
+  x.unique1 = 0 and
+  x.unique1 in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=bb.f1);
+</sql-statement>
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+--
+-- regression test: be sure we cope with proven-dummy append rels
+--
+explain (costs off)
+select aa, bb, unique1, unique1
+  from tenk1 right join b on aa = unique1
+  where bb < bb and bb is null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select aa, bb, unique1, unique1
+  from tenk1 right join b on aa = unique1
+  where bb < bb and bb is null;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.b
+    
+<sql-statement>
+--
+-- regression test: check handling of empty-FROM subquery underneath outer join
+--
+explain (costs off)
+select * from int8_tbl i1 left join (int8_tbl i2 join
+  (select 123 as x) ss on i2.q1 = x) on i1.q2 = i2.q2
+order by 1, 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select * from int8_tbl i1 left join (int8_tbl i2 join
+  (select 123 as x) ss on i2.q1 = x) on i1.q2 = i2.q2
+order by 1, 2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from int8_tbl i1 left join (int8_tbl i2 join
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: q1
+        	select * from int8_tbl i1 left join (int8_tbl i2 join
+	^
+<sql-statement>
+--
+-- regression test: check a case where join_clause_is_movable_into() gives
+-- an imprecise result, causing an assertion failure
+--
+select count(*)
+from
+  (select t3.tenthous as x1, coalesce(t1.stringu1, t2.stringu1) as x2
+   from tenk1 t1
+   left join tenk1 t2 on t1.unique1 = t2.unique1
+   join tenk1 t3 on t1.unique2 = t3.unique2) ss,
+  tenk1 t4,
+  tenk1 t5
+where t4.thousand = t5.unique1 and ss.x1 = t4.tenthous and ss.x2 = t5.stringu1;
+</sql-statement>
+<sql-statement>
+--
+-- regression test: check a case where we formerly missed including an EC
+-- enforcement clause because it was expected to be handled at scan level
+--
+explain (costs off)
+select a.f1, b.f1, t.thousand, t.tenthous from
+  tenk1 t,
+  (select sum(f1)+1 as f1 from int4_tbl i4a) a,
+  (select sum(f1) as f1 from int4_tbl i4b) b
+where b.f1 = t.thousand and a.f1 = b.f1 and (a.f1+b.f1+999) = t.tenthous;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select a.f1, b.f1, t.thousand, t.tenthous from
+  tenk1 t,
+  (select sum(f1)+1 as f1 from int4_tbl i4a) a,
+  (select sum(f1) as f1 from int4_tbl i4b) b
+where b.f1 = t.thousand and a.f1 = b.f1 and (a.f1+b.f1+999) = t.tenthous;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select a.f1, b.f1, t.thousand, t.tenthous from
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	select a.f1, b.f1, t.thousand, t.tenthous from
+	^
+<sql-statement>
+--
+-- check a case where we formerly got confused by conflicting sort orders
+-- in redundant merge join path keys
+--
+explain (costs off)
+select * from
+  j1_tbl full join
+  (select * from j2_tbl order by j2_tbl.i desc, j2_tbl.k asc) j2_tbl
+  on j1_tbl.i = j2_tbl.i and j1_tbl.i = j2_tbl.k;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select * from
+  j1_tbl full join
+  (select * from j2_tbl order by j2_tbl.i desc, j2_tbl.k asc) j2_tbl
+  on j1_tbl.i = j2_tbl.i and j1_tbl.i = j2_tbl.k;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.j1_tbl
+    
+<sql-statement>
+--
+-- a different check for handling of redundant sort keys in merge joins
+--
+explain (costs off)
+select count(*) from
+  (select * from tenk1 x order by x.thousand, x.twothousand, x.fivethous) x
+  left join
+  (select * from tenk1 y order by y.unique2) y
+  on x.thousand = y.unique2 and x.twothousand = y.hundred and x.fivethous = y.unique2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select count(*) from
+  (select * from tenk1 x order by x.thousand, x.twothousand, x.fivethous) x
+  left join
+  (select * from tenk1 y order by y.unique2) y
+  on x.thousand = y.unique2 and x.twothousand = y.hundred and x.fivethous = y.unique2;
+</sql-statement>
+<sql-statement>
+--
+-- Clean up
+--
+DROP TABLE t1;
+</sql-statement>
+<sql-statement>
+DROP TABLE t2;
+</sql-statement>
+<sql-statement>
+DROP TABLE t3;
+</sql-statement>
+<sql-statement>
+DROP TABLE J1_TBL;
+</sql-statement>
+<sql-statement>
+DROP TABLE J2_TBL;
+</sql-statement>
+<sql-statement>
+-- Both DELETE and UPDATE allow the specification of additional tables
+-- to "join" against to determine which rows should be modified.
+CREATE TEMP TABLE t1 (a int, b int);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE t2 (a int, b int);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE t3 (x int, y int);
+</sql-statement>
+<sql-statement>
+INSERT INTO t1 VALUES (5, 10);
+</sql-statement>
+<sql-statement>
+INSERT INTO t1 VALUES (15, 20);
+</sql-statement>
+<sql-statement>
+INSERT INTO t1 VALUES (100, 100);
+</sql-statement>
+<sql-statement>
+INSERT INTO t1 VALUES (200, 1000);
+</sql-statement>
+<sql-statement>
+INSERT INTO t2 VALUES (200, 2000);
+</sql-statement>
+<sql-statement>
+INSERT INTO t3 VALUES (5, 20);
+</sql-statement>
+<sql-statement>
+INSERT INTO t3 VALUES (6, 7);
+</sql-statement>
+<sql-statement>
+INSERT INTO t3 VALUES (7, 8);
+</sql-statement>
+<sql-statement>
+INSERT INTO t3 VALUES (500, 100);
+</sql-statement>
+<sql-statement>
+DELETE FROM t3 USING t1 table1 WHERE t3.x = table1.a;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: using is not supported
+    	DELETE FROM t3 USING t1 table1 WHERE t3.x = table1.a;
+	^
+<sql-statement>
+SELECT * FROM t3;
+</sql-statement>
+<sql-statement>
+DELETE FROM t3 USING t1 JOIN t2 USING (a) WHERE t3.x > t1.a;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: using is not supported
+    	DELETE FROM t3 USING t1 JOIN t2 USING (a) WHERE t3.x > t1.a;
+	^
+<sql-statement>
+SELECT * FROM t3;
+</sql-statement>
+<sql-statement>
+DELETE FROM t3 USING t3 t3_other WHERE t3.x = t3_other.x AND t3.y = t3_other.y;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: using is not supported
+    	DELETE FROM t3 USING t3 t3_other WHERE t3.x = t3_other.x AND t3.y = t3_other.y;
+	^
+<sql-statement>
+SELECT * FROM t3;
+</sql-statement>
+<sql-statement>
+-- Test join against inheritance tree
+create temp table t2a () inherits (t2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	-- Test join against inheritance tree
+	^
+<sql-statement>
+insert into t2a values (200, 2001);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.t2a
+    
+<sql-statement>
+select * from t1 left join t2 on (t1.a = t2.a);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from t1 left join t2 on (t1.a = t2.a);
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: a
+        	select * from t1 left join t2 on (t1.a = t2.a);
+	^
+<sql-statement>
+-- Test matching of column name with wrong alias
+select t1.x from t1 join t3 on (t1.a = t3.x);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- Test matching of column name with wrong alias
+	^
+        -stdin-:<main>:2:8: Error: No such column: x
+        	select t1.x from t1 join t3 on (t1.a = t3.x);
+	       ^
+<sql-statement>
+-- Test matching of locking clause with wrong alias
+select t1.*, t2.*, unnamed_join.* from
+  t1 join t2 on (t1.a = t2.a), t3 as unnamed_join
+  for update of unnamed_join;
+</sql-statement>
+-stdin-:<main>: Warning: Parse Sql
+
+    -stdin-:<main>:1:1: Warning: SelectStmt: lockingClause is ignored
+    	-- Test matching of locking clause with wrong alias
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- Test matching of locking clause with wrong alias
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: a
+        	-- Test matching of locking clause with wrong alias
+	^
+<sql-statement>
+select foo.*, unnamed_join.* from
+  t1 join t2 using (a) as foo, t3 as unnamed_join
+  for update of unnamed_join;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
+    	select foo.*, unnamed_join.* from
+	^
+<sql-statement>
+select foo.*, unnamed_join.* from
+  t1 join t2 using (a) as foo, t3 as unnamed_join
+  for update of foo;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: join USING: unsupported AS
+    	select foo.*, unnamed_join.* from
+	^
+<sql-statement>
+select bar.*, unnamed_join.* from
+  (t1 join t2 using (a) as foo) as bar, t3 as unnamed_join
+  for update of foo;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	select bar.*, unnamed_join.* from
+	^
+<sql-statement>
+select bar.*, unnamed_join.* from
+  (t1 join t2 using (a) as foo) as bar, t3 as unnamed_join
+  for update of bar;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	select bar.*, unnamed_join.* from
+	^
+<sql-statement>
+--
+-- regression test for 8.1 merge right join bug
+--
+CREATE TEMP TABLE tt1 ( tt1_id int4, joincol int4 );
+</sql-statement>
+<sql-statement>
+INSERT INTO tt1 VALUES (1, 11);
+</sql-statement>
+<sql-statement>
+INSERT INTO tt1 VALUES (2, NULL);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE tt2 ( tt2_id int4, joincol int4 );
+</sql-statement>
+<sql-statement>
+INSERT INTO tt2 VALUES (21, 11);
+</sql-statement>
+<sql-statement>
+INSERT INTO tt2 VALUES (22, 11);
+</sql-statement>
+<sql-statement>
+set enable_hashjoin to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashjoin
+    	set enable_hashjoin to off;
+	^
+<sql-statement>
+set enable_nestloop to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_nestloop
+    	set enable_nestloop to off;
+	^
+<sql-statement>
+-- these should give the same results
+select tt1.*, tt2.* from tt1 left join tt2 on tt1.joincol = tt2.joincol;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- these should give the same results
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: joincol
+        	-- these should give the same results
+	^
+<sql-statement>
+select tt1.*, tt2.* from tt2 right join tt1 on tt1.joincol = tt2.joincol;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select tt1.*, tt2.* from tt2 right join tt1 on tt1.joincol = tt2.joincol;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: joincol
+        	select tt1.*, tt2.* from tt2 right join tt1 on tt1.joincol = tt2.joincol;
+	^
+<sql-statement>
+reset enable_hashjoin;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_hashjoin;
+	^
+<sql-statement>
+reset enable_nestloop;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_nestloop;
+	^
+<sql-statement>
+--
+-- regression test for bug #13908 (hash join with skew tuples & nbatch increase)
+--
+set work_mem to '64kB';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: work_mem
+    	--
+	^
+<sql-statement>
+set enable_mergejoin to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_mergejoin
+    	set enable_mergejoin to off;
+	^
+<sql-statement>
+set enable_memoize to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_memoize
+    	set enable_memoize to off;
+	^
+<sql-statement>
+explain (costs off)
+select count(*) from tenk1 a, tenk1 b
+  where a.hundred = b.thousand and (b.fivethous % 10) < 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select count(*) from tenk1 a, tenk1 b
+  where a.hundred = b.thousand and (b.fivethous % 10) < 10;
+</sql-statement>
+<sql-statement>
+reset work_mem;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset work_mem;
+	^
+<sql-statement>
+reset enable_mergejoin;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_mergejoin;
+	^
+<sql-statement>
+reset enable_memoize;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_memoize;
+	^
+<sql-statement>
+--
+-- regression test for 8.2 bug with improper re-ordering of left joins
+--
+create temp table tt3(f1 int, f2 text);
+</sql-statement>
+<sql-statement>
+insert into tt3 select x, repeat('xyzzy', 100) from generate_series(1,10000) x;
+</sql-statement>
+<sql-statement>
+create index tt3i on tt3(f1);
+</sql-statement>
+<sql-statement>
+analyze tt3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze tt3;
+	^
+<sql-statement>
+create temp table tt4(f1 int);
+</sql-statement>
+<sql-statement>
+insert into tt4 values (0),(1),(9999);
+</sql-statement>
+<sql-statement>
+analyze tt4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze tt4;
+	^
+<sql-statement>
+SELECT a.f1
+FROM tt4 a
+LEFT JOIN (
+        SELECT b.f1
+        FROM tt3 b LEFT JOIN tt3 c ON (b.f1 = c.f1)
+        WHERE c.f1 IS NULL
+) AS d ON (a.f1 = d.f1)
+WHERE d.f1 IS NULL;
+</sql-statement>
+<sql-statement>
+--
+-- regression test for proper handling of outer joins within antijoins
+--
+create temp table tt4x(c1 int, c2 int, c3 int);
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select * from tt4x t1
+where not exists (
+  select 1 from tt4x t2
+    left join tt4x t3 on t2.c3 = t3.c1
+    left join ( select t5.c1 as c1
+                from tt4x t4 left join tt4x t5 on t4.c2 = t5.c1
+              ) a1 on t3.c2 = a1.c1
+  where t1.c1 = t2.c2
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+--
+-- regression test for problems of the sort depicted in bug #3494
+--
+create temp table tt5(f1 int, f2 int);
+</sql-statement>
+<sql-statement>
+create temp table tt6(f1 int, f2 int);
+</sql-statement>
+<sql-statement>
+insert into tt5 values(1, 10);
+</sql-statement>
+<sql-statement>
+insert into tt5 values(1, 11);
+</sql-statement>
+<sql-statement>
+insert into tt6 values(1, 9);
+</sql-statement>
+<sql-statement>
+insert into tt6 values(1, 2);
+</sql-statement>
+<sql-statement>
+insert into tt6 values(2, 9);
+</sql-statement>
+<sql-statement>
+select * from tt5,tt6 where tt5.f1 = tt6.f1 and tt5.f1 = tt5.f2 - tt6.f2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from tt5,tt6 where tt5.f1 = tt6.f1 and tt5.f1 = tt5.f2 - tt6.f2;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	select * from tt5,tt6 where tt5.f1 = tt6.f1 and tt5.f1 = tt5.f2 - tt6.f2;
+	^
+<sql-statement>
+--
+-- regression test for problems of the sort depicted in bug #3588
+--
+create temp table xx (pkxx int);
+</sql-statement>
+<sql-statement>
+create temp table yy (pkyy int, pkxx int);
+</sql-statement>
+<sql-statement>
+insert into xx values (1);
+</sql-statement>
+<sql-statement>
+insert into xx values (2);
+</sql-statement>
+<sql-statement>
+insert into xx values (3);
+</sql-statement>
+<sql-statement>
+insert into yy values (101, 1);
+</sql-statement>
+<sql-statement>
+insert into yy values (201, 2);
+</sql-statement>
+<sql-statement>
+insert into yy values (301, NULL);
+</sql-statement>
+<sql-statement>
+select yy.pkyy as yy_pkyy, yy.pkxx as yy_pkxx, yya.pkyy as yya_pkyy,
+       xxa.pkxx as xxa_pkxx, xxb.pkxx as xxb_pkxx
+from yy
+     left join (SELECT * FROM yy where pkyy = 101) as yya ON yy.pkyy = yya.pkyy
+     left join xx xxa on yya.pkxx = xxa.pkxx
+     left join xx xxb on coalesce (xxa.pkxx, 1) = xxb.pkxx;
+</sql-statement>
+<sql-statement>
+--
+-- regression test for improper pushing of constants across outer-join clauses
+-- (as seen in early 8.2.x releases)
+--
+create temp table zt1 (f1 int primary key);
+</sql-statement>
+<sql-statement>
+create temp table zt2 (f2 int primary key);
+</sql-statement>
+<sql-statement>
+create temp table zt3 (f3 int primary key);
+</sql-statement>
+<sql-statement>
+insert into zt1 values(53);
+</sql-statement>
+<sql-statement>
+insert into zt2 values(53);
+</sql-statement>
+<sql-statement>
+select * from
+  zt2 left join zt3 on (f2 = f3)
+      left join zt1 on (f3 = f1)
+where f2 = 53;
+</sql-statement>
+<sql-statement>
+create temp view zv1 as select *,'dummy'::text AS junk from zt1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	create temp view zv1 as select *,'dummy'::text AS junk from zt1;
+	^
+<sql-statement>
+select * from
+  zt2 left join zt3 on (f2 = f3)
+      left join zv1 on (f3 = f1)
+where f2 = 53;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.zv1
+    
+<sql-statement>
+--
+-- regression test for improper extraction of OR indexqual conditions
+-- (as seen in early 8.3.x releases)
+--
+select a.unique2, a.ten, b.tenthous, b.unique2, b.hundred
+from tenk1 a left join tenk1 b on a.unique2 = b.tenthous
+where a.unique1 = 42 and
+      ((b.unique2 is null and a.ten = 2) or b.hundred = 3);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: unique2
+        	--
+	^
+<sql-statement>
+--
+-- test proper positioning of one-time quals in EXISTS (8.4devel bug)
+--
+prepare foo(bool) as
+  select count(*) from tenk1 a left join tenk1 b
+    on (a.unique2 = b.unique1 and exists
+        (select 1 from tenk1 c where c.thousand = b.unique2 and $1));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 301
+    	--
+	^
+<sql-statement>
+execute foo(true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 302
+    	execute foo(true);
+	^
+<sql-statement>
+execute foo(false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 302
+    	execute foo(false);
+	^
+<sql-statement>
+--
+-- test for sane behavior with noncanonical merge clauses, per bug #4926
+--
+begin;
+</sql-statement>
+<sql-statement>
+set enable_mergejoin = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_mergejoin
+    	set enable_mergejoin = 1;
+	^
+<sql-statement>
+set enable_hashjoin = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashjoin
+    	set enable_hashjoin = 0;
+	^
+<sql-statement>
+set enable_nestloop = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_nestloop
+    	set enable_nestloop = 0;
+	^
+<sql-statement>
+create temp table a (i integer);
+</sql-statement>
+<sql-statement>
+create temp table b (x integer, y integer);
+</sql-statement>
+<sql-statement>
+select * from a left join b on i = x and i = y and x = i;
+</sql-statement>
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+--
+-- test handling of merge clauses using record_ops
+--
+begin;
+</sql-statement>
+<sql-statement>
+create type mycomptype as (id int, v bigint);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 314
+    	create type mycomptype as (id int, v bigint);
+	^
+<sql-statement>
+create temp table tidv (idv mycomptype);
+</sql-statement>
+<sql-statement>
+create index on tidv (idv);
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select a.idv, b.idv from tidv a, tidv b where a.idv = b.idv;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+set enable_mergejoin = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_mergejoin
+    	set enable_mergejoin = 0;
+	^
+<sql-statement>
+set enable_hashjoin = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashjoin
+    	set enable_hashjoin = 0;
+	^
+<sql-statement>
+explain (costs off)
+select a.idv, b.idv from tidv a, tidv b where a.idv = b.idv;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+--
+-- test NULL behavior of whole-row Vars, per bug #5025
+--
+select t1.q2, count(t2.*)
+from int8_tbl t1 left join int8_tbl t2 on (t1.q2 = t2.q1)
+group by t1.q2 order by 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	--
+	^
+        -stdin-:<main>:4:15: Error: At function: PgAgg
+        	select t1.q2, count(t2.*)
+	              ^
+            -stdin-:<main>:4:21: Error: Expected PG type, but got: Struct
+            	select t1.q2, count(t2.*)
+	                    ^
+<sql-statement>
+select t1.q2, count(t2.*)
+from int8_tbl t1 left join (select * from int8_tbl) t2 on (t1.q2 = t2.q1)
+group by t1.q2 order by 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select t1.q2, count(t2.*)
+	^
+        -stdin-:<main>:1:15: Error: At function: PgAgg
+        	select t1.q2, count(t2.*)
+	              ^
+            -stdin-:<main>:1:21: Error: Expected PG type, but got: Struct
+            	select t1.q2, count(t2.*)
+	                    ^
+<sql-statement>
+select t1.q2, count(t2.*)
+from int8_tbl t1 left join (select * from int8_tbl offset 0) t2 on (t1.q2 = t2.q1)
+group by t1.q2 order by 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select t1.q2, count(t2.*)
+	^
+        -stdin-:<main>:1:15: Error: At function: PgAgg
+        	select t1.q2, count(t2.*)
+	              ^
+            -stdin-:<main>:1:21: Error: Expected PG type, but got: Struct
+            	select t1.q2, count(t2.*)
+	                    ^
+<sql-statement>
+select t1.q2, count(t2.*)
+from int8_tbl t1 left join
+  (select q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
+  on (t1.q2 = t2.q1)
+group by t1.q2 order by 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select t1.q2, count(t2.*)
+	^
+        -stdin-:<main>:1:15: Error: At function: PgAgg
+        	select t1.q2, count(t2.*)
+	              ^
+            -stdin-:<main>:1:21: Error: Expected PG type, but got: Struct
+            	select t1.q2, count(t2.*)
+	                    ^
+<sql-statement>
+--
+-- test incorrect failure to NULL pulled-up subexpressions
+--
+begin;
+</sql-statement>
+<sql-statement>
+create temp table a (
+     code char not null,
+     constraint a_pk primary key (code)
+);
+</sql-statement>
+<sql-statement>
+create temp table b (
+     a char not null,
+     num integer not null,
+     constraint b_pk primary key (a, num)
+);
+</sql-statement>
+<sql-statement>
+create temp table c (
+     name char not null,
+     a char,
+     constraint c_pk primary key (name)
+);
+</sql-statement>
+<sql-statement>
+insert into a (code) values ('p');
+</sql-statement>
+<sql-statement>
+insert into a (code) values ('q');
+</sql-statement>
+<sql-statement>
+insert into b (a, num) values ('p', 1);
+</sql-statement>
+<sql-statement>
+insert into b (a, num) values ('p', 2);
+</sql-statement>
+<sql-statement>
+insert into c (name, a) values ('A', 'p');
+</sql-statement>
+<sql-statement>
+insert into c (name, a) values ('B', 'q');
+</sql-statement>
+<sql-statement>
+insert into c (name, a) values ('C', null);
+</sql-statement>
+<sql-statement>
+select c.name, ss.code, ss.b_cnt, ss.const
+from c left join
+  (select a.code, coalesce(b_grp.cnt, 0) as b_cnt, -1 as const
+   from a left join
+     (select count(1) as cnt, b.a from b group by b.a) as b_grp
+     on a.code = b_grp.a
+  ) as ss
+  on (c.a = ss.code)
+order by c.name;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	select c.name, ss.code, ss.b_cnt, ss.const
+	^
+        -stdin-:<main>:5:51: Error: No such column: a
+        	     (select count(1) as cnt, b.a from b group by b.a) as b_grp
+	                                                  ^
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+--
+-- test incorrect handling of placeholders that only appear in targetlists,
+-- per bug #6154
+--
+SELECT * FROM
+( SELECT 1 as key1 ) sub1
+LEFT JOIN
+( SELECT sub3.key3, sub4.value2, COALESCE(sub4.value2, 66) as value3 FROM
+    ( SELECT 1 as key3 ) sub3
+    LEFT JOIN
+    ( SELECT sub5.key5, COALESCE(sub6.value1, 1) as value2 FROM
+        ( SELECT 1 as key5 ) sub5
+        LEFT JOIN
+        ( SELECT 2 as key6, 42 as value1 ) sub6
+        ON sub5.key5 = sub6.key6
+    ) sub4
+    ON sub4.key5 = sub3.key3
+) sub2
+ON sub1.key1 = sub2.key3;
+</sql-statement>
+<sql-statement>
+-- test the path using join aliases, too
+SELECT * FROM
+( SELECT 1 as key1 ) sub1
+LEFT JOIN
+( SELECT sub3.key3, value2, COALESCE(value2, 66) as value3 FROM
+    ( SELECT 1 as key3 ) sub3
+    LEFT JOIN
+    ( SELECT sub5.key5, COALESCE(sub6.value1, 1) as value2 FROM
+        ( SELECT 1 as key5 ) sub5
+        LEFT JOIN
+        ( SELECT 2 as key6, 42 as value1 ) sub6
+        ON sub5.key5 = sub6.key6
+    ) sub4
+    ON sub4.key5 = sub3.key3
+) sub2
+ON sub1.key1 = sub2.key3;
+</sql-statement>
+<sql-statement>
+--
+-- test case where a PlaceHolderVar is used as a nestloop parameter
+--
+EXPLAIN (COSTS OFF)
+SELECT qq, unique1
+  FROM
+  ( SELECT COALESCE(q1, 0) AS qq FROM int8_tbl a ) AS ss1
+  FULL OUTER JOIN
+  ( SELECT COALESCE(q2, -1) AS qq FROM int8_tbl b ) AS ss2
+  USING (qq)
+  INNER JOIN tenk1 c ON qq = unique2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+SELECT qq, unique1
+  FROM
+  ( SELECT COALESCE(q1, 0) AS qq FROM int8_tbl a ) AS ss1
+  FULL OUTER JOIN
+  ( SELECT COALESCE(q2, -1) AS qq FROM int8_tbl b ) AS ss2
+  USING (qq)
+  INNER JOIN tenk1 c ON qq = unique2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT qq, unique1
+	^
+        -stdin-:<main>:7:25: Error: Column reference is ambiguous: qq
+        	  INNER JOIN tenk1 c ON qq = unique2;
+	                        ^
+<sql-statement>
+--
+-- nested nestloops can require nested PlaceHolderVars
+--
+create temp table nt1 (
+  id int primary key,
+  a1 boolean,
+  a2 boolean
+);
+</sql-statement>
+<sql-statement>
+create temp table nt2 (
+  id int primary key,
+  nt1_id int,
+  b1 boolean,
+  b2 boolean,
+  foreign key (nt1_id) references nt1(id)
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table constraint not supported
+    	create temp table nt2 (
+	^
+<sql-statement>
+create temp table nt3 (
+  id int primary key,
+  nt2_id int,
+  c1 boolean,
+  foreign key (nt2_id) references nt2(id)
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table constraint not supported
+    	create temp table nt3 (
+	^
+<sql-statement>
+insert into nt1 values (1,true,true);
+</sql-statement>
+<sql-statement>
+insert into nt1 values (2,true,false);
+</sql-statement>
+<sql-statement>
+insert into nt1 values (3,false,false);
+</sql-statement>
+<sql-statement>
+insert into nt2 values (1,1,true,true);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.nt2
+    
+<sql-statement>
+insert into nt2 values (2,2,true,false);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.nt2
+    
+<sql-statement>
+insert into nt2 values (3,3,false,false);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.nt2
+    
+<sql-statement>
+insert into nt3 values (1,1,true);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.nt3
+    
+<sql-statement>
+insert into nt3 values (2,2,false);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.nt3
+    
+<sql-statement>
+insert into nt3 values (3,3,true);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.nt3
+    
+<sql-statement>
+explain (costs off)
+select nt3.id
+from nt3 as nt3
+  left join
+    (select nt2.*, (nt2.b1 and ss1.a3) AS b3
+     from nt2 as nt2
+       left join
+         (select nt1.*, (nt1.id is not null) as a3 from nt1) as ss1
+         on ss1.id = nt2.nt1_id
+    ) as ss2
+    on ss2.id = nt3.nt2_id
+where nt3.id = 1 and ss2.b3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select nt3.id
+from nt3 as nt3
+  left join
+    (select nt2.*, (nt2.b1 and ss1.a3) AS b3
+     from nt2 as nt2
+       left join
+         (select nt1.*, (nt1.id is not null) as a3 from nt1) as ss1
+         on ss1.id = nt2.nt1_id
+    ) as ss2
+    on ss2.id = nt3.nt2_id
+where nt3.id = 1 and ss2.b3;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.nt2
+    
+<sql-statement>
+--
+-- test case where a PlaceHolderVar is propagated into a subquery
+--
+explain (costs off)
+select * from
+  int8_tbl t1 left join
+  (select q1 as x, 42 as y from int8_tbl t2) ss
+  on t1.q2 = ss.x
+where
+  1 = (select 1 from int8_tbl t3 where ss.y is not null limit 1)
+order by 1,2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select * from
+  int8_tbl t1 left join
+  (select q1 as x, 42 as y from int8_tbl t2) ss
+  on t1.q2 = ss.x
+where
+  1 = (select 1 from int8_tbl t3 where ss.y is not null limit 1)
+order by 1,2;
+</sql-statement>
+<sql-statement>
+--
+-- variant where a PlaceHolderVar is needed at a join, but not above the join
+--
+explain (costs off)
+select * from
+  int4_tbl as i41,
+  lateral
+    (select 1 as x from
+      (select i41.f1 as lat,
+              i42.f1 as loc from
+         int8_tbl as i81, int4_tbl as i42) as ss1
+      right join int4_tbl as i43 on (i43.f1 > 1)
+      where ss1.loc = ss1.lat) as ss2
+where i41.f1 > 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select * from
+  int4_tbl as i41,
+  lateral
+    (select 1 as x from
+      (select i41.f1 as lat,
+              i42.f1 as loc from
+         int8_tbl as i81, int4_tbl as i42) as ss1
+      right join int4_tbl as i43 on (i43.f1 > 1)
+      where ss1.loc = ss1.lat) as ss2
+where i41.f1 > 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+--
+-- test the corner cases FULL JOIN ON TRUE and FULL JOIN ON FALSE
+--
+select * from int4_tbl a full join int4_tbl b on true;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	--
+	^
+<sql-statement>
+select * from int4_tbl a full join int4_tbl b on false;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from int4_tbl a full join int4_tbl b on false;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	select * from int4_tbl a full join int4_tbl b on false;
+	^
+<sql-statement>
+--
+-- test for ability to use a cartesian join when necessary
+--
+create temp table q1 as select 1 as q1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	--
+	^
+<sql-statement>
+create temp table q2 as select 0 as q2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create temp table q2 as select 0 as q2;
+	^
+<sql-statement>
+analyze q1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze q1;
+	^
+<sql-statement>
+analyze q2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze q2;
+	^
+<sql-statement>
+explain (costs off)
+select * from
+  tenk1 join int4_tbl on f1 = twothousand,
+  q1, q2
+where q1 = thousand or q2 = thousand;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select * from
+  tenk1 join int4_tbl on f1 = twothousand,
+  q1, q2
+where thousand = (q1 + q2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+--
+-- test ability to generate a suitable plan for a star-schema query
+--
+explain (costs off)
+select * from
+  tenk1, int8_tbl a, int8_tbl b
+where thousand = a.q1 and tenthous = b.q1 and a.q2 = 1 and b.q2 = 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+--
+-- test a corner case in which we shouldn't apply the star-schema optimization
+--
+explain (costs off)
+select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
+  tenk1 t1
+  inner join int4_tbl i1
+    left join (select v1.x2, v2.y1, 11 AS d1
+               from (select 1,0 from onerow) v1(x1,x2)
+               left join (select 3,1 from onerow) v2(y1,y2)
+               on v1.x1 = v2.y2) subq1
+    on (i1.f1 = subq1.x2)
+  on (t1.unique2 = subq1.d1)
+  left join tenk1 t2
+  on (subq1.y1 = t2.unique1)
+where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
+  tenk1 t1
+  inner join int4_tbl i1
+    left join (select v1.x2, v2.y1, 11 AS d1
+               from (select 1,0 from onerow) v1(x1,x2)
+               left join (select 3,1 from onerow) v2(y1,y2)
+               on v1.x1 = v2.y2) subq1
+    on (i1.f1 = subq1.x2)
+  on (t1.unique2 = subq1.d1)
+  left join tenk1 t2
+  on (subq1.y1 = t2.unique1)
+where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
+</sql-statement>
+<sql-statement>
+-- variant that isn't quite a star-schema case
+select ss1.d1 from
+  tenk1 as t1
+  inner join tenk1 as t2
+  on t1.tenthous = t2.ten
+  inner join
+    int8_tbl as i8
+    left join int4_tbl as i4
+      inner join (select 64::information_schema.cardinal_number as d1
+                  from tenk1 t3,
+                       lateral (select abs(t3.unique1) + random()) ss0(x)
+                  where t3.fivethous < 0) as ss1
+      on i4.f1 = ss1.d1
+    on i8.q1 = i4.f1
+  on t1.tenthous = ss1.d1
+where t1.unique1 < i4.f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	-- variant that isn't quite a star-schema case
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	-- variant that isn't quite a star-schema case
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	-- variant that isn't quite a star-schema case
+	^
+<sql-statement>
+-- this variant is foldable by the remove-useless-RESULT-RTEs code
+explain (costs off)
+select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
+  tenk1 t1
+  inner join int4_tbl i1
+    left join (select v1.x2, v2.y1, 11 AS d1
+               from (values(1,0)) v1(x1,x2)
+               left join (values(3,1)) v2(y1,y2)
+               on v1.x1 = v2.y2) subq1
+    on (i1.f1 = subq1.x2)
+  on (t1.unique2 = subq1.d1)
+  left join tenk1 t2
+  on (subq1.y1 = t2.unique1)
+where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- this variant is foldable by the remove-useless-RESULT-RTEs code
+	^
+<sql-statement>
+select t1.unique2, t1.stringu1, t2.unique1, t2.stringu2 from
+  tenk1 t1
+  inner join int4_tbl i1
+    left join (select v1.x2, v2.y1, 11 AS d1
+               from (values(1,0)) v1(x1,x2)
+               left join (values(3,1)) v2(y1,y2)
+               on v1.x1 = v2.y2) subq1
+    on (i1.f1 = subq1.x2)
+  on (t1.unique2 = subq1.d1)
+  left join tenk1 t2
+  on (subq1.y1 = t2.unique1)
+where t1.unique2 < 42 and t1.stringu1 > t2.stringu2;
+</sql-statement>
+<sql-statement>
+-- Here's a variant that we can't fold too aggressively, though,
+-- or we end up with noplace to evaluate the lateral PHV
+explain (verbose, costs off)
+select * from
+  (select 1 as x) ss1 left join (select 2 as y) ss2 on (true),
+  lateral (select ss2.y as z limit 1) ss3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Here's a variant that we can't fold too aggressively, though,
+	^
+<sql-statement>
+select * from
+  (select 1 as x) ss1 left join (select 2 as y) ss2 on (true),
+  lateral (select ss2.y as z limit 1) ss3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+-- Test proper handling of appendrel PHVs during useless-RTE removal
+explain (costs off)
+select * from
+  (select 0 as z) as t1
+  left join
+  (select true as a) as t2
+  on true,
+  lateral (select true as b
+           union all
+           select a as b) as t3
+where b;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test proper handling of appendrel PHVs during useless-RTE removal
+	^
+<sql-statement>
+select * from
+  (select 0 as z) as t1
+  left join
+  (select true as a) as t2
+  on true,
+  lateral (select true as b
+           union all
+           select a as b) as t3
+where b;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+--
+-- test inlining of immutable functions
+--
+create function f_immutable_int4(i integer) returns integer as
+$$ begin return i; end; $$ language plpgsql immutable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	--
+	^
+<sql-statement>
+-- check optimization of function scan with join
+explain (costs off)
+select unique1 from tenk1, (select * from f_immutable_int4(1) x) x
+where x = unique1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check optimization of function scan with join
+	^
+<sql-statement>
+explain (verbose, costs off)
+select unique1, x.*
+from tenk1, (select *, random() from f_immutable_int4(1) x) x
+where x = unique1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+explain (costs off)
+select unique1 from tenk1, f_immutable_int4(1) x where x = unique1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select unique1 from tenk1, lateral f_immutable_int4(1) x where x = unique1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select unique1 from tenk1, lateral f_immutable_int4(1) x where x in (select 17);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select unique1, x from tenk1 join f_immutable_int4(1) x on unique1 = x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select unique1, x from tenk1 left join f_immutable_int4(1) x on unique1 = x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select unique1, x from tenk1 right join f_immutable_int4(1) x on unique1 = x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select unique1, x from tenk1 full join f_immutable_int4(1) x on unique1 = x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+-- check that pullup of a const function allows further const-folding
+explain (costs off)
+select unique1 from tenk1, f_immutable_int4(1) x where x = 42;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check that pullup of a const function allows further const-folding
+	^
+<sql-statement>
+-- test inlining of immutable functions with PlaceHolderVars
+explain (costs off)
+select nt3.id
+from nt3 as nt3
+  left join
+    (select nt2.*, (nt2.b1 or i4 = 42) AS b3
+     from nt2 as nt2
+       left join
+         f_immutable_int4(0) i4
+         on i4 = nt2.nt1_id
+    ) as ss2
+    on ss2.id = nt3.nt2_id
+where nt3.id = 1 and ss2.b3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- test inlining of immutable functions with PlaceHolderVars
+	^
+<sql-statement>
+drop function f_immutable_int4(int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	drop function f_immutable_int4(int);
+	^
+<sql-statement>
+-- test inlining when function returns composite
+create function mki8(bigint, bigint) returns int8_tbl as
+$$select row($1,$2)::int8_tbl$$ language sql;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- test inlining when function returns composite
+	^
+<sql-statement>
+create function mki4(int) returns int4_tbl as
+$$select row($1)::int4_tbl$$ language sql;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	create function mki4(int) returns int4_tbl as
+	^
+<sql-statement>
+explain (verbose, costs off)
+select * from mki8(1,2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select * from mki8(1,2);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from mki8(1,2);
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from mki8(1,2);
+	              ^
+            -stdin-:<main>:1:15: Error: No such proc: mki8
+            	select * from mki8(1,2);
+	              ^
+<sql-statement>
+explain (verbose, costs off)
+select * from mki4(42);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select * from mki4(42);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from mki4(42);
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from mki4(42);
+	              ^
+            -stdin-:<main>:1:15: Error: No such proc: mki4
+            	select * from mki4(42);
+	              ^
+<sql-statement>
+drop function mki8(bigint, bigint);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	drop function mki8(bigint, bigint);
+	^
+<sql-statement>
+drop function mki4(int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	drop function mki4(int);
+	^
+<sql-statement>
+--
+-- test extraction of restriction OR clauses from join OR clause
+-- (we used to only do this for indexable clauses)
+--
+explain (costs off)
+select * from tenk1 a join tenk1 b on
+  (a.unique1 = 1 and b.unique1 = 2) or (a.unique2 = 3 and b.hundred = 4);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+explain (costs off)
+select * from tenk1 a join tenk1 b on
+  (a.unique1 = 1 and b.unique1 = 2) or (a.unique2 = 3 and b.ten = 4);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select * from tenk1 a join tenk1 b on
+  (a.unique1 = 1 and b.unique1 = 2) or
+  ((a.unique2 = 3 or a.unique2 = 7) and b.hundred = 4);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+--
+-- test placement of movable quals in a parameterized join tree
+--
+explain (costs off)
+select * from tenk1 t1 left join
+  (tenk1 t2 join tenk1 t3 on t2.thousand = t3.unique2)
+  on t1.hundred = t2.hundred and t1.ten = t3.ten
+where t1.unique1 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+explain (costs off)
+select * from tenk1 t1 left join
+  (tenk1 t2 join tenk1 t3 on t2.thousand = t3.unique2)
+  on t1.hundred = t2.hundred and t1.ten + t2.ten = t3.ten
+where t1.unique1 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select count(*) from
+  tenk1 a join tenk1 b on a.unique1 = b.unique2
+  left join tenk1 c on a.unique2 = b.unique1 and c.thousand = a.thousand
+  join int4_tbl on b.thousand = f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select count(*) from
+  tenk1 a join tenk1 b on a.unique1 = b.unique2
+  left join tenk1 c on a.unique2 = b.unique1 and c.thousand = a.thousand
+  join int4_tbl on b.thousand = f1;
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select b.unique1 from
+  tenk1 a join tenk1 b on a.unique1 = b.unique2
+  left join tenk1 c on b.unique1 = 42 and c.thousand = a.thousand
+  join int4_tbl i1 on b.thousand = f1
+  right join int4_tbl i2 on i2.f1 = b.tenthous
+  order by 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select b.unique1 from
+  tenk1 a join tenk1 b on a.unique1 = b.unique2
+  left join tenk1 c on b.unique1 = 42 and c.thousand = a.thousand
+  join int4_tbl i1 on b.thousand = f1
+  right join int4_tbl i2 on i2.f1 = b.tenthous
+  order by 1;
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select * from
+(
+  select unique1, q1, coalesce(unique1, -1) + q1 as fault
+  from int8_tbl left join tenk1 on (q2 = unique2)
+) ss
+where fault = 122
+order by fault;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select * from
+(
+  select unique1, q1, coalesce(unique1, -1) + q1 as fault
+  from int8_tbl left join tenk1 on (q2 = unique2)
+) ss
+where fault = 122
+order by fault;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: PgSelect, At function: PgSetItem, At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_int8_tbl.q2 has type: pgint8, b._alias_tenk1.unique2 has type: pgint4)
+        	select * from
+	^
+<sql-statement>
+explain (costs off)
+select * from
+(values (1, array[10,20]), (2, array[20,30])) as v1(v1x,v1ys)
+left join (values (1, 10), (2, 20)) as v2(v2x,v2y) on v2x = v1x
+left join unnest(v1ys) as u1(u1y) on u1y = v2y;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select * from
+(values (1, array[10,20]), (2, array[20,30])) as v1(v1x,v1ys)
+left join (values (1, 10), (2, 20)) as v2(v2x,v2y) on v2x = v1x
+left join unnest(v1ys) as u1(u1y) on u1y = v2y;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:4:18: Error: Columns are not allowed in: RANGE FUNCTION
+    	left join unnest(v1ys) as u1(u1y) on u1y = v2y;
+	                 ^
+<sql-statement>
+--
+-- test handling of potential equivalence clauses above outer joins
+--
+explain (costs off)
+select q1, unique2, thousand, hundred
+  from int8_tbl a left join tenk1 b on q1 = unique2
+  where coalesce(thousand,123) = q1 and q1 = coalesce(hundred,123);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select q1, unique2, thousand, hundred
+  from int8_tbl a left join tenk1 b on q1 = unique2
+  where coalesce(thousand,123) = q1 and q1 = coalesce(hundred,123);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedFilter, At function: OrderedMap, At function: EquiJoin
+    	select q1, unique2, thousand, hundred
+	^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_a.q1 has type: pgint8, b._alias_b.unique2 has type: pgint4)
+        	select q1, unique2, thousand, hundred
+	^
+<sql-statement>
+explain (costs off)
+select f1, unique2, case when unique2 is null then f1 else 0 end
+  from int4_tbl a left join tenk1 b on f1 = unique2
+  where (case when unique2 is null then f1 else 0 end) = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select f1, unique2, case when unique2 is null then f1 else 0 end
+  from int4_tbl a left join tenk1 b on f1 = unique2
+  where (case when unique2 is null then f1 else 0 end) = 0;
+</sql-statement>
+<sql-statement>
+--
+-- another case with equivalence clauses above outer joins (bug #8591)
+--
+explain (costs off)
+select a.unique1, b.unique1, c.unique1, coalesce(b.twothousand, a.twothousand)
+  from tenk1 a left join tenk1 b on b.thousand = a.unique1                        left join tenk1 c on c.unique2 = coalesce(b.twothousand, a.twothousand)
+  where a.unique2 < 10 and coalesce(b.twothousand, a.twothousand) = 44;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select a.unique1, b.unique1, c.unique1, coalesce(b.twothousand, a.twothousand)
+  from tenk1 a left join tenk1 b on b.thousand = a.unique1                        left join tenk1 c on c.unique2 = coalesce(b.twothousand, a.twothousand)
+  where a.unique2 < 10 and coalesce(b.twothousand, a.twothousand) = 44;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select a.unique1, b.unique1, c.unique1, coalesce(b.twothousand, a.twothousand)
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: unique1
+        	select a.unique1, b.unique1, c.unique1, coalesce(b.twothousand, a.twothousand)
+	^
+<sql-statement>
+--
+-- check handling of join aliases when flattening multiple levels of subquery
+--
+explain (verbose, costs off)
+select foo1.join_key as foo1_id, foo3.join_key AS foo3_id, bug_field from
+  (values (0),(1)) foo1(join_key)
+left join
+  (select join_key, bug_field from
+    (select ss1.join_key, ss1.bug_field from
+      (select f1 as join_key, 666 as bug_field from int4_tbl i1) ss1
+    ) foo2
+   left join
+    (select unique2 as join_key from tenk1 i2) ss2
+   using (join_key)
+  ) foo3
+using (join_key);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select foo1.join_key as foo1_id, foo3.join_key AS foo3_id, bug_field from
+  (values (0),(1)) foo1(join_key)
+left join
+  (select join_key, bug_field from
+    (select ss1.join_key, ss1.bug_field from
+      (select f1 as join_key, 666 as bug_field from int4_tbl i1) ss1
+    ) foo2
+   left join
+    (select unique2 as join_key from tenk1 i2) ss2
+   using (join_key)
+  ) foo3
+using (join_key);
+</sql-statement>
+<sql-statement>
+--
+-- test successful handling of nested outer joins with degenerate join quals
+--
+explain (verbose, costs off)
+select t1.* from
+  text_tbl t1
+  left join (select *, '***'::text as d1 from int8_tbl i8b1) b1
+    left join int8_tbl i8
+      left join (select *, null::int as d2 from int8_tbl i8b2) b2
+      on (i8.q1 = b2.q1)
+    on (b2.d2 = b1.q2)
+  on (t1.f1 = b1.d1)
+  left join int4_tbl i4
+  on (i8.q2 = i4.f1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select t1.* from
+  text_tbl t1
+  left join (select *, '***'::text as d1 from int8_tbl i8b1) b1
+    left join int8_tbl i8
+      left join (select *, null::int as d2 from int8_tbl i8b2) b2
+      on (i8.q1 = b2.q1)
+    on (b2.d2 = b1.q2)
+  on (t1.f1 = b1.d1)
+  left join int4_tbl i4
+  on (i8.q2 = i4.f1);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin
+    	select t1.* from
+	^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b1.q2 has type: pgint8, b._alias_b2.d2 has type: pgint4)
+        	select t1.* from
+	^
+<sql-statement>
+explain (verbose, costs off)
+select t1.* from
+  text_tbl t1
+  left join (select *, '***'::text as d1 from int8_tbl i8b1) b1
+    left join int8_tbl i8
+      left join (select *, null::int as d2 from int8_tbl i8b2, int4_tbl i4b2) b2
+      on (i8.q1 = b2.q1)
+    on (b2.d2 = b1.q2)
+  on (t1.f1 = b1.d1)
+  left join int4_tbl i4
+  on (i8.q2 = i4.f1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select t1.* from
+  text_tbl t1
+  left join (select *, '***'::text as d1 from int8_tbl i8b1) b1
+    left join int8_tbl i8
+      left join (select *, null::int as d2 from int8_tbl i8b2, int4_tbl i4b2) b2
+      on (i8.q1 = b2.q1)
+    on (b2.d2 = b1.q2)
+  on (t1.f1 = b1.d1)
+  left join int4_tbl i4
+  on (i8.q2 = i4.f1);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin
+    	select t1.* from
+	^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b1.q2 has type: pgint8, b._alias_b2.d2 has type: pgint4)
+        	select t1.* from
+	^
+<sql-statement>
+explain (verbose, costs off)
+select t1.* from
+  text_tbl t1
+  left join (select *, '***'::text as d1 from int8_tbl i8b1) b1
+    left join int8_tbl i8
+      left join (select *, null::int as d2 from int8_tbl i8b2, int4_tbl i4b2
+                 where q1 = f1) b2
+      on (i8.q1 = b2.q1)
+    on (b2.d2 = b1.q2)
+  on (t1.f1 = b1.d1)
+  left join int4_tbl i4
+  on (i8.q2 = i4.f1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select t1.* from
+  text_tbl t1
+  left join (select *, '***'::text as d1 from int8_tbl i8b1) b1
+    left join int8_tbl i8
+      left join (select *, null::int as d2 from int8_tbl i8b2, int4_tbl i4b2
+                 where q1 = f1) b2
+      on (i8.q1 = b2.q1)
+    on (b2.d2 = b1.q2)
+  on (t1.f1 = b1.d1)
+  left join int4_tbl i4
+  on (i8.q2 = i4.f1);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin, At function: OrderedMap, At function: EquiJoin
+    	select t1.* from
+	^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_b1.q2 has type: pgint8, b._alias_b2.d2 has type: pgint4)
+        	select t1.* from
+	^
+<sql-statement>
+explain (verbose, costs off)
+select * from
+  text_tbl t1
+  inner join int8_tbl i8
+  on i8.q2 = 456
+  right join text_tbl t2
+  on t1.f1 = 'doh!'
+  left join int4_tbl i4
+  on i8.q1 = i4.f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select * from
+  text_tbl t1
+  inner join int8_tbl i8
+  on i8.q2 = 456
+  right join text_tbl t2
+  on t1.f1 = 'doh!'
+  left join int4_tbl i4
+  on i8.q1 = i4.f1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	select * from
+	^
+<sql-statement>
+--
+-- test for appropriate join order in the presence of lateral references
+--
+explain (verbose, costs off)
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
+where t1.f1 = ss.f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss
+where t1.f1 = ss.f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+explain (verbose, costs off)
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss1,
+  lateral (select ss1.* from text_tbl t3 limit 1) as ss2
+where t1.f1 = ss2.f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select * from
+  text_tbl t1
+  left join int8_tbl i8
+  on i8.q2 = 123,
+  lateral (select i8.q1, t2.f1 from text_tbl t2 limit 1) as ss1,
+  lateral (select ss1.* from text_tbl t3 limit 1) as ss2
+where t1.f1 = ss2.f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+explain (verbose, costs off)
+select 1 from
+  text_tbl as tt1
+  inner join text_tbl as tt2 on (tt1.f1 = 'foo')
+  left join text_tbl as tt3 on (tt3.f1 = 'foo')
+  left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
+  lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
+where tt1.f1 = ss1.c0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select 1 from
+  text_tbl as tt1
+  inner join text_tbl as tt2 on (tt1.f1 = 'foo')
+  left join text_tbl as tt3 on (tt3.f1 = 'foo')
+  left join text_tbl as tt4 on (tt3.f1 = tt4.f1),
+  lateral (select tt4.f1 as c0 from text_tbl as tt5 limit 1) as ss1
+where tt1.f1 = ss1.c0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select 1 from
+	^
+<sql-statement>
+--
+-- check a case in which a PlaceHolderVar forces join order
+--
+explain (verbose, costs off)
+select ss2.* from
+  int4_tbl i41
+  left join int8_tbl i8
+    join (select i42.f1 as c1, i43.f1 as c2, 42 as c3
+          from int4_tbl i42, int4_tbl i43) ss1
+    on i8.q1 = ss1.c2
+  on i41.f1 = ss1.c1,
+  lateral (select i41.*, i8.*, ss1.* from text_tbl limit 1) ss2
+where ss1.c2 = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select ss2.* from
+  int4_tbl i41
+  left join int8_tbl i8
+    join (select i42.f1 as c1, i43.f1 as c2, 42 as c3
+          from int4_tbl i42, int4_tbl i43) ss1
+    on i8.q1 = ss1.c2
+  on i41.f1 = ss1.c1,
+  lateral (select i41.*, i8.*, ss1.* from text_tbl limit 1) ss2
+where ss1.c2 = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select ss2.* from
+	^
+<sql-statement>
+--
+-- test successful handling of full join underneath left join (bug #14105)
+--
+explain (costs off)
+select * from
+  (select 1 as id) as xx
+  left join
+    (tenk1 as a1 full join (select 1 as id) as yy on (a1.unique1 = yy.id))
+  on (xx.id = coalesce(yy.id));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select * from
+  (select 1 as id) as xx
+  left join
+    (tenk1 as a1 full join (select 1 as id) as yy on (a1.unique1 = yy.id))
+  on (xx.id = coalesce(yy.id));
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id
+        	select * from
+	^
+<sql-statement>
+--
+-- test ability to push constants through outer join clauses
+--
+explain (costs off)
+  select * from int4_tbl a left join tenk1 b on f1 = unique2 where f1 = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+explain (costs off)
+  select * from tenk1 a full join tenk1 b using(unique2) where unique2 = 42;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+--
+-- test that quals attached to an outer join have correct semantics,
+-- specifically that they don't re-use expressions computed below the join;
+-- we force a mergejoin so that coalesce(b.q1, 1) appears as a join input
+--
+set enable_hashjoin to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashjoin
+    	--
+	^
+<sql-statement>
+set enable_nestloop to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_nestloop
+    	set enable_nestloop to off;
+	^
+<sql-statement>
+explain (verbose, costs off)
+  select a.q2, b.q1
+    from int8_tbl a left join int8_tbl b on a.q2 = coalesce(b.q1, 1)
+    where coalesce(b.q1, 1) > 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select a.q2, b.q1
+  from int8_tbl a left join int8_tbl b on a.q2 = coalesce(b.q1, 1)
+  where coalesce(b.q1, 1) > 0;
+</sql-statement>
+<sql-statement>
+reset enable_hashjoin;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_hashjoin;
+	^
+<sql-statement>
+reset enable_nestloop;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_nestloop;
+	^
+<sql-statement>
+--
+-- test join removal
+--
+begin;
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE a (id int PRIMARY KEY, b_id int);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE b (id int PRIMARY KEY, c_id int);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE c (id int PRIMARY KEY);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE d (a int, b int);
+</sql-statement>
+<sql-statement>
+INSERT INTO a VALUES (0, 0), (1, NULL);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: YtWriteTable!
+    	INSERT INTO a VALUES (0, 0), (1, NULL);
+	^
+        -stdin-:<main>:1:1: Error: values have 2 columns, INSERT INTO expects: 1
+        	INSERT INTO a VALUES (0, 0), (1, NULL);
+	^
+<sql-statement>
+INSERT INTO b VALUES (0, 0), (1, NULL);
+</sql-statement>
+<sql-statement>
+INSERT INTO c VALUES (0), (1);
+</sql-statement>
+<sql-statement>
+INSERT INTO d VALUES (1,3), (2,2), (3,1);
+</sql-statement>
+<sql-statement>
+-- all three cases should be optimizable into a simple seqscan
+explain (costs off) SELECT a.* FROM a LEFT JOIN b ON a.b_id = b.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- all three cases should be optimizable into a simple seqscan
+	^
+<sql-statement>
+explain (costs off) SELECT b.* FROM b LEFT JOIN c ON b.c_id = c.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off) SELECT b.* FROM b LEFT JOIN c ON b.c_id = c.id;
+	^
+<sql-statement>
+explain (costs off)
+  SELECT a.* FROM a LEFT JOIN (b left join c on b.c_id = c.id)
+  ON (a.b_id = b.id);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+-- check optimization of outer join within another special join
+explain (costs off)
+select id from a where id in (
+	select b.id from b left join c on b.id = c.id
+);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check optimization of outer join within another special join
+	^
+<sql-statement>
+-- check that join removal works for a left join when joining a subquery
+-- that is guaranteed to be unique by its GROUP BY clause
+explain (costs off)
+select d.* from d left join (select * from b group by b.id, b.c_id) s
+  on d.a = s.id and d.b = s.c_id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check that join removal works for a left join when joining a subquery
+	^
+<sql-statement>
+-- similarly, but keying off a DISTINCT clause
+explain (costs off)
+select d.* from d left join (select distinct * from b) s
+  on d.a = s.id and d.b = s.c_id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- similarly, but keying off a DISTINCT clause
+	^
+<sql-statement>
+-- join removal is not possible when the GROUP BY contains a column that is
+-- not in the join condition.  (Note: as of 9.6, we notice that b.id is a
+-- primary key and so drop b.c_id from the GROUP BY of the resulting plan;
+-- but this happens too late for join removal in the outer plan level.)
+explain (costs off)
+select d.* from d left join (select * from b group by b.id, b.c_id) s
+  on d.a = s.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- join removal is not possible when the GROUP BY contains a column that is
+	^
+<sql-statement>
+-- similarly, but keying off a DISTINCT clause
+explain (costs off)
+select d.* from d left join (select distinct * from b) s
+  on d.a = s.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- similarly, but keying off a DISTINCT clause
+	^
+<sql-statement>
+-- check join removal works when uniqueness of the join condition is enforced
+-- by a UNION
+explain (costs off)
+select d.* from d left join (select id from a union select id from b) s
+  on d.a = s.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check join removal works when uniqueness of the join condition is enforced
+	^
+<sql-statement>
+-- check join removal with a cross-type comparison operator
+explain (costs off)
+select i8.* from int8_tbl i8 left join (select f1 from int4_tbl group by f1) i4
+  on i8.q1 = i4.f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check join removal with a cross-type comparison operator
+	^
+<sql-statement>
+-- check join removal with lateral references
+explain (costs off)
+select 1 from (select a.id FROM a left join b on a.b_id = b.id) q,
+			  lateral generate_series(1, q.id) gs(i) where q.id = gs.i;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check join removal with lateral references
+	^
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+create temp table parent (k int primary key, pd int);
+</sql-statement>
+<sql-statement>
+create temp table child (k int unique, cd int);
+</sql-statement>
+<sql-statement>
+insert into parent values (1, 10), (2, 20), (3, 30);
+</sql-statement>
+<sql-statement>
+insert into child values (1, 100), (4, 400);
+</sql-statement>
+<sql-statement>
+-- this case is optimizable
+select p.* from parent p left join child c on (p.k = c.k);
+</sql-statement>
+<sql-statement>
+explain (costs off)
+  select p.* from parent p left join child c on (p.k = c.k);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+-- this case is not
+select p.*, linked from parent p
+  left join (select c.*, true as linked from child c) as ss
+  on (p.k = ss.k);
+</sql-statement>
+<sql-statement>
+explain (costs off)
+  select p.*, linked from parent p
+    left join (select c.*, true as linked from child c) as ss
+    on (p.k = ss.k);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+-- check for a 9.0rc1 bug: join removal breaks pseudoconstant qual handling
+select p.* from
+  parent p left join child c on (p.k = c.k)
+  where p.k = 1 and p.k = 2;
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select p.* from
+  parent p left join child c on (p.k = c.k)
+  where p.k = 1 and p.k = 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select p.* from
+  (parent p left join child c on (p.k = c.k)) join parent x on p.k = x.k
+  where p.k = 1 and p.k = 2;
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select p.* from
+  (parent p left join child c on (p.k = c.k)) join parent x on p.k = x.k
+  where p.k = 1 and p.k = 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+-- bug 5255: this is not optimizable by join removal
+begin;
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE a (id int PRIMARY KEY);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE b (id int PRIMARY KEY, a_id int);
+</sql-statement>
+<sql-statement>
+INSERT INTO a VALUES (0), (1);
+</sql-statement>
+<sql-statement>
+INSERT INTO b VALUES (0, 0), (1, NULL);
+</sql-statement>
+<sql-statement>
+SELECT * FROM b LEFT JOIN a ON (b.a_id = a.id) WHERE (a.id IS NULL OR a.id > 0);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT * FROM b LEFT JOIN a ON (b.a_id = a.id) WHERE (a.id IS NULL OR a.id > 0);
+	^
+        -stdin-:<main>:1:33: Error: No such column: a_id
+        	SELECT * FROM b LEFT JOIN a ON (b.a_id = a.id) WHERE (a.id IS NULL OR a.id > 0);
+	                                ^
+        -stdin-:<main>:1:42: Error: No such column: id
+        	SELECT * FROM b LEFT JOIN a ON (b.a_id = a.id) WHERE (a.id IS NULL OR a.id > 0);
+	                                         ^
+<sql-statement>
+SELECT b.* FROM b LEFT JOIN a ON (b.a_id = a.id) WHERE (a.id IS NULL OR a.id > 0);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT b.* FROM b LEFT JOIN a ON (b.a_id = a.id) WHERE (a.id IS NULL OR a.id > 0);
+	^
+        -stdin-:<main>:1:35: Error: No such column: a_id
+        	SELECT b.* FROM b LEFT JOIN a ON (b.a_id = a.id) WHERE (a.id IS NULL OR a.id > 0);
+	                                  ^
+        -stdin-:<main>:1:44: Error: No such column: id
+        	SELECT b.* FROM b LEFT JOIN a ON (b.a_id = a.id) WHERE (a.id IS NULL OR a.id > 0);
+	                                           ^
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+-- another join removal bug: this is not optimizable, either
+begin;
+</sql-statement>
+<sql-statement>
+create temp table innertab (id int8 primary key, dat1 int8);
+</sql-statement>
+<sql-statement>
+insert into innertab values(123, 42);
+</sql-statement>
+<sql-statement>
+SELECT * FROM
+    (SELECT 1 AS x) ss1
+  LEFT JOIN
+    (SELECT q1, q2, COALESCE(dat1, q1) AS y
+     FROM int8_tbl LEFT JOIN innertab ON q2 = id) ss2
+  ON true;
+</sql-statement>
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+-- another join removal bug: we must clean up correctly when removing a PHV
+begin;
+</sql-statement>
+<sql-statement>
+create temp table uniquetbl (f1 text unique);
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select t1.* from
+  uniquetbl as t1
+  left join (select *, '***'::text as d1 from uniquetbl) t2
+  on t1.f1 = t2.f1
+  left join uniquetbl t3
+  on t2.d1 = t3.f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select t0.*
+from
+ text_tbl t0
+ left join
+   (select case t1.ten when 0 then 'doh!'::text else null::text end as case1,
+           t1.stringu2
+     from tenk1 t1
+     join int4_tbl i4 ON i4.f1 = t1.unique2
+     left join uniquetbl u1 ON u1.f1 = t1.string4) ss
+  on t0.f1 = ss.case1
+where ss.stringu2 !~* ss.case1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select t0.*
+from
+ text_tbl t0
+ left join
+   (select case t1.ten when 0 then 'doh!'::text else null::text end as case1,
+           t1.stringu2
+     from tenk1 t1
+     join int4_tbl i4 ON i4.f1 = t1.unique2
+     left join uniquetbl u1 ON u1.f1 = t1.string4) ss
+  on t0.f1 = ss.case1
+where ss.stringu2 !~* ss.case1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: PgSelect, At function: PgSetItem, At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedMap, At function: EquiJoin
+    	select t0.*
+	^
+        -stdin-:<main>:1:1: Error: Cannot compare key columns (a._alias_t1.string4 has type: pgname, b._alias_u1.f1 has type: pgtext)
+        	select t0.*
+	^
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+-- test case to expose miscomputation of required relid set for a PHV
+explain (verbose, costs off)
+select i8.*, ss.v, t.unique2
+  from int8_tbl i8
+    left join int4_tbl i4 on i4.f1 = 1
+    left join lateral (select i4.f1 + 1 as v) as ss on true
+    left join tenk1 t on t.unique2 = ss.v
+where q2 = 456;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- test case to expose miscomputation of required relid set for a PHV
+	^
+<sql-statement>
+select i8.*, ss.v, t.unique2
+  from int8_tbl i8
+    left join int4_tbl i4 on i4.f1 = 1
+    left join lateral (select i4.f1 + 1 as v) as ss on true
+    left join tenk1 t on t.unique2 = ss.v
+where q2 = 456;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select i8.*, ss.v, t.unique2
+	^
+<sql-statement>
+-- and check a related issue where we miscompute required relids for
+-- a PHV that's been translated to a child rel
+create temp table parttbl (a integer primary key) partition by range (a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- and check a related issue where we miscompute required relids for
+	^
+<sql-statement>
+create temp table parttbl1 partition of parttbl for values from (1) to (100);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create temp table parttbl1 partition of parttbl for values from (1) to (100);
+	^
+<sql-statement>
+insert into parttbl values (11), (12);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.parttbl
+    
+<sql-statement>
+explain (costs off)
+select * from
+  (select *, 12 as phv from parttbl) as ss
+  right join int4_tbl on true
+where ss.a = ss.phv and f1 = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select * from
+  (select *, 12 as phv from parttbl) as ss
+  right join int4_tbl on true
+where ss.a = ss.phv and f1 = 0;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.parttbl
+    
+<sql-statement>
+-- bug #8444: we've historically allowed duplicate aliases within aliased JOINs
+select * from
+  int8_tbl x join (int4_tbl x cross join int4_tbl y) j on q1 = f1; -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	-- bug #8444: we've historically allowed duplicate aliases within aliased JOINs
+	^
+<sql-statement>
+select * from
+  int8_tbl x join (int4_tbl x cross join int4_tbl y) j on q1 = y.f1; -- error
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	select * from
+	^
+<sql-statement>
+select * from
+  int8_tbl x join (int4_tbl x cross join int4_tbl y(ff)) j on q1 = f1; -- ok
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	select * from
+	^
+<sql-statement>
+--
+-- Test hints given on incorrect column references are useful
+--
+select t1.uunique1 from
+  tenk1 t1 join tenk2 t2 on t1.two = t2.two; -- error, prefer "t1" suggestion
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:4:8: Error: No such column: uunique1
+        	select t1.uunique1 from
+	       ^
+<sql-statement>
+select t2.uunique1 from
+  tenk1 t1 join tenk2 t2 on t1.two = t2.two; -- error, prefer "t2" suggestion
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select t2.uunique1 from
+	^
+        -stdin-:<main>:1:8: Error: No such column: uunique1
+        	select t2.uunique1 from
+	       ^
+<sql-statement>
+select uunique1 from
+  tenk1 t1 join tenk2 t2 on t1.two = t2.two; -- error, suggest both at once
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select uunique1 from
+	^
+        -stdin-:<main>:1:8: Error: No such column: uunique1
+        	select uunique1 from
+	       ^
+<sql-statement>
+--
+-- Take care to reference the correct RTE
+--
+select atts.relid::regclass, s.* from pg_stats s join
+    pg_attribute a on s.attname = a.attname and s.tablename =
+    a.attrelid::regclass::text join (select unnest(indkey) attnum,
+    indexrelid from pg_index i) atts on atts.attnum = a.attnum where
+    schemaname != 'pg_catalog';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:6:45: Error: Generator functions are not allowed in: SELECT
+    	    a.attrelid::regclass::text join (select unnest(indkey) attnum,
+	                                            ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	--
+	^
+<sql-statement>
+--
+-- Test LATERAL
+--
+select unique2, x.*
+from tenk1 a, lateral (select * from int4_tbl b where f1 = a.unique1) x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	--
+	^
+<sql-statement>
+explain (costs off)
+  select unique2, x.*
+  from tenk1 a, lateral (select * from int4_tbl b where f1 = a.unique1) x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select unique2, x.*
+from int4_tbl x, lateral (select unique2 from tenk1 where f1 = unique1) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select unique2, x.*
+	^
+<sql-statement>
+explain (costs off)
+  select unique2, x.*
+  from int4_tbl x, lateral (select unique2 from tenk1 where f1 = unique1) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+  select unique2, x.*
+  from int4_tbl x cross join lateral (select unique2 from tenk1 where f1 = unique1) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select unique2, x.*
+from int4_tbl x left join lateral (select unique1, unique2 from tenk1 where f1 = unique1) ss on true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select unique2, x.*
+	^
+<sql-statement>
+explain (costs off)
+  select unique2, x.*
+  from int4_tbl x left join lateral (select unique1, unique2 from tenk1 where f1 = unique1) ss on true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+-- check scoping of lateral versus parent references
+-- the first of these should return int8_tbl.q2, the second int8_tbl.q1
+select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- check scoping of lateral versus parent references
+	^
+        -stdin-:<main>:3:11: Error: At function: PgSubLink, At function: PgSelect
+        	select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+	          ^
+            -stdin-:<main>:3:11: Error: At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+            	select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+	          ^
+                -stdin-:<main>:3:34: Error: Column reference can't be used without FROM
+                	select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+	                                 ^
+            -stdin-:<main>:3:11: Error: At function: PgSelect, At function: PgSetItem
+            	select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+	          ^
+                -stdin-:<main>:3:55: Error: Column reference can't be used without FROM
+                	select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
+	                                                      ^
+<sql-statement>
+select *, (select r from (select q1 as q2) x, lateral (select q2 as r) y) from int8_tbl;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:11: Error: RangeSubselect: unsupported lateral
+    	select *, (select r from (select q1 as q2) x, lateral (select q2 as r) y) from int8_tbl;
+	          ^
+<sql-statement>
+-- lateral with function in FROM
+select count(*) from tenk1 a, lateral generate_series(1,two) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeFunction: unsupported lateral
+    	-- lateral with function in FROM
+	^
+<sql-statement>
+explain (costs off)
+  select count(*) from tenk1 a, lateral generate_series(1,two) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+  select count(*) from tenk1 a cross join lateral generate_series(1,two) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+-- don't need the explicit LATERAL keyword for functions
+explain (costs off)
+  select count(*) from tenk1 a, generate_series(1,two) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- don't need the explicit LATERAL keyword for functions
+	^
+<sql-statement>
+-- lateral with UNION ALL subselect
+explain (costs off)
+  select * from generate_series(100,200) g,
+    lateral (select * from int8_tbl a where g = q1 union all
+             select * from int8_tbl b where g = q2) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- lateral with UNION ALL subselect
+	^
+<sql-statement>
+select * from generate_series(100,200) g,
+  lateral (select * from int8_tbl a where g = q1 union all
+           select * from int8_tbl b where g = q2) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from generate_series(100,200) g,
+	^
+<sql-statement>
+-- lateral with VALUES
+explain (costs off)
+  select count(*) from tenk1 a,
+    tenk1 b join lateral (values(a.unique1)) ss(x) on b.unique2 = ss.x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- lateral with VALUES
+	^
+<sql-statement>
+select count(*) from tenk1 a,
+  tenk1 b join lateral (values(a.unique1)) ss(x) on b.unique2 = ss.x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select count(*) from tenk1 a,
+	^
+<sql-statement>
+-- lateral with VALUES, no flattening possible
+explain (costs off)
+  select count(*) from tenk1 a,
+    tenk1 b join lateral (values(a.unique1),(-1)) ss(x) on b.unique2 = ss.x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- lateral with VALUES, no flattening possible
+	^
+<sql-statement>
+select count(*) from tenk1 a,
+  tenk1 b join lateral (values(a.unique1),(-1)) ss(x) on b.unique2 = ss.x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select count(*) from tenk1 a,
+	^
+<sql-statement>
+-- lateral injecting a strange outer join condition
+explain (costs off)
+  select * from int8_tbl a,
+    int8_tbl x left join lateral (select a.q1 from int4_tbl y) ss(z)
+      on x.q2 = ss.z
+  order by a.q1, a.q2, x.q1, x.q2, ss.z;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- lateral injecting a strange outer join condition
+	^
+<sql-statement>
+select * from int8_tbl a,
+  int8_tbl x left join lateral (select a.q1 from int4_tbl y) ss(z)
+    on x.q2 = ss.z
+  order by a.q1, a.q2, x.q1, x.q2, ss.z;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from int8_tbl a,
+	^
+<sql-statement>
+-- lateral reference to a join alias variable
+select * from (select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1,
+  lateral (select x) ss2(y);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	-- lateral reference to a join alias variable
+	^
+<sql-statement>
+select * from (select f1 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1,
+  lateral (values(x)) ss2(y);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from (select f1 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1,
+	^
+<sql-statement>
+select * from ((select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1) j,
+  lateral (select x) ss2(y);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	select * from ((select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1) j,
+	^
+<sql-statement>
+-- lateral references requiring pullup
+select * from (values(1)) x(lb),
+  lateral generate_series(lb,4) x4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeFunction: unsupported lateral
+    	-- lateral references requiring pullup
+	^
+<sql-statement>
+select * from (select f1/1000000000 from int4_tbl) x(lb),
+  lateral generate_series(lb,4) x4;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeFunction: unsupported lateral
+    	select * from (select f1/1000000000 from int4_tbl) x(lb),
+	^
+<sql-statement>
+select * from (values(1)) x(lb),
+  lateral (values(lb)) y(lbcopy);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from (values(1)) x(lb),
+	^
+<sql-statement>
+select * from (values(1)) x(lb),
+  lateral (select lb from int4_tbl) y(lbcopy);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from (values(1)) x(lb),
+	^
+<sql-statement>
+select * from
+  int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
+  lateral (values(x.q1,y.q1,y.q2)) v(xq1,yq1,yq2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+select * from
+  int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
+  lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+select x.* from
+  int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
+  lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select x.* from
+	^
+<sql-statement>
+select v.* from
+  (int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1)
+  left join int4_tbl z on z.f1 = x.q2,
+  lateral (select x.q1,y.q1 union all select x.q2,y.q2) v(vx,vy);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select v.* from
+	^
+<sql-statement>
+select v.* from
+  (int8_tbl x left join (select q1,(select coalesce(q2,0)) q2 from int8_tbl) y on x.q2 = y.q1)
+  left join int4_tbl z on z.f1 = x.q2,
+  lateral (select x.q1,y.q1 union all select x.q2,y.q2) v(vx,vy);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select v.* from
+	^
+<sql-statement>
+select v.* from
+  (int8_tbl x left join (select q1,(select coalesce(q2,0)) q2 from int8_tbl) y on x.q2 = y.q1)
+  left join int4_tbl z on z.f1 = x.q2,
+  lateral (select x.q1,y.q1 from onerow union all select x.q2,y.q2 from onerow) v(vx,vy);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select v.* from
+	^
+<sql-statement>
+explain (verbose, costs off)
+select * from
+  int8_tbl a left join
+  lateral (select *, a.q2 as x from int8_tbl b) ss on a.q2 = ss.q1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select * from
+  int8_tbl a left join
+  lateral (select *, a.q2 as x from int8_tbl b) ss on a.q2 = ss.q1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+explain (verbose, costs off)
+select * from
+  int8_tbl a left join
+  lateral (select *, coalesce(a.q2, 42) as x from int8_tbl b) ss on a.q2 = ss.q1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select * from
+  int8_tbl a left join
+  lateral (select *, coalesce(a.q2, 42) as x from int8_tbl b) ss on a.q2 = ss.q1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+-- lateral can result in join conditions appearing below their
+-- real semantic level
+explain (verbose, costs off)
+select * from int4_tbl i left join
+  lateral (select * from int2_tbl j where i.f1 = j.f1) k on true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- lateral can result in join conditions appearing below their
+	^
+<sql-statement>
+select * from int4_tbl i left join
+  lateral (select * from int2_tbl j where i.f1 = j.f1) k on true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from int4_tbl i left join
+	^
+<sql-statement>
+explain (verbose, costs off)
+select * from int4_tbl i left join
+  lateral (select coalesce(i) from int2_tbl j where i.f1 = j.f1) k on true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select * from int4_tbl i left join
+  lateral (select coalesce(i) from int2_tbl j where i.f1 = j.f1) k on true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from int4_tbl i left join
+	^
+<sql-statement>
+explain (verbose, costs off)
+select * from int4_tbl a,
+  lateral (
+    select * from int4_tbl b left join int8_tbl c on (b.f1 = q1 and a.f1 = q2)
+  ) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select * from int4_tbl a,
+  lateral (
+    select * from int4_tbl b left join int8_tbl c on (b.f1 = q1 and a.f1 = q2)
+  ) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from int4_tbl a,
+	^
+<sql-statement>
+-- lateral reference in a PlaceHolderVar evaluated at join level
+explain (verbose, costs off)
+select * from
+  int8_tbl a left join lateral
+  (select b.q1 as bq1, c.q1 as cq1, least(a.q1,b.q1,c.q1) from
+   int8_tbl b cross join int8_tbl c) ss
+  on a.q2 = ss.bq1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- lateral reference in a PlaceHolderVar evaluated at join level
+	^
+<sql-statement>
+select * from
+  int8_tbl a left join lateral
+  (select b.q1 as bq1, c.q1 as cq1, least(a.q1,b.q1,c.q1) from
+   int8_tbl b cross join int8_tbl c) ss
+  on a.q2 = ss.bq1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+-- case requiring nested PlaceHolderVars
+explain (verbose, costs off)
+select * from
+  int8_tbl c left join (
+    int8_tbl a left join (select q1, coalesce(q2,42) as x from int8_tbl b) ss1
+      on a.q2 = ss1.q1
+    cross join
+    lateral (select q1, coalesce(ss1.x,q2) as y from int8_tbl d) ss2
+  ) on c.q2 = ss2.q1,
+  lateral (select ss2.y offset 0) ss3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- case requiring nested PlaceHolderVars
+	^
+<sql-statement>
+-- case that breaks the old ph_may_need optimization
+explain (verbose, costs off)
+select c.*,a.*,ss1.q1,ss2.q1,ss3.* from
+  int8_tbl c left join (
+    int8_tbl a left join
+      (select q1, coalesce(q2,f1) as x from int8_tbl b, int4_tbl b2
+       where q1 < f1) ss1
+      on a.q2 = ss1.q1
+    cross join
+    lateral (select q1, coalesce(ss1.x,q2) as y from int8_tbl d) ss2
+  ) on c.q2 = ss2.q1,
+  lateral (select * from int4_tbl i where ss2.y > f1) ss3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- case that breaks the old ph_may_need optimization
+	^
+<sql-statement>
+-- check processing of postponed quals (bug #9041)
+explain (verbose, costs off)
+select * from
+  (select 1 as x offset 0) x cross join (select 2 as y offset 0) y
+  left join lateral (
+    select * from (select 3 as z offset 0) z where z.z = x.x
+  ) zz on zz.z = y.y;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check processing of postponed quals (bug #9041)
+	^
+<sql-statement>
+-- check dummy rels with lateral references (bug #15694)
+explain (verbose, costs off)
+select * from int8_tbl i8 left join lateral
+  (select *, i8.q2 from int4_tbl where false) ss on true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check dummy rels with lateral references (bug #15694)
+	^
+<sql-statement>
+explain (verbose, costs off)
+select * from int8_tbl i8 left join lateral
+  (select *, i8.q2 from int4_tbl i1, int4_tbl i2 where false) ss on true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+-- check handling of nested appendrels inside LATERAL
+select * from
+  ((select 2 as v) union all (select 3 as v)) as q1
+  cross join lateral
+  ((select * from
+      ((select 4 as v) union all (select 5 as v)) as q3)
+   union all
+   (select q1.v)
+  ) as q2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	-- check handling of nested appendrels inside LATERAL
+	^
+<sql-statement>
+-- check the number of columns specified
+SELECT * FROM (int8_tbl i cross join int4_tbl j) ss(a,b,c,d);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: JoinExpr: unsupported alias
+    	-- check the number of columns specified
+	^
+<sql-statement>
+-- check we don't try to do a unique-ified semijoin with LATERAL
+explain (verbose, costs off)
+select * from
+  (values (0,9998), (1,1000)) v(id,x),
+  lateral (select f1 from int4_tbl
+           where f1 = any (select unique1 from tenk1
+                           where unique2 = v.x offset 0)) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check we don't try to do a unique-ified semijoin with LATERAL
+	^
+<sql-statement>
+select * from
+  (values (0,9998), (1,1000)) v(id,x),
+  lateral (select f1 from int4_tbl
+           where f1 = any (select unique1 from tenk1
+                           where unique2 = v.x offset 0)) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+-- check proper extParam/allParam handling (this isn't exactly a LATERAL issue,
+-- but we can make the test case much more compact with LATERAL)
+explain (verbose, costs off)
+select * from (values (0), (1)) v(id),
+lateral (select * from int8_tbl t1,
+         lateral (select * from
+                    (select * from int8_tbl t2
+                     where q1 = any (select q2 from int8_tbl t3
+                                     where q2 = (select greatest(t1.q1,t2.q2))
+                                       and (select v.id=0)) offset 0) ss2) ss
+         where t1.q1 = ss.q2) ss0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check proper extParam/allParam handling (this isn't exactly a LATERAL issue,
+	^
+<sql-statement>
+select * from (values (0), (1)) v(id),
+lateral (select * from int8_tbl t1,
+         lateral (select * from
+                    (select * from int8_tbl t2
+                     where q1 = any (select q2 from int8_tbl t3
+                                     where q2 = (select greatest(t1.q1,t2.q2))
+                                       and (select v.id=0)) offset 0) ss2) ss
+         where t1.q1 = ss.q2) ss0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from (values (0), (1)) v(id),
+	^
+<sql-statement>
+-- test some error cases where LATERAL should have been used but wasn't
+select f1,g from int4_tbl a, (select f1 as g) ss;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	-- test some error cases where LATERAL should have been used but wasn't
+	^
+        -stdin-:<main>:2:38: Error: Column reference can't be used without FROM
+        	select f1,g from int4_tbl a, (select f1 as g) ss;
+	                                     ^
+<sql-statement>
+select f1,g from int4_tbl a, (select a.f1 as g) ss;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	select f1,g from int4_tbl a, (select a.f1 as g) ss;
+	^
+        -stdin-:<main>:1:38: Error: Column reference can't be used without FROM
+        	select f1,g from int4_tbl a, (select a.f1 as g) ss;
+	                                     ^
+<sql-statement>
+select f1,g from int4_tbl a cross join (select f1 as g) ss;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	select f1,g from int4_tbl a cross join (select f1 as g) ss;
+	^
+        -stdin-:<main>:1:48: Error: Column reference can't be used without FROM
+        	select f1,g from int4_tbl a cross join (select f1 as g) ss;
+	                                               ^
+<sql-statement>
+select f1,g from int4_tbl a cross join (select a.f1 as g) ss;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	select f1,g from int4_tbl a cross join (select a.f1 as g) ss;
+	^
+        -stdin-:<main>:1:48: Error: Column reference can't be used without FROM
+        	select f1,g from int4_tbl a cross join (select a.f1 as g) ss;
+	                                               ^
+<sql-statement>
+-- SQL:2008 says the left table is in scope but illegal to access here
+select f1,g from int4_tbl a right join lateral generate_series(0, a.f1) g on true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeFunction: unsupported lateral
+    	-- SQL:2008 says the left table is in scope but illegal to access here
+	^
+<sql-statement>
+select f1,g from int4_tbl a full join lateral generate_series(0, a.f1) g on true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeFunction: unsupported lateral
+    	select f1,g from int4_tbl a full join lateral generate_series(0, a.f1) g on true;
+	^
+<sql-statement>
+-- check we complain about ambiguous table references
+select * from
+  int8_tbl x cross join (int4_tbl x cross join lateral (select x.f1) ss);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	-- check we complain about ambiguous table references
+	^
+<sql-statement>
+-- LATERAL can be used to put an aggregate into the FROM clause of its query
+select 1 from tenk1 a, lateral (select max(a.unique1) from int4_tbl b) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	-- LATERAL can be used to put an aggregate into the FROM clause of its query
+	^
+<sql-statement>
+-- check behavior of LATERAL in UPDATE/DELETE
+create temp table xx1 as select f1 as x1, -f1 as x2 from int4_tbl;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	-- check behavior of LATERAL in UPDATE/DELETE
+	^
+<sql-statement>
+-- error, can't do this:
+update xx1 set x2 = f1 from (select * from int4_tbl where f1 = x1) ss;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+update xx1 set x2 = f1 from (select * from int4_tbl where f1 = xx1.x1) ss;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+-- can't do it even with LATERAL:
+update xx1 set x2 = f1 from lateral (select * from int4_tbl where f1 = x1) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	-- can't do it even with LATERAL:
+	^
+<sql-statement>
+-- we might in future allow something like this, but for now it's an error:
+update xx1 set x2 = f1 from xx1, lateral (select * from int4_tbl where f1 = x1) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	-- we might in future allow something like this, but for now it's an error:
+	^
+<sql-statement>
+-- also errors:
+delete from xx1 using (select * from int4_tbl where f1 = x1) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: using is not supported
+    	-- also errors:
+	^
+<sql-statement>
+delete from xx1 using (select * from int4_tbl where f1 = xx1.x1) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: using is not supported
+    	delete from xx1 using (select * from int4_tbl where f1 = xx1.x1) ss;
+	^
+<sql-statement>
+delete from xx1 using lateral (select * from int4_tbl where f1 = x1) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: using is not supported
+    	delete from xx1 using lateral (select * from int4_tbl where f1 = x1) ss;
+	^
+<sql-statement>
+--
+-- test LATERAL reference propagation down a multi-level inheritance hierarchy
+-- produced for a multi-level partitioned table hierarchy.
+--
+create table join_pt1 (a int, b int, c varchar) partition by range(a);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	--
+	^
+<sql-statement>
+create table join_pt1p1 partition of join_pt1 for values from (0) to (100) partition by range(b);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table join_pt1p1 partition of join_pt1 for values from (0) to (100) partition by range(b);
+	^
+<sql-statement>
+create table join_pt1p2 partition of join_pt1 for values from (100) to (200);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table join_pt1p2 partition of join_pt1 for values from (100) to (200);
+	^
+<sql-statement>
+create table join_pt1p1p1 partition of join_pt1p1 for values from (0) to (100);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table join_pt1p1p1 partition of join_pt1p1 for values from (0) to (100);
+	^
+<sql-statement>
+insert into join_pt1 values (1, 1, 'x'), (101, 101, 'y');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.join_pt1
+    
+<sql-statement>
+create table join_ut1 (a int, b int, c varchar);
+</sql-statement>
+<sql-statement>
+insert into join_ut1 values (101, 101, 'y'), (2, 2, 'z');
+</sql-statement>
+<sql-statement>
+explain (verbose, costs off)
+select t1.b, ss.phv from join_ut1 t1 left join lateral
+              (select t2.a as t2a, t3.a t3a, least(t1.a, t2.a, t3.a) phv
+					  from join_pt1 t2 join join_ut1 t3 on t2.a = t3.b) ss
+              on t1.a = ss.t2a order by t1.a;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select t1.b, ss.phv from join_ut1 t1 left join lateral
+              (select t2.a as t2a, t3.a t3a, least(t1.a, t2.a, t3.a) phv
+					  from join_pt1 t2 join join_ut1 t3 on t2.a = t3.b) ss
+              on t1.a = ss.t2a order by t1.a;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select t1.b, ss.phv from join_ut1 t1 left join lateral
+	^
+<sql-statement>
+drop table join_pt1;
+</sql-statement>
+<sql-statement>
+drop table join_ut1;
+</sql-statement>
+<sql-statement>
+--
+-- test estimation behavior with multi-column foreign key and constant qual
+--
+begin;
+</sql-statement>
+<sql-statement>
+create table fkest (x integer, x10 integer, x10b integer, x100 integer);
+</sql-statement>
+<sql-statement>
+insert into fkest select x, x/10, x/10, x/100 from generate_series(1,1000) x;
+</sql-statement>
+<sql-statement>
+create unique index on fkest(x, x10, x100);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
+    	create unique index on fkest(x, x10, x100);
+	^
+<sql-statement>
+analyze fkest;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze fkest;
+	^
+<sql-statement>
+explain (costs off)
+select * from fkest f1
+  join fkest f2 on (f1.x = f2.x and f1.x10 = f2.x10b and f1.x100 = f2.x100)
+  join fkest f3 on f1.x = f3.x
+  where f1.x100 = 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+alter table fkest add constraint fk
+  foreign key (x, x10b, x100) references fkest (x, x10, x100);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table fkest add constraint fk
+	^
+<sql-statement>
+explain (costs off)
+select * from fkest f1
+  join fkest f2 on (f1.x = f2.x and f1.x10 = f2.x10b and f1.x100 = f2.x100)
+  join fkest f3 on f1.x = f3.x
+  where f1.x100 = 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+--
+-- test that foreign key join estimation performs sanely for outer joins
+--
+begin;
+</sql-statement>
+<sql-statement>
+create table fkest (a int, b int, c int unique, primary key(a,b));
+</sql-statement>
+<sql-statement>
+create table fkest1 (a int, b int, primary key(a,b));
+</sql-statement>
+<sql-statement>
+insert into fkest select x/10, x%10, x from generate_series(1,1000) x;
+</sql-statement>
+<sql-statement>
+insert into fkest1 select x/10, x%10 from generate_series(1,1000) x;
+</sql-statement>
+<sql-statement>
+alter table fkest1
+  add constraint fkest1_a_b_fkey foreign key (a,b) references fkest;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	alter table fkest1
+	^
+<sql-statement>
+analyze fkest;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze fkest;
+	^
+<sql-statement>
+analyze fkest1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze fkest1;
+	^
+<sql-statement>
+explain (costs off)
+select *
+from fkest f
+  left join fkest1 f1 on f.a = f1.a and f.b = f1.b
+  left join fkest1 f2 on f.a = f2.a and f.b = f2.b
+  left join fkest1 f3 on f.a = f3.a and f.b = f3.b
+where f.c = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+--
+-- test planner's ability to mark joins as unique
+--
+create table j1 (id int primary key);
+</sql-statement>
+<sql-statement>
+create table j2 (id int primary key);
+</sql-statement>
+<sql-statement>
+create table j3 (id int);
+</sql-statement>
+<sql-statement>
+insert into j1 values(1),(2),(3);
+</sql-statement>
+<sql-statement>
+insert into j2 values(1),(2),(3);
+</sql-statement>
+<sql-statement>
+insert into j3 values(1),(1);
+</sql-statement>
+<sql-statement>
+analyze j1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze j1;
+	^
+<sql-statement>
+analyze j2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze j2;
+	^
+<sql-statement>
+analyze j3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze j3;
+	^
+<sql-statement>
+-- ensure join is properly marked as unique
+explain (verbose, costs off)
+select * from j1 inner join j2 on j1.id = j2.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure join is properly marked as unique
+	^
+<sql-statement>
+-- ensure join is not unique when not an equi-join
+explain (verbose, costs off)
+select * from j1 inner join j2 on j1.id > j2.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure join is not unique when not an equi-join
+	^
+<sql-statement>
+-- ensure non-unique rel is not chosen as inner
+explain (verbose, costs off)
+select * from j1 inner join j3 on j1.id = j3.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure non-unique rel is not chosen as inner
+	^
+<sql-statement>
+-- ensure left join is marked as unique
+explain (verbose, costs off)
+select * from j1 left join j2 on j1.id = j2.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure left join is marked as unique
+	^
+<sql-statement>
+-- ensure right join is marked as unique
+explain (verbose, costs off)
+select * from j1 right join j2 on j1.id = j2.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure right join is marked as unique
+	^
+<sql-statement>
+-- ensure full join is marked as unique
+explain (verbose, costs off)
+select * from j1 full join j2 on j1.id = j2.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure full join is marked as unique
+	^
+<sql-statement>
+-- a clauseless (cross) join can't be unique
+explain (verbose, costs off)
+select * from j1 cross join j2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- a clauseless (cross) join can't be unique
+	^
+<sql-statement>
+-- ensure a natural join is marked as unique
+explain (verbose, costs off)
+select * from j1 natural join j2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure a natural join is marked as unique
+	^
+<sql-statement>
+-- ensure a distinct clause allows the inner to become unique
+explain (verbose, costs off)
+select * from j1
+inner join (select distinct id from j3) j3 on j1.id = j3.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure a distinct clause allows the inner to become unique
+	^
+<sql-statement>
+-- ensure group by clause allows the inner to become unique
+explain (verbose, costs off)
+select * from j1
+inner join (select id from j3 group by id) j3 on j1.id = j3.id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure group by clause allows the inner to become unique
+	^
+<sql-statement>
+drop table j1;
+</sql-statement>
+<sql-statement>
+drop table j2;
+</sql-statement>
+<sql-statement>
+drop table j3;
+</sql-statement>
+<sql-statement>
+-- test more complex permutations of unique joins
+create table j1 (id1 int, id2 int, primary key(id1,id2));
+</sql-statement>
+<sql-statement>
+create table j2 (id1 int, id2 int, primary key(id1,id2));
+</sql-statement>
+<sql-statement>
+create table j3 (id1 int, id2 int, primary key(id1,id2));
+</sql-statement>
+<sql-statement>
+insert into j1 values(1,1),(1,2);
+</sql-statement>
+<sql-statement>
+insert into j2 values(1,1);
+</sql-statement>
+<sql-statement>
+insert into j3 values(1,1);
+</sql-statement>
+<sql-statement>
+analyze j1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze j1;
+	^
+<sql-statement>
+analyze j2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze j2;
+	^
+<sql-statement>
+analyze j3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze j3;
+	^
+<sql-statement>
+-- ensure there's no unique join when not all columns which are part of the
+-- unique index are seen in the join clause
+explain (verbose, costs off)
+select * from j1
+inner join j2 on j1.id1 = j2.id1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure there's no unique join when not all columns which are part of the
+	^
+<sql-statement>
+-- ensure proper unique detection with multiple join quals
+explain (verbose, costs off)
+select * from j1
+inner join j2 on j1.id1 = j2.id1 and j1.id2 = j2.id2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure proper unique detection with multiple join quals
+	^
+<sql-statement>
+-- ensure we don't detect the join to be unique when quals are not part of the
+-- join condition
+explain (verbose, costs off)
+select * from j1
+inner join j2 on j1.id1 = j2.id1 where j1.id2 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ensure we don't detect the join to be unique when quals are not part of the
+	^
+<sql-statement>
+-- as above, but for left joins.
+explain (verbose, costs off)
+select * from j1
+left join j2 on j1.id1 = j2.id1 where j1.id2 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- as above, but for left joins.
+	^
+<sql-statement>
+-- validate logic in merge joins which skips mark and restore.
+-- it should only do this if all quals which were used to detect the unique
+-- are present as join quals, and not plain quals.
+set enable_nestloop to 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_nestloop
+    	-- validate logic in merge joins which skips mark and restore.
+	^
+<sql-statement>
+set enable_hashjoin to 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashjoin
+    	set enable_hashjoin to 0;
+	^
+<sql-statement>
+set enable_sort to 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_sort
+    	set enable_sort to 0;
+	^
+<sql-statement>
+-- create indexes that will be preferred over the PKs to perform the join
+create index j1_id1_idx on j1 (id1) where id1 % 1000 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: partial index is not supported yet
+    	-- create indexes that will be preferred over the PKs to perform the join
+	^
+<sql-statement>
+create index j2_id1_idx on j2 (id1) where id1 % 1000 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: partial index is not supported yet
+    	create index j2_id1_idx on j2 (id1) where id1 % 1000 = 1;
+	^
+<sql-statement>
+-- need an additional row in j2, if we want j2_id1_idx to be preferred
+insert into j2 values(1,2);
+</sql-statement>
+<sql-statement>
+analyze j2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze j2;
+	^
+<sql-statement>
+explain (costs off) select * from j1
+inner join j2 on j1.id1 = j2.id1 and j1.id2 = j2.id2
+where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off) select * from j1
+	^
+<sql-statement>
+select * from j1
+inner join j2 on j1.id1 = j2.id1 and j1.id2 = j2.id2
+where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from j1
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id1
+        	select * from j1
+	^
+<sql-statement>
+-- Exercise array keys mark/restore B-Tree code
+explain (costs off) select * from j1
+inner join j2 on j1.id1 = j2.id1 and j1.id2 = j2.id2
+where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1 and j2.id1 = any (array[1]);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Exercise array keys mark/restore B-Tree code
+	^
+<sql-statement>
+select * from j1
+inner join j2 on j1.id1 = j2.id1 and j1.id2 = j2.id2
+where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1 and j2.id1 = any (array[1]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from j1
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id1
+        	select * from j1
+	^
+<sql-statement>
+-- Exercise array keys "find extreme element" B-Tree code
+explain (costs off) select * from j1
+inner join j2 on j1.id1 = j2.id1 and j1.id2 = j2.id2
+where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1 and j2.id1 >= any (array[1,5]);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Exercise array keys "find extreme element" B-Tree code
+	^
+<sql-statement>
+select * from j1
+inner join j2 on j1.id1 = j2.id1 and j1.id2 = j2.id2
+where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1 and j2.id1 >= any (array[1,5]);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from j1
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id1
+        	select * from j1
+	^
+<sql-statement>
+reset enable_nestloop;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_nestloop;
+	^
+<sql-statement>
+reset enable_hashjoin;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_hashjoin;
+	^
+<sql-statement>
+reset enable_sort;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_sort;
+	^
+<sql-statement>
+drop table j1;
+</sql-statement>
+<sql-statement>
+drop table j2;
+</sql-statement>
+<sql-statement>
+drop table j3;
+</sql-statement>
+<sql-statement>
+-- check that semijoin inner is not seen as unique for a portion of the outerrel
+explain (verbose, costs off)
+select t1.unique1, t2.hundred
+from onek t1, tenk1 t2
+where exists (select 1 from tenk1 t3
+              where t3.thousand = t1.unique1 and t3.tenthous = t2.hundred)
+      and t1.unique1 < 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check that semijoin inner is not seen as unique for a portion of the outerrel
+	^
+<sql-statement>
+-- ... unless it actually is unique
+create table j3 as select unique1, tenthous from onek;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	-- ... unless it actually is unique
+	^
+<sql-statement>
+vacuum analyze j3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	vacuum analyze j3;
+	^
+<sql-statement>
+create unique index on j3(unique1, tenthous);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
+    	create unique index on j3(unique1, tenthous);
+	^
+<sql-statement>
+explain (verbose, costs off)
+select t1.unique1, t2.hundred
+from onek t1, tenk1 t2
+where exists (select 1 from j3
+              where j3.unique1 = t1.unique1 and j3.tenthous = t2.hundred)
+      and t1.unique1 < 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+drop table j3;
+</sql-statement>

@@ -1,0 +1,5 @@
+{%- include "[generator]/common_vars.jinja" -%}
+
+{%- set prepareProtosTask = target.proto_files|length or target.runs|length or target.custom_runs|length -%}
+{%- set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}
+{%- set extractLibrariesProtosTask = libraries|length -%}

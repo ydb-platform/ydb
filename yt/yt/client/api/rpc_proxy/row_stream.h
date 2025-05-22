@@ -8,8 +8,8 @@
 
 #include <yt/yt/client/table_client/row_batch.h>
 
+#include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>
-#include <yt/yt/core/misc/range.h>
 
 namespace NYT::NApi::NRpcProxy {
 

@@ -24,6 +24,7 @@
 static struct iovec *vecs;
 static int no_buf_select;
 static int no_iopoll;
+static int no_hybrid;
 
 static int provide_buffers(struct io_uring *ring)
 {
@@ -88,7 +89,7 @@ static int __test_io(const char *file, struct io_uring *ring, int write, int sqt
 	}
 	fd = open(file, open_flags);
 	if (fd < 0) {
-		if (errno == EINVAL)
+		if (errno == EINVAL || errno == EPERM || errno == EACCES)
 			return 0;
 		perror("file open");
 		goto err;
@@ -231,7 +232,7 @@ static int test_io_uring_cqe_peek(const char *file)
 
 	fd = open(file, O_RDONLY | O_DIRECT);
 	if (fd < 0) {
-		if (errno == EINVAL) {
+		if (errno == EINVAL || errno == EPERM || errno == EACCES) {
 			io_uring_queue_exit(&ring);
 			return T_EXIT_SKIP;
 		}
@@ -303,7 +304,7 @@ static int test_io_uring_submit_enters(const char *file)
 	open_flags = O_WRONLY | O_DIRECT;
 	fd = open(file, open_flags);
 	if (fd < 0) {
-		if (errno == EINVAL)
+		if (errno == EINVAL || errno == EPERM || errno == EACCES)
 			return T_EXIT_SKIP;
 		perror("file open");
 		goto err;
@@ -352,7 +353,7 @@ ok:
 }
 
 static int test_io(const char *file, int write, int sqthread, int fixed,
-		   int buf_select, int defer)
+		   int hybrid, int buf_select, int defer)
 {
 	struct io_uring ring;
 	int ret, ring_flags = IORING_SETUP_IOPOLL;
@@ -364,10 +365,18 @@ static int test_io(const char *file, int write, int sqthread, int fixed,
 		ring_flags |= IORING_SETUP_SINGLE_ISSUER |
 			      IORING_SETUP_DEFER_TASKRUN;
 
+	if (hybrid)
+		ring_flags |= IORING_SETUP_HYBRID_IOPOLL;
+
 	ret = t_create_ring(64, &ring, ring_flags);
-	if (ret == T_SETUP_SKIP)
+	if (ret == T_SETUP_SKIP) {
 		return 0;
+	}
 	if (ret != T_SETUP_OK) {
+		if (ring_flags & IORING_SETUP_HYBRID_IOPOLL) {
+			no_hybrid = 1;
+			return 0;
+		}
 		fprintf(stderr, "ring create failed: %d\n", ret);
 		return 1;
 	}
@@ -419,22 +428,23 @@ int main(int argc, char *argv[])
 
 	vecs = t_create_buffers(BUFFERS, BS);
 
-	nr = 32;
+	nr = 64;
 	if (no_buf_select)
-		nr = 8;
-	else if (!t_probe_defer_taskrun())
 		nr = 16;
+	else if (!t_probe_defer_taskrun())
+		nr = 32;
 	for (i = 0; i < nr; i++) {
 		int write = (i & 1) != 0;
 		int sqthread = (i & 2) != 0;
 		int fixed = (i & 4) != 0;
-		int buf_select = (i & 8) != 0;
-		int defer = (i & 16) != 0;
+		int hybrid = (i & 8) != 0;
+		int buf_select = (i & 16) != 0;
+		int defer = (i & 32) != 0;
 
-		ret = test_io(fname, write, sqthread, fixed, buf_select, defer);
+		ret = test_io(fname, write, sqthread, fixed, hybrid, buf_select, defer);
 		if (ret) {
-			fprintf(stderr, "test_io failed %d/%d/%d/%d/%d\n",
-				write, sqthread, fixed, buf_select, defer);
+			fprintf(stderr, "test_io failed %d/%d/%d/%d/%d/%d\n",
+				write, sqthread, fixed, hybrid, buf_select, defer);
 			goto err;
 		}
 		if (no_iopoll)

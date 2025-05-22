@@ -123,13 +123,14 @@ namespace NKikimr {
 
         template<typename TMerger>
         void AddIndexOnly(const TLogoBlobID &logoBlobId, const TMerger &merger) {
-            const auto &status = BarriersEssence->Keep(logoBlobId, merger.GetMemRec(), merger.GetMemRecsMerged(),
-                                                       QueryCtx->HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/);
+            const auto &status = BarriersEssence->Keep(logoBlobId, merger.GetMemRec(), {},
+                QueryCtx->HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/);
             if (status.KeepData) {
                 const TIngress &ingress = merger.GetMemRec().GetIngress();
                 ui64 ingr = ingress.Raw();
                 ui64 *pingr = (ShowInternals ? &ingr : nullptr);
-                Y_ABORT_UNLESS(logoBlobId.PartId() == 0); // Index-only response must contain a single record for the blob
+                 // Index-only response must contain a single record for the blob
+                Y_VERIFY_S(logoBlobId.PartId() == 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
                 const NMatrix::TVectorType local = ingress.LocalParts(QueryCtx->HullCtx->VCtx->Top->GType);
 
                 const int mode = ingress.GetCollectMode(TIngress::IngressMode(QueryCtx->HullCtx->VCtx->Top->GType));

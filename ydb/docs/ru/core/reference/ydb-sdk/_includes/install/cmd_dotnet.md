@@ -1,3 +1,3 @@
-``` bash
+```bash
 dotnet add package Ydb.Sdk
 ```

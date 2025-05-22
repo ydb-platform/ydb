@@ -13,7 +13,7 @@ namespace NKikimr::NBlobDepot {
         TBlobDepot* const Self;
         std::weak_ptr<TToken> Token;
         std::shared_ptr<TToken> ActorToken = std::make_shared<TToken>();
-        std::vector<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs;
+        std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs;
         THashSet<TLogoBlobID> ResolutionErrors;
         TEvBlobDepot::TEvResolve::TPtr Ev;
 
@@ -33,6 +33,161 @@ namespace NKikimr::NBlobDepot {
 
         bool Finished = false;
 
+        std::vector<TAssimilatedBlobInfo> AssimilatedBlobs;
+
+        using TRange = std::tuple<ui64, TLogoBlobID, TLogoBlobID, bool>;
+        using TScan = std::tuple<TKey, TKey, TScanFlags, bool, std::optional<TRange>>;
+
+        class TTxPrepare : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+            TResolveDecommitActor *Actor;
+            std::weak_ptr<TToken> ActorToken;
+            int Index = 0;
+            std::deque<TScan> Scans;
+            std::optional<TScanRange> ScanRange;
+            bool IssueGets;
+            std::optional<TRange> IssueRangeAfter;
+
+            // transaction-local state
+            bool Progress = false;
+            bool RestartTx = false;
+
+        public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DECOMMIT_BLOBS; }
+
+            TTxPrepare(TResolveDecommitActor *actor, std::deque<TScan>&& scans)
+                : TTransactionBase(actor->Self)
+                , Actor(actor)
+                , ActorToken(Actor->ActorToken)
+                , Scans(std::move(scans))
+            {}
+
+            TTxPrepare(TTxPrepare& other)
+                : TTransactionBase(other.Self)
+                , Actor(other.Actor)
+                , ActorToken(std::move(other.ActorToken))
+                , Index(other.Index)
+                , Scans(std::move(other.Scans))
+                , ScanRange(std::move(other.ScanRange))
+                , IssueGets(other.IssueGets)
+                , IssueRangeAfter(std::move(other.IssueRangeAfter))
+            {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                if (ActorToken.expired()) {
+                    return true;
+                }
+
+                auto checkProgress = [&] {
+                    if (Progress) {
+                        RestartTx = true;
+                        return true;
+                    } else {
+                        return false;
+                    }
+                };
+
+                // process pending scans
+                auto doScanRange = [&] {
+                    auto callback = [&](const TKey& key, const TValue& value) {
+                        if (IssueGets && value.GoingToAssimilate) {
+                            InvokeOtherActor(*Actor, &TResolveDecommitActor::IssueGet, key.GetBlobId(), true /*mustRestoreFirst*/);
+                        }
+                        return true;
+                    };
+                    if (Self->Data->ScanRange(*ScanRange, &txc, &Progress, callback)) { // scan has been finished completely
+                        ScanRange.reset();
+                        if (IssueRangeAfter) {
+                            std::apply([&](auto&&... args) {
+                                InvokeOtherActor(*Actor, &TResolveDecommitActor::IssueRange, std::move(args)...);
+                            }, *IssueRangeAfter);
+                        }
+                        return true;
+                    } else { // some data remains
+                        return false;
+                    }
+                };
+                if (ScanRange && !doScanRange()) {
+                    return checkProgress();
+                }
+                while (!Scans.empty()) {
+                    auto& [from, to, flags, issueGets, issueRangeAfter] = Scans.front();
+                    ScanRange.emplace(std::move(from), std::move(to), flags);
+                    IssueGets = issueGets;
+                    IssueRangeAfter = std::move(issueRangeAfter);
+                    Scans.pop_front();
+
+                    if (!doScanRange()) {
+                        return checkProgress();
+                    }
+                }
+
+                // process explicit items after doing all scans
+                for (auto& items = Actor->Ev->Get()->Record.GetItems(); Index < items.size(); ++Index) {
+                    if (const auto& item = items[Index]; item.HasExactKey()) {
+                        TData::TKey key = TKey::FromBinaryKey(item.GetExactKey(), Self->Config);
+                        if (!Self->Data->EnsureKeyLoaded(key, txc, &Progress)) {
+                            return checkProgress();
+                        }
+                        const TValue *value = Self->Data->FindKey(key);
+                        const bool notYetAssimilated = Self->Data->LastAssimilatedBlobId < key.GetBlobId();
+                        const bool doGet = !value ? notYetAssimilated :
+                            value->GoingToAssimilate ? item.GetMustRestoreFirst() : notYetAssimilated;
+                        if (doGet) {
+                            InvokeOtherActor(*Actor, &TResolveDecommitActor::IssueGet, key.GetBlobId(),
+                                item.GetMustRestoreFirst());
+                        }
+                    }
+                }
+
+                return true;
+            }
+
+            void Complete(const TActorContext&) override {
+                if (ActorToken.expired()) {
+                    return;
+                } else if (RestartTx) {
+                    Self->Execute(std::make_unique<TTxPrepare>(*this));
+                } else {
+                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvTxComplete, 0, Actor->SelfId(), {}, nullptr, 0));
+                }
+            }
+        };
+
+        class TTxDecommitBlobs : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+            THashSet<TLogoBlobID> ResolutionErrors;
+            std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> DecommitBlobs;
+            TEvBlobDepot::TEvResolve::TPtr Ev;
+
+        public:
+            TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DECOMMIT_BLOBS; }
+
+            TTxDecommitBlobs(TBlobDepot *self, THashSet<TLogoBlobID>&& resolutionErrors, 
+                    std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob>&& decommitBlobs,
+                    TEvBlobDepot::TEvResolve::TPtr ev)
+                : TTransactionBase(self)
+                , ResolutionErrors(std::move(resolutionErrors))
+                , DecommitBlobs(std::move(decommitBlobs))
+                , Ev(ev)
+            {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                for (size_t num = 0; !DecommitBlobs.empty() && num < 10'000; DecommitBlobs.pop_front()) {
+                    num += Self->Data->AddDataOnDecommit(DecommitBlobs.front(), txc, this);
+                }
+                return true;
+            }
+
+            void Complete(const TActorContext&) override {
+                Self->Data->CommitTrash(this);
+                if (DecommitBlobs.empty()) {
+                    Self->Data->ExecuteTxResolve(Ev, std::move(ResolutionErrors));
+                } else {
+                    Self->Execute(std::make_unique<TTxDecommitBlobs>(Self, std::move(ResolutionErrors),
+                        std::move(DecommitBlobs), Ev));
+                }
+            }
+        };
+
     public:
         TResolveDecommitActor(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr ev)
             : Self(self)
@@ -48,17 +203,13 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT42, "TResolveDecommitActor::Bootstrap", (Id, Self->GetLogId()),
                 (Sender, Ev->Sender), (Cookie, Ev->Cookie));
 
-            Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Token, ActorToken}}, std::bind(&TThis::TxPrepare, this)));
-            ++TxInFlight;
-            Become(&TThis::StateFunc);
-        }
+            std::deque<TScan> scans;
 
-        void TxPrepare() {
             for (const auto& item : Ev->Get()->Record.GetItems()) {
                 switch (item.GetKeyDesignatorCase()) {
                     case NKikimrBlobDepot::TEvResolve::TItem::kKeyRange: {
                         if (!item.HasTabletId()) {
-                           return FinishWithError(NLog::PRI_CRIT, "incorrect request");
+                            return FinishWithError(NLog::PRI_CRIT, "incorrect request: tablet id not set");
                         }
 
                         const ui64 tabletId = item.GetTabletId();
@@ -74,76 +225,46 @@ namespace NKikimr::NBlobDepot {
                                 TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId,
                                 TLogoBlobID::MaxCrcMode);
 
+                        if (maxId < minId) {
+                            return FinishWithError(NLog::PRI_CRIT, "incorrect request: ending key goes before beginning one");
+                        }
+
                         Y_ABORT_UNLESS(minId <= maxId);
 
                         if (Self->Data->LastAssimilatedBlobId < maxId) {
                             // adjust minId to skip already assimilated items in range query
                             if (minId < Self->Data->LastAssimilatedBlobId) {
                                 if (item.GetMustRestoreFirst()) {
-                                    ScanRange(TKey(minId), TKey(*Self->Data->LastAssimilatedBlobId),
-                                        EScanFlags::INCLUDE_BEGIN, true /*issueGets*/);
+                                    scans.emplace_back(TKey(minId), TKey(*Self->Data->LastAssimilatedBlobId),
+                                        EScanFlags::INCLUDE_BEGIN, true, std::nullopt);
                                 }
                                 minId = *Self->Data->LastAssimilatedBlobId;
                             }
 
                             // prepare the range first -- we must have it loaded in memory
-                            ScanRange(TKey(minId), TKey(maxId), EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END,
-                                false /*issueGets*/);
-
-                            // issue scan query
-                            IssueRange(tabletId, minId, maxId, item.GetMustRestoreFirst());
+                            scans.emplace_back(TKey(minId), TKey(maxId),
+                                EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END, false,
+                                std::make_tuple(tabletId, minId, maxId, item.GetMustRestoreFirst()));
                         } else if (item.GetMustRestoreFirst()) {
-                            ScanRange(TKey(minId), TKey(maxId), EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END,
-                                true /*issueGets*/);
+                            scans.emplace_back(TKey(minId), TKey(maxId),
+                                EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END, true, std::nullopt);
                         }
 
                         break;
                     }
 
-                    case NKikimrBlobDepot::TEvResolve::TItem::kExactKey: {
-                        TData::TKey key = TKey::FromBinaryKey(item.GetExactKey(), Self->Config);
-                        while (!Self->Data->EnsureKeyLoaded(key, *TCoroTx::GetTxc())) {
-                            TCoroTx::RestartTx();
-                        }
-                        const TValue *value = Self->Data->FindKey(key);
-                        const bool notYetAssimilated = Self->Data->LastAssimilatedBlobId < key.GetBlobId();
-                        const bool doGet = !value ? notYetAssimilated :
-                            value->GoingToAssimilate ? item.GetMustRestoreFirst() : notYetAssimilated;
-                        if (doGet) {
-                            IssueGet(key.GetBlobId(), item.GetMustRestoreFirst());
-                        }
+                    case NKikimrBlobDepot::TEvResolve::TItem::kExactKey:
+                        // this would be processed inside the tx
                         break;
-                    }
 
                     case NKikimrBlobDepot::TEvResolve::TItem::KEYDESIGNATOR_NOT_SET:
-                        Y_DEBUG_ABORT_UNLESS(false);
-                        break;
+                        return FinishWithError(NLog::PRI_CRIT, "incorrect request: key designator not set");
                 }
             }
 
-            TCoroTx::FinishTx();
-            TActivationContext::Send(new IEventHandle(TEvPrivate::EvTxComplete, 0, SelfId(), {}, nullptr, 0));
-        }
-
-        void ScanRange(TKey from, TKey to, TScanFlags flags, bool issueGets) {
-            bool progress = false;
-
-            auto callback = [&](const TKey& key, const TValue& value) {
-                if (issueGets && value.GoingToAssimilate) {
-                    IssueGet(key.GetBlobId(), true /*mustRestoreFirst*/);
-                }
-                return true;
-            };
-
-            TScanRange r{from, to, flags};
-            while (!Self->Data->ScanRange(r, TCoroTx::GetTxc(), &progress, callback)) {
-                if (std::exchange(progress, false)) {
-                    TCoroTx::FinishTx();
-                    TCoroTx::RunSuccessorTx();
-                } else {
-                    TCoroTx::RestartTx();
-                }
-            }
+            Self->Execute(std::make_unique<TTxPrepare>(this, std::move(scans)));
+            ++TxInFlight;
+            Become(&TThis::StateFunc);
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -187,7 +308,6 @@ namespace NKikimr::NBlobDepot {
 
             Y_ABORT_UNLESS(RangesInFlight);
             --RangesInFlight;
-            CheckIfDone();
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -236,9 +356,10 @@ namespace NKikimr::NBlobDepot {
                         DecommitBlobs.push_back({r.Id, r.Keep, r.DoNotKeep});
                     }
                 } else if (r.Status == NKikimrProto::NODATA) {
-                    Self->Data->ExecuteTxCommitAssimilatedBlob(NKikimrProto::NODATA, TBlobSeqId(), TData::TKey(r.Id),
-                        TEvPrivate::EvTxComplete, SelfId(), 0);
-                    ++TxInFlight;
+                    AssimilatedBlobs.push_back({TData::TKey(r.Id), TAssimilatedBlobInfo::TDrop{}});
+                    if (AssimilatedBlobs.size() >= 10'000) {
+                        IssueTxCommitAssimilatedBlob();
+                    }
                 } else {
                     // mark this specific key as unresolvable
                     ResolutionErrors.emplace(r.Id);
@@ -249,9 +370,7 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(GetBytesInFlight >= ev->Cookie);
             --GetsInFlight;
             GetBytesInFlight -= ev->Cookie;
-
             ProcessGetQueue();
-            CheckIfDone();
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -296,14 +415,16 @@ namespace NKikimr::NBlobDepot {
 
             if (msg.Status != NKikimrProto::OK) { // do not reply OK to this item
                 ResolutionErrors.insert(key.GetBlobId());
+            } else {
+                AssimilatedBlobs.push_back({std::move(key), TAssimilatedBlobInfo::TUpdate{
+                    TBlobSeqId::FromLogoBlobId(msg.Id), keep, doNotKeep}});
+                if (AssimilatedBlobs.size() >= 10'000) {
+                    IssueTxCommitAssimilatedBlob();
+                }
             }
 
             Y_ABORT_UNLESS(PutsInFlight);
             --PutsInFlight;
-
-            Self->Data->ExecuteTxCommitAssimilatedBlob(msg.Status, TBlobSeqId::FromLogoBlobId(msg.Id), std::move(key),
-                TEvPrivate::EvTxComplete, SelfId(), 0, keep, doNotKeep);
-            ++TxInFlight;
         }
 
         void HandleTxComplete() {
@@ -313,16 +434,17 @@ namespace NKikimr::NBlobDepot {
 
             Y_ABORT_UNLESS(TxInFlight);
             --TxInFlight;
-            CheckIfDone();
         }
 
         void CheckIfDone() {
-            if (TxInFlight + RangesInFlight + GetsInFlight + GetQ.size() + PutsInFlight == 0) {
-                FinishWithSuccess();
+            if (TxInFlight + RangesInFlight + GetsInFlight + GetQ.size() + PutsInFlight != 0) {
+                return;
             }
-        }
 
-        void FinishWithSuccess() {
+            if (!AssimilatedBlobs.empty()) {
+                return IssueTxCommitAssimilatedBlob();
+            }
+
             Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
@@ -330,24 +452,14 @@ namespace NKikimr::NBlobDepot {
                 (Cookie, Ev->Cookie), (ResolutionErrors.size, ResolutionErrors.size()),
                 (DecommitBlobs.size, DecommitBlobs.size()));
 
-            Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Token}}, [self = Self, decommitBlobs = std::move(DecommitBlobs),
-                    ev = Ev, resolutionErrors = std::move(ResolutionErrors)]() mutable {
-                ui32 numItemsProcessed = 0;
-                for (const auto& blob : decommitBlobs) {
-                    if (numItemsProcessed == 10'000) {
-                        TCoroTx::FinishTx();
-                        self->Data->CommitTrash(TCoroTx::CurrentTx());
-                        numItemsProcessed = 0;
-                        TCoroTx::RunSuccessorTx();
-                    }
-                    numItemsProcessed += self->Data->AddDataOnDecommit(blob, *TCoroTx::GetTxc(), TCoroTx::CurrentTx());
-                }
-                TCoroTx::FinishTx();
-                self->Data->CommitTrash(TCoroTx::CurrentTx());
-                self->Data->ExecuteTxResolve(ev, std::move(resolutionErrors));
-            }));
-
+            Self->Execute(std::make_unique<TTxDecommitBlobs>(Self, std::move(ResolutionErrors), std::move(DecommitBlobs), Ev));
             PassAway();
+        }
+
+        void IssueTxCommitAssimilatedBlob() {
+            Self->Data->ExecuteTxCommitAssimilatedBlob(std::exchange(AssimilatedBlobs, {}), TEvPrivate::EvTxComplete,
+                SelfId(), 0);
+            ++TxInFlight;
         }
 
         void FinishWithError(NLog::EPriority prio, TString errorReason) {
@@ -373,10 +485,12 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
 
                 default:
-                    Y_DEBUG_ABORT_UNLESS(false, "unexpected event Type# %08" PRIx32, type);
+                    Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
                     STLOG(PRI_CRIT, BLOB_DEPOT, BDT90, "unexpected event", (Id, Self->GetLogId()), (Type, type));
                     break;
             }
+
+            CheckIfDone();
         }
     };
 

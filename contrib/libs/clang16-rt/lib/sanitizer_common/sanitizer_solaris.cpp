@@ -27,7 +27,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <thread.h>
-#include <synch.h>
+#error #include <synch.h>
 #include <signal.h>
 #include <sys/mman.h>
 #include <sys/resource.h>

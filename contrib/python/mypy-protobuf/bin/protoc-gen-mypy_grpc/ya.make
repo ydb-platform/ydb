@@ -1,5 +1,7 @@
 PY3_PROGRAM(protoc-gen-mypy_grpc)
 
+VERSION(Service-proxy-version)
+
 LICENSE(Apache-2.0)
 
 PEERDIR(

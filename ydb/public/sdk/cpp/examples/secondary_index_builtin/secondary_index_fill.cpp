@@ -1,13 +1,13 @@
 #include "secondary_index.h"
 
 #include <util/random/random.h>
-#include <util/string/printf.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NStatusHelpers;
 
-TVector<TSeries> GetSeries() {
-    TVector<TSeries> series = {
+std::vector<TSeries> GetSeries() {
+    std::vector<TSeries> series = {
         TSeries(1, "First episode", TInstant::ParseIso8601("2006-01-01"), "Pilot episode.", 1000, 0),
         TSeries(2, "Second episode", TInstant::ParseIso8601("2006-02-01"), "Jon Snow knows nothing.", 2000, 1),
         TSeries(3, "Third episode", TInstant::ParseIso8601("2006-03-01"), "Daenerys is the mother of dragons.", 3000, 2),
@@ -22,8 +22,8 @@ TVector<TSeries> GetSeries() {
     return series;
 }
 
-TVector<TUser> GetUsers() {
-    TVector<TUser> users = {
+std::vector<TUser> GetUsers() {
+    std::vector<TUser> users = {
         TUser(0, "Kit Harrington", 32),
         TUser(1, "Emilia Clarke", 32),
         TUser(2, "Jason Momoa", 39),
@@ -32,7 +32,7 @@ TVector<TUser> GetUsers() {
     return users;
 }
 
-TParams Build(const TVector<TSeries>& seriesList, const TVector<TUser>& usersList) {
+TParams Build(const std::vector<TSeries>& seriesList, const std::vector<TUser>& usersList) {
 
     TParamsBuilder paramsBuilder;
 
@@ -81,11 +81,11 @@ TParams Build(const TVector<TSeries>& seriesList, const TVector<TUser>& usersLis
     return paramsBuilder.Build();
 }
 
-static TStatus FillTable(TSession session, const TString& path) {
+static TStatus FillTable(TSession session, const std::string& path) {
 
-    auto query = Sprintf(R"(
+    auto query = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $seriesData AS List<Struct<
             series_id: Uint64,
@@ -116,15 +116,15 @@ static TStatus FillTable(TSession session, const TString& path) {
             user_id,
             name,
             age
-        FROM AS_TABLE($usersData);)", path.c_str());
+        FROM AS_TABLE($usersData);)", path);
 
     TParams seriesParams = Build(GetSeries(), GetUsers());
     return session.ExecuteDataQuery(query,
-                            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),seriesParams)
+                            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), seriesParams)
                             .GetValueSync();
 }
 
-int Insert(NYdb::TDriver& driver, const TString& path) {
+int Insert(NYdb::TDriver& driver, const std::string& path) {
 
     TTableClient client(driver);
     ThrowOnError(client.RetryOperationSync([path] (TSession session) {

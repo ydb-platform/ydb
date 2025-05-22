@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/stream/output.h>
+#include <util/stream/format.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -14,15 +15,15 @@ namespace NFwd {
             eff = Usage * [ /Fetch; /(Before + Usage + After) ];
         */
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "TFwd{"
-                << Fetch << "b"
-                << " > " << Saved << "b"
-                << " > " << Usage << "b"
-                << " +" << After << "b"
-                << " ~" << Before << "b"
+                << "fetch=" << HumanReadableSize(Fetch, SF_BYTES)
+                << ",saved=" << HumanReadableSize(Saved, SF_BYTES)
+                << ",usage=" << HumanReadableSize(Usage, SF_BYTES)
+                << ",after=" << HumanReadableSize(After, SF_BYTES)
+                << ",before=" << HumanReadableSize(Before, SF_BYTES)
                 << "}";
         }
 
@@ -36,6 +37,8 @@ namespace NFwd {
 
             return *this;
         }
+
+        auto operator<=>(const TStat&) const = default;
 
         ui64 Fetch = 0;     /* Requested to load by cache       */
         ui64 Saved = 0;     /* Obtained by cache with DoSave()  */

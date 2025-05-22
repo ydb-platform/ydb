@@ -7,13 +7,15 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_gateway.h>
+#include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
 
@@ -67,14 +69,19 @@ struct TRunActorParams { // TODO2 : Change name
         const TString& tenantName,
         uint64_t resultBytesLimit,
         TDuration executionTtl,
+        TInstant requestSubmittedAt,
         TInstant requestStartedAt,
         ui32 restartCount,
         const TString& jobId,
         const Fq::Private::TaskResources& resources,
         const TString& executionId,
         const TString& operationId,
-        const NFq::NConfig::TYdbStorageConfig& computeConnection,
-        TDuration resultTtl
+        const ::NFq::NConfig::TYdbStorageConfig& computeConnection,
+        TDuration resultTtl,
+        std::map<TString, Ydb::TypedValue>&& queryParameters,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+        const ::NFq::NConfig::TWorkloadManagerConfig& workloadManager,
+        NYql::IPqGatewayFactory::TPtr pqGatewayFactory
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -128,14 +135,19 @@ struct TRunActorParams { // TODO2 : Change name
     const TString TenantName;
     const uint64_t ResultBytesLimit;
     const TDuration ExecutionTtl;
+    TInstant RequestSubmittedAt;
     TInstant RequestStartedAt;
     const ui32 RestartCount;
     const TString JobId;
     Fq::Private::TaskResources Resources;
     TString ExecutionId;
     NYdb::TOperation::TOperationId OperationId;
-    NFq::NConfig::TYdbStorageConfig ComputeConnection;
+    ::NFq::NConfig::TYdbStorageConfig ComputeConnection;
     TDuration ResultTtl;
+    std::map<TString, Ydb::TypedValue> QueryParameters;
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
+    ::NFq::NConfig::TWorkloadManagerConfig WorkloadManager;
+    NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
 };
 
 } /* NFq */

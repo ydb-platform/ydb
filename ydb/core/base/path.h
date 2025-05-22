@@ -37,4 +37,12 @@ inline TVector<TString> ChildPath(const TVector<TString>& parentPath, const TStr
     return path;
 }
 
+inline TVector<TString> ChildPath(const TVector<TString>& parentPath, const TVector<TString>& childPath) {
+    auto path = parentPath;
+    for (const auto& childName : childPath) {
+        path.push_back(childName);
+    }
+    return path;
+}
+
 }

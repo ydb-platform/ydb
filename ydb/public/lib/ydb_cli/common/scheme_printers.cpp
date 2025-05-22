@@ -15,7 +15,7 @@ TSchemePrinterBase::TSchemePrinterBase(const TDriver& driver, TSettings&& settin
 {}
 
 void TSchemePrinterBase::Print() {
-    PrintDirectoryRecursive(Settings.Path, "");
+    PrintDirectoryRecursive(Settings.Path, "").GetValueSync();
 }
 
 bool TSchemePrinterBase::IsDirectoryLike(const NScheme::TSchemeEntry& entry) {
@@ -24,43 +24,54 @@ bool TSchemePrinterBase::IsDirectoryLike(const NScheme::TSchemeEntry& entry) {
         || entry.Type == NScheme::ESchemeEntryType::ColumnStore;
 }
 
-void TSchemePrinterBase::PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath) {
-    NScheme::TListDirectoryResult result = SchemeClient.ListDirectory(
+NThreading::TFuture<void> TSchemePrinterBase::PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath) {
+    return SchemeClient.ListDirectory(
         fullPath,
         Settings.ListDirectorySettings
-    ).GetValueSync();
-    ThrowOnError(result);
+    ).Apply([this, fullPath, relativePath](const NScheme::TAsyncListDirectoryResult& resultFuture) {
+        const auto& result = resultFuture.GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    if (relativePath || IsDirectoryLike(result.GetEntry())) {
-        PrintDirectory(relativePath, result);
-    } else {
-        PrintEntry(relativePath, result.GetEntry());
-    }
+        if (relativePath || IsDirectoryLike(result.GetEntry())) {
+            std::lock_guard g(Lock);
+            PrintDirectory(relativePath, result);
+        } else {
+            std::lock_guard g(Lock);
+            PrintEntry(relativePath, result.GetEntry());
+        }
 
-    if (Settings.Recursive) {
-        for (const auto& child : result.GetChildren()) {
-            TString childRelativePath = relativePath + (relativePath ? "/" : "") + child.Name;
-            TString childFullPath = fullPath + "/" + child.Name;
-            if (IsDirectoryLike(child)) {
-                PrintDirectoryRecursive(childFullPath, childRelativePath);
-            } else {
-                PrintEntry(childRelativePath, child);
+        TVector<NThreading::TFuture<void>> childFutures;
+        if (Settings.Recursive) {
+            for (const auto& child : result.GetChildren()) {
+                TString childRelativePath = relativePath + (relativePath ? "/" : "") + child.Name;
+                TString childFullPath = fullPath + "/" + child.Name;
+                if (IsDirectoryLike(child)) {
+                    childFutures.push_back(PrintDirectoryRecursive(childFullPath, childRelativePath));
+                    if (!Settings.Multithread) {
+                        childFutures.back().Wait();
+                        childFutures.back().TryRethrow();
+                    }
+                } else {
+                    std::lock_guard g(Lock);
+                    PrintEntry(childRelativePath, child);
+                }
             }
         }
-    }
+        return NThreading::WaitExceptionOrAll(childFutures);
+    });
 }
 
 NTable::TDescribeTableResult TSchemePrinterBase::DescribeTable(const TString& relativePath) {
     NTable::TCreateSessionResult sessionResult = TableClient.GetSession(
         NTable::TCreateSessionSettings()
     ).GetValueSync();
-    ThrowOnError(sessionResult);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
 
     NTable::TDescribeTableResult tableResult = sessionResult.GetSession().DescribeTable(
         Settings.Path + (relativePath ? ("/" + relativePath) : ""),
         Settings.DescribeTableSettings
     ).GetValueSync();
-    ThrowOnError(tableResult);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(tableResult);
     return tableResult;
 }
 
@@ -72,7 +83,7 @@ void TDefaultSchemePrinter::PrintDirectory(
     const TString& relativePath,
     const NScheme::TListDirectoryResult& entryResult)
 {
-    TVector<NScheme::TSchemeEntry> children = entryResult.GetChildren();
+    std::vector<NScheme::TSchemeEntry> children = entryResult.GetChildren();
     NScheme::TSchemeEntry entry = entryResult.GetEntry();
 
     if (Settings.Recursive) {
@@ -129,7 +140,7 @@ void TTableSchemePrinter::PrintDirectory(
         // Do not print target directory itself
         if (!Settings.Recursive) {
             for (const auto& child : entryResult.GetChildren()) {
-                PrintEntry(child.Name, child);
+                PrintEntry(TString{child.Name}, child);
             }
         }
     }
@@ -148,7 +159,7 @@ void TTableSchemePrinter::PrintTable(const TString& relativePath, const NScheme:
     auto tableDescription = tableResult.GetTableDescription();
 
     // Empty relative path in case of a single non-directory object in Path
-    TString actualRelativePath = relativePath ? relativePath : entry.Name;
+    TString actualRelativePath = relativePath ? relativePath : TString{entry.Name};
 
     Table.AddRow()
         .Column(0, EntryTypeToString(entry.Type))
@@ -162,7 +173,7 @@ void TTableSchemePrinter::PrintTable(const TString& relativePath, const NScheme:
 
 void TTableSchemePrinter::PrintOther(const TString& relativePath, const NScheme::TSchemeEntry& entry) {
     // Empty relative path in case of a single non-directory object in Path
-    TString actualRelativePath = relativePath ? relativePath : entry.Name;
+    TString actualRelativePath = relativePath ? relativePath : TString{entry.Name};
     Table.AddRow()
         .Column(0, EntryTypeToString(entry.Type))
         .Column(1, entry.Owner)
@@ -199,7 +210,7 @@ void TJsonSchemePrinter::PrintDirectory(const TString& relativePath, const NSche
             NeedToCloseList = true;
         } else {
             for (const auto& child : entryResult.GetChildren()) {
-                PrintEntry(child.Name, child);
+                PrintEntry(TString{child.Name}, child);
             }
             Writer.EndList();
             Cout << Writer.Str() << Endl;
@@ -244,7 +255,7 @@ void TJsonSchemePrinter::PrintOther(const TString& relativePath, const NScheme::
 
 void TJsonSchemePrinter::PrintCommonInfo(const TString& relativePath, const NScheme::TSchemeEntry& entry) {
     // Empty relative path in case of a single non-directory object in Path
-    TString actualRelativePath = relativePath ? relativePath : entry.Name;
+    TString actualRelativePath = relativePath ? relativePath : TString{entry.Name};
     Writer.WriteKey("type");
     Writer.WriteString(EntryTypeToString(entry.Type));
     Writer.WriteKey("path");

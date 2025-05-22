@@ -10,7 +10,9 @@
 
 #include <yt/yt/core/misc/property.h>
 
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
+
+#include <library/cpp/yt/string/format.h>
 
 namespace NYT::NChunkClient {
 
@@ -24,7 +26,6 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs);
 TDataStatistics  operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs);
 
 bool operator == (const TDataStatistics& lhs, const TDataStatistics& rhs);
-bool operator != (const TDataStatistics& lhs, const TDataStatistics& rhs);
 
 void Serialize(const TDataStatistics& statistics, NYson::IYsonConsumer* consumer);
 
@@ -32,7 +33,6 @@ void SetDataStatisticsField(TDataStatistics& statistics, TStringBuf key, i64 val
 
 void FormatValue(TStringBuilderBase* builder, const TDataStatistics& statistics, TStringBuf spec);
 void FormatValue(TStringBuilderBase* builder, const TDataStatistics* statistics, TStringBuf spec);
-TString ToString(const TDataStatistics& statistics);
 
 } // namespace NProto
 
@@ -53,8 +53,11 @@ public:
         1>;
     DEFINE_BYREF_RO_PROPERTY(TCodecToDuration, CodecToDuration);
 
+    DEFINE_BYREF_RO_PROPERTY(TDuration, ValueDictionaryCompressionDuration);
+
 public:
     TCodecStatistics& Append(const TCodecDuration& codecTime);
+    TCodecStatistics& AppendToValueDictionaryCompression(TDuration duration);
 
     TCodecStatistics& operator+=(const TCodecStatistics& other);
 
@@ -67,7 +70,6 @@ private:
 };
 
 void FormatValue(TStringBuilderBase* builder, const TCodecStatistics& statistics, TStringBuf spec);
-TString ToString(const TCodecStatistics& statistics);
 
 ////////////////////////////////////////////////////////////////////////////////
 

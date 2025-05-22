@@ -30,36 +30,75 @@ struct TNodeInfo {
 
 protected:
     EVolatileState VolatileState;
-    static const ui64 MAX_TABLET_COUNT_DEFAULT_VALUE;
 
 public:
+    static const ui64 MAX_TABLET_COUNT_DEFAULT_VALUE;
+
+    struct TTabletAvailabilityInfo {
+        NKikimrLocal::TTabletAvailability FromLocal;
+        ui64 EffectiveMaxCount;
+        bool IsSet;
+
+        TTabletAvailabilityInfo(const NKikimrLocal::TTabletAvailability& availability) : FromLocal(availability)
+                                                                                       , EffectiveMaxCount(availability.GetMaxCount())
+                                                                                       , IsSet(EffectiveMaxCount != MAX_TABLET_COUNT_DEFAULT_VALUE)
+        {
+        }
+
+        void UpdateRestriction(ui64 restriction) {
+            EffectiveMaxCount = std::min(FromLocal.GetMaxCount(), restriction);
+            IsSet = true;
+        }
+
+        void RemoveRestriction() {
+            // We set IsSet to true if we are removing a restriction that does not exist anyway
+            // This way, it takes priority over DefaultTabletCount from HiveConfig
+            IsSet = (EffectiveMaxCount == FromLocal.GetMaxCount() || FromLocal.GetMaxCount() != MAX_TABLET_COUNT_DEFAULT_VALUE);
+            EffectiveMaxCount = FromLocal.GetMaxCount();
+        }
+    };
+
+    struct TLastScheduledTablet {
+        TFullTabletId TabletId;
+        NMetrics::TFastRiseAverageValue<double, 20> UsageSince;
+        double UsageBefore;
+    };
+
     THive& Hive;
     TNodeId Id;
     TActorId Local;
     bool Down;
     bool Freeze;
     bool Drain;
+    bool BecomeUpOnRestart = false;
     TVector<TActorId> DrainInitiators;
     TDrainSettings DrainSettings;
     std::unordered_map<TTabletInfo::EVolatileState, std::unordered_set<TTabletInfo*>> Tablets;
     std::unordered_map<TTabletTypes::EType, std::unordered_set<TTabletInfo*>> TabletsRunningByType;
     std::unordered_map<TFullObjectId, std::unordered_set<TTabletInfo*>> TabletsOfObject;
+    std::vector<TFullTabletId> FrozenTablets;
     TResourceRawValues ResourceValues; // accumulated resources from tablet metrics
     TResourceRawValues ResourceTotalValues; // actual used resources from the node (should be greater or equal one above)
     NMetrics::TAverageValue<TResourceRawValues, 20> AveragedResourceTotalValues;
     double NodeTotalUsage = 0;
     NMetrics::TFastRiseAverageValue<double, 20> AveragedNodeTotalUsage;
+    NMetrics::TAverageValue<double, 20> AveragedNodeTotalCpuUsage;
     TResourceRawValues ResourceMaximumValues;
     TInstant StartTime;
     TNodeLocation Location;
     bool LocationAcquired;
-    std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> TabletAvailability;
+    std::unordered_map<TTabletTypes::EType, TTabletAvailabilityInfo> TabletAvailability;
+    std::unordered_map<TTabletTypes::EType, ui64> TabletAvailabilityRestrictions;
     TVector<TSubDomainKey> ServicedDomains;
     TVector<TSubDomainKey> LastSeenServicedDomains;
     TVector<TActorId> PipeServers;
     THashSet<TLeaderTabletInfo*> LockedTablets;
     mutable TInstant LastResourceChangeReaction;
     NKikimrHive::TNodeStatistics Statistics;
+    bool DeletionScheduled = false;
+    TString Name;
+    ui64 DrainSeqNo = 0;
+    std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -102,7 +141,11 @@ public:
     ui32 GetTabletNeighboursCount(const TTabletInfo& tablet) const {
         auto it = TabletsOfObject.find(tablet.GetObjectId());
         if (it != TabletsOfObject.end()) {
-            return it->second.size();
+            auto count = it->second.size();
+            if (tablet.IsAliveOnLocal(Local)) {
+                --count;
+            }
+            return count;
         } else {
             return 0;
         }
@@ -124,8 +167,9 @@ public:
     bool IsAllowedToRunTablet(TTabletDebugState* debugState = nullptr) const;
     bool IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
     bool IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
-    i32 GetPriorityForTablet(const TTabletInfo& tablet) const;
+    i32 GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const;
     ui64 GetMaxTabletsScheduled() const;
+    ui64 GetMaxCountForTabletType(TTabletTypes::EType tabletType) const;
 
     bool IsAbleToScheduleTablet() const {
         return GetTabletsScheduled() < GetMaxTabletsScheduled();
@@ -196,7 +240,7 @@ public:
         }
     }
 
-    bool CanBeDeleted() const;
+    bool CanBeDeleted(TInstant now) const;
     void RegisterInDomains();
     void DeregisterInDomains();
     void Ping();
@@ -211,10 +255,10 @@ public:
         return ResourceMaximumValues;
     }
 
-    double GetNodeUsageForTablet(const TTabletInfo& tablet) const;
-    double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::Dominant) const;
+    double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true) const;
+    double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
-                        EResourceToBalance resource = EResourceToBalance::Dominant) const;
+                        EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
 
     ui64 GetTabletsRunningByType(TTabletTypes::EType tabletType) const;
 
@@ -233,9 +277,9 @@ public:
         return ServicedDomains.empty() ? TSubDomainKey() : ServicedDomains.front();
     }
 
-    void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics);
+    void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics, NIceDb::TNiceDb& db);
     void ActualizeNodeStatistics(TInstant now);
-    ui64 GetRestartsPerPeriod(TInstant barrier) const;
+    ui64 GetRestartsPerPeriod(TInstant barrier = {}) const;
 
     TDataCenterId GetDataCenter() const {
         return Location.GetDataCenterId();

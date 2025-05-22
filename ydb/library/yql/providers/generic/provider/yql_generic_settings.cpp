@@ -1,8 +1,9 @@
 #include "yql_generic_cluster_config.h"
 #include "yql_generic_settings.h"
+#include "yql_generic_utils.h"
 
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -34,7 +35,7 @@ namespace NYql {
                                            const TCredentials::TPtr& credentials) {
         ValidateGenericClusterConfig(clusterConfig, "TGenericConfiguration::AddCluster");
 
-        YQL_CLOG(INFO, ProviderGeneric) << "generic provider add cluster: " << DumpGenericClusterConfig(clusterConfig);
+        YQL_CLOG(INFO, ProviderGeneric) << "GenericConfiguration::AddCluster: " << DumpGenericClusterConfig(clusterConfig);
 
         const auto& clusterName = clusterConfig.GetName();
         const auto& databaseId = clusterConfig.GetDatabaseId();
@@ -95,23 +96,6 @@ namespace NYql {
                                "or set (ServiceAccountId && ServiceAccountIdSignature) in cluster config";
     }
 
-    TString TGenericConfiguration::DumpGenericClusterConfig(const TGenericClusterConfig& clusterConfig) const {
-        TStringBuilder sb;
-        sb << "name = " << clusterConfig.GetName()
-           << ", kind = " << NConnector::NApi::EDataSourceKind_Name(clusterConfig.GetKind())
-           << ", database name = " << clusterConfig.GetDatabaseName()
-           << ", database id = " << clusterConfig.GetName()
-           << ", endpoint = " << clusterConfig.GetEndpoint()
-           << ", use tls = " << clusterConfig.GetUseSsl()
-           << ", protocol = " << NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol());
-
-        for (const auto& [key, value] : clusterConfig.GetDataSourceOptions()) {
-            sb << ", " << key << " = " << value;
-        }
-
-        return sb;
-    }
-
     TGenericSettings::TConstPtr TGenericConfiguration::Snapshot() const {
         return std::make_shared<const TGenericSettings>(*this);
     }
@@ -120,4 +104,4 @@ namespace NYql {
         return ValidClusters.contains(cluster);
     }
 
-}
+} // namespace NYql

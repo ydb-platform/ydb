@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <google/protobuf/map.h>
@@ -8,7 +10,7 @@ namespace Ydb {
     class TypedValue;
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NScripting {
     class TScriptingClient;
@@ -28,6 +30,7 @@ namespace NExperimental {
 
 namespace NQuery {
     class TExecQueryImpl;
+    class TQueryClient;
 }
 
 class TParamsBuilder;
@@ -40,7 +43,8 @@ class TParams {
     friend class NScripting::TScriptingClient;
     friend class NExperimental::TStreamQueryClient;
     friend class NQuery::TExecQueryImpl;
-    friend class NYdb::TProtoAccessor;
+    friend class NQuery::TQueryClient;
+    friend class NYdb::V2::TProtoAccessor;
 public:
     bool Empty() const;
 

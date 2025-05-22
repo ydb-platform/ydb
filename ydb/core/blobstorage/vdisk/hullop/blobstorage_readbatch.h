@@ -2,6 +2,8 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
+#include <ydb/core/blobstorage/vdisk/common/disk_part.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 #include <util/generic/queue.h>
 
@@ -101,28 +103,31 @@ namespace NKikimr {
 
         bool Started = false;
 
+        const TString VDiskLogPrefix;
         const ui32 MaxReadBlockSize;
         const ui32 SeekCostInBytes;
         const double EfficiencyThreshold;
 
     public:
-        TCompactReadBatcher(ui32 maxReadBlockSize, ui32 seekCostInBytes, double efficiencyThreshold)
-            : MaxReadBlockSize(maxReadBlockSize)
+        TCompactReadBatcher(const TString& prefix, ui32 maxReadBlockSize, ui32 seekCostInBytes, double efficiencyThreshold)
+            : VDiskLogPrefix(prefix)
+            , MaxReadBlockSize(maxReadBlockSize)
             , SeekCostInBytes(seekCostInBytes)
             , EfficiencyThreshold(efficiencyThreshold)
         {}
 
         // enqueue read item -- a read from specific chunk at desired position and length; function returns serial
         // number of this request; all results are then reported sequently in ascending order of returned serial
-        ui64 AddReadItem(TChunkIdx chunkIdx, ui32 offset, ui32 size, TPayload&& payload) {
+        ui64 AddReadItem(TDiskPart location, TPayload&& payload) {
             const ui64 serial = NextSerial++;
-            ReadQueue.push_back(TReadItem{chunkIdx, offset, size, std::move(payload), serial, NKikimrProto::UNKNOWN, {}});
+            ReadQueue.push_back(TReadItem{location.ChunkIdx, location.Offset, location.Size, std::move(payload), serial,
+                NKikimrProto::UNKNOWN, {}});
             return serial;
         }
 
         // start batcher operation; no AddReadItem requests allowed beyond this point
         void Start() {
-            Y_ABORT_UNLESS(!Started);
+            Y_VERIFY_S(!Started, VDiskLogPrefix);
             Started = true;
             Iterator = ReadQueue.begin();
         }
@@ -164,7 +169,7 @@ namespace NKikimr {
                     // calculate new number of bytes we are going to read in single request; if this value exceeds
                     // maximum block size, stop generating request (unless read queue is totally empty)
                     const ui32 newTotalBytes = newEnclosingRange.second - newEnclosingRange.first;
-                    Y_ABORT_UNLESS(newTotalBytes);
+                    Y_VERIFY_S(newTotalBytes, VDiskLogPrefix);
                     if (newTotalBytes > MaxReadBlockSize && outIt != Iterator) {
                         break;
                     }
@@ -175,7 +180,7 @@ namespace NKikimr {
                     double efficiency = (double)effectiveBytes / newTotalBytes;
                     if (efficiency < EfficiencyThreshold) {
                         // this can't be the first item -- as the efficiency for single item is 1.0
-                        Y_ABORT_UNLESS(outIt != Iterator);
+                        Y_VERIFY_S(outIt != Iterator, VDiskLogPrefix);
                         break;
                     }
 
@@ -184,7 +189,7 @@ namespace NKikimr {
                     const i32 addedUselessBytes = newTotalBytes - (totalBytes + it->Size);
                     if (addedUselessBytes > 0 && (ui32)addedUselessBytes > SeekCostInBytes) {
                         // this can't be the first item too for the same reason as above
-                        Y_ABORT_UNLESS(outIt != Iterator);
+                        Y_VERIFY_S(outIt != Iterator, VDiskLogPrefix);
                         break;
                     }
 
@@ -219,7 +224,7 @@ namespace NKikimr {
             auto& data = msg->Data;
 
             auto it = ActiveRequests.find(msg->Cookie);
-            Y_ABORT_UNLESS(it != ActiveRequests.end());
+            Y_VERIFY_S(it != ActiveRequests.end(), VDiskLogPrefix);
 
             for (auto reqIt = it->second.first; reqIt != it->second.second; ++reqIt) {
                 TReadItem& item = *reqIt;
@@ -227,7 +232,8 @@ namespace NKikimr {
                 item.Status = msg->Status;
                 if (msg->Status == NKikimrProto::OK) {
                     // ensure returned area covers this item
-                    Y_ABORT_UNLESS(item.Offset >= msg->Offset && item.Offset + item.Size <= msg->Offset + data.Size());
+                    Y_VERIFY_S(item.Offset >= msg->Offset && item.Offset + item.Size <= msg->Offset + data.Size(),
+                        VDiskLogPrefix);
 
                     // calculate offset of item inside response
                     const ui32 offset = item.Offset - msg->Offset;
@@ -274,7 +280,7 @@ namespace NKikimr {
 
         void Finish() {
             Started = false;
-            Y_ABORT_UNLESS(NextSerial == NextReadySerial);
+            Y_VERIFY_S(NextSerial == NextReadySerial, VDiskLogPrefix);
         }
     };
 

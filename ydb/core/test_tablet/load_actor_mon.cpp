@@ -156,6 +156,11 @@ namespace NKikimr::NTestShard {
                                     }
 
                                     TABLER() {
+                                        TABLED() { str << "Patches in flight"; }
+                                        TABLED() { str << self->PatchesInFlight.size(); }
+                                    }
+
+                                    TABLER() {
                                         TABLED() { str << "Reads in flight"; }
                                         TABLED() { str << self->ReadsInFlight.size() << '/' << self->KeysBeingRead.size(); }
                                     }

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "fwd.h"
 #include "structured_table_formats.h"
 #include "operation_preparer.h"
 
@@ -179,12 +178,13 @@ void ExecuteVanilla(
     const TOperationOptions& options);
 
 EOperationBriefState CheckOperation(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
     const TOperationId& operationId);
 
 void WaitForOperation(
     const IClientRetryPolicyPtr& clientRetryPolicy,
+    const IRawClientPtr& rawClient,
     const TClientContext& context,
     const TOperationId& operationId);
 

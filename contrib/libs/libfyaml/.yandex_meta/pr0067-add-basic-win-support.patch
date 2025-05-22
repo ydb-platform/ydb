@@ -1,0 +1,2794 @@
+From 7c01e0b98f4b5024aa6a155772bebd51fe4c4946 Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Sun, 29 Jan 2023 00:06:37 +0300
+Subject: [PATCH 1/7] replace unportable gcc extensions
+
+---
+ include/libfyaml.h             | 124 ++++++++++++++--------------
+ src/internal/libfyaml-parser.c | 142 ++++++++++++++++++---------------
+ src/lib/fy-atom.c              |   8 +-
+ src/lib/fy-atom.h              |   6 +-
+ src/lib/fy-ctype.h             |  16 ++--
+ src/lib/fy-diag.c              |  58 ++++++++++----
+ src/lib/fy-diag.h              |  28 +++----
+ src/lib/fy-doc.c               |  79 ++++++++++--------
+ src/lib/fy-dump.c              |   2 +-
+ src/lib/fy-emit.c              |   8 +-
+ src/lib/fy-parse.c             |  34 +++++---
+ src/lib/fy-parse.h             |   2 +-
+ src/lib/fy-token.h             |  10 +--
+ src/lib/fy-utf8.h              |  20 ++---
+ src/lib/fy-walk.c              |  12 ++-
+ src/tool/fy-tool.c             |   8 +-
+ src/valgrind/fy-valgrind.h     |   8 +-
+ test/libfyaml-test-core.c      |  18 ++---
+ 18 files changed, 323 insertions(+), 260 deletions(-)
+
+diff --git a/include/libfyaml.h b/include/libfyaml.h
+index 828f077..3baa3f4 100644
+--- a/include/libfyaml.h
++++ b/include/libfyaml.h
+@@ -41,6 +41,11 @@ extern "C" {
+ 
+ #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <unistd.h>
++#define FY_ALLOCA(x) alloca(x)
++#elif defined(_MSC_VER)
++#include <BaseTsd.h>
++typedef SSIZE_T ssize_t;
++#define FY_ALLOCA(x) _alloca(x)
+ #endif
+ 
+ /* opaque types for the user */
+@@ -71,9 +76,11 @@ struct fy_document_iterator;
+ #define FY_NT	((size_t)-1)
+ 
+ #if defined(__GNUC__) && __GNUC__ >= 4
++#define FY_ATTRIBUTE(attr) __attribute ((attr))
+ #define FY_EXPORT __attribute__ ((visibility ("default")))
+ #define FY_DEPRECATED __attribute__ ((deprecated))
+ #else
++#define FY_ATTRIBUTE(attr) /* nothing */
+ #define FY_EXPORT /* nothing */
+ #define FY_DEPRECATED /* nothing */
+ #endif
+@@ -84,34 +91,32 @@ struct fy_document_iterator;
+  * If the _str pointer is NULL, then NULL will be returned
+  */
+ #ifndef FY_ALLOCA_COPY_FREE
+-#define FY_ALLOCA_COPY_FREE(_str, _len)				\
+-        ({							\
+-                char *__str = (_str), *__stra = NULL;		\
+-                size_t __len = (size_t)(_len);			\
++#define FY_ALLOCA_COPY_FREE(_str, _len, _res)			\
++	do {							\
++		char *__res, *__str = (char*)(_str);		\
++	        size_t __len = (size_t)(_len);			\
++		__res = NULL;					\
+ 								\
+ 		if (__str) {					\
+-			if (__len == FY_NT) 			\
++			if (__len == FY_NT)			\
+ 				__len = strlen(__str);		\
+-			__stra = alloca(__len + 1);		\
+-			memcpy(__stra, __str, __len);		\
+-			__stra[__len] = '\0';			\
++			__res = FY_ALLOCA(__len + 1);		\
++			memcpy(__res, __str, __len);		\
++			(__res[__len]) = '\0';			\
+ 			free(__str);				\
+ 		}						\
+-                (const char *)__stra;				\
+-        })
++	        *(_res) = __res;				\
++	} while(false)
+ #endif
+ 
+ /* same as above but when _str == NULL return "" */
+ #ifndef FY_ALLOCA_COPY_FREE_NO_NULL
+-#define FY_ALLOCA_COPY_FREE_NO_NULL(_str, _len)			\
+-        ({							\
+-                const char *__strb;				\
+-								\
+-		__strb = FY_ALLOCA_COPY_FREE(_str, _len);	\
+-		if (!__strb)					\
+-			__strb = "";				\
+-		__strb;						\
+-        })
++#define FY_ALLOCA_COPY_FREE_NO_NULL(_str, _len, _res)		\
++	do {							\
++		FY_ALLOCA_COPY_FREE(_str, _len, _res);  	\
++		if (!*(_res))					\
++			*(_res) = "";				\
++	} while(false)
+ #endif
+ 
+ /**
+@@ -2022,8 +2027,8 @@ fy_emit_document_to_string(struct fy_document *fyd,
+ 			   enum fy_emitter_cfg_flags flags)
+ 	FY_EXPORT;
+ 
+-#define fy_emit_document_to_string_alloca(_fyd, _flags) \
+-	FY_ALLOCA_COPY_FREE(fy_emit_document_to_string((_fyd), (_flags)), FY_NT)
++#define fy_emit_document_to_string_alloca(_fyd, _flags, _res) \
++	FY_ALLOCA_COPY_FREE(fy_emit_document_to_string((_fyd), (_flags)), FY_NT, (_res))
+ 
+ /**
+  * fy_emit_node_to_buffer() - Emit a node (recursively) to a buffer
+@@ -2061,8 +2066,8 @@ char *
+ fy_emit_node_to_string(struct fy_node *fyn, enum fy_emitter_cfg_flags flags)
+ 	FY_EXPORT;
+ 
+-#define fy_emit_node_to_string_alloca(_fyn, _flags) \
+-	FY_ALLOCA_COPY_FREE(fy_emit_node_to_string((_fyn), (_flags)), FY_NT)
++#define fy_emit_node_to_string_alloca(_fyn, _flags, _res) \
++	FY_ALLOCA_COPY_FREE(fy_emit_node_to_string((_fyn), (_flags)), FY_NT, (_res))
+ 
+ /**
+  * fy_emit_to_buffer() - Create an emitter for buffer output.
+@@ -2669,7 +2674,7 @@ fy_document_vbuildf(const struct fy_parse_cfg *cfg,
+  */
+ struct fy_document *
+ fy_document_buildf(const struct fy_parse_cfg *cfg, const char *fmt, ...)
+-	__attribute__((format(printf, 2, 3)))
++	FY_ATTRIBUTE(format(printf, 2, 3))
+ 	FY_EXPORT;
+ 
+ /**
+@@ -3054,7 +3059,7 @@ fy_node_vbuildf(struct fy_document *fyd, const char *fmt, va_list ap)
+  */
+ struct fy_node *
+ fy_node_buildf(struct fy_document *fyd, const char *fmt, ...)
+-	__attribute__((format(printf, 2, 3)))
++	FY_ATTRIBUTE(format(printf, 2, 3))
+ 	FY_EXPORT;
+ 
+ /**
+@@ -3110,8 +3115,8 @@ char *
+ fy_node_get_path(struct fy_node *fyn)
+ 	FY_EXPORT;
+ 
+-#define fy_node_get_path_alloca(_fyn) \
+-	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_path((_fyn)), FY_NT)
++#define fy_node_get_path_alloca(_fyn, _res) \
++	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_path((_fyn)), FY_NT, (_res))
+ 
+ /**
+  * fy_node_get_parent() - Get the parent node of a node
+@@ -3162,8 +3167,8 @@ char *
+ fy_node_get_parent_address(struct fy_node *fyn)
+ 	FY_EXPORT;
+ 
+-#define fy_node_get_parent_address_alloca(_fyn) \
+-	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_parent_address((_fyn)), FY_NT)
++#define fy_node_get_parent_address_alloca(_fyn, _res) \
++	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_parent_address((_fyn)), FY_NT, (_res))
+ 
+ /**
+  * fy_node_get_path_relative_to() - Get a path address of a node
+@@ -3184,8 +3189,8 @@ char *
+ fy_node_get_path_relative_to(struct fy_node *fyn_parent, struct fy_node *fyn)
+ 	FY_EXPORT;
+ 
+-#define fy_node_get_path_relative_to_alloca(_fynp, _fyn) \
+-	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_path_relative_to((_fynp), (_fyn)), FY_NT)
++#define fy_node_get_path_relative_to_alloca(_fynp, _fyn, _res) \
++	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_path_relative_to((_fynp), (_fyn)), FY_NT, (_res))
+ 
+ /**
+  * fy_node_get_short_path() - Get a path address of a node in the shortest
+@@ -3217,8 +3222,8 @@ char *
+ fy_node_get_short_path(struct fy_node *fyn)
+ 	FY_EXPORT;
+ 
+-#define fy_node_get_short_path_alloca(_fyn) \
+-	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_short_path((_fyn)), FY_NT)
++#define fy_node_get_short_path_alloca(_fyn, _res) \
++	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_short_path((_fyn)), FY_NT, (_res))
+ 
+ /**
+  * fy_node_get_reference() - Get a textual reference to a node
+@@ -3240,8 +3245,8 @@ char *
+ fy_node_get_reference(struct fy_node *fyn)
+ 	FY_EXPORT;
+ 
+-#define fy_node_get_reference_alloca(_fyn) \
+-	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_reference((_fyn)), FY_NT)
++#define fy_node_get_reference_alloca(_fyn, _res) \
++	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_reference((_fyn)), FY_NT, (_res))
+ 
+ /**
+  * fy_node_create_reference() - Create an alias reference node
+@@ -3284,8 +3289,8 @@ char *
+ fy_node_get_relative_reference(struct fy_node *fyn_base, struct fy_node *fyn)
+ 	FY_EXPORT;
+ 
+-#define fy_node_get_relative_reference_alloca(_fynb, _fyn) \
+-	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_relative_reference((_fynb), (_fyn)), FY_NT)
++#define fy_node_get_relative_reference_alloca(_fynb, _fyn, _res) \
++	FY_ALLOCA_COPY_FREE_NO_NULL(fy_node_get_relative_reference((_fynb), (_fyn)), FY_NT, (_res))
+ 
+ /**
+  * fy_node_create_relative_reference() - Create an alias reference node
+@@ -3389,7 +3394,7 @@ fy_node_create_vscalarf(struct fy_document *fyd, const char *fmt, va_list ap)
+ struct fy_node *
+ fy_node_create_scalarf(struct fy_document *fyd, const char *fmt, ...)
+ 	FY_EXPORT
+-	__attribute__((format(printf, 2, 3)));
++	FY_ATTRIBUTE(format(printf, 2, 3));
+ 
+ /**
+  * fy_node_create_sequence() - Create an empty sequence node.
+@@ -4224,7 +4229,7 @@ int fy_node_vscanf(struct fy_node *fyn, const char *fmt, va_list ap);
+  */
+ int
+ fy_node_scanf(struct fy_node *fyn, const char *fmt, ...)
+-	__attribute__((format(scanf, 2, 3)))
++	FY_ATTRIBUTE(format(scanf, 2, 3))
+ 	FY_EXPORT;
+ 
+ /**
+@@ -4275,7 +4280,7 @@ fy_document_vscanf(struct fy_document *fyd, const char *fmt, va_list ap)
+  */
+ int
+ fy_document_scanf(struct fy_document *fyd, const char *fmt, ...)
+-	__attribute__((format(scanf, 2, 3)))
++	FY_ATTRIBUTE(format(scanf, 2, 3))
+ 	FY_EXPORT;
+ 
+ /**
+@@ -4571,7 +4576,7 @@ fy_node_set_vanchorf(struct fy_node *fyn, const char *fmt, va_list ap)
+  */
+ int
+ fy_node_set_anchorf(struct fy_node *fyn, const char *fmt, ...)
+-	FY_EXPORT __attribute__((format(printf, 2, 3)));
++	FY_EXPORT FY_ATTRIBUTE(format(printf, 2, 3));
+ 
+ /**
+  * fy_node_remove_anchor() - Remove an anchor
+@@ -4839,7 +4844,7 @@ fy_node_vreport(struct fy_node *fyn, enum fy_error_type type,
+ void
+ fy_node_report(struct fy_node *fyn, enum fy_error_type type,
+ 	       const char *fmt, ...)
+-	__attribute__((format(printf, 3, 4)))
++	FY_ATTRIBUTE(format(printf, 3, 4))
+ 	FY_EXPORT;
+ 
+ /**
+@@ -4890,7 +4895,7 @@ void
+ fy_node_override_report(struct fy_node *fyn, enum fy_error_type type,
+ 			const char *file, int line, int column,
+ 			const char *fmt, ...)
+-	__attribute__((format(printf, 6, 7)))
++	FY_ATTRIBUTE(format(printf, 6, 7))
+ 	FY_EXPORT;
+ 
+ typedef void (*fy_diag_output_fn)(struct fy_diag *diag, void *user,
+@@ -5170,7 +5175,7 @@ fy_diag_vprintf(struct fy_diag *diag, const char *fmt, va_list ap)
+ int
+ fy_diag_printf(struct fy_diag *diag, const char *fmt, ...)
+ 	FY_EXPORT
+-	__attribute__((format(printf, 2, 3)));
++	FY_ATTRIBUTE(format(printf, 2, 3));
+ 
+ /**
+  * struct fy_diag_ctx - The diagnostics context
+@@ -5237,22 +5242,9 @@ int
+ fy_diagf(struct fy_diag *diag, const struct fy_diag_ctx *fydc,
+ 	 const char *fmt, ...)
+ 	FY_EXPORT
+-	__attribute__((format(printf, 3, 4)));
+-
+-#define fy_diag_diag(_diag, _level, _fmt, ...) \
+-	({ \
+-		struct fy_diag_ctx _ctx = { \
+-			.level = (_level), \
+-			.module = FYEM_UNKNOWN, \
+-			.source_func = __func__, \
+-			.source_file = __FILE__, \
+-			.source_line = __LINE__, \
+-			.file = NULL, \
+-			.line = 0, \
+-			.column = 0, \
+-		}; \
+-		fy_diagf((_diag), &_ctx, (_fmt) , ## __VA_ARGS__); \
+-	})
++	FY_ATTRIBUTE(format(printf, 3, 4));
++
++int fy_diag_diag(struct fy_diag *diag, enum fy_error_type level, const char* fmt, ...);
+ 
+ #ifndef NDEBUG
+ 
+@@ -5310,7 +5302,7 @@ fy_diag_node_vreport(struct fy_diag *diag, struct fy_node *fyn,
+ void
+ fy_diag_node_report(struct fy_diag *diag, struct fy_node *fyn,
+ 		    enum fy_error_type type, const char *fmt, ...)
+-	__attribute__((format(printf, 4, 5)))
++	FY_ATTRIBUTE(format(printf, 4, 5))
+ 	FY_EXPORT;
+ 
+ /**
+@@ -5365,7 +5357,7 @@ void
+ fy_diag_node_override_report(struct fy_diag *diag, struct fy_node *fyn,
+ 			     enum fy_error_type type, const char *file,
+ 			     int line, int column, const char *fmt, ...)
+-	__attribute__((format(printf, 7, 8)))
++	FY_ATTRIBUTE(format(printf, 7, 8))
+ 	FY_EXPORT;
+ 
+ /**
+@@ -6889,8 +6881,8 @@ char *
+ fy_path_component_get_text(struct fy_path_component *fypc)
+ 	FY_EXPORT;
+ 
+-#define fy_path_component_get_text_alloca(_fypc) \
+-	FY_ALLOCA_COPY_FREE(fy_path_component_get_text((_fypc)), FY_NT)
++#define fy_path_component_get_text_alloca(_fypc, _res) \
++	FY_ALLOCA_COPY_FREE(fy_path_component_get_text((_fypc)), FY_NT, (_res))
+ /**
+  * fy_path_depth() - Get the depth of a path
+  *
+@@ -6937,8 +6929,8 @@ char *
+ fy_path_get_text(struct fy_path *fypp)
+ 	FY_EXPORT;
+ 
+-#define fy_path_get_text_alloca(_fypp) \
+-	FY_ALLOCA_COPY_FREE(fy_path_get_text((_fypp)), FY_NT)
++#define fy_path_get_text_alloca(_fypp, _res) \
++	FY_ALLOCA_COPY_FREE(fy_path_get_text((_fypp)), FY_NT, (_res))
+ 
+ /**
+  * fy_path_in_root() - Check if the path is in the root of the document
+diff --git a/src/internal/libfyaml-parser.c b/src/internal/libfyaml-parser.c
+index 9764cf9..9563208 100644
+--- a/src/internal/libfyaml-parser.c
++++ b/src/internal/libfyaml-parser.c
+@@ -144,7 +144,9 @@ static void display_usage(FILE *fp, char *progname)
+ 
+ void print_escaped(FILE *fp, const char *str, int length)
+ {
+-	fprintf(fp, "%s", fy_utf8_format_text_a(str, length, fyue_doublequote));
++    char* str2;
++    fy_utf8_format_text_a(str, length, fyue_doublequote, &str2);
++	fprintf(fp, "%s", str2);
+ }
+ 
+ static int txt2esc_internal(const char *s, int l, char *out, int *outszp, int delim)
+@@ -248,8 +250,8 @@ static char *txt2esc_format(const char *s, int l, char *buf, int maxsz, int deli
+ 	return buf;
+ }
+ 
+-#define fy_atom_get_text_a(_atom) \
+-	({ \
++#define fy_atom_get_text_a(_atom, _res) \
++	do { \
+ 		struct fy_atom *_a = (_atom); \
+ 		int _len; \
+ 		char *_buf; \
+@@ -258,7 +260,7 @@ static char *txt2esc_format(const char *s, int l, char *buf, int maxsz, int deli
+ 		if (!_a->direct_output) { \
+ 			_len = fy_atom_format_text_length(_a); \
+ 			if (_len > 0) { \
+-				_buf = alloca(_len + 1); \
++				_buf = FY_ALLOCA(_len + 1); \
+ 				memset(_buf, 0, _len + 1); \
+ 				fy_atom_format_text(_a, _buf, _len + 1); \
+ 				_buf[_len] = '\0'; \
+@@ -266,25 +268,25 @@ static char *txt2esc_format(const char *s, int l, char *buf, int maxsz, int deli
+ 			} \
+ 		} else { \
+ 			_len = fy_atom_size(_a); \
+-			_buf = alloca(_len + 1); \
++			_buf = FY_ALLOCA(_len + 1); \
+ 			memset(_buf, 0, _len + 1); \
+ 			memcpy(_buf, fy_atom_data(_a), _len); \
+ 			_buf[_len] = '\0'; \
+ 			_txt = _buf; \
+ 		} \
+-		_txt; \
+-	})
++		*(_res) = _txt; \
++	} while(false)
+ 
+-#define txt2esc_a(_s, _l) \
+-	({ \
++#define txt2esc_a(_s, _l, _res) \
++	do { \
+ 	 	const char *__s = (const void *)(_s); \
+ 	 	int __l = (_l); \
+ 		int _ll = txt2esc_length(__s, __l, '\''); \
+-	 	txt2esc_format(__s, __l, alloca(_ll + 1), _ll + 1, '\''); \
+-	})
++	 	(*res) = txt2esc_format(__s, __l, FY_ALLOCA(_ll + 1), _ll + 1, '\''); \
++	} while(false)
+ 
+-#define fy_atom_get_esc_text_a(_atom) txt2esc_a(fy_atom_get_text_a(_atom), -1)
+-#define fy_token_get_esc_text_a(_atom) txt2esc_a(fy_token_get_text0(_atom), -1)
++#define fy_atom_get_esc_text_a(_atom, _res) txt2esc_a(fy_atom_get_text_a(_atom), -1, (_res))
++#define fy_token_get_esc_text_a(_atom, _res) txt2esc_a(fy_token_get_text0(_atom), -1, (_res))
+ 
+ void dump_event(struct fy_parser *fyp, struct fy_event *fye)
+ {
+@@ -314,16 +316,16 @@ void dump_event(struct fy_parser *fyp, struct fy_event *fye)
+ 		printf("%-14s%s|\n", "DOCUMENT_END", mm);
+ 		break;
+ 	case FYET_ALIAS:
+-		anchor = fy_token_get_esc_text_a(fye->alias.anchor);
++		fy_token_get_esc_text_a(fye->alias.anchor, &anchor);
+ 		printf("%-14s%s| '%s'\n", "ALIAS", mm, anchor);
+ 		break;
+ 	case FYET_SCALAR:
+ 		if (fye->scalar.anchor)
+-			anchor = fy_token_get_esc_text_a(fye->scalar.anchor);
++			fy_token_get_esc_text_a(fye->scalar.anchor, &anchor);
+ 		if (fye->scalar.tag)
+-			tag = fy_token_get_esc_text_a(fye->scalar.tag);
++			fy_token_get_esc_text_a(fye->scalar.tag, &tag);
+ 		if (fye->scalar.value)
+-			value = fy_token_get_esc_text_a(fye->scalar.value);
++			fy_token_get_esc_text_a(fye->scalar.value, &value);
+ 		printf("%-14s%s|%s%s%s%s%s%s '%s'\n", "SCALAR", mm,
+ 			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+ 			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "",
+@@ -331,9 +333,9 @@ void dump_event(struct fy_parser *fyp, struct fy_event *fye)
+ 		break;
+ 	case FYET_SEQUENCE_START:
+ 		if (fye->sequence_start.anchor)
+-			anchor = fy_token_get_esc_text_a(fye->sequence_start.anchor);
++			fy_token_get_esc_text_a(fye->sequence_start.anchor, &anchor);
+ 		if (fye->sequence_start.tag)
+-			tag = fy_token_get_esc_text_a(fye->sequence_start.tag);
++			fy_token_get_esc_text_a(fye->sequence_start.tag, &tag);
+ 		printf("%-14s%s|%s%s%s%s%s%s\n", "SEQUENCE_START", mm,
+ 			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+ 			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "");
+@@ -343,9 +345,9 @@ void dump_event(struct fy_parser *fyp, struct fy_event *fye)
+ 		break;
+ 	case FYET_MAPPING_START:
+ 		if (fye->mapping_start.anchor)
+-			anchor = fy_token_get_esc_text_a(fye->mapping_start.anchor);
++			fy_token_get_esc_text_a(fye->mapping_start.anchor, &anchor);
+ 		if (fye->mapping_start.tag)
+-			tag = fy_token_get_esc_text_a(fye->mapping_start.tag);
++			fy_token_get_esc_text_a(fye->mapping_start.tag, &tag);
+ 		printf("%-14s%s|%s%s%s%s%s%s\n", "MAPPING_START", mm,
+ 			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+ 			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "");
+@@ -488,6 +490,7 @@ static void dump_token(struct fy_token *fyt)
+ 	const struct fy_version *vers;
+ 	const char *handle, *prefix, *suffix;
+ 	const char *typetxt;
++	char *tmp1, tmp2;
+ 
+ 	typetxt = fy_token_type_txt[fyt->type];
+ 	assert(typetxt);
+@@ -506,9 +509,11 @@ static void dump_token(struct fy_token *fyt)
+ 		prefix = fy_tag_directive_token_prefix0(fyt);
+ 		if (!prefix)
+ 			prefix = "";
++        txt2esc_a(handle, -1, &tmp1);
++        txt2esc_a(prefix, -1, &tmp2);
+ 		printf("%s handle='%s' prefix='%s'\n", typetxt,
+-				txt2esc_a(handle, -1),
+-				txt2esc_a(prefix, -1));
++				tmp1,
++				tmp2);
+ 		break;
+ 	case FYTT_ALIAS:
+ 		printf("%s value='%s'\n", typetxt,
+@@ -525,9 +530,11 @@ static void dump_token(struct fy_token *fyt)
+ 		suffix = fy_tag_token_suffix0(fyt);
+ 		if (!suffix)
+ 			suffix = "";
++        txt2esc_a(handle, -1, &tmp1);
++        txt2esc_a(prefix, -1, &tmp2);
+ 		printf("%s handle='%s' suffix='%s'\n", typetxt,
+-				txt2esc_a(handle, -1),
+-				txt2esc_a(suffix, -1));
++				tmp1,
++				tmp2);
+ 		break;
+ 	case FYTT_SCALAR:
+ 		switch (fy_token_scalar_style(fyt)) {
+@@ -553,19 +560,20 @@ static void dump_token(struct fy_token *fyt)
+ 			style = "*illegal*";
+ 			break;
+ 		}
++        fy_atom_get_esc_text_a(&fyt->handle, &tmp1);
+ 		printf("%s value='%s' style=%s\n", typetxt,
+-				fy_atom_get_esc_text_a(&fyt->handle),
++				tmp1,
+ 				style);
+ 		break;
+ 
+ 	case FYTT_INPUT_MARKER:
+-		printf("%s value='%s'\n", typetxt,
+-				fy_atom_get_esc_text_a(&fyt->handle));
++        fy_atom_get_esc_text_a(&fyt->handle, &tmp1);
++		printf("%s value='%s'\n", typetxt, tmp1);
+ 		break;
+ 
+ 	case FYTT_PE_MAP_KEY:
+-		printf("%s value='%s'\n", typetxt,
+-				fy_atom_get_esc_text_a(&fyt->handle));
++        fy_atom_get_esc_text_a(&fyt->handle, &tmp1);
++		printf("%s value='%s'\n", typetxt, tmp1);
+ 		break;
+ 
+ 	case FYTT_PE_SEQ_INDEX:
+@@ -579,8 +587,8 @@ static void dump_token(struct fy_token *fyt)
+ 		break;
+ 
+ 	case FYTT_PE_ALIAS:
+-		printf("%s value='%s'\n", "PE-ALIAS",
+-				fy_atom_get_esc_text_a(&fyt->handle));
++        fy_atom_get_esc_text_a(&fyt->handle, &tmp1);
++		printf("%s value='%s'\n", "PE-ALIAS", tmp1);
+ 		break;
+ 
+ 	default:
+@@ -751,10 +759,12 @@ process_event(struct fy_parser *fyp, struct fy_event *fye, struct fy_path *path,
+ 	struct fy_node_pair *fynp;
+ 	char tbuf[80];
+ 	int rc;
++	char *path_text;
+ 
+ 	if (cd->null_output)
+ 		return FYCR_OK_CONTINUE;
+ 
++	fy_path_get_text_alloca(path, &path_text);
+ 	fyp_info(fyp, "%s: %c%c%c%c%c %3d - %-32s: %s\n", fy_event_type_txt[fye->type],
+ 			fy_path_in_root(path) ? 'R' : '-',
+ 			fy_path_in_sequence(path) ? 'S' : '-',
+@@ -763,7 +773,7 @@ process_event(struct fy_parser *fyp, struct fy_event *fye, struct fy_path *path,
+ 				fy_path_in_mapping_value(path) ? 'V' : '-',
+ 			fy_path_in_collection_root(path) ? '/' : '-',
+ 			fy_path_depth(path),
+-			fy_path_get_text_alloca(path),
++		    path_text,
+ 			fy_token_dump_format(fy_event_get_token(fye), tbuf, sizeof(tbuf)));
+ 
+ 	switch (fye->type) {
+@@ -1078,6 +1088,7 @@ int do_comment(struct fy_parser *fyp)
+ void dump_libyaml_token(yaml_token_t *token)
+ {
+ 	const char *style;
++	char *tmp1, *tmp2;
+ 
+ 	switch (token->type) {
+ 	case YAML_NO_TOKEN:
+@@ -1095,9 +1106,9 @@ void dump_libyaml_token(yaml_token_t *token)
+ 				token->data.version_directive.minor);
+ 		break;
+ 	case YAML_TAG_DIRECTIVE_TOKEN:
+-		printf("TAG_DIRECTIVE handle='%s' prefix='%s'\n",
+-				txt2esc_a(token->data.tag_directive.handle, -1),
+-				txt2esc_a(token->data.tag_directive.prefix, -1));
++		txt2esc_a(token->data.tag_directive.handle, -1, &tmp1);
++		txt2esc_a(token->data.tag_directive.prefix, -1, &tmp2);
++		printf("TAG_DIRECTIVE handle='%s' prefix='%s'\n", tmp1, tmp2);
+ 		break;
+ 	case YAML_DOCUMENT_START_TOKEN:
+ 		printf("DOCUMENT_START\n");
+@@ -1139,17 +1150,19 @@ void dump_libyaml_token(yaml_token_t *token)
+ 		printf("VALUE\n");
+ 		break;
+ 	case YAML_ALIAS_TOKEN:
++        txt2esc_a(token->data.alias.value, -1, &tmp1);
+ 		printf("ALIAS value='%s'\n",
+-				txt2esc_a(token->data.alias.value, -1));
++				tmp1);
+ 		break;
+ 	case YAML_ANCHOR_TOKEN:
++        txt2esc_a(token->data.anchor.value, -1, &tmp1);
+ 		printf("ANCHOR value='%s'\n",
+-				txt2esc_a(token->data.anchor.value, -1));
++				tmp1);
+ 		break;
+ 	case YAML_TAG_TOKEN:
+-		printf("TAG handle='%s' suffix='%s'\n",
+-				txt2esc_a(token->data.tag.handle, -1),
+-				txt2esc_a(token->data.tag.suffix, -1));
++	    txt2esc_a(token->data.tag.handle, -1, &tmp1);
++	    txt2esc_a(token->data.tag.suffix, -1, &tmp2);
++		printf("TAG handle='%s' suffix='%s'\n", tmp1, tmp2);
+ 		break;
+ 	case YAML_SCALAR_TOKEN:
+ 		switch (token->data.scalar.style) {
+@@ -1175,9 +1188,9 @@ void dump_libyaml_token(yaml_token_t *token)
+ 			style = "*ERROR*";
+ 			break;
+ 		}
++		txt2esc_a(token->data.scalar.value, token->data.scalar.length, &tmp1);
+ 		printf("SCALAR value='%s' style=%s\n",
+-				txt2esc_a(token->data.scalar.value, token->data.scalar.length),
+-				style);
++				style, tmp1);
+ 		break;
+ 	}
+ }
+@@ -1202,23 +1215,24 @@ int do_libyaml_scan(yaml_parser_t *parser)
+ 	return 0;
+ }
+ 
+-#define mark_a(_m) \
+-	({ \
++#define mark_a(_m, _res) \
++	do { \
+ 		yaml_mark_t *__m = (_m); \
+-	 	char *_s = alloca(30); \
++	 	char *_s = FY_ALLOCA(30); \
+ 	 	snprintf(_s, 30, "%zu/%zu/%zu", __m->index, __m->line, __m->column); \
+-	 	_s; \
+-	 })
++	 	*(_res) = _s; \
++	 } while(false)
+ 
+ void dump_libyaml_event(yaml_event_t *event)
+ {
+ 	char mbuf[40];
+ 	char *mm;
+ 	char *anchor = NULL, *tag = NULL, *value = NULL;
++	char *tmp1, *tmp2;
+ 
+-	snprintf(mbuf, sizeof(mbuf), " %10s-%-10s ",
+-			mark_a(&event->start_mark),
+-			mark_a(&event->end_mark));
++	mark_a(&event->start_mark, &tmp1);
++	mark_a(&event->end_mark, &tmp2);
++	snprintf(mbuf, sizeof(mbuf), " %10s-%-10s ", tmp1, tmp2);
+ 	mm = mbuf;
+ 	mm = " ";
+ 
+@@ -1239,15 +1253,15 @@ void dump_libyaml_event(yaml_event_t *event)
+ 		printf("%-14s%s|\n", "DOCUMENT_END", mm);
+ 		break;
+ 	case YAML_ALIAS_EVENT:
+-		anchor = txt2esc_a((char *)event->data.alias.anchor, -1);
++		txt2esc_a((char *)event->data.alias.anchor, -1, &anchor);
+ 		printf("%-14s%s| '%s'\n", "ALIAS", mm, anchor);
+ 		break;
+ 	case YAML_SCALAR_EVENT:
+ 		if (event->data.scalar.anchor)
+-			anchor = txt2esc_a((char *)event->data.scalar.anchor, -1);
++			txt2esc_a((char *)event->data.scalar.anchor, -1, &anchor);
+ 		if (event->data.scalar.tag)
+-			tag = txt2esc_a((char *)event->data.scalar.tag, -1);
+-		value = txt2esc_a((char *)event->data.scalar.value, -1);
++			txt2esc_a((char *)event->data.scalar.tag, -1, &tag);
++		txt2esc_a((char *)event->data.scalar.value, -1, &value);
+ 		printf("%-14s%s|%s%s%s%s%s%s '%s'\n", "SCALAR", mm,
+ 			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+ 			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "",
+@@ -1255,9 +1269,9 @@ void dump_libyaml_event(yaml_event_t *event)
+ 		break;
+ 	case YAML_SEQUENCE_START_EVENT:
+ 		if (event->data.sequence_start.anchor)
+-			anchor = txt2esc_a((char *)event->data.sequence_start.anchor, -1);
++			txt2esc_a((char *)event->data.sequence_start.anchor, -1, &anchor);
+ 		if (event->data.sequence_start.tag)
+-			tag = txt2esc_a((char *)event->data.sequence_start.tag, -1);
++			txt2esc_a((char *)event->data.sequence_start.tag, -1, &tag);
+ 		printf("%-14s%s|%s%s%s%s%s%s\n", "SEQUENCE_START", mm,
+ 			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+ 			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "");
+@@ -1267,9 +1281,9 @@ void dump_libyaml_event(yaml_event_t *event)
+ 		break;
+ 	case YAML_MAPPING_START_EVENT:
+ 		if (event->data.mapping_start.anchor)
+-			anchor = txt2esc_a((char *)event->data.mapping_start.anchor, -1);
++			txt2esc_a((char *)event->data.mapping_start.anchor, -1, &anchor);
+ 		if (event->data.mapping_start.tag)
+-			tag = txt2esc_a((char *)event->data.mapping_start.tag, -1);
++			txt2esc_a((char *)event->data.mapping_start.tag, -1, &tag);
+ 		printf("%-14s%s|%s%s%s%s%s%s\n", "MAPPING_START", mm,
+ 			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+ 			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "");
+@@ -3820,8 +3834,8 @@ int do_bad_utf8(const struct fy_parse_cfg *cfg, int argc, char *argv[])
+ 
+ 	len = strlen(key);
+ 
+-	fwd = alloca(sizeof(*fwd) * len);
+-	bwd = alloca(sizeof(*bwd) * len);
++	fwd = FY_ALLOCA(sizeof(*fwd) * len);
++	bwd = FY_ALLOCA(sizeof(*bwd) * len);
+ 
+ 	memset(fwd, 0, sizeof(*fwd) * len);
+ 	memset(bwd, 0, sizeof(*bwd) * len);
+@@ -3911,7 +3925,7 @@ int apply_flags_option(const char *arg, unsigned int *flagsp,
+ 			sn = e;
+ 
+ 		len = sn - s;
+-		targ = alloca(len + 1);
++		targ = FY_ALLOCA(len + 1);
+ 		memcpy(targ, s, len);
+ 		targ[len] = '\0';
+ 
+@@ -3959,7 +3973,7 @@ int main(int argc, char *argv[])
+ 	while ((opt = getopt_long_only(argc, argv, "I:m:i:w:d:rsc:C:D:M:W:S:qh", lopts, &lidx)) != -1) {
+ 		switch (opt) {
+ 		case 'I':
+-			tmp = alloca(strlen(cfg.search_path) + 1 + strlen(optarg) + 1);
++			tmp = FY_ALLOCA(strlen(cfg.search_path) + 1 + strlen(optarg) + 1);
+ 			s = tmp;
+ 			strcpy(s, cfg.search_path);
+ 			if (cfg.search_path && cfg.search_path[0]) {
+@@ -4213,7 +4227,7 @@ int main(int argc, char *argv[])
+ 	if (!icount)
+ 		icount++;
+ 
+-	fyic_array = alloca(sizeof(*fyic_array) * icount);
++	fyic_array = FY_ALLOCA(sizeof(*fyic_array) * icount);
+ 	memset(fyic_array, 0, sizeof(*fyic_array) * icount);
+ 
+ 	j = 0;
+diff --git a/src/lib/fy-atom.c b/src/lib/fy-atom.c
+index 4086d92..efeabbe 100644
+--- a/src/lib/fy-atom.c
++++ b/src/lib/fy-atom.c
+@@ -372,7 +372,7 @@ fy_atom_iter_line_analyze(struct fy_atom_iter *iter, struct fy_atom_iter_line_in
+ 
+ 	last_was_ws = false;
+ 
+-	ts = atom->tabsize ? : 8;	/* pick it up from the atom (if there is) */
++	ts = atom->tabsize ? atom->tabsize : 8;	/* pick it up from the atom (if there is) */
+ 
+ 	/* consecutive whitespace */
+ 	cws = 0;
+@@ -642,7 +642,7 @@ void fy_atom_iter_start(const struct fy_atom *atom, struct fy_atom_iter *iter)
+ 	iter->chomp = atom->increment;
+ 
+ 	/* default tab size is 8 */
+-	iter->tabsize = atom->tabsize ? : 8;
++	iter->tabsize = atom->tabsize ? atom->tabsize: 8;
+ 
+ 	memset(iter->li, 0, sizeof(iter->li));
+ 	li = &iter->li[1];
+@@ -965,7 +965,7 @@ fy_atom_iter_format(struct fy_atom_iter *iter)
+ 			case FYAC_CLIP:
+ 
+ 				pending_lb_size = 16;
+-				pending_lb = alloca(sizeof(*pending_lb) * pending_lb_size);
++				pending_lb = FY_ALLOCA(sizeof(*pending_lb) * pending_lb_size);
+ 
+ 				pending_nl = 0;
+ 				if (!li->empty) {
+@@ -987,7 +987,7 @@ fy_atom_iter_format(struct fy_atom_iter *iter)
+ 					}
+ 					if (li->lb_end && !iter->empty) {
+ 						if (pending_nl >= pending_lb_size) {
+-							pending_lb_new = alloca(sizeof(*pending_lb) * pending_lb_size * 2);
++							pending_lb_new = FY_ALLOCA(sizeof(*pending_lb) * pending_lb_size * 2);
+ 							memcpy(pending_lb_new, pending_lb, sizeof(*pending_lb) * pending_lb_size);
+ 							pending_lb_size *= 2;
+ 							pending_lb = pending_lb_new;
+diff --git a/src/lib/fy-atom.h b/src/lib/fy-atom.h
+index 9041f21..2a8b563 100644
+--- a/src/lib/fy-atom.h
++++ b/src/lib/fy-atom.h
+@@ -185,11 +185,11 @@ struct fy_atom *fy_reader_fill_atom_mark(struct fy_reader *fyr, const struct fy_
+ 					 const struct fy_mark *end_mark, struct fy_atom *handle);
+ struct fy_atom *fy_reader_fill_atom_at(struct fy_reader *fyr, int advance, int count, struct fy_atom *handle);
+ 
+-#define fy_reader_fill_atom_a(_fyr, _advance)  fy_reader_fill_atom((_fyr), (_advance), alloca(sizeof(struct fy_atom)))
++#define fy_reader_fill_atom_a(_fyr, _advance)  fy_reader_fill_atom((_fyr), (_advance), FY_ALLOCA(sizeof(struct fy_atom)))
+ 
+ struct fy_atom *fy_fill_node_atom(struct fy_node *fyn, struct fy_atom *handle);
+ 
+-#define fy_fill_node_atom_a(_fyn)  fy_fill_node_atom((_fyn), alloca(sizeof(struct fy_atom)))
++#define fy_fill_node_atom_a(_fyn)  fy_fill_node_atom((_fyn), FY_ALLOCA(sizeof(struct fy_atom)))
+ 
+ struct fy_atom_iter_line_info {
+ 	const char *start;
+@@ -275,7 +275,7 @@ static inline const char *fy_atom_data(const struct fy_atom *atom)
+ 	if (!atom)
+ 		return NULL;
+ 
+-	return fy_input_start(atom->fyi) + atom->start_mark.input_pos;
++	return (char *)fy_input_start(atom->fyi) + atom->start_mark.input_pos;
+ }
+ 
+ static inline size_t fy_atom_size(const struct fy_atom *atom)
+diff --git a/src/lib/fy-ctype.h b/src/lib/fy-ctype.h
+index 89ab12c..8a8e7fb 100644
+--- a/src/lib/fy-ctype.h
++++ b/src/lib/fy-ctype.h
+@@ -239,24 +239,26 @@ static inline bool fy_is_flow_ws_m(int c, enum fy_flow_ws_mode fws_mode)
+ static inline const void * \
+ fy_find_ ## _kind (const void *s, size_t len) \
+ { \
+-	const void *e = s + len; \
++	const char *cs = (char *)s; \
++	const char *e = cs + len; \
+ 	int c, w; \
+-	for (; s < e && (c = fy_utf8_get(s,  e - s, &w)) >= 0; s += w) { \
++	for (; cs < e && (c = fy_utf8_get(cs,  e - cs, &w)) >= 0; cs += w) { \
+ 		assert(w); \
+ 		if (fy_is_ ## _kind (c)) \
+-			return s; \
++			return cs; \
+ 	} \
+ 	return NULL; \
+ } \
+ static inline const void * \
+ fy_find_non_ ## _kind (const void *s, size_t len) \
+ { \
+-	const void *e = s + len; \
++	const char *cs = (char *)s; \
++	const char *e = cs + len; \
+ 	int c, w; \
+-	for (; s < e && (c = fy_utf8_get(s,  e - s, &w)) >= 0; s += w) { \
++	for (; cs < e && (c = fy_utf8_get(cs,  e - cs, &w)) >= 0; cs += w) { \
+ 		assert(w); \
+ 		if (!(fy_is_ ## _kind (c))) \
+-			return s; \
++			return cs; \
+ 		assert(w); \
+ 	} \
+ 	return NULL; \
+@@ -308,7 +310,7 @@ static inline const void *fy_skip_lb(const void *ptr, int left)
+ 	if (c == '\r' && left > width && *(char *)ptr == '\n')
+ 		width++;
+ 
+-	return ptr + width;
++	return (char *)ptr + width;
+ }
+ 
+ /* given a pointer to a chunk of memory, return pointer to first
+diff --git a/src/lib/fy-diag.c b/src/lib/fy-diag.c
+index 5488c08..aa1e4cd 100644
+--- a/src/lib/fy-diag.c
++++ b/src/lib/fy-diag.c
+@@ -11,13 +11,15 @@
+ 
+ #include <stdio.h>
+ #include <string.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <sys/types.h>
+ #include <sys/stat.h>
++#include <unistd.h>
++#endif
+ #include <assert.h>
+ #include <stdlib.h>
+ #include <errno.h>
+ #include <stdarg.h>
+-#include <unistd.h>
+ #include <ctype.h>
+ 
+ #include <libfyaml.h>
+@@ -32,6 +34,25 @@ static const char *error_type_txt[] = {
+ 	[FYET_ERROR]   = "error",
+ };
+ 
++int fy_diag_diag(struct fy_diag *diag, enum fy_error_type level, const char* fmt, ...)
++{
++    va_list args;
++       struct fy_diag_ctx ctx = {
++               .level = level,
++               .module = FYEM_UNKNOWN,
++               .source_func = __func__,
++               .source_file = __FILE__,
++               .source_line = __LINE__,
++               .file = NULL,
++               .line = 0,
++               .column = 0,
++       };
++
++    va_start(args, fmt);
++    fy_diagf(diag, &ctx, fmt, args);
++    va_end(args);
++}
++
+ const char *fy_error_type_to_string(enum fy_error_type type)
+ {
+ 
+@@ -184,6 +205,7 @@ static void fy_diag_update_term_info(struct fy_diag *diag)
+ 		goto out;
+ 
+ 	rows = columns = 0;
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ 	ret = fy_term_query_size(fd, &rows, &columns);
+ 	if (ret != 0)
+ 		goto out;
+@@ -192,6 +214,7 @@ static void fy_diag_update_term_info(struct fy_diag *diag)
+ 		diag->term_info.rows = rows;
+ 		diag->term_info.columns = columns;
+ 	}
++#endif
+ out:
+ 	diag->terminal_probed = true;
+ }
+@@ -455,7 +478,7 @@ int fy_vdiag(struct fy_diag *diag, const struct fy_diag_ctx *fydc,
+ 		goto out;
+ 	}
+ 
+-	msg = alloca_vsprintf(fmt, ap);
++	alloca_vsprintf(&msg, fmt, ap);
+ 
+ 	/* source part */
+ 	if (diag->cfg.show_source) {
+@@ -467,21 +490,21 @@ int fy_vdiag(struct fy_diag *diag, const struct fy_diag_ctx *fydc,
+ 				file_stripped++;
+ 		} else
+ 			file_stripped = "";
+-		source = alloca_sprintf("%s:%d @%s()%s",
++		alloca_sprintf(&source, "%s:%d @%s()%s",
+ 				file_stripped, fydc->source_line, fydc->source_func, " ");
+ 	}
+ 
+ 	/* position part */
+ 	if (diag->cfg.show_position && fydc->line >= 0 && fydc->column >= 0)
+-		position = alloca_sprintf("<%3d:%2d>%s", fydc->line, fydc->column, ": ");
++		alloca_sprintf(&position, "<%3d:%2d>%s", fydc->line, fydc->column, ": ");
+ 
+ 	/* type part */
+ 	if (diag->cfg.show_type)
+-		typestr = alloca_sprintf("[%s]%s", fy_error_level_str(level), ": ");
++		alloca_sprintf(&typestr, "[%s]%s", fy_error_level_str(level), ": ");
+ 
+ 	/* module part */
+ 	if (diag->cfg.show_module)
+-		modulestr = alloca_sprintf("<%s>%s", fy_error_module_str(fydc->module), ": ");
++		alloca_sprintf(&modulestr, "<%s>%s", fy_error_module_str(fydc->module), ": ");
+ 
+ 	if (diag->cfg.colorize) {
+ 		switch (level) {
+@@ -508,13 +531,13 @@ int fy_vdiag(struct fy_diag *diag, const struct fy_diag_ctx *fydc,
+ 	}
+ 
+ 	rc = fy_diag_printf(diag, "%s" "%*s" "%*s" "%*s" "%*s" "%s" "%s\n",
+-			color_start ? : "",
+-			source    ? diag->cfg.source_width : 0, source ? : "",
+-			position  ? diag->cfg.position_width : 0, position ? : "",
+-			typestr   ? diag->cfg.type_width : 0, typestr ? : "",
+-			modulestr ? diag->cfg.module_width : 0, modulestr ? : "",
++			color_start ? color_start : "",
++			source    ? diag->cfg.source_width : 0, source ? source : "",
++			position  ? diag->cfg.position_width : 0, position ? position : "",
++			typestr   ? diag->cfg.type_width : 0, typestr ? typestr : "",
++			modulestr ? diag->cfg.module_width : 0, modulestr ? modulestr : "",
+ 			msg,
+-			color_end ? : "");
++			color_end ? color_end : "");
+ 
+ 	if (rc > 0)
+ 		rc++;
+@@ -638,7 +661,7 @@ void fy_diag_error_atom_display(struct fy_diag *diag, enum fy_error_type type, s
+ 
+ 			/* worse case utf8 + 2 color sequences + zero terminated */
+ 			rowbufsz = cols * 4 + 2 * 16 + 1;
+-			rowbuf = alloca(rowbufsz);
++			rowbuf = FY_ALLOCA(rowbufsz);
+ 			rbe = rowbuf + rowbufsz;
+ 
+ 			/* if the maximum column number is less than the terminal
+@@ -837,15 +860,16 @@ void fy_diag_vreport(struct fy_diag *diag,
+ 	}
+ 
+ 	/* it will strip trailing newlines */
+-	msg_str = alloca_vsprintf(fmt, ap);
++	alloca_vsprintf(&msg_str, fmt, ap);
+ 
+ 	/* get the colors */
+ 	fy_diag_get_error_colors(diag, fydrc->type, &color_start, &color_end, &white);
+ 
+ 	if (name || (line > 0 && column > 0))
+-		name_str = (line > 0 && column > 0) ?
+-			alloca_sprintf("%s%s:%d:%d: ", white, name, line, column) :
+-			alloca_sprintf("%s%s: ", white, name);
++		if (line > 0 && column > 0)
++			alloca_sprintf(&name_str, "%s%s:%d:%d: ", white, name, line, column);
++		else
++			alloca_sprintf(&name_str, "%s%s: ", white, name);
+ 
+ 	if (!diag->collect_errors) {
+ 		fy_diag_printf(diag, "%s" "%s%s: %s" "%s\n",
+diff --git a/src/lib/fy-diag.h b/src/lib/fy-diag.h
+index f19861d..bcf6568 100644
+--- a/src/lib/fy-diag.h
++++ b/src/lib/fy-diag.h
+@@ -192,14 +192,14 @@ void fy_parser_diag_report(struct fy_parser *fyp,
+ 	_FYP_TOKEN_DIAG(_fyp, \
+ 		fy_token_create(FYTT_INPUT_MARKER, \
+ 			fy_fill_atom_at((_fyp), (_adv), (_cnt), \
+-			alloca(sizeof(struct fy_atom)))), \
++			FY_ALLOCA(sizeof(struct fy_atom)))), \
+ 		_type, _module, _fmt, ## __VA_ARGS__)
+ 
+ #define FYP_MARK_DIAG(_fyp, _sm, _em, _type, _module, _fmt, ...) \
+ 	_FYP_TOKEN_DIAG(_fyp, \
+ 		fy_token_create(FYTT_INPUT_MARKER, \
+ 			fy_fill_atom_mark(((_fyp)), (_sm), (_em), \
+-				alloca(sizeof(struct fy_atom)))), \
++				FY_ALLOCA(sizeof(struct fy_atom)))), \
+ 		_type, _module, _fmt, ## __VA_ARGS__)
+ 
+ #define FYP_NODE_DIAG(_fyp, _fyn, _type, _module, _fmt, ...) \
+@@ -333,14 +333,14 @@ void fy_reader_diag_report(struct fy_reader *fyr,
+ 	_FYR_TOKEN_DIAG(_fyr, \
+ 		fy_token_create(FYTT_INPUT_MARKER, \
+ 			fy_reader_fill_atom_at((_fyr), (_adv), (_cnt), \
+-			alloca(sizeof(struct fy_atom)))), \
++			FY_ALLOCA(sizeof(struct fy_atom)))), \
+ 		_type, _module, _fmt, ## __VA_ARGS__)
+ 
+ #define FYR_MARK_DIAG(_fyr, _sm, _em, _type, _module, _fmt, ...) \
+ 	_FYR_TOKEN_DIAG(_fyr, \
+ 		fy_token_create(FYTT_INPUT_MARKER, \
+ 			fy_reader_fill_atom_mark(((_fyr)), (_sm), (_em), \
+-				alloca(sizeof(struct fy_atom)))), \
++				FY_ALLOCA(sizeof(struct fy_atom)))), \
+ 		_type, _module, _fmt, ## __VA_ARGS__)
+ 
+ #define FYR_NODE_DIAG(_fyr, _fyn, _type, _module, _fmt, ...) \
+@@ -686,8 +686,8 @@ void fy_document_builder_diag_report(struct fy_document_builder *fydb,
+ 	FYDB_TOKEN_DIAG(_fydb, _fyt, FYET_WARNING, _module, _fmt, ## __VA_ARGS__)
+ 
+ /* alloca formatted print methods */
+-#define alloca_vsprintf(_fmt, _ap) \
+-	({ \
++#define alloca_vsprintf(_res, _fmt, _ap) \
++	do { \
+ 		const char *__fmt = (_fmt); \
+ 		va_list _ap_orig; \
+ 		int _size; \
+@@ -698,18 +698,18 @@ void fy_document_builder_diag_report(struct fy_document_builder *fydb,
+ 		_size = vsnprintf(NULL, 0, __fmt, _ap_orig); \
+ 		va_end(_ap_orig); \
+ 		if (_size != -1) { \
+-			_buf = alloca(_size + 1); \
++			_buf = FY_ALLOCA(_size + 1); \
+ 			_sizew = vsnprintf(_buf, _size + 1, __fmt, _ap); \
+ 			assert(_size == _sizew); \
+ 			_s = _buf + strlen(_buf); \
+ 			while (_s > _buf && _s[-1] == '\n') \
+ 				*--_s = '\0'; \
+ 		} \
+-		_buf; \
+-	})
++		*(_res) = _buf; \
++	} while(false)
+ 
+-#define alloca_sprintf(_fmt, ...) \
+-	({ \
++#define alloca_sprintf(_res, _fmt, ...) \
++	do { \
+ 		const char *__fmt = (_fmt); \
+ 		int _size; \
+ 		int _sizew __FY_DEBUG_UNUSED__; \
+@@ -717,14 +717,14 @@ void fy_document_builder_diag_report(struct fy_document_builder *fydb,
+ 		\
+ 		_size = snprintf(NULL, 0, __fmt, ## __VA_ARGS__); \
+ 		if (_size != -1) { \
+-			_buf = alloca(_size + 1); \
++			_buf = FY_ALLOCA(_size + 1); \
+ 			_sizew = snprintf(_buf, _size + 1, __fmt, __VA_ARGS__); \
+ 			assert(_size == _sizew); \
+ 			_s = _buf + strlen(_buf); \
+ 			while (_s > _buf && _s[-1] == '\n') \
+ 				*--_s = '\0'; \
+ 		} \
+-		_buf; \
+-	})
++		*(_res) = _buf; \
++	} while(false)
+ 
+ #endif
+diff --git a/src/lib/fy-doc.c b/src/lib/fy-doc.c
+index 602264b..60768e6 100644
+--- a/src/lib/fy-doc.c
++++ b/src/lib/fy-doc.c
+@@ -15,7 +15,9 @@
+ #include <stdlib.h>
+ #include <ctype.h>
+ #include <errno.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <unistd.h>
++#endif
+ 
+ #include <libfyaml.h>
+ 
+@@ -274,10 +276,13 @@ int fy_node_set_anchor_copy(struct fy_node *fyn, const char *text, size_t len)
+ 
+ int fy_node_set_vanchorf(struct fy_node *fyn, const char *fmt, va_list ap)
+ {
++    char *str;
++
+ 	if (!fyn || !fmt)
+ 		return -1;
+ 
+-	return fy_document_set_anchor_internal(fyn->fyd, fyn, alloca_vsprintf(fmt, ap), FY_NT, FYDSAF_COPY);
++    alloca_vsprintf(&str, fmt, ap);
++	return fy_document_set_anchor_internal(fyn->fyd, fyn, str, FY_NT, FYDSAF_COPY);
+ }
+ 
+ int fy_node_set_anchorf(struct fy_node *fyn, const char *fmt, ...)
+@@ -1264,11 +1269,11 @@ bool fy_node_compare_user(struct fy_node *fyn1, struct fy_node *fyn2,
+ 			break;
+ 		}
+ 
+-		fynpp1 = alloca(sizeof(*fynpp1) * (count1 + 1));
++		fynpp1 = FY_ALLOCA(sizeof(*fynpp1) * (count1 + 1));
+ 		fy_node_mapping_fill_array(fyn1, fynpp1, count1);
+ 		fy_node_mapping_perform_sort(fyn1, sort_fn, sort_fn_arg, fynpp1, count1);
+ 
+-		fynpp2 = alloca(sizeof(*fynpp2) * (count2 + 1));
++		fynpp2 = FY_ALLOCA(sizeof(*fynpp2) * (count2 + 1));
+ 		fy_node_mapping_fill_array(fyn2, fynpp2, count2);
+ 		fy_node_mapping_perform_sort(fyn2, sort_fn, sort_fn_arg, fynpp2, count2);
+ 
+@@ -3862,17 +3867,17 @@ bool fy_node_is_empty(struct fy_node *fyn)
+ 	return true;
+ }
+ 
+-#define fy_node_walk_ctx_create_a(_max_depth, _mark) \
+-	({ \
++#define fy_node_walk_ctx_create_a(_max_depth, _mark, _res) \
++	do { \
+ 		unsigned int __max_depth = (_max_depth); \
+ 		struct fy_node_walk_ctx *_ctx; \
+ 		\
+-		_ctx = alloca(sizeof(*_ctx) + sizeof(struct fy_node *) * __max_depth); \
++		_ctx = FY_ALLOCA(sizeof(*_ctx) + sizeof(struct fy_node *) * __max_depth); \
+ 		_ctx->max_depth = _max_depth; \
+ 		_ctx->next_slot = 0; \
+ 		_ctx->mark = (_mark); \
+-		_ctx; \
+-	})
++		*(_res) = _ctx; \
++	} while(false)
+ 
+ static inline void fy_node_walk_mark_start(struct fy_node_walk_ctx *ctx)
+ {
+@@ -3944,7 +3949,7 @@ fy_node_follow_aliases(struct fy_node *fyn, enum fy_node_walk_flags flags, bool
+ 
+ 	while (fyn && fy_node_is_alias(fyn)) {
+ 
+-		// fprintf(stderr, "%s: %s\n", __func__, fy_node_get_path_alloca(fyn));
++		// fprintf(stderr, "%s: %s\n", __func__, fy_node_get_path_FY_ALLOCA(fyn));
+ 
+ 		/* check for loops */
+ 		if (fy_ptr_node_list_contains(&nl, fyn)) {
+@@ -4250,7 +4255,7 @@ fy_node_by_path_internal(struct fy_node *fyn,
+ 		if (has_json_key_esc) {
+ 			/* note that the escapes reduce the length, so allocating the
+ 			 * same size is guaranteed safe */
+-			json_key = alloca(len + 1);
++			json_key = FY_ALLOCA(len + 1);
+ 
+ 			ss = path;
+ 			ee = s;
+@@ -4275,7 +4280,7 @@ fy_node_by_path_internal(struct fy_node *fyn,
+ 		/* URI encoded escaped */
+ 		if ((flags & FYNWF_URI_ENCODED) && memchr(path, '%', len)) {
+ 			/* escapes shrink, so safe to allocate as much */
+-			uri_path = alloca(len + 1);
++			uri_path = FY_ALLOCA(len + 1);
+ 
+ 			ss = path;
+ 			ee = path + len;
+@@ -4501,7 +4506,7 @@ fy_node_get_reference_internal(struct fy_node *fyn_base, struct fy_node *fyn, bo
+ 		text = fy_anchor_get_text(fya, &len);
+ 		if (!text)
+ 			return NULL;
+-		path2 = alloca(1 + len + 1);
++		path2 = FY_ALLOCA(1 + len + 1);
+ 		path2[0] = '*';
+ 		memcpy(path2 + 1, text, len);
+ 		path2[len + 1] = '\0';
+@@ -4513,10 +4518,10 @@ fy_node_get_reference_internal(struct fy_node *fyn_base, struct fy_node *fyn, bo
+ 			fya = fy_node_get_nearest_anchor(fyn);
+ 		if (!fya) {
+ 			/* no anchor, direct reference (ie return *\/foo\/bar */
+-			path = fy_node_get_path_alloca(fyn);
++			fy_node_get_path_alloca(fyn, &path);
+ 			if (!*path)
+ 				return NULL;
+-			path2 = alloca(1 + strlen(path) + 1);
++			path2 = FY_ALLOCA(1 + strlen(path) + 1);
+ 			path2[0] = '*';
+ 			strcpy(path2 + 1, path);
+ 		} else {
+@@ -4524,25 +4529,25 @@ fy_node_get_reference_internal(struct fy_node *fyn_base, struct fy_node *fyn, bo
+ 			if (!text)
+ 				return NULL;
+ 			if (fy_anchor_node(fya) != fyn) {
+-				path = fy_node_get_path_relative_to_alloca(fy_anchor_node(fya), fyn);
++				fy_node_get_path_relative_to_alloca(fy_anchor_node(fya), fyn, &path);
+ 				if (*path) {
+ 					/* we have a relative path */
+-					path2 = alloca(1 + len + 1 + strlen(path) + 1);
++					path2 = FY_ALLOCA(1 + len + 1 + strlen(path) + 1);
+ 					path2[0] = '*';
+ 					memcpy(path2 + 1, text, len);
+ 					path2[len + 1] = '/';
+ 					memcpy(1 + path2 + len + 1, path, strlen(path) + 1);
+ 				} else {
+ 					/* absolute path */
+-					path = fy_node_get_path_alloca(fyn);
++					fy_node_get_path_alloca(fyn, &path);
+ 					if (!*path)
+ 						return NULL;
+-					path2 = alloca(1 + strlen(path) + 1);
++					path2 = FY_ALLOCA(1 + strlen(path) + 1);
+ 					path2[0] = '*';
+ 					strcpy(path2 + 1, path);
+ 				}
+ 			} else {
+-				path2 = alloca(1 + len + 1);
++				path2 = FY_ALLOCA(1 + len + 1);
+ 				path2[0] = '*';
+ 				memcpy(path2 + 1, text, len);
+ 				path2[len + 1] = '\0';
+@@ -4640,9 +4645,9 @@ bool fy_check_ref_loop(struct fy_document *fyd, struct fy_node *fyn,
+ 			break;
+ 
+ 		ctxn = ctx;
+-		if (!ctxn)
+-			ctxn = fy_node_walk_ctx_create_a(
+-				fy_node_walk_max_depth_from_flags(flags), FYNWF_REF_MARKER);
++		if (!ctxn) 
++			fy_node_walk_ctx_create_a(
++				fy_node_walk_max_depth_from_flags(flags), FYNWF_REF_MARKER, &ctxn);
+ 
+ 
+ 		if (!ctx) {
+@@ -4816,7 +4821,7 @@ char *fy_node_get_path(struct fy_node *fyn)
+ 	track = NULL;
+ 	len = 0;
+ 	while ((path = fy_node_get_parent_address(fyn))) {
+-		newtrack = alloca(sizeof(*newtrack));
++		newtrack = FY_ALLOCA(sizeof(*newtrack));
+ 		newtrack->prev = track;
+ 		newtrack->path = path;
+ 
+@@ -4887,13 +4892,13 @@ char *fy_node_get_path_relative_to(struct fy_node *fyn_parent, struct fy_node *f
+ 		ppathlen = strlen(ppath);
+ 
+ 		if (pathlen > 0) {
+-			path2 = alloca(pathlen + 1 + ppathlen + 1);
++			path2 = FY_ALLOCA(pathlen + 1 + ppathlen + 1);
+ 			memcpy(path2, ppath, ppathlen);
+ 			path2[ppathlen] = '/';
+ 			memcpy(path2 + ppathlen + 1, path, pathlen);
+ 			path2[ppathlen + 1 + pathlen] = '\0';
+ 		} else {
+-			path2 = alloca(ppathlen + 1);
++			path2 = FY_ALLOCA(ppathlen + 1);
+ 			memcpy(path2, ppath, ppathlen);
+ 			path2[ppathlen] = '\0';
+ 		}
+@@ -4935,11 +4940,12 @@ char *fy_node_get_short_path(struct fy_node *fyn)
+ 	if (!text)
+ 		return NULL;
+ 
+-	if (fyn_anchor == fyn)
+-		str = alloca_sprintf("*%.*s", (int)len, text);
+-	else
+-		str = alloca_sprintf("*%.*s/%s", (int)len, text,
+-				fy_node_get_path_relative_to_alloca(fyn_anchor, fyn));
++	if (fyn_anchor == fyn) {
++		alloca_sprintf(&str, "*%.*s", (int)len, text);
++    } else {
++        fy_node_get_path_relative_to_alloca(fyn_anchor, fyn, &path);
++		alloca_sprintf(&str, "*%.*s/%s", (int)len, text, path);
++	}
+ 
+ 	path = strdup(str);
+ 	return path;
+@@ -5242,10 +5248,13 @@ struct fy_node *fy_node_create_alias_copy(struct fy_document *fyd, const char *d
+ 
+ struct fy_node *fy_node_create_vscalarf(struct fy_document *fyd, const char *fmt, va_list ap)
+ {
++    char *str;
++
+ 	if (!fyd || !fmt)
+ 		return NULL;
+ 
+-	return fy_node_create_scalar_internal(fyd, alloca_vsprintf(fmt, ap), FY_NT, FYNCSIF_COPY);
++    alloca_vsprintf(&str, fmt, ap);
++	return fy_node_create_scalar_internal(fyd, str, FY_NT, FYNCSIF_COPY);
+ }
+ 
+ struct fy_node *fy_node_create_scalarf(struct fy_document *fyd, const char *fmt, ...)
+@@ -5774,7 +5783,7 @@ void fy_node_mapping_perform_sort(struct fy_node *fyn_map,
+ 		def_arg.cmp_fn = NULL;
+ 		def_arg.arg = NULL;
+ 	}
+-	ctx.key_cmp = key_cmp ? : fy_node_mapping_sort_cmp_default;
++	ctx.key_cmp = key_cmp ? key_cmp : fy_node_mapping_sort_cmp_default;
+ 	ctx.arg = key_cmp ? arg : &def_arg;
+ 	ctx.fynpp = fynpp;
+ 	ctx.count = count;
+@@ -6043,7 +6052,7 @@ int fy_node_vscanf(struct fy_node *fyn, const char *fmt, va_list ap)
+ 		goto err_out;
+ 
+ 	len = strlen(fmt);
+-	fmt_cpy = alloca(len + 1);
++	fmt_cpy = FY_ALLOCA(len + 1);
+ 	memcpy(fmt_cpy, fmt, len + 1);
+ 	s = fmt_cpy;
+ 	e = s + len;
+@@ -6110,7 +6119,7 @@ int fy_node_vscanf(struct fy_node *fyn, const char *fmt, va_list ap)
+ 
+ 		/* allocate buffer it's smaller than the one we have already */
+ 		if (!value0 || value0_len < value_len) {
+-			value0 = alloca(value_len + 1);
++			value0 = FY_ALLOCA(value_len + 1);
+ 			value0_len = value_len;
+ 		}
+ 
+@@ -6461,7 +6470,7 @@ fy_node_hash_internal(struct fy_node *fyn, fy_hash_update_fn update_fn, void *st
+ 	case FYNT_MAPPING:
+ 		count = fy_node_mapping_item_count(fyn);
+ 
+-		fynpp = alloca(sizeof(*fynpp) * (count + 1));
++		fynpp = FY_ALLOCA(sizeof(*fynpp) * (count + 1));
+ 
+ 		fy_node_mapping_fill_array(fyn, fynpp, count);
+ 		fy_node_mapping_perform_sort(fyn, NULL, NULL, fynpp, count);
+diff --git a/src/lib/fy-dump.c b/src/lib/fy-dump.c
+index 24fb8c9..fe6a231 100644
+--- a/src/lib/fy-dump.c
++++ b/src/lib/fy-dump.c
+@@ -134,7 +134,7 @@ char *fy_token_dump_format(struct fy_token *fyt, char *buf, size_t bufsz)
+ 		/* not too large */
+ 		if (size > 20)
+ 			size = 20;
+-		text = fy_utf8_format_text_a(text, size, fyue_doublequote);
++		fy_utf8_format_text_a(text, size, fyue_doublequote, &text);
+ 		size = strlen(text);
+ 		if (size > 10) {
+ 			sfx = "...\"";
+diff --git a/src/lib/fy-emit.c b/src/lib/fy-emit.c
+index 36d8d8e..9f2e27e 100644
+--- a/src/lib/fy-emit.c
++++ b/src/lib/fy-emit.c
+@@ -236,7 +236,7 @@ void fy_emit_vprintf(struct fy_emitter *emit, enum fy_emitter_write_type type, c
+ 	if (size < 0)
+ 		return;
+ 
+-	str = alloca(size + 1);
++	str = FY_ALLOCA(size + 1);
+ 	size = vsnprintf(str, size + 1, fmt, ap2);
+ 	if (size < 0)
+ 		return;
+@@ -272,7 +272,7 @@ void fy_emit_write_indent(struct fy_emitter *emit, int indent)
+ 
+ 	if (emit->column < indent) {
+ 		len = indent - emit->column;
+-		ws = alloca(len + 1);
++		ws = FY_ALLOCA(len + 1);
+ 		memset(ws, ' ', len);
+ 		ws[len] = '\0';
+ 		fy_emit_write(emit, fyewt_indent, ws, len);
+@@ -541,7 +541,7 @@ void fy_emit_token_comment(struct fy_emitter *emit, struct fy_token *fyt, int fl
+ 	if (len < 0)
+ 		return;
+ 
+-	text = alloca(len + 1);
++	text = FY_ALLOCA(len + 1);
+ 
+ 	if (placement == fycp_top || placement == fycp_bottom) {
+ 		fy_emit_write_indent(emit, indent);
+@@ -1659,7 +1659,7 @@ void fy_emit_mapping(struct fy_emitter *emit, struct fy_node *fyn, int flags, in
+ 					"malloc() failed");
+ 			used_malloc = true;
+ 		} else
+-			fynpp = alloca((count + 1) * sizeof(*fynpp));
++			fynpp = FY_ALLOCA((count + 1) * sizeof(*fynpp));
+ 
+ 		/* fill (removing empty KVs) */
+ 		i = 0;
+diff --git a/src/lib/fy-parse.c b/src/lib/fy-parse.c
+index 16ce784..3a65a8c 100644
+--- a/src/lib/fy-parse.c
++++ b/src/lib/fy-parse.c
+@@ -548,7 +548,7 @@ int fy_parse_version_directive(struct fy_parser *fyp, struct fy_token *fyt, bool
+ 	vs = fy_token_get_text(fyt, &vs_len);
+ 	fyp_error_check(fyp, vs, err_out,
+ 			"fy_token_get_text() failed");
+-	vs0 = alloca(vs_len + 1);
++	vs0 = FY_ALLOCA(vs_len + 1);
+ 	memcpy(vs0, vs, vs_len);
+ 	vs0[vs_len] = '\0';
+ 
+@@ -671,7 +671,7 @@ static int fy_parser_reader_file_open(struct fy_reader *fyr, const char *name)
+ 	}
+ 
+ 	len = strlen(fyp->cfg.search_path);
+-	sp = alloca(len + 1);
++	sp = FY_ALLOCA(len + 1);
+ 	memcpy(sp, fyp->cfg.search_path, len + 1);
+ 
+ 	/* allocate the maximum possible so that we don't deal with reallocations */
+@@ -1031,6 +1031,7 @@ int fy_scan_to_next_token(struct fy_parser *fyp)
+ 	ssize_t offset;
+ 	struct fy_atom *handle;
+ 	struct fy_reader *fyr;
++	char *str;
+ 
+ 	fyr = fyp->reader;
+ 
+@@ -1163,8 +1164,8 @@ int fy_scan_to_next_token(struct fy_parser *fyp)
+ 	fyp_error_check(fyp, !rc, err_out_rc,
+ 			"fy_reader_input_scan_token_mark() failed");
+ 
+-	fyp_scan_debug(fyp, "%s: next token starts with c='%s'", __func__,
+-			fy_utf8_format_a(fy_parse_peek(fyp), fyue_singlequote));
++    fy_utf8_format_a(fy_parse_peek(fyp), fyue_singlequote, &str);
++	fyp_scan_debug(fyp, "%s: next token starts with c='%s'", __func__, str);
+ 	return 0;
+ }
+ 
+@@ -3171,13 +3172,15 @@ int fy_fetch_block_scalar(struct fy_parser *fyp, bool is_literal, int c)
+ 	int actual_lb_length, pending_lb_length;
+ 	struct fy_mark indicator_mark;
+ 	bool generated_indent;
++	char *str;
+ #ifdef ATOM_SIZE_CHECK
+ 	size_t tlength;
+ #endif
+ 
++    fy_utf8_format_a(c, fyue_singlequote, &str);
+ 	fyp_error_check(fyp, c == '|' || c == '>', err_out,
+ 			"bad start of block scalar ('%s')",
+-				fy_utf8_format_a(c, fyue_singlequote));
++				str);
+ 
+ 	fy_get_mark(fyp, &indicator_mark);
+ 
+@@ -3565,9 +3568,10 @@ int fy_fetch_block_scalar(struct fy_parser *fyp, bool is_literal, int c)
+ #ifdef ATOM_SIZE_CHECK
+ 	tlength = fy_atom_format_text_length(&handle);
+ 	if (tlength != length) {
++        fy_utf8_format_text_a(fy_atom_data(&handle), fy_atom_size(&handle), fyue_doublequote, &str);
+ 		fyp_warning(fyp, "%s: storage hint calculation failed real %zu != hint %zu - \"%s\"", __func__,
+ 			tlength, length,
+-			fy_utf8_format_text_a(fy_atom_data(&handle), fy_atom_size(&handle), fyue_doublequote));
++			str);
+ 		length = tlength;
+ 	}
+ #endif
+@@ -3618,6 +3622,7 @@ int fy_reader_fetch_flow_scalar_handle(struct fy_reader *fyr, int c, int indent,
+ 	size_t escbuf_len;
+ 	enum fy_utf8_escape esc_mode;
+ 	const char *ep;
++	char *str;
+ #ifdef ATOM_SIZE_CHECK
+ 	size_t tlength;
+ #endif
+@@ -3627,9 +3632,10 @@ int fy_reader_fetch_flow_scalar_handle(struct fy_reader *fyr, int c, int indent,
+ 	is_single = c == '\'';
+ 	end_c = c;
+ 
++    fy_utf8_format_a(c, fyue_singlequote, &str);
+ 	fyr_error_check(fyr, c == '\'' || c == '"', err_out,
+ 			"bad start of flow scalar ('%s')",
+-				fy_utf8_format_a(c, fyue_singlequote));
++				str);
+ 
+ 	fy_reader_get_mark(fyr, &mark);
+ 
+@@ -3876,11 +3882,12 @@ int fy_reader_fetch_flow_scalar_handle(struct fy_reader *fyr, int c, int indent,
+ 
+ 					ep = escbuf;
+ 
++					fy_utf8_format_a(c, fyue_singlequote, &str);
+ 					value = fy_utf8_parse_escape(&ep, escbuf_len, esc_mode);
+ 					FYR_PARSE_ERROR_CHECK(fyr, 0, 2, FYEM_SCAN,
+ 						value >= 0, err_out,
+ 						"invalid escape '%s' in %s string",
+-							fy_utf8_format_a(c, fyue_singlequote),
++						   str,
+ 							is_single ? "single-quoted" : "double-quoted");
+ 
+ 					fy_reader_advance_by(fyr, 2);
+@@ -4003,10 +4010,11 @@ int fy_reader_fetch_flow_scalar_handle(struct fy_reader *fyr, int c, int indent,
+ 
+ #ifdef ATOM_SIZE_CHECK
+ 	tlength = fy_atom_format_text_length(handle);
++	fy_utf8_format_text_a(fy_atom_data(handle), fy_atom_size(handle), fyue_doublequote, &str);
+ 	if (tlength != length) {
+ 		fyr_warning(fyr, "%s: storage hint calculation failed real %zu != hint %zu - \"%s\"", __func__,
+ 			tlength, length,
+-			fy_utf8_format_text_a(fy_atom_data(handle), fy_atom_size(handle), fyue_doublequote));
++			str);
+ 		length = tlength;
+ 	}
+ #endif
+@@ -4034,6 +4042,7 @@ int fy_reader_fetch_plain_scalar_handle(struct fy_reader *fyr, int c, int indent
+ 	struct fy_mark mark, last_mark;
+ 	bool is_multiline, has_lb, has_ws, ends_with_eof;
+ 	bool has_json_esc;
++	char *str;
+ #ifdef ATOM_SIZE_CHECK
+ 	size_t tlength;
+ #endif
+@@ -4290,9 +4299,10 @@ int fy_reader_fetch_plain_scalar_handle(struct fy_reader *fyr, int c, int indent
+ #ifdef ATOM_SIZE_CHECK
+ 	tlength = fy_atom_format_text_length(handle);
+ 	if (tlength != length) {
++		fy_utf8_format_text_a(fy_atom_data(handle), fy_atom_size(handle), fyue_doublequote, &str);
+ 		fyr_warning(fyr, "%s: storage hint calculation failed real %zu != hint %zu - \"%s\"", __func__,
+ 			tlength, length,
+-			fy_utf8_format_text_a(fy_atom_data(handle), fy_atom_size(handle), fyue_doublequote));
++			str);
+ 		length = tlength;
+ 	}
+ #endif
+@@ -4330,12 +4340,14 @@ int fy_fetch_flow_scalar(struct fy_parser *fyp, int c)
+ 	struct fy_simple_key_mark skm;
+ 	struct fy_token *fyt;
+ 	int i = 0, rc = -1;
++	char *str;
+ 
+ 	is_single = c == '\'';
+ 
++	fy_utf8_format_a(c, fyue_singlequote, &str);
+ 	fyp_error_check(fyp, c == '\'' || c == '"', err_out,
+ 			"bad start of flow scalar ('%s')",
+-				fy_utf8_format_a(c, fyue_singlequote));
++			str);
+ 
+ 	FYP_PARSE_ERROR_CHECK(fyp, 0, 1, FYEM_SCAN,
+ 			fy_flow_indent_check(fyp), err_out,
+diff --git a/src/lib/fy-parse.h b/src/lib/fy-parse.h
+index 11e71bf..899800a 100644
+--- a/src/lib/fy-parse.h
++++ b/src/lib/fy-parse.h
+@@ -534,7 +534,7 @@ fy_parser_set_flow_only_mode(struct fy_parser *fyp, bool flow_only_mode)
+ }
+ 
+ #define fy_fill_atom_a(_fyp, _advance) \
+-	fy_fill_atom((_fyp), (_advance), alloca(sizeof(struct fy_atom)))
++	fy_fill_atom((_fyp), (_advance), FY_ALLOCA(sizeof(struct fy_atom)))
+ 
+ struct fy_token *fy_token_vqueue(struct fy_parser *fyp, enum fy_token_type type, va_list ap);
+ struct fy_token *fy_token_queue(struct fy_parser *fyp, enum fy_token_type type, ...);
+diff --git a/src/lib/fy-token.h b/src/lib/fy-token.h
+index a464955..8cd4383 100644
+--- a/src/lib/fy-token.h
++++ b/src/lib/fy-token.h
+@@ -448,20 +448,20 @@ unsigned int fy_analyze_scalar_content(const char *data, size_t size,
+ /* must be freed */
+ char *fy_token_debug_text(struct fy_token *fyt);
+ 
+-#define fy_token_debug_text_a(_fyt) \
+-	({ \
++#define fy_token_debug_text_a(_fyt, _res) \
++	do { \
+ 		struct fy_token *__fyt = (_fyt); \
+ 		char *_buf, *_rbuf = ""; \
+ 		size_t _len; \
+ 		_buf = fy_token_debug_text(__fyt); \
+ 		if (_buf) { \
+ 			_len = strlen(_buf); \
+-			_rbuf = alloca(_len + 1); \
++			_rbuf = FY_ALLOCA(_len + 1); \
+ 			memcpy(_rbuf, _buf, _len + 1); \
+ 			free(_buf); \
+ 		} \
+-		_rbuf; \
+-	})
++		*(_res) = _rbuf; \
++	} while(false)
+ 
+ int fy_token_memcmp(struct fy_token *fyt, const void *ptr, size_t len);
+ int fy_token_strcmp(struct fy_token *fyt, const char *str);
+diff --git a/src/lib/fy-utf8.h b/src/lib/fy-utf8.h
+index b879706..9dc0825 100644
+--- a/src/lib/fy-utf8.h
++++ b/src/lib/fy-utf8.h
+@@ -148,11 +148,11 @@ static inline bool fy_utf8_escape_is_any_doublequote(enum fy_utf8_escape esc)
+ 
+ char *fy_utf8_format(int c, char *buf, enum fy_utf8_escape esc);
+ 
+-#define fy_utf8_format_a(_c, _esc) \
+-	({ \
+-	 	char *_buf = alloca(FY_UTF8_FORMAT_BUFMIN); \
+-	 	fy_utf8_format((_c), _buf, _esc); \
+-	})
++#define fy_utf8_format_a(_c, _esc, _res) \
++	do { \
++	 	char *_buf = FY_ALLOCA(FY_UTF8_FORMAT_BUFMIN); \
++	 	*(_res) = fy_utf8_format((_c), _buf, _esc); \
++	} while(false)
+ 
+ int fy_utf8_format_text_length(const char *buf, size_t len,
+ 			       enum fy_utf8_escape esc);
+@@ -160,15 +160,15 @@ char *fy_utf8_format_text(const char *buf, size_t len,
+ 			  char *out, size_t maxsz,
+ 			  enum fy_utf8_escape esc);
+ 
+-#define fy_utf8_format_text_a(_buf, _len, _esc) \
+-	({ \
++#define fy_utf8_format_text_a(_buf, _len, _esc, _res) \
++	do { \
+ 		const char *__buf = (_buf); \
+ 		size_t __len = (_len); \
+ 		enum fy_utf8_escape __esc = (_esc); \
+ 		size_t _outsz = fy_utf8_format_text_length(__buf, __len, __esc); \
+-		char *_out = alloca(_outsz + 1); \
+-		fy_utf8_format_text(__buf, __len, _out, _outsz, __esc); \
+-	})
++		char *_out = FY_ALLOCA(_outsz + 1); \
++		*(_res) = fy_utf8_format_text(__buf, __len, _out, _outsz, __esc); \
++	} while(false)
+ 
+ char *fy_utf8_format_text_alloc(const char *buf, size_t len, enum fy_utf8_escape esc);
+ 
+diff --git a/src/lib/fy-walk.c b/src/lib/fy-walk.c
+index 736704d..5e7cda3 100644
+--- a/src/lib/fy-walk.c
++++ b/src/lib/fy-walk.c
+@@ -3092,6 +3092,9 @@ fy_path_parse_expression(struct fy_path_parser *fypp)
+ 	struct fy_path_expr *expr, *expr_top, *exprt;
+ 	enum fy_expr_mode old_scan_mode, prev_scan_mode;
+ 	int ret, rc;
++#ifdef DEBUG_EXPR
++    char *dbg;
++#endif
+ 
+ 	/* the parser must be in the correct state */
+ 	if (!fypp || fy_expr_stack_size(&fypp->operators) > 0 || fy_expr_stack_size(&fypp->operands) > 0)
+@@ -3117,7 +3120,8 @@ fy_path_parse_expression(struct fy_path_parser *fypp)
+ 			break;
+ 
+ #ifdef DEBUG_EXPR
+-		FYR_TOKEN_DIAG(fyr, fyt, FYET_NOTICE, FYEM_PARSE, "next token %s", fy_token_debug_text_a(fyt));
++        fy_token_debug_text_a(fyt, &dbg);
++		FYR_TOKEN_DIAG(fyr, fyt, FYET_NOTICE, FYEM_PARSE, "next token %s", dbg);
+ #endif
+ 		fytt = fyt->type;
+ 
+@@ -4663,7 +4667,7 @@ fy_path_expr_execute(struct fy_path_exec *fypx, int level, struct fy_path_expr *
+ 		/* execute the arguments */
+ 		nargs = expr->fym->nargs;
+ 		if (nargs > 0) {
+-			fwr_args = alloca(sizeof(*fwr_args) * nargs);
++			fwr_args = FY_ALLOCA(sizeof(*fwr_args) * nargs);
+ 			memset(fwr_args, 0, sizeof(*fwr_args) * nargs);
+ 			for (i = 0, exprt = fy_path_expr_list_head(&expr->children); exprt;
+ 					exprt = fy_path_expr_next(&expr->children, exprt), i++) {
+@@ -4995,6 +4999,7 @@ fy_node_alias_resolve_by_ypath_result(struct fy_node *fyn)
+ 	struct fy_anchor *fya;
+ 	struct fy_path_exec *fypx = NULL;
+ 	int rc;
++	char* path;
+ 
+ 	if (!fyn || !fy_node_is_alias(fyn))
+ 		return NULL;
+@@ -5026,9 +5031,10 @@ fy_node_alias_resolve_by_ypath_result(struct fy_node *fyn)
+ 	assert(pxdd);
+ 
+ 	if (pxnd->traversals++ > 0) {
++        fy_node_get_path_alloca(fyn, &path);
+ 		FYD_NODE_ERROR(fyd, fyn, FYEM_DOC,
+ 				"recursive reference detected at %s\n",
+-				fy_node_get_path_alloca(fyn));
++				path);
+ 		pxnd->traversals--;
+ 		return NULL;
+ 	}
+diff --git a/src/tool/fy-tool.c b/src/tool/fy-tool.c
+index a975bec..1c7b26c 100644
+--- a/src/tool/fy-tool.c
++++ b/src/tool/fy-tool.c
+@@ -431,7 +431,7 @@ int apply_flags_option(const char *arg, unsigned int *flagsp,
+ 			sn = e;
+ 
+ 		len = sn - s;
+-		targ = alloca(len + 1);
++		targ = FY_ALLOCA(len + 1);
+ 		memcpy(targ, s, len);
+ 		targ[len] = '\0';
+ 
+@@ -1256,8 +1256,10 @@ compose_process_event(struct fy_parser *fyp, struct fy_event *fye, struct fy_pat
+ 	struct fy_node *fyn, *fyn_parent;
+ 	struct fy_node_pair *fynp;
+ 	int rc;
++	char* path_text;
+ 
+ 	if (cd->verbose) {
++        fy_path_get_text_alloca(path, &path_text);
+ 		fprintf(stderr, "%s: %c%c%c%c%c %3d - %-32s\n",
+ 				fy_event_type_get_text(fye->type),
+ 				fy_path_in_root(path) ? 'R' : '-',
+@@ -1267,7 +1269,7 @@ compose_process_event(struct fy_parser *fyp, struct fy_event *fye, struct fy_pat
+ 					fy_path_in_mapping_value(path) ? 'V' : '-',
+ 				fy_path_in_collection_root(path) ? '/' : '-',
+ 				fy_path_depth(path),
+-				fy_path_get_text_alloca(path));
++				path_text);
+ 	}
+ 
+ 	switch (fye->type) {
+@@ -1543,7 +1545,7 @@ int main(int argc, char *argv[])
+ 					lopts, &lidx)) != -1) {
+ 		switch (opt) {
+ 		case 'I':
+-			tmp = alloca(strlen(cfg.search_path) + 1 + strlen(optarg) + 1);
++			tmp = FY_ALLOCA(strlen(cfg.search_path) + 1 + strlen(optarg) + 1);
+ 			s = tmp;
+ 			strcpy(s, cfg.search_path);
+ 			if (cfg.search_path && cfg.search_path[0]) {
+diff --git a/src/valgrind/fy-valgrind.h b/src/valgrind/fy-valgrind.h
+index 0c7074b..263b262 100644
+--- a/src/valgrind/fy-valgrind.h
++++ b/src/valgrind/fy-valgrind.h
+@@ -21,6 +21,8 @@
+ #include <limits.h>
+ #include <stdio.h>
+ 
++#include <libfyaml.h>
++
+ enum fy_valgrind_tool {
+ 	fyvt_none,
+ 	fyvt_valgrind,
+@@ -106,7 +108,7 @@ static inline void fy_valgrind_check(int *argcp, char ***argvp)
+ 
+ 	case fyvt_valgrind:
+ 		va_argc = 1 + 4 + argc - 1;
+-		va_argv = alloca(sizeof(*va_argv) * (va_argc + 1));
++		va_argv = FY_ALLOCA(sizeof(*va_argv) * (va_argc + 1));
+ 		va_argv[0] = valgrind;
+ 		va_argv[1] = "--leak-check=full";
+ 		va_argv[2] = "--track-origins=yes";
+@@ -117,7 +119,7 @@ static inline void fy_valgrind_check(int *argcp, char ***argvp)
+ 
+ 	case fyvt_callgrind:
+ 		va_argc = 1 + 5 + argc - 1;
+-		va_argv = alloca(sizeof(*va_argv) * (va_argc + 1));
++		va_argv = FY_ALLOCA(sizeof(*va_argv) * (va_argc + 1));
+ 		va_argv[0] = valgrind;
+ 		va_argv[1] = "--tool=callgrind";
+ 		va_argv[2] = "--dump-instr=yes";
+@@ -129,7 +131,7 @@ static inline void fy_valgrind_check(int *argcp, char ***argvp)
+ 
+ 	case fyvt_massif:
+ 		va_argc = 1 + 2 + argc - 1;
+-		va_argv = alloca(sizeof(*va_argv) * (va_argc + 1));
++		va_argv = FY_ALLOCA(sizeof(*va_argv) * (va_argc + 1));
+ 		va_argv[0] = valgrind;
+ 		va_argv[1] = "--tool=massif";
+ 		va_argv[2] = argv0;
+diff --git a/test/libfyaml-test-core.c b/test/libfyaml-test-core.c
+index d4cd39f..e9aa7dd 100644
+--- a/test/libfyaml-test-core.c
++++ b/test/libfyaml-test-core.c
+@@ -461,27 +461,27 @@ START_TEST(doc_short_path)
+ 	fyn_baz = fy_node_by_path(fyn_root, "/foo/bar/2/baz", FY_NT, FYNWF_DONT_FOLLOW);
+ 	ck_assert_ptr_ne(fyn_baz, NULL);
+ 
+-	str = fy_node_get_short_path_alloca(fyn_root);
++	fy_node_get_short_path_alloca(fyn_root, &str);
+ 	ck_assert_ptr_ne(str, NULL);
+ 	ck_assert_str_eq(str, "*r");
+ 	ck_assert_ptr_eq(fy_node_by_path(fy_document_root(fyd), str, FY_NT, FYNWF_FOLLOW), fyn_root);
+ 
+-	str = fy_node_get_short_path_alloca(fyn_foo);
++	fy_node_get_short_path_alloca(fyn_foo, &str);
+ 	ck_assert_ptr_ne(str, NULL);
+ 	ck_assert_str_eq(str, "*f");
+ 	ck_assert_ptr_eq(fy_node_by_path(fy_document_root(fyd), str, FY_NT, FYNWF_FOLLOW), fyn_foo);
+ 
+-	str = fy_node_get_short_path_alloca(fyn_notfoo);
++	fy_node_get_short_path_alloca(fyn_notfoo, &str);
+ 	ck_assert_ptr_ne(str, NULL);
+ 	ck_assert_str_eq(str, "*r/notfoo");
+ 	ck_assert_ptr_eq(fy_node_by_path(fy_document_root(fyd), str, FY_NT, FYNWF_FOLLOW), fyn_notfoo);
+ 
+-	str = fy_node_get_short_path_alloca(fyn_bar);
++	fy_node_get_short_path_alloca(fyn_bar, &str);
+ 	ck_assert_ptr_ne(str, NULL);
+ 	ck_assert_str_eq(str, "*f/bar");
+ 	ck_assert_ptr_eq(fy_node_by_path(fy_document_root(fyd), str, FY_NT, FYNWF_FOLLOW), fyn_bar);
+ 
+-	str = fy_node_get_short_path_alloca(fyn_baz);
++	fy_node_get_short_path_alloca(fyn_baz, &str);
+ 	ck_assert_ptr_ne(str, NULL);
+ 	ck_assert_str_eq(str, "*f/bar/2/baz");
+ 	ck_assert_ptr_eq(fy_node_by_path(fy_document_root(fyd), str, FY_NT, FYNWF_FOLLOW), fyn_baz);
+@@ -1843,7 +1843,7 @@ START_TEST(alloca_check)
+ 	/* fy_emit_document_to_string*() */
+ 	buf = fy_emit_document_to_string(fyd, FYECF_MODE_FLOW_ONELINE);
+ 	ck_assert_ptr_ne(buf, NULL);
+-	abuf = fy_emit_document_to_string_alloca(fyd, FYECF_MODE_FLOW_ONELINE);
++	fy_emit_document_to_string_alloca(fyd, FYECF_MODE_FLOW_ONELINE, &abuf);
+ 	ck_assert_ptr_ne(abuf, NULL);
+ 	ck_assert_str_eq(buf, abuf);
+ 	free(buf);
+@@ -1851,7 +1851,7 @@ START_TEST(alloca_check)
+ 	/* fy_emit_node_to_string*() */
+ 	buf = fy_emit_node_to_string(fy_node_by_path(fy_document_root(fyd), "/foo", FY_NT, FYNWF_DONT_FOLLOW), FYECF_MODE_FLOW_ONELINE);
+ 	ck_assert_ptr_ne(buf, NULL);
+-	abuf = fy_emit_node_to_string_alloca(fy_node_by_path(fy_document_root(fyd), "/foo", FY_NT, FYNWF_DONT_FOLLOW), FYECF_MODE_FLOW_ONELINE);
++	fy_emit_node_to_string_alloca(fy_node_by_path(fy_document_root(fyd), "/foo", FY_NT, FYNWF_DONT_FOLLOW), FYECF_MODE_FLOW_ONELINE, &abuf);
+ 	ck_assert_ptr_ne(abuf, NULL);
+ 	ck_assert_str_eq(buf, abuf);
+ 	free(buf);
+@@ -1860,14 +1860,14 @@ START_TEST(alloca_check)
+ 	buf = fy_node_get_path(fy_node_by_path(fy_document_root(fyd), "/foo", FY_NT, FYNWF_DONT_FOLLOW));
+ 	ck_assert_ptr_ne(buf, NULL);
+ 	ck_assert_str_eq(buf, "/foo");
+-	abuf = fy_node_get_path_alloca(fy_node_by_path(fy_document_root(fyd), "/foo", FY_NT, FYNWF_DONT_FOLLOW));
++	fy_node_get_path_alloca(fy_node_by_path(fy_document_root(fyd), "/foo", FY_NT, FYNWF_DONT_FOLLOW), &abuf);
+ 	ck_assert_ptr_ne(abuf, NULL);
+ 	ck_assert_str_eq(abuf, "/foo");
+ 	ck_assert_str_eq(buf, abuf);
+ 	free(buf);
+ 
+ 	/* check that a bad path is "" */
+-	abuf = fy_node_get_path_alloca(NULL);
++	fy_node_get_path_alloca(NULL, &abuf);
+ 	ck_assert_ptr_ne(abuf, NULL);
+ 	ck_assert_str_eq(abuf, "");
+ 
+
+From 67a4075058e69cc7c8360223df8d973b83ff1543 Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Sun, 29 Jan 2023 00:26:36 +0300
+Subject: [PATCH 2/7] replace unportable gcc extensions
+
+---
+ src/internal/libfyaml-parser.c | 26 ++++++++++-----------
+ src/lib/fy-diag.c              |  2 +-
+ src/lib/fy-doc.c               |  4 ++--
+ src/lib/fy-doc.h               |  4 ++++
+ src/lib/fy-docbuilder.c        |  2 ++
+ src/lib/fy-dump.c              |  2 ++
+ src/lib/fy-emit.c              |  8 +++++--
+ src/lib/fy-input.c             | 42 +++++++++++++++++++++-------------
+ src/lib/fy-input.h             |  2 +-
+ src/lib/fy-parse.c             |  2 +-
+ src/lib/fy-parse.h             |  2 +-
+ 11 files changed, 59 insertions(+), 37 deletions(-)
+
+diff --git a/src/internal/libfyaml-parser.c b/src/internal/libfyaml-parser.c
+index 9563208..14847d6 100644
+--- a/src/internal/libfyaml-parser.c
++++ b/src/internal/libfyaml-parser.c
+@@ -327,9 +327,9 @@ void dump_event(struct fy_parser *fyp, struct fy_event *fye)
+ 		if (fye->scalar.value)
+ 			fy_token_get_esc_text_a(fye->scalar.value, &value);
+ 		printf("%-14s%s|%s%s%s%s%s%s '%s'\n", "SCALAR", mm,
+-			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+-			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "",
+-			value ? : "");
++			anchor ? " anchor='" : "", anchor ? anchor : "", anchor ? "'" : "",
++			   tag ?    " tag='" : "",    tag ? tag : "",    tag ? "'" : "",
++			value ? value : "");
+ 		break;
+ 	case FYET_SEQUENCE_START:
+ 		if (fye->sequence_start.anchor)
+@@ -337,8 +337,8 @@ void dump_event(struct fy_parser *fyp, struct fy_event *fye)
+ 		if (fye->sequence_start.tag)
+ 			fy_token_get_esc_text_a(fye->sequence_start.tag, &tag);
+ 		printf("%-14s%s|%s%s%s%s%s%s\n", "SEQUENCE_START", mm,
+-			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+-			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "");
++			anchor ? " anchor='" : "", anchor ? anchor : "", anchor ? "'" : "",
++			   tag ?    " tag='" : "",    tag ? tag : "",    tag ? "'" : "");
+ 		break;
+ 	case FYET_SEQUENCE_END:
+ 		printf("%-14s%s|\n", "SEQUENCE_END", mm);
+@@ -349,8 +349,8 @@ void dump_event(struct fy_parser *fyp, struct fy_event *fye)
+ 		if (fye->mapping_start.tag)
+ 			fy_token_get_esc_text_a(fye->mapping_start.tag, &tag);
+ 		printf("%-14s%s|%s%s%s%s%s%s\n", "MAPPING_START", mm,
+-			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+-			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "");
++			anchor ? " anchor='" : "", anchor ? anchor : "", anchor ? "'" : "",
++			   tag ?    " tag='" : "",    tag ? tag : "",    tag ? "'" : "");
+ 		break;
+ 	case FYET_MAPPING_END:
+ 		printf("%-14s%s|\n", "MAPPING_END", mm);
+@@ -1263,8 +1263,8 @@ void dump_libyaml_event(yaml_event_t *event)
+ 			txt2esc_a((char *)event->data.scalar.tag, -1, &tag);
+ 		txt2esc_a((char *)event->data.scalar.value, -1, &value);
+ 		printf("%-14s%s|%s%s%s%s%s%s '%s'\n", "SCALAR", mm,
+-			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+-			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "",
++			anchor ? " anchor='" : "", anchor ? anchor : "", anchor ? "'" : "",
++			   tag ?    " tag='" : "",    tag ? tag : "",    tag ? "'" : "",
+ 			value);
+ 		break;
+ 	case YAML_SEQUENCE_START_EVENT:
+@@ -1273,8 +1273,8 @@ void dump_libyaml_event(yaml_event_t *event)
+ 		if (event->data.sequence_start.tag)
+ 			txt2esc_a((char *)event->data.sequence_start.tag, -1, &tag);
+ 		printf("%-14s%s|%s%s%s%s%s%s\n", "SEQUENCE_START", mm,
+-			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+-			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "");
++			anchor ? " anchor='" : "", anchor ? anchor : "", anchor ? "'" : "",
++			   tag ?    " tag='" : "",    tag ? tag : "",    tag ? "'" : "");
+ 		break;
+ 	case YAML_SEQUENCE_END_EVENT:
+ 		printf("%-14s%s|\n", "SEQUENCE_END", mm);
+@@ -1285,8 +1285,8 @@ void dump_libyaml_event(yaml_event_t *event)
+ 		if (event->data.mapping_start.tag)
+ 			txt2esc_a((char *)event->data.mapping_start.tag, -1, &tag);
+ 		printf("%-14s%s|%s%s%s%s%s%s\n", "MAPPING_START", mm,
+-			anchor ? " anchor='" : "", anchor ? : "", anchor ? "'" : "",
+-			   tag ?    " tag='" : "",    tag ? : "",    tag ? "'" : "");
++			anchor ? " anchor='" : "", anchor ? anchor : "", anchor ? "'" : "",
++			   tag ?    " tag='" : "",    tag ? tag : "",    tag ? "'" : "");
+ 		break;
+ 	case YAML_MAPPING_END_EVENT:
+ 		printf("%-14s%s|\n", "MAPPING_END", mm);
+diff --git a/src/lib/fy-diag.c b/src/lib/fy-diag.c
+index aa1e4cd..ee6a77c 100644
+--- a/src/lib/fy-diag.c
++++ b/src/lib/fy-diag.c
+@@ -873,7 +873,7 @@ void fy_diag_vreport(struct fy_diag *diag,
+ 
+ 	if (!diag->collect_errors) {
+ 		fy_diag_printf(diag, "%s" "%s%s: %s" "%s\n",
+-			name_str ? : "",
++			name_str ? name_str : "",
+ 			color_start, fy_error_type_to_string(fydrc->type), color_end,
+ 			msg_str);
+ 
+diff --git a/src/lib/fy-doc.c b/src/lib/fy-doc.c
+index 60768e6..22e0c51 100644
+--- a/src/lib/fy-doc.c
++++ b/src/lib/fy-doc.c
+@@ -5666,7 +5666,7 @@ const void *a, const void *b, void *arg
+ }
+ 
+ /* not! thread safe! */
+-#if !defined(HAVE_QSORT_R) || !HAVE_QSORT_R || defined(__EMSCRIPTEN__)
++#if !defined(HAVE_QSORT_R) || !HAVE_QSORT_R || defined(__EMSCRIPTEN__) || defined(_MSC_VER)
+ static struct fy_node_mapping_sort_ctx *fy_node_mapping_sort_ctx_no_qsort_r;
+ 
+ static int fy_node_mapping_sort_cmp_no_qsort_r(const void *a, const void *b)
+@@ -5787,7 +5787,7 @@ void fy_node_mapping_perform_sort(struct fy_node *fyn_map,
+ 	ctx.arg = key_cmp ? arg : &def_arg;
+ 	ctx.fynpp = fynpp;
+ 	ctx.count = count;
+-#if defined(HAVE_QSORT_R) && HAVE_QSORT_R && !defined(__EMSCRIPTEN__)
++#if defined(HAVE_QSORT_R) && HAVE_QSORT_R && !defined(__EMSCRIPTEN__) && !defined(_MSC_VER)
+ #ifdef __APPLE__
+ 	qsort_r(fynpp, count, sizeof(*fynpp), &ctx, fy_node_mapping_sort_cmp);
+ #else
+diff --git a/src/lib/fy-doc.h b/src/lib/fy-doc.h
+index 6c15024..916b66a 100644
+--- a/src/lib/fy-doc.h
++++ b/src/lib/fy-doc.h
+@@ -61,7 +61,11 @@ struct fy_node {
+ 	struct fy_node *parent;
+ 	struct fy_document *fyd;
+ 	unsigned int marks;
++#if !defined(_MSC_VER)
+ 	enum fy_node_type type : 2;	/* 2 bits are enough for 3 types */
++#else
++	enum fy_node_type type;	/* it converted incorrectly and can't be used as supposed to be */
++#endif
+ 	bool has_meta : 1;
+ 	bool attached : 1;		/* when it's attached somewhere */
+ 	bool synthetic : 1;		/* node has been modified programmaticaly */
+diff --git a/src/lib/fy-docbuilder.c b/src/lib/fy-docbuilder.c
+index 94f6606..08152f0 100644
+--- a/src/lib/fy-docbuilder.c
++++ b/src/lib/fy-docbuilder.c
+@@ -15,7 +15,9 @@
+ #include <stdlib.h>
+ #include <ctype.h>
+ #include <errno.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <unistd.h>
++#endif
+ 
+ #include <libfyaml.h>
+ 
+diff --git a/src/lib/fy-dump.c b/src/lib/fy-dump.c
+index fe6a231..ac1980d 100644
+--- a/src/lib/fy-dump.c
++++ b/src/lib/fy-dump.c
+@@ -11,11 +11,13 @@
+ 
+ #include <stdio.h>
+ #include <string.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <sys/mman.h>
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <unistd.h>
++#endif
+ #include <assert.h>
+ #include <stdlib.h>
+ #include <errno.h>
+diff --git a/src/lib/fy-emit.c b/src/lib/fy-emit.c
+index 9f2e27e..8da29ce 100644
+--- a/src/lib/fy-emit.c
++++ b/src/lib/fy-emit.c
+@@ -14,7 +14,11 @@
+ #include <assert.h>
+ #include <stdlib.h>
+ #include <limits.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <unistd.h>
++#elif defined (_MSC_VER)
++#define STDOUT_FILENO _fileno(stdin)
++#endif
+ #include <ctype.h>
+ #include <errno.h>
+ 
+@@ -1844,7 +1848,7 @@ int fy_emit_document_start(struct fy_emitter *emit, struct fy_document *fyd,
+ 	if (!emit || !fyd || !fyd->fyds)
+ 		return -1;
+ 
+-	root = fyn_root ? : fy_document_root(fyd);
++	root = fyn_root ? fyn_root : fy_document_root(fyd);
+ 
+ 	root_tag_or_anchor = root && (root->tag || fy_document_lookup_anchor_by_node(fyd, root));
+ 
+@@ -2283,7 +2287,7 @@ static int do_buffer_output(struct fy_emitter *emit, enum fy_emitter_write_type
+ 		if (!state->allocate_buffer)
+ 			return 0;
+ 
+-		pagesize = sysconf(_SC_PAGESIZE);
++		pagesize = fy_get_pagesize();
+ 		size = state->need + pagesize - 1;
+ 		size = size - size % pagesize;
+ 
+diff --git a/src/lib/fy-input.c b/src/lib/fy-input.c
+index 5d16ce6..ac021ad 100644
+--- a/src/lib/fy-input.c
++++ b/src/lib/fy-input.c
+@@ -15,11 +15,15 @@
+ #include <stdlib.h>
+ #include <stdarg.h>
+ #include <fcntl.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <unistd.h>
+ #include <sys/mman.h>
++#endif
+ #include <sys/types.h>
+ #include <sys/stat.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <sys/ioctl.h>
++#endif
+ #include <errno.h>
+ 
+ #include <libfyaml.h>
+@@ -216,10 +220,12 @@ void fy_input_close(struct fy_input *fyi)
+ 	case fyit_file:
+ 	case fyit_fd:
+ 
++#if !defined(_MSC_VER)
+ 		if (fyi->addr) {
+ 			munmap(fyi->addr, fyi->length);
+ 			fyi->addr = NULL;
+ 		}
++#endif
+ 
+ 		if (fyi->fd != -1) {
+ 			if (!fyi->cfg.no_close_fd)
+@@ -408,6 +414,7 @@ int fy_reader_input_open(struct fy_reader *fyr, struct fy_input *fyi, const stru
+ 		fyi->length = sb.st_size;
+ 
+ 		/* only map if not zero (and is not disabled) */
++#if !defined(_MSC_VER)
+ 		if (sb.st_size > 0 && !fyr->current_input_cfg.disable_mmap_opt) {
+ 			fyi->addr = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fyi->fd, 0);
+ 
+@@ -418,6 +425,7 @@ int fy_reader_input_open(struct fy_reader *fyr, struct fy_input *fyi, const stru
+ 				fyi->addr = NULL;
+ 			}
+ 		}
++#endif
+ 		/* if we've managed to mmap, we' good */
+ 		if (fyi->addr)
+ 			break;
+@@ -464,12 +472,14 @@ int fy_reader_input_open(struct fy_reader *fyr, struct fy_input *fyi, const stru
+ 		/* all the rest need it */
+ 	default:
+ 		/* if we're not in mmap mode */
++#if !defined(_MSC_VER)
+ 		if (fyi->addr && !fyr->current_input_cfg.disable_mmap_opt)
+ 			break;
++#endif
+ 
+ 		fyi->chunk = fyi->cfg.chunk;
+ 		if (!fyi->chunk)
+-			fyi->chunk = sysconf(_SC_PAGESIZE);
++			fyi->chunk = fy_get_pagesize();
+ 		fyi->chop = fyi->chunk * FYI_CHOP_MULT;
+ 		fyi->buffer = malloc(fyi->chunk);
+ 		fyr_error_check(fyr, fyi->buffer, err_out,
+@@ -585,7 +595,7 @@ int fy_reader_input_scan_token_mark_slow_path(struct fy_reader *fyr)
+ 	assert(fyi->read >= fyr->current_input_pos);
+ 	fyi_new->read = fyi->read - fyr->current_input_pos;
+ 	if (fyi_new->read > 0)
+-		memcpy(fyi_new->buffer, fyi->buffer + fyr->current_input_pos, fyi_new->read);
++		memcpy(fyi_new->buffer, (char *)fyi->buffer + fyr->current_input_pos, fyi_new->read);
+ 
+ 	fyr->this_input_start += fyr->current_input_pos;
+ 
+@@ -629,7 +639,7 @@ const void *fy_reader_ptr_slow_path(struct fy_reader *fyr, size_t *leftp)
+ 	case fyit_fd:
+ 		if (fyi->addr) {
+ 			left = fyi->length - (fyr->this_input_start + fyr->current_input_pos);
+-			p = fyi->addr + fyr->current_input_pos;
++			p = (char *)fyi->addr + fyr->current_input_pos;
+ 			break;
+ 		}
+ 
+@@ -638,17 +648,17 @@ const void *fy_reader_ptr_slow_path(struct fy_reader *fyr, size_t *leftp)
+ 	case fyit_stream:
+ 	case fyit_callback:
+ 		left = fyi->read - (fyr->this_input_start + fyr->current_input_pos);
+-		p = fyi->buffer + fyr->current_input_pos;
++		p = (char *)fyi->buffer + fyr->current_input_pos;
+ 		break;
+ 
+ 	case fyit_memory:
+ 		left = fyi->cfg.memory.size - fyr->current_input_pos;
+-		p = fyi->cfg.memory.data + fyr->current_input_pos;
++		p = (char *)fyi->cfg.memory.data + fyr->current_input_pos;
+ 		break;
+ 
+ 	case fyit_alloc:
+ 		left = fyi->cfg.alloc.size - fyr->current_input_pos;
+-		p = fyi->cfg.alloc.data + fyr->current_input_pos;
++		p = (char *)fyi->cfg.alloc.data + fyr->current_input_pos;
+ 		break;
+ 
+ 
+@@ -700,7 +710,7 @@ const void *fy_reader_input_try_pull(struct fy_reader *fyr, struct fy_input *fyi
+ 				fyr_debug(fyr, "file input exhausted");
+ 				break;
+ 			}
+-			p = fyi->addr + pos;
++			p = (char *)fyi->addr + pos;
+ 			break;
+ 		}
+ 
+@@ -712,7 +722,7 @@ const void *fy_reader_input_try_pull(struct fy_reader *fyr, struct fy_input *fyi
+ 		assert(fyi->read >= pos);
+ 
+ 		left = fyi->read - pos;
+-		p = fyi->buffer + pos;
++		p = (char *)fyi->buffer + pos;
+ 
+ 		/* enough to satisfy directly */
+ 		if (left >= pull)
+@@ -756,7 +766,7 @@ const void *fy_reader_input_try_pull(struct fy_reader *fyr, struct fy_input *fyi
+ 			fyi->generation++;
+ 
+ 			space = fyi->allocated - pos;
+-			p = fyi->buffer + pos;
++			p = (char *)fyi->buffer + pos;
+ 		}
+ 
+ 		/* always try to read up to the allocated space */
+@@ -768,7 +778,7 @@ const void *fy_reader_input_try_pull(struct fy_reader *fyr, struct fy_input *fyi
+ 
+ 				fyr_debug(fyr, "performing callback request of %zu", nreadreq);
+ 
+-				nread = fyi->cfg.callback.input(fyi->cfg.userdata, fyi->buffer + fyi->read, nreadreq);
++				nread = fyi->cfg.callback.input(fyi->cfg.userdata, (char *)fyi->buffer + fyi->read, nreadreq);
+ 
+ 				fyr_debug(fyr, "callback returned %zu", nread);
+ 
+@@ -787,7 +797,7 @@ const void *fy_reader_input_try_pull(struct fy_reader *fyr, struct fy_input *fyi
+ 
+ 				fyr_debug(fyr, "performing fread request of %zu", nreadreq);
+ 
+-				nread = fread(fyi->buffer + fyi->read, 1, nreadreq, fyi->fp);
++				nread = fread((char *)fyi->buffer + fyi->read, 1, nreadreq, fyi->fp);
+ 
+ 				fyr_debug(fyr, "fread returned %zu", nread);
+ 
+@@ -811,7 +821,7 @@ const void *fy_reader_input_try_pull(struct fy_reader *fyr, struct fy_input *fyi
+ 				fyr_debug(fyr, "performing read request of %zu", nreadreq);
+ 
+ 				do {
+-					snread = read(fyi->fd, fyi->buffer + fyi->read, nreadreq);
++					snread = read(fyi->fd, (char *)fyi->buffer + fyi->read, nreadreq);
+ 				} while (snread == -1 && errno == EAGAIN);
+ 
+ 				fyr_debug(fyr, "read returned %zd", snread);
+@@ -859,7 +869,7 @@ const void *fy_reader_input_try_pull(struct fy_reader *fyr, struct fy_input *fyi
+ 			fyr_debug(fyr, "memory input exhausted");
+ 			break;
+ 		}
+-		p = fyi->cfg.memory.data + pos;
++		p = (char *)fyi->cfg.memory.data + pos;
+ 		break;
+ 
+ 	case fyit_alloc:
+@@ -870,7 +880,7 @@ const void *fy_reader_input_try_pull(struct fy_reader *fyr, struct fy_input *fyi
+ 			fyr_debug(fyr, "alloc input exhausted");
+ 			break;
+ 		}
+-		p = fyi->cfg.alloc.data + pos;
++		p = (char *)fyi->cfg.alloc.data + pos;
+ 		break;
+ 
+ 
+@@ -952,13 +962,13 @@ struct fy_input *fy_input_create(const struct fy_input_cfg *fyic)
+ 		break;
+ 	case fyit_memory:
+ 		ret = asprintf(&fyi->name, "<memory-@%p-%p>",
+-			fyic->memory.data, fyic->memory.data + fyic->memory.size - 1);
++			fyic->memory.data, (char *)fyic->memory.data + fyic->memory.size - 1);
+ 		if (ret == -1)
+ 			fyi->name = NULL;
+ 		break;
+ 	case fyit_alloc:
+ 		ret = asprintf(&fyi->name, "<alloc-@%p-%p>",
+-			fyic->memory.data, fyic->memory.data + fyic->memory.size - 1);
++			fyic->memory.data, (char *)fyic->memory.data + fyic->memory.size - 1);
+ 		if (ret == -1)
+ 			fyi->name = NULL;
+ 		break;
+diff --git a/src/lib/fy-input.h b/src/lib/fy-input.h
+index 6634fab..e61f273 100644
+--- a/src/lib/fy-input.h
++++ b/src/lib/fy-input.h
+@@ -602,7 +602,7 @@ fy_reader_advance_octets(struct fy_reader *fyr, size_t advance)
+ 	assert(fyr->current_left >= advance);
+ 
+ 	fyr->current_input_pos += advance;
+-	fyr->current_ptr += advance;
++	fyr->current_ptr = (char *)fyr->current_ptr + advance;
+ 	fyr->current_left -= advance;
+ 
+ 	fyr->current_c = fy_utf8_get(fyr->current_ptr, fyr->current_left, &fyr->current_w);
+diff --git a/src/lib/fy-parse.c b/src/lib/fy-parse.c
+index 3a65a8c..839e4b7 100644
+--- a/src/lib/fy-parse.c
++++ b/src/lib/fy-parse.c
+@@ -6641,7 +6641,7 @@ int fy_parser_set_input_fp(struct fy_parser *fyp, const char *name, FILE *fp)
+ 	memset(&fyic, 0, sizeof(fyic));
+ 
+ 	fyic.type = fyit_stream;
+-	fyic.stream.name = name ? : "<stream>";
++	fyic.stream.name = name ? name : "<stream>";
+ 	fyic.stream.fp = fp;
+ 	fyic.ignore_stdio = !!(fyp->cfg.flags & FYPCF_DISABLE_BUFFERING);
+ 
+diff --git a/src/lib/fy-parse.h b/src/lib/fy-parse.h
+index 899800a..b3b1ab7 100644
+--- a/src/lib/fy-parse.h
++++ b/src/lib/fy-parse.h
+@@ -524,7 +524,7 @@ fy_parser_set_reader(struct fy_parser *fyp, struct fy_reader *fyr)
+ {
+ 	if (!fyp)
+ 		return;
+-	fyp->reader = fyr ? : &fyp->builtin_reader;
++	fyp->reader = fyr ? fyr : &fyp->builtin_reader;
+ }
+ 
+ static inline void
+
+From 55f7773f2f4b19a26fe362a291c28ae387fb0f44 Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Sun, 29 Jan 2023 00:38:49 +0300
+Subject: [PATCH 3/7] fix unportable headers
+
+---
+ src/lib/fy-parse.c |  6 ++++
+ src/lib/fy-token.c |  4 +--
+ src/lib/fy-types.c |  2 ++
+ src/lib/fy-utf8.c  |  6 ++--
+ src/lib/fy-utf8.h  |  4 +--
+ src/lib/fy-utils.c | 87 ++++++++++++++++++++++++++++++++++++++++++++++
+ src/lib/fy-utils.h |  9 +++++
+ src/lib/fy-walk.c  |  2 ++
+ 8 files changed, 113 insertions(+), 7 deletions(-)
+
+diff --git a/src/lib/fy-parse.c b/src/lib/fy-parse.c
+index 839e4b7..79edd41 100644
+--- a/src/lib/fy-parse.c
++++ b/src/lib/fy-parse.c
+@@ -11,12 +11,18 @@
+ 
+ #include <stdio.h>
+ #include <string.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <sys/mman.h>
++#endif
+ #include <sys/types.h>
+ #include <sys/stat.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <sys/ioctl.h>
++#endif
+ #include <fcntl.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <unistd.h>
++#endif
+ #include <assert.h>
+ #include <stdlib.h>
+ #include <errno.h>
+diff --git a/src/lib/fy-token.c b/src/lib/fy-token.c
+index 2a75004..91efa89 100644
+--- a/src/lib/fy-token.c
++++ b/src/lib/fy-token.c
+@@ -159,7 +159,7 @@ static int fy_tag_token_format_internal(const struct fy_token *fyt, void *out, s
+ 	if (out) {
+ 		outsz = *outszp;
+ 		o = out;
+-		oe = out + outsz;
++		oe = (char *)out + outsz;
+ 	}
+ 
+ 	if (!fyt->tag.fyt_td)
+@@ -246,7 +246,7 @@ static int fy_tag_directive_token_format_internal(const struct fy_token *fyt,
+ 	if (out) {
+ 		outsz = *outszp;
+ 		o = out;
+-		oe = out + outsz;
++		oe = (char *)out + outsz;
+ 	}
+ 
+ #define O_CPY(_src, _len) \
+diff --git a/src/lib/fy-types.c b/src/lib/fy-types.c
+index fd34fab..5e0da30 100644
+--- a/src/lib/fy-types.c
++++ b/src/lib/fy-types.c
+@@ -11,11 +11,13 @@
+ 
+ #include <stdio.h>
+ #include <string.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <sys/mman.h>
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <unistd.h>
++#endif
+ #include <assert.h>
+ #include <stdlib.h>
+ #include <errno.h>
+diff --git a/src/lib/fy-utf8.c b/src/lib/fy-utf8.c
+index e5103ac..8105f71 100644
+--- a/src/lib/fy-utf8.c
++++ b/src/lib/fy-utf8.c
+@@ -253,11 +253,11 @@ const void *fy_utf8_memchr_generic(const void *s, int c, size_t n)
+ 	int cc, w;
+ 	const void *e;
+ 
+-	e = s + n;
+-	while (s < e && (cc = fy_utf8_get(s, e - s, &w)) >= 0) {
++	e = (char*)s + n;
++	while (s < e && (cc = fy_utf8_get(s, (char*)e - (char*)s, &w)) >= 0) {
+ 		if (c == cc)
+ 			return s;
+-		s += w;
++		s = (char*)s + w;
+ 	}
+ 
+ 	return NULL;
+diff --git a/src/lib/fy-utf8.h b/src/lib/fy-utf8.h
+index 9dc0825..fa4faa1 100644
+--- a/src/lib/fy-utf8.h
++++ b/src/lib/fy-utf8.h
+@@ -87,7 +87,7 @@ int fy_utf8_get_right_generic(const void *ptr, int left, int *widthp);
+ 
+ static inline int fy_utf8_get_right(const void *ptr, int left, int *widthp)
+ {
+-	const uint8_t *p = ptr + left;
++	const uint8_t *p = (const uint8_t*)ptr + left;
+ 
+ 	/* single byte (hot path) */
+ 	if (left > 0 && !(p[-1] & 0x80)) {
+@@ -194,7 +194,7 @@ static inline const void *fy_utf8_strchr(const void *s, int c)
+ 
+ static inline int fy_utf8_count(const void *ptr, size_t len)
+ {
+-	const uint8_t *s = ptr, *e = ptr + len;
++	const uint8_t *s = ptr, *e = (const uint8_t *)ptr + len;
+ 	int w, count;
+ 
+ 	count = 0;
+diff --git a/src/lib/fy-utils.c b/src/lib/fy-utils.c
+index 8b55ccb..8f87ae7 100644
+--- a/src/lib/fy-utils.c
++++ b/src/lib/fy-utils.c
+@@ -15,16 +15,101 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <errno.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <termios.h>
+ #include <unistd.h>
+ #include <sys/select.h>
+ #include <sys/time.h>
+ #include <sys/types.h>
++#elif defined(_MSC_VER)
++#include <windows.h>
++#endif
+ 
+ #include "fy-utf8.h"
+ #include "fy-ctype.h"
+ #include "fy-utils.h"
+ 
++int fy_get_pagesize() {
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
++       return sysconf(_SC_PAGESIZE);
++#elif defined (_MSC_VER)
++    SYSTEM_INFO si;
++    GetSystemInfo(&si);
++       return si.dwPageSize;
++#endif
++}
++
++#if defined(_MSC_VER)
++#ifndef VA_COPY
++# ifdef HAVE_VA_COPY
++#  define VA_COPY(dest, src) va_copy(dest, src)
++# else
++#  ifdef HAVE___VA_COPY
++#   define VA_COPY(dest, src) __va_copy(dest, src)
++#  else
++#   define VA_COPY(dest, src) (dest) = (src)
++#  endif
++# endif
++#endif
++
++#define INIT_SZ 128
++
++int
++vasprintf(char **str, const char *fmt, va_list ap)
++{
++    int ret;
++    va_list ap2;
++    char *string, *newstr;
++    size_t len;
++
++    if ((string = malloc(INIT_SZ)) == NULL)
++        goto fail;
++
++    VA_COPY(ap2, ap);
++    ret = vsnprintf(string, INIT_SZ, fmt, ap2);
++    va_end(ap2);
++    if (ret >= 0 && ret < INIT_SZ) { /* succeeded with initial alloc */
++        *str = string;
++    } else if (ret == INT_MAX || ret < 0) { /* Bad length */
++        free(string);
++        goto fail;
++    } else {    /* bigger than initial, realloc allowing for nul */
++        len = (size_t)ret + 1;
++        if ((newstr = realloc(string, len)) == NULL) {
++            free(string);
++            goto fail;
++        }
++        VA_COPY(ap2, ap);
++        ret = vsnprintf(newstr, len, fmt, ap2);
++        va_end(ap2);
++        if (ret < 0 || (size_t)ret >= len) { /* failed with realloc'ed string */
++            free(newstr);
++            goto fail;
++        }
++        *str = newstr;
++    }
++    return (ret);
++
++fail:
++    *str = NULL;
++    errno = ENOMEM;
++    return (-1);
++}
++
++int asprintf(char **str, const char *fmt, ...)
++{
++    va_list ap;
++    int ret;
++
++    *str = NULL;
++    va_start(ap, fmt);
++    ret = vasprintf(str, fmt, ap);
++    va_end(ap);
++
++    return ret;
++}
++#endif
++
+ #if defined(__APPLE__) && (_POSIX_C_SOURCE < 200809L)
+ 
+ /*
+@@ -397,6 +482,7 @@ int fy_tag_scan(const char *data, size_t len, struct fy_tag_scan_info *info)
+ 	return 0;
+ }
+ 
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ /* simple terminal methods; mainly for getting size of terminal */
+ int fy_term_set_raw(int fd, struct termios *oldt)
+ {
+@@ -632,3 +718,4 @@ int fy_term_query_size(int fd, int *rows, int *cols)
+ 
+ 	return ret;
+ }
++#endif
+diff --git a/src/lib/fy-utils.h b/src/lib/fy-utils.h
+index cf3e3c5..dd99125 100644
+--- a/src/lib/fy-utils.h
++++ b/src/lib/fy-utils.h
+@@ -15,13 +15,22 @@
+ 
+ #include <stdio.h>
+ #include <stdbool.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <unistd.h>
+ #include <termios.h>
++#endif
+ 
+ #if defined(__APPLE__) && (_POSIX_C_SOURCE < 200809L)
+ FILE *open_memstream(char **ptr, size_t *sizeloc);
+ #endif
+ 
++int fy_get_pagesize();
++
++#if defined(_MSC_VER)
++int vasprintf(char **strp, const char *fmt, va_list ap);
++int asprintf(char **strp, const char *fmt, ...);
++#endif
++
+ int fy_tag_handle_length(const char *data, size_t len);
+ bool fy_tag_uri_is_valid(const char *data, size_t len);
+ int fy_tag_uri_length(const char *data, size_t len);
+diff --git a/src/lib/fy-walk.c b/src/lib/fy-walk.c
+index 5e7cda3..a2138d2 100644
+--- a/src/lib/fy-walk.c
++++ b/src/lib/fy-walk.c
+@@ -15,7 +15,9 @@
+ #include <stdlib.h>
+ #include <ctype.h>
+ #include <errno.h>
++#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+ #include <unistd.h>
++#endif
+ #include <math.h>
+ #include <limits.h>
+ 
+
+From 16fcfcfa8c2ceb9628b4fb62caf2c91d1d05459b Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Sun, 29 Jan 2023 00:42:52 +0300
+Subject: [PATCH 4/7] small fixes
+
+---
+ src/lib/fy-diag.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/lib/fy-diag.c b/src/lib/fy-diag.c
+index ee6a77c..ca324fa 100644
+--- a/src/lib/fy-diag.c
++++ b/src/lib/fy-diag.c
+@@ -36,6 +36,8 @@ static const char *error_type_txt[] = {
+ 
+ int fy_diag_diag(struct fy_diag *diag, enum fy_error_type level, const char* fmt, ...)
+ {
++    int ret;
++
+     va_list args;
+        struct fy_diag_ctx ctx = {
+                .level = level,
+@@ -49,8 +51,10 @@ int fy_diag_diag(struct fy_diag *diag, enum fy_error_type level, const char* fmt
+        };
+ 
+     va_start(args, fmt);
+-    fy_diagf(diag, &ctx, fmt, args);
++    ret = fy_diagf(diag, &ctx, fmt, args);
+     va_end(args);
++
++    return ret;
+ }
+ 
+ const char *fy_error_type_to_string(enum fy_error_type type)
+@@ -865,11 +869,12 @@ void fy_diag_vreport(struct fy_diag *diag,
+ 	/* get the colors */
+ 	fy_diag_get_error_colors(diag, fydrc->type, &color_start, &color_end, &white);
+ 
+-	if (name || (line > 0 && column > 0))
++	if (name || (line > 0 && column > 0)) {
+ 		if (line > 0 && column > 0)
+ 			alloca_sprintf(&name_str, "%s%s:%d:%d: ", white, name, line, column);
+ 		else
+ 			alloca_sprintf(&name_str, "%s%s: ", white, name);
++	}
+ 
+ 	if (!diag->collect_errors) {
+ 		fy_diag_printf(diag, "%s" "%s%s: %s" "%s\n",
+
+From 308d127b2d5772b602582829339532fa312e66aa Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Sun, 29 Jan 2023 01:03:34 +0300
+Subject: [PATCH 5/7] fix __attribute__ in diag
+
+---
+ src/lib/fy-diag.h | 24 ++++++++++++------------
+ 1 file changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/src/lib/fy-diag.h b/src/lib/fy-diag.h
+index bcf6568..9f75af7 100644
+--- a/src/lib/fy-diag.h
++++ b/src/lib/fy-diag.h
+@@ -98,12 +98,12 @@ void fy_diag_vreport(struct fy_diag *diag,
+ void fy_diag_report(struct fy_diag *diag,
+ 		    const struct fy_diag_report_ctx *fydrc,
+ 		    const char *fmt, ...)
+-			__attribute__((format(printf, 3, 4)));
++			FY_ATTRIBUTE(format(printf, 3, 4));
+ 
+ #ifdef FY_DEVMODE
+ #define __FY_DEBUG_UNUSED__	/* nothing */
+ #else
+-#define __FY_DEBUG_UNUSED__	__attribute__((__unused__))
++#define __FY_DEBUG_UNUSED__	FY_ATTRIBUTE(__unused__)
+ #endif
+ 
+ /* parser diagnostics */
+@@ -119,7 +119,7 @@ int fy_parser_vdiag(struct fy_parser *fyp, unsigned int flags,
+ int fy_parser_diag(struct fy_parser *fyp, unsigned int flags,
+ 		   const char *file, int line, const char *func,
+ 		   const char *fmt, ...)
+-			__attribute__((format(printf, 6, 7)));
++			FY_ATTRIBUTE(format(printf, 6, 7));
+ 
+ void fy_diag_error_atom_display(struct fy_diag *diag, enum fy_error_type type,
+ 				 struct fy_atom *atom);
+@@ -132,7 +132,7 @@ void fy_parser_diag_vreport(struct fy_parser *fyp,
+ void fy_parser_diag_report(struct fy_parser *fyp,
+ 			   const struct fy_diag_report_ctx *fydrc,
+ 			   const char *fmt, ...)
+-		__attribute__((format(printf, 3, 4)));
++		FY_ATTRIBUTE(format(printf, 3, 4));
+ 
+ #ifdef FY_DEVMODE
+ 
+@@ -272,7 +272,7 @@ int fy_reader_vdiag(struct fy_reader *fyr, unsigned int flags,
+ int fy_reader_diag(struct fy_reader *fyr, unsigned int flags,
+ 		   const char *file, int line, const char *func,
+ 		   const char *fmt, ...)
+-			__attribute__((format(printf, 6, 7)));
++			FY_ATTRIBUTE(format(printf, 6, 7));
+ 
+ void fy_reader_diag_vreport(struct fy_reader *fyr,
+ 			    const struct fy_diag_report_ctx *fydrc,
+@@ -280,7 +280,7 @@ void fy_reader_diag_vreport(struct fy_reader *fyr,
+ void fy_reader_diag_report(struct fy_reader *fyr,
+ 			   const struct fy_diag_report_ctx *fydrc,
+ 			   const char *fmt, ...)
+-		__attribute__((format(printf, 3, 4)));
++		FY_ATTRIBUTE(format(printf, 3, 4));
+ 
+ #ifdef FY_DEVMODE
+ 
+@@ -412,7 +412,7 @@ int fy_document_vdiag(struct fy_document *fyd, unsigned int flags,
+ int fy_document_diag(struct fy_document *fyd, unsigned int flags,
+ 		     const char *file, int line, const char *func,
+ 		     const char *fmt, ...)
+-			__attribute__((format(printf, 6, 7)));
++			FY_ATTRIBUTE(format(printf, 6, 7));
+ 
+ void fy_document_diag_vreport(struct fy_document *fyd,
+ 			      const struct fy_diag_report_ctx *fydrc,
+@@ -420,7 +420,7 @@ void fy_document_diag_vreport(struct fy_document *fyd,
+ void fy_document_diag_report(struct fy_document *fyd,
+ 			     const struct fy_diag_report_ctx *fydrc,
+ 			     const char *fmt, ...)
+-			__attribute__((format(printf, 3, 4)));
++			FY_ATTRIBUTE(format(printf, 3, 4));
+ 
+ #ifdef FY_DEVMODE
+ 
+@@ -514,7 +514,7 @@ int fy_composer_vdiag(struct fy_composer *fyc, unsigned int flags,
+ int fy_composer_diag(struct fy_composer *fyc, unsigned int flags,
+ 		     const char *file, int line, const char *func,
+ 		     const char *fmt, ...)
+-			__attribute__((format(printf, 6, 7)));
++			FY_ATTRIBUTE(format(printf, 6, 7));
+ 
+ void fy_composer_diag_vreport(struct fy_composer *fyc,
+ 			      const struct fy_diag_report_ctx *fydrc,
+@@ -522,7 +522,7 @@ void fy_composer_diag_vreport(struct fy_composer *fyc,
+ void fy_composer_diag_report(struct fy_composer *fyc,
+ 			     const struct fy_diag_report_ctx *fydrc,
+ 			     const char *fmt, ...)
+-			__attribute__((format(printf, 3, 4)));
++			FY_ATTRIBUTE(format(printf, 3, 4));
+ 
+ #ifdef FY_DEVMODE
+ 
+@@ -599,7 +599,7 @@ int fy_document_builder_vdiag(struct fy_document_builder *fydb, unsigned int fla
+ int fy_document_builder_diag(struct fy_document_builder *fydb, unsigned int flags,
+ 			     const char *file, int line, const char *func,
+ 			     const char *fmt, ...)
+-			__attribute__((format(printf, 6, 7)));
++			FY_ATTRIBUTE(format(printf, 6, 7));
+ 
+ void fy_document_builder_diag_vreport(struct fy_document_builder *fydb,
+ 				      const struct fy_diag_report_ctx *fydrc,
+@@ -607,7 +607,7 @@ void fy_document_builder_diag_vreport(struct fy_document_builder *fydb,
+ void fy_document_builder_diag_report(struct fy_document_builder *fydb,
+ 				     const struct fy_diag_report_ctx *fydrc,
+ 				     const char *fmt, ...)
+-				__attribute__((format(printf, 3, 4)));
++				FY_ATTRIBUTE(format(printf, 3, 4));
+ 
+ #ifdef FY_DEVMODE
+ 
+
+From cc6fb5de268eb22e46fd2ac603cda5cbad56f8d5 Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Sun, 29 Jan 2023 01:08:33 +0300
+Subject: [PATCH 6/7] fix __attribute__
+
+---
+ src/lib/fy-atom.c       | 2 +-
+ src/lib/fy-emit-accum.h | 2 +-
+ src/lib/fy-emit.c       | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/lib/fy-atom.c b/src/lib/fy-atom.c
+index efeabbe..a38e6fb 100644
+--- a/src/lib/fy-atom.c
++++ b/src/lib/fy-atom.c
+@@ -223,7 +223,7 @@ _fy_atom_iter_add_chunk_copy(struct fy_atom_iter *iter, const char *str, size_t
+ /* keep it around without a warning even though it's unused */
+ static int
+ _fy_atom_iter_add_utf8(struct fy_atom_iter *iter, int c)
+-	__attribute__((__unused__));
++	FY_ATTRIBUTE(__unused__);
+ 
+ static int
+ _fy_atom_iter_add_utf8(struct fy_atom_iter *iter, int c)
+diff --git a/src/lib/fy-emit-accum.h b/src/lib/fy-emit-accum.h
+index fd9bb67..acc8ae7 100644
+--- a/src/lib/fy-emit-accum.h
++++ b/src/lib/fy-emit-accum.h
+@@ -212,7 +212,7 @@ fy_emit_accum_utf8_write(struct fy_emit_accum *ea, const void *data, size_t len)
+ 
+ static inline int
+ fy_emit_accum_utf8_printf_raw(struct fy_emit_accum *ea, const char *fmt, ...)
+-		__attribute__((format(printf, 2, 3)));
++		FY_ATTRIBUTE(format(printf, 2, 3));
+ 
+ static inline int
+ fy_emit_accum_utf8_printf_raw(struct fy_emit_accum *ea, const char *fmt, ...)
+diff --git a/src/lib/fy-emit.c b/src/lib/fy-emit.c
+index 8da29ce..0edc9d9 100644
+--- a/src/lib/fy-emit.c
++++ b/src/lib/fy-emit.c
+@@ -30,7 +30,7 @@
+ /* fwd decl */
+ void fy_emit_write(struct fy_emitter *emit, enum fy_emitter_write_type type, const char *str, int len);
+ void fy_emit_printf(struct fy_emitter *emit, enum fy_emitter_write_type type, const char *fmt, ...)
+-		__attribute__((format(printf, 3, 4)));
++		FY_ATTRIBUTE(format(printf, 3, 4));
+ 
+ static inline bool fy_emit_is_json_mode(const struct fy_emitter *emit)
+ {
+
+From bf81e2b8db324bce5ef7f9e44cff68faddf58233 Mon Sep 17 00:00:00 2001
+From: Innokentii Mokin <innokentii@yandex-team.ru>
+Date: Sun, 29 Jan 2023 01:16:11 +0300
+Subject: [PATCH 7/7] fix ptr arithmetics
+
+---
+ src/lib/fy-doc.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/lib/fy-doc.c b/src/lib/fy-doc.c
+index 22e0c51..a18c629 100644
+--- a/src/lib/fy-doc.c
++++ b/src/lib/fy-doc.c
+@@ -942,8 +942,8 @@ struct fy_token *fy_node_non_synthesized_token(struct fy_node *fyn)
+ 	if (!fyt_start || !fyt_end)
+ 		return NULL;
+ 
+-	s = fy_input_start(fyi) + fyt_start->handle.start_mark.input_pos;
+-	e = fy_input_start(fyi) + fyt_end->handle.end_mark.input_pos;
++	s = (char *)fy_input_start(fyi) + fyt_start->handle.start_mark.input_pos;
++	e = (char *)fy_input_start(fyi) + fyt_end->handle.end_mark.input_pos;
+ 	size = (size_t)(e - s);
+ 
+ 	if (size > 0)
+
+

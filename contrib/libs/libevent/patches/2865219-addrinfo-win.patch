@@ -1,0 +1,22 @@
+commit 2deb40b97feee5856402ad2f486c1c5d174fab74
+author: aozeritsky
+date: 2017-04-07T23:50:54+03:00
+revision: 2865219
+
+    [LOGBROKER-2390] disable addrinfo hacks on windows because it corrupts addrinfo stucture (TODO: report this upstream) __BYPASS_CHECKS__
+
+--- libevent/evutil.c	(5a2c66aac67c2bf3937bf8a22810569258ec4887)
++++ libevent/evutil.c	(2deb40b97feee5856402ad2f486c1c5d174fab74)
+@@ -1059,8 +1059,11 @@ evutil_adjust_hints_for_addrconfig(struct evutil_addrinfo *hints)
+ #ifdef USE_NATIVE_GETADDRINFO
+ static int need_numeric_port_hack_=0;
+ static int need_socktype_protocol_hack_=0;
++#ifdef WIN32
++static int tested_for_getaddrinfo_hacks=1;
++#else
+ static int tested_for_getaddrinfo_hacks=0;
+-
++#endif
+ /* Some older BSDs (like OpenBSD up to 4.6) used to believe that
+    giving a numeric port without giving an ai_socktype was verboten.
+    We test for this so we can apply an appropriate workaround.  If it

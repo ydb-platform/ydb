@@ -1,0 +1,11 @@
+items:
+- name: Типы данных
+  include: { mode: link, path: types/toc_i.yaml }
+- name: Синтаксис
+  include: { mode: link, path: syntax/toc_i.yaml }
+- name: Встроенные функции
+  include: { mode: link, path: builtins/toc_i.yaml }
+- name: Рецепты
+  include: { mode: link, path: recipes/toc_i.yaml }
+- name: Список изменений
+  include: { mode: link, path: changelog/toc_i.yaml }

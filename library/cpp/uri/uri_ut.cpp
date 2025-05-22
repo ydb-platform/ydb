@@ -840,7 +840,7 @@ namespace NUri {
                 uri.Parse("http://srv.net:80/print", TFeature::FeaturesRecommended);
                 TString s = uri.PrintS(TUri::FlagPort);
                 Cdbg << uri.PrintS() << ',' << uri.PrintS(TUri::FlagPort) << Endl;
-                UNIT_ASSERT(s.Empty());
+                UNIT_ASSERT(s.empty());
             }
         }
 

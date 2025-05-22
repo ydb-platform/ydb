@@ -1,7 +1,7 @@
 #pragma once
 #include "common_data.h"
-#include "common/client.h"
-#include "common/agent.h"
+#include <ydb/library/signals/client.h>
+#include <ydb/library/signals/agent.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -60,6 +60,7 @@ public:
     const TDataOwnerSignals Inserted;
     const TDataOwnerSignals Committed;
     const TDataOwnerSignals Aborted;
+    const TLoadTimeSignals LoadCounters;
 
     TInsertTableCounters();
 

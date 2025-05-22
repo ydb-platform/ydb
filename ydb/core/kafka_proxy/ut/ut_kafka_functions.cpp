@@ -1,8 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <strstream>
-
-#include "../kafka_messages.h"
+#include <ydb/core/kafka_proxy/kafka_messages.h>
 
 using namespace NKafka;
 

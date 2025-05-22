@@ -8,8 +8,10 @@ namespace NHive {
 
 struct TBootQueue {
     struct TBootQueueRecord {
-        TFullTabletId TabletId;
+        TTabletId TabletId;
         double Priority;
+        TFollowerId FollowerId;
+        TNodeId SuggestedNodeId;
 
         static double GetBootPriority(const TTabletInfo& tablet) {
             double priority = 0;
@@ -45,20 +47,35 @@ struct TBootQueue {
             return Priority < o.Priority;
         }
 
-        TBootQueueRecord(const TTabletInfo& tablet)
-            : TabletId(tablet.GetFullTabletId())
-            , Priority(GetBootPriority(tablet))
-        {
-        }
+        TBootQueueRecord(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
     };
 
-    std::priority_queue<TBootQueueRecord, std::vector<TBootQueueRecord>> BootQueue;
-    std::deque<TBootQueueRecord> WaitQueue; // tablets from BootQueue waiting for new nodes
+    static_assert(sizeof(TBootQueueRecord) <= 24);
 
+    using TQueue = TPriorityQueue<TBootQueueRecord>;
+
+    TQueue BootQueue;
+    TQueue WaitQueue; // tablets from BootQueue waiting for new nodes
+private:
+    bool ProcessWaitQueue = false;
+    bool NextFromWaitQueue = false;
+
+public:
     void AddToBootQueue(TBootQueueRecord record);
     TBootQueueRecord PopFromBootQueue();
     void AddToWaitQueue(TBootQueueRecord record);
-    void MoveFromWaitQueueToBootQueue();
+    void IncludeWaitQueue();
+    void ExcludeWaitQueue();
+    bool Empty() const;
+    size_t Size() const;
+
+    template<typename... Args>
+    void EmplaceToBootQueue(Args&&... args) {
+        BootQueue.emplace(args...);
+    }
+
+private:
+    TQueue& GetCurrentQueue();
 };
 
 }

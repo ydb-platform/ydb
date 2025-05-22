@@ -1,0 +1,113 @@
+package NKikimrCompaction;
+option java_package = "ru.yandex.kikimr.proto";
+
+enum ECompactionStrategy {
+    CompactionStrategyUnset = 0;
+    CompactionStrategyGenerational = 1;
+    CompactionStrategySharded = 2; // DEPRECATED: use CompactionStrategyGenerational
+}
+
+message TCompactionPolicy {
+
+    message TBackgroundPolicy {
+        // How much (in %) of forced compaction criteria should be met to submit background task.
+        optional uint32 Threshold = 1 [default = 101]; // no background compaction by default
+        // Base background compaction priority value (less priority means more important task).
+        // Value is used to compute real task priority basing on compaction criteria, time
+        // in queue etc.
+        optional uint32 PriorityBase = 2 [default = 100];
+        // Submitted background task may become more prioritized over time.
+        // New priority is computed as priority /= max(log(elapsed_seconds) * factor, 1);
+        optional double TimeFactor = 3 [default = 1.0];
+        optional uint32 TaskType = 4 [default = 5]; // DEPRECATED
+        optional string ResourceBrokerTask = 5;
+    }
+
+    message TGenerationPolicy {
+        optional uint32 GenerationId = 1;
+        optional uint64 SizeToCompact = 2;
+        optional uint32 CountToCompact = 3;
+        optional uint32 ForceCountToCompact = 4; // OR one of force limits happend
+        optional uint64 ForceSizeToCompact = 5;
+        optional uint32 CompactionBrokerQueue = 6; // DEPRECATED
+        optional bool KeepInCache = 7;
+        optional TBackgroundPolicy BackgroundCompactionPolicy = 8;
+        optional string ResourceBrokerTask = 9;
+        optional uint32 ExtraCompactionPercent = 10;
+        optional uint64 ExtraCompactionMinSize = 11;
+        optional uint32 ExtraCompactionExpPercent = 12;
+        optional uint64 ExtraCompactionExpMaxSize = 13;
+        optional uint64 UpliftPartSize = 14;
+    }
+
+    //NOTE: default values must be in sync with ydb/core/base/localdb.cpp, TShardPolicy
+    message TShardPolicy {
+        // Adjacent shards smaller than this will be merged
+        optional uint64 MinShardSize = 1 [default = 33554432];
+
+        // Shards bigger than this will split in two or more pieces
+        optional uint64 MaxShardSize = 2 [default = 134217728];
+
+        // Slices smaller than this will get prioritized compaction
+        optional uint64 MinSliceSize = 3 [default = 2097152];
+
+        // Level will be compacted when there are more than this number of slices
+        optional uint32 MaxSlicesPerLevel = 4 [default = 256];
+
+        // Shard will be compacted when there are more than this number of levels
+        optional uint32 MaxTotalLevels = 5 [default = 16];
+
+        // Shard will avoid compacting less than this number of levels
+        optional uint32 MinLevelsToCompact = 6 [default = 2];
+
+        // Level will be compacted when it has X% of its data in upper levels
+        optional uint32 NewDataPercentToCompact = 7 [default = 100];
+
+        // Level will be compacted when it has X% of its rows in upper levels
+        optional uint32 NewRowsPercentToCompact = 8 [default = 0];
+
+        // Resource broker task type for compactions
+        optional string ResourceBrokerTask = 9 [default = "compaction_gen1"];
+
+        // Base priority for compaction tasks
+        optional uint32 TaskPriorityBase = 10 [default = 1000];
+
+        // Task priority will be increased for every N levels over the minimum
+        optional uint32 TaskPriorityLevelsBoost = 11 [default = 1];
+
+        // Task priority will be decreased for every N bytes of input
+        optional uint64 TaskPrioritySizePenalty = 12 [default = 4194304];
+
+        // Part data may be reused, unless it would leave this much garbage
+        optional uint32 MaxGarbagePercentToReuse = 13 [default = 20];
+
+        // Minimum slice that that may be reused
+        optional uint64 MinSliceSizeToReuse = 14 [default = 524288];
+    }
+
+    optional uint64 InMemSizeToSnapshot = 1;
+    optional uint32 InMemStepsToSnapshot = 2; // snapshot inmem state when size AND steps from last snapshot passed
+    optional uint32 InMemForceStepsToSnapshot = 3; // OR steps passed
+    optional uint64 InMemForceSizeToSnapshot = 4; // OR size reached
+    optional uint32 InMemCompactionBrokerQueue = 5 [default = 0]; // DEPRECATED
+    optional uint64 ReadAheadHiThreshold = 6 [default = 67108864];
+    optional uint64 ReadAheadLoThreshold = 7 [default = 16777216];
+    optional uint32 MinDataPageSize = 8 [default = 7168];   // 7KB is smallest optimal for 512 byte sectors
+    optional uint32 SnapBrokerQueue = 9 [default = 0]; // DEPRECATED
+    optional uint32 BackupBrokerQueue = 11 [default = 1]; // DEPRECATED
+    optional uint32 DefaultTaskPriority = 12 [default = 5];
+    optional TBackgroundPolicy BackgroundSnapshotPolicy = 13;
+    optional string InMemResourceBrokerTask = 14;
+    optional string SnapshotResourceBrokerTask = 15;
+    optional string BackupResourceBrokerTask = 16;
+    optional uint64 LogOverheadSizeToSnapshot = 17;
+    optional uint32 LogOverheadCountToSnapshot = 18;
+    optional uint32 DroppedRowsPercentToCompact = 19;
+    optional ECompactionStrategy CompactionStrategy = 20 [default = CompactionStrategyUnset];
+    optional TShardPolicy ShardPolicy = 21;
+    optional bool KeepEraseMarkers = 22;
+    optional uint32 MinBTreeIndexNodeSize = 23 [default = 7168];
+    optional uint32 MinBTreeIndexNodeKeys = 24 [default = 6];
+
+    repeated TGenerationPolicy Generation = 10;
+}

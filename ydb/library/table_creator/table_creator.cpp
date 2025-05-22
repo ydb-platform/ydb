@@ -6,7 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -34,12 +34,18 @@ public:
         TVector<NKikimrSchemeOp::TColumnDescription> columns,
         TVector<TString> keyColumns,
         NKikimrServices::EServiceKikimr logService,
-        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing())
+        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
+        const TString& database = {},
+        bool isSystemUser = false,
+        TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing())
         : PathComponents(std::move(pathComponents))
         , Columns(std::move(columns))
         , KeyColumns(std::move(keyColumns))
         , LogService(logService)
         , TtlSettings(std::move(ttlSettings))
+        , Database(database)
+        , IsSystemUser(isSystemUser)
+        , PartitioningPolicy(std::move(partitioningPolicy))
         , LogPrefix("Table " + TableName() + " updater. ")
     {
         Y_ABORT_UNLESS(!PathComponents.empty());
@@ -52,6 +58,7 @@ public:
     }
 
     STRICT_STFUNC(StateFuncCheck,
+        hFunc(TEvents::TEvUndelivered, Handle)
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         sFunc(NActors::TEvents::TEvWakeup, CheckTableExistence);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -68,32 +75,29 @@ public:
 
     void Bootstrap() {
         Become(&TTableCreator::StateFuncCheck);
+        if (!Database) {
+            Database = AppData()->TenantName;
+        }
         CheckTableExistence();
     }
 
     void CheckTableExistence() {
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        auto pathComponents = SplitPath(AppData()->TenantName);
-        request->DatabaseName = CanonizePath(pathComponents);
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        pathComponents.insert(pathComponents.end(), PathComponents.begin(), PathComponents.end());
-        entry.Path = pathComponents;
-        entry.ShowPrivatePath = true;
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(NTableCreator::BuildSchemeCacheNavigateRequest(
+            {PathComponents}, Database
+        ).Release()), IEventHandle::FlagTrackDelivery);
     }
 
     void RunTableRequest() {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        request->Record.SetDatabaseName(Database);
         NKikimrSchemeOp::TModifyScheme& modifyScheme = *request->Record.MutableTransaction()->MutableModifyScheme();
-        auto pathComponents = SplitPath(AppData()->TenantName);
+        auto pathComponents = SplitPath(Database);
         for (size_t i = 0; i < PathComponents.size() - 1; ++i) {
             pathComponents.emplace_back(PathComponents[i]);
         }
         modifyScheme.SetWorkingDir(CanonizePath(pathComponents));
-        LOG_DEBUG_S(*TlsActivationContext, LogService,
-            LogPrefix << "Full table path:" << modifyScheme.GetWorkingDir() << "/" << TableName());
+        TString fullPath = modifyScheme.GetWorkingDir() + "/" + TableName();
+        LOG_DEBUG_S(*TlsActivationContext, LogService, LogPrefix << "Full table path:" << fullPath);
         modifyScheme.SetOperationType(OperationType);
         modifyScheme.SetInternal(true);
         modifyScheme.SetAllowAccessToPrivatePaths(true);
@@ -114,7 +118,23 @@ public:
         if (TtlSettings) {
             tableDesc->MutableTTLSettings()->CopyFrom(*TtlSettings);
         }
+        if (IsSystemUser) {
+            request->Record.SetUserToken(NACLib::TSystemUsers::Metadata().SerializeAsString());
+        }
+        if (PartitioningPolicy) {
+            auto* partitioningPolicy = tableDesc->MutablePartitionConfig()->MutablePartitioningPolicy();
+            partitioningPolicy->CopyFrom(*PartitioningPolicy);
+        }
+
         Send(MakeTxProxyID(), std::move(request));
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
+            Retry();
+            return;
+        }
+        Fail("Scheme cache is unavailable");
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -188,7 +208,7 @@ public:
                 // In the process of creating a database, errors of the form may occur -
                 // database doesn't have storage pools at all to create tablet
                 // channels to storage pool binding by profile id
-                // Also, this status is returned when column types mismatch - 
+                // Also, this status is returned when column types mismatch -
                 // need to fallback to rebuild column diff
                 } else if (ssStatus == NKikimrScheme::EStatus::StatusInvalidParameter) {
                     FallBack(true /* long delay */);
@@ -209,7 +229,7 @@ public:
         if (delay) {
             Schedule(*delay, new NActors::TEvents::TEvWakeup());
         } else {
-            Fail();
+            Fail("Retry limit exceeded");
         }
     }
 
@@ -272,34 +292,38 @@ public:
     }
 
     void Fail(NSchemeCache::TSchemeCacheNavigate::EStatus status) {
-        LOG_ERROR_S(*TlsActivationContext, LogService,
-            LogPrefix << "Failed to upgrade table: " << status);
-        Reply();
+        TString message = TStringBuilder() << "Failed to upgrade table: " << status;
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
     void Fail(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        LOG_ERROR_S(*TlsActivationContext, LogService,
-            LogPrefix << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record);
-        Reply();
+        TString message = TStringBuilder() << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record;
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
-    void Fail() {
-        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << "Retry limit exceeded");
-        Reply();
+    void Fail(const TString& message) {
+        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        Reply(false, message);
     }
 
     void Success() {
-        Reply();
+        Reply(true);
     }
 
     void Success(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
         LOG_INFO_S(*TlsActivationContext, LogService,
             LogPrefix << "Successful " << GetOperationType() <<  " request: " << ev->Get()->Status());
-        Reply();
+        Reply(true);
     }
 
-    void Reply() {
-        Send(Owner, new TEvTableCreator::TEvCreateTableResponse());
+    void Reply(bool success, const TString& message) {
+        Reply(success, {NYql::TIssue(message)});
+    }
+
+    void Reply(bool success, NYql::TIssues issues = {}) {
+        Send(Owner, new TEvTableCreator::TEvCreateTableResponse(success, std::move(issues)));
         if (SchemePipeActorId) {
             NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
         }
@@ -357,11 +381,13 @@ private:
     }
 
     static TTableCreatorRetryPolicy::IRetryState::TPtr CreateRetryState() {
-        return TTableCreatorRetryPolicy::GetFixedIntervalPolicy(
+        return TTableCreatorRetryPolicy::GetExponentialBackoffPolicy(
                   [](bool longDelay){return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;}
                 , TDuration::MilliSeconds(100)
                 , TDuration::MilliSeconds(300)
-                , 100
+                , TDuration::Seconds(1)
+                , std::numeric_limits<size_t>::max()
+                , TDuration::Seconds(10)
             )->CreateRetryState();
     }
 
@@ -370,6 +396,9 @@ private:
     const TVector<TString> KeyColumns;
     NKikimrServices::EServiceKikimr LogService;
     const TMaybe<NKikimrSchemeOp::TTTLSettings> TtlSettings;
+    TString Database;
+    bool IsSystemUser = false;
+    const TMaybe<NKikimrSchemeOp::TPartitioningPolicy> PartitioningPolicy;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;
     NActors::TActorId Owner;
     NActors::TActorId SchemePipeActorId;
@@ -380,15 +409,103 @@ private:
 
 } // namespace
 
+namespace NTableCreator {
+
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
+    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    auto databasePath = SplitPath(database);
+    request->DatabaseName = CanonizePath(databasePath);
+    if (userToken && !userToken->GetSerializedToken().empty()) {
+        request->UserToken = userToken;
+    }
+
+    for (const auto& pathComponents : pathsComponents) {
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
+        entry.ShowPrivatePath = true;
+        entry.Path = databasePath;
+        entry.Path.insert(entry.Path.end(), pathComponents.begin(), pathComponents.end());
+    }
+
+    return request;
+}
+
+THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(
+    const TVector<TVector<TString>>& pathsComponents, const TString& database)
+{
+    return BuildSchemeCacheNavigateRequest(pathsComponents, database ? database : AppData()->TenantName, nullptr);
+}
+
+NKikimrSchemeOp::TColumnDescription TMultiTableCreator::Col(const TString& columnName, const char* columnType) {
+    NKikimrSchemeOp::TColumnDescription desc;
+    desc.SetName(columnName);
+    desc.SetType(columnType);
+    return desc;
+}
+
+NKikimrSchemeOp::TColumnDescription TMultiTableCreator::Col(const TString& columnName, NScheme::TTypeId columnType) {
+    return Col(columnName, NScheme::TypeName(columnType));
+}
+
+NKikimrSchemeOp::TTTLSettings TMultiTableCreator::TtlCol(const TString& columnName, TDuration expireAfter, TDuration runInterval) {
+    NKikimrSchemeOp::TTTLSettings settings;
+    settings.MutableEnabled()->SetExpireAfterSeconds(expireAfter.Seconds());
+    settings.MutableEnabled()->SetColumnName(columnName);
+    settings.MutableEnabled()->MutableSysSettings()->SetRunInterval(runInterval.MicroSeconds());
+    return settings;
+}
+
+TMultiTableCreator::TMultiTableCreator(std::vector<NActors::IActor*> tableCreators)
+    : TableCreators(std::move(tableCreators))
+{}
+
+void TMultiTableCreator::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
+    TBase::Registered(sys, owner);
+    Owner = owner;
+}
+
+void TMultiTableCreator::Bootstrap() {
+    Become(&TMultiTableCreator::StateFunc);
+
+    TablesCreating = TableCreators.size();
+    for (const auto creator : TableCreators) {
+        Register(creator);
+    }
+}
+
+void TMultiTableCreator::Handle(TEvTableCreator::TEvCreateTableResponse::TPtr& ev) {
+    if (!ev->Get()->Success) {
+        Success = false;
+        Issues.AddIssues(std::move(ev->Get()->Issues));
+    }
+
+    Y_ABORT_UNLESS(TablesCreating > 0);
+    if (--TablesCreating == 0) {
+        OnTablesCreated(Success, std::move(Issues));
+        PassAway();
+    }
+}
+
+STRICT_STFUNC(TMultiTableCreator::StateFunc,
+    hFunc(TEvTableCreator::TEvCreateTableResponse, Handle);
+);
+
+} // namespace NTableCreator
+
 NActors::IActor* CreateTableCreator(
     TVector<TString> pathComponents,
     TVector<NKikimrSchemeOp::TColumnDescription> columns,
     TVector<TString> keyColumns,
     NKikimrServices::EServiceKikimr logService,
-    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings)
+    TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings,
+    const TString& database,
+    bool isSystemUser,
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy)
 {
     return new TTableCreator(std::move(pathComponents), std::move(columns),
-        std::move(keyColumns), logService, std::move(ttlSettings));
+        std::move(keyColumns), logService, std::move(ttlSettings), database,
+        isSystemUser, std::move(partitioningPolicy));
 }
 
 } // namespace NKikimr

@@ -23,12 +23,15 @@ class TExtCountersUpdaterActor
     TCounterPtr MemoryUsedBytes;
     TCounterPtr MemoryLimitBytes;
     TCounterPtr StorageUsedBytes;
+    TCounterPtr StorageUsedBytesOnSsd;
+    TCounterPtr StorageUsedBytesOnHdd;
     TVector<TCounterPtr> CpuUsedCorePercents;
     TVector<TCounterPtr> CpuLimitCorePercents;
     THistogramPtr ExecuteLatencyMs;
 
     TCounterPtr AnonRssSize;
     TCounterPtr CGroupMemLimit;
+    TCounterPtr MemoryHardLimit;
     TVector<TCounterPtr> PoolElapsedMicrosec;
     TVector<TCounterPtr> PoolCurrentThreadCount;
     TVector<ui64> PoolElapsedMicrosecPrevValue;
@@ -54,6 +57,10 @@ public:
             "resources.memory.limit_bytes", false);
         StorageUsedBytes = ydbGroup->GetNamedCounter("name",
             "resources.storage.used_bytes", false);
+        StorageUsedBytesOnSsd = ydbGroup->GetNamedCounter("name",
+            "resources.storage.used_bytes.ssd", false);
+        StorageUsedBytesOnHdd = ydbGroup->GetNamedCounter("name",
+            "resources.storage.used_bytes.hdd", false);
 
         auto poolCount = Config.Pools.size();
         CpuUsedCorePercents.resize(poolCount);
@@ -95,6 +102,13 @@ private:
                 }
             }
         }
+        if (!MemoryHardLimit) {
+            auto utilsGroup = GetServiceCounters(AppData()->Counters, "utils");
+            auto memoryControllerGroup = utilsGroup->FindSubgroup("component", "memory_controller");
+            if (memoryControllerGroup) {
+                MemoryHardLimit = memoryControllerGroup->FindCounter("Stats/HardLimit");
+            }
+        }
     }
 
     void Transform() {
@@ -104,32 +118,48 @@ private:
             MemoryUsedBytes->Set(AnonRssSize->Val());
             metrics->AddMetric("resources.memory.used_bytes", AnonRssSize->Val());
         }
-        if (CGroupMemLimit) {
+        if (CGroupMemLimit && !MemoryHardLimit) {
             MemoryLimitBytes->Set(CGroupMemLimit->Val());
+        } else if (MemoryHardLimit) {
+            MemoryLimitBytes->Set(MemoryHardLimit->Val());
         }
         if (StorageUsedBytes->Val() != 0) {
             metrics->AddMetric("resources.storage.used_bytes", StorageUsedBytes->Val());
         }
-        double cpuUsage = 0;
-        for (size_t i = 0; i < Config.Pools.size(); ++i) {
-            if (PoolElapsedMicrosec[i]) {
-                auto elapsedMs = PoolElapsedMicrosec[i]->Val();
-                double usedCore = elapsedMs / 10000.;
-                CpuUsedCorePercents[i]->Set(usedCore);
-                if (PoolElapsedMicrosecPrevValue[i] != 0) {
-                    cpuUsage += (elapsedMs - PoolElapsedMicrosecPrevValue[i]) / 1000000.;
-                }
-                PoolElapsedMicrosecPrevValue[i] = elapsedMs;
-            }
-            if (PoolCurrentThreadCount[i] && PoolCurrentThreadCount[i]->Val()) {
-                double limitCore = PoolCurrentThreadCount[i]->Val() * 100;
-                CpuLimitCorePercents[i]->Set(limitCore);
-            } else {
-                double limitCore = Config.Pools[i].ThreadCount * 100;
-                CpuLimitCorePercents[i]->Set(limitCore);
-            }
+        if (StorageUsedBytesOnSsd->Val() != 0) {
+            metrics->AddMetric("resources.storage.used_bytes.ssd", StorageUsedBytesOnSsd->Val());
         }
-        metrics->AddMetric("resources.cpu.usage", cpuUsage);
+        if (StorageUsedBytesOnHdd->Val() != 0) {
+            metrics->AddMetric("resources.storage.used_bytes.hdd", StorageUsedBytesOnHdd->Val());
+        }
+        if (!Config.Pools.empty()) {
+            double cpuUsage = 0;
+            for (size_t i = 0; i < Config.Pools.size(); ++i) {
+                double usedCore = 0;
+                double limitCore = 0;
+                if (PoolElapsedMicrosec[i]) {
+                    auto elapsedMs = PoolElapsedMicrosec[i]->Val();
+                    CpuUsedCorePercents[i]->Set(elapsedMs / 10000.);
+                    if (PoolElapsedMicrosecPrevValue[i] != 0) {
+                        usedCore = (elapsedMs - PoolElapsedMicrosecPrevValue[i]) / 1000000.;
+                        cpuUsage += usedCore;
+                    }
+                    PoolElapsedMicrosecPrevValue[i] = elapsedMs;
+                }
+                if (PoolCurrentThreadCount[i] && PoolCurrentThreadCount[i]->Val()) {
+                    limitCore = PoolCurrentThreadCount[i]->Val();
+                    CpuLimitCorePercents[i]->Set(limitCore * 100);
+                } else {
+                    limitCore = Config.Pools[i].ThreadCount * 100;
+                    CpuLimitCorePercents[i]->Set(limitCore * 100);
+                }
+                if (limitCore > 0) {
+                    metrics->AddArithmeticMetric(TStringBuilder() << "resources.cpu." << Config.Pools[i].Name << ".usage",
+                        usedCore, '/', limitCore);
+                }
+            }
+            metrics->AddMetric("resources.cpu.usage", cpuUsage);
+        }
         if (ExecuteLatencyMs) {
             THistogramSnapshotPtr snapshot = ExecuteLatencyMs->Snapshot();
             ui32 count = snapshot->Count();
@@ -140,36 +170,24 @@ private:
             }
             ui64 total = 0;
             for (ui32 n = 0; n < count; ++n) {
-                ui64 value = snapshot->Value(n);;
+                ui64 value = snapshot->Value(n);
                 ui64 diff = value - ExecuteLatencyMsPrevValues[n];
                 total += diff;
                 ExecuteLatencyMsValues[n] = diff;
                 ExecuteLatencyMsPrevValues[n] = value;
                 if (ExecuteLatencyMsBounds[n] == 0) {
-                    ExecuteLatencyMsBounds[n] = snapshot->UpperBound(n);
+                    NMonitoring::TBucketBound bound = snapshot->UpperBound(n);
+                    ExecuteLatencyMsBounds[n] = bound == Max<NMonitoring::TBucketBound>() ? Max<ui64>() : ui64(bound);
                 }
             }
             metrics->AddMetric("queries.requests", total);
             if (total != 0) {
-                double p50 = NGraph::GetTimingForPercentile(50, ExecuteLatencyMsValues, ExecuteLatencyMsBounds, total);
-                if (!isnan(p50)) {
-                    metrics->AddMetric("queries.latencies.p50", p50);
-                }
-                double p75 = NGraph::GetTimingForPercentile(75, ExecuteLatencyMsValues, ExecuteLatencyMsBounds, total);
-                if (!isnan(p75)) {
-                    metrics->AddMetric("queries.latencies.p75", p75);
-                }
-                double p90 = NGraph::GetTimingForPercentile(90, ExecuteLatencyMsValues, ExecuteLatencyMsBounds, total);
-                if (!isnan(p90)) {
-                    metrics->AddMetric("queries.latencies.p90", p90);
-                }
-                double p99 = NGraph::GetTimingForPercentile(99, ExecuteLatencyMsValues, ExecuteLatencyMsBounds, total);
-                if (!isnan(p99)) {
-                    metrics->AddMetric("queries.latencies.p99", p99);
-                }
+                metrics->AddHistogramMetric("queries.latencies", ExecuteLatencyMsBounds, ExecuteLatencyMsValues);
             }
         }
-        Send(NGraph::MakeGraphServiceId(), metrics.Release());
+        if (metrics->Record.MetricsSize() > 0) {
+            Send(NGraph::MakeGraphServiceId(), metrics.Release());
+        }
     }
 
     void HandleWakeup() {
@@ -188,4 +206,3 @@ IActor* CreateExtCountersUpdater(TExtCountersConfig&& config) {
 
 }
 }
-

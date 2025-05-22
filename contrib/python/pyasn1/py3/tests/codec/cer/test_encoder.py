@@ -15,38 +15,37 @@ from pyasn1.type import opentype
 from pyasn1.type import univ
 from pyasn1.type import useful
 from pyasn1.codec.cer import encoder
-from pyasn1.compat.octets import ints2octs
 from pyasn1.error import PyAsn1Error
 
 
 class BooleanEncoderTestCase(BaseTestCase):
     def testTrue(self):
-        assert encoder.encode(univ.Boolean(1)) == ints2octs((1, 1, 255))
+        assert encoder.encode(univ.Boolean(1)) == bytes((1, 1, 255))
 
     def testFalse(self):
-        assert encoder.encode(univ.Boolean(0)) == ints2octs((1, 1, 0))
+        assert encoder.encode(univ.Boolean(0)) == bytes((1, 1, 0))
 
 
 class BitStringEncoderTestCase(BaseTestCase):
     def testShortMode(self):
         assert encoder.encode(
             univ.BitString((1, 0) * 5)
-        ) == ints2octs((3, 3, 6, 170, 128))
+        ) == bytes((3, 3, 6, 170, 128))
 
     def testLongMode(self):
-        assert encoder.encode(univ.BitString((1, 0) * 501)) == ints2octs((3, 127, 6) + (170,) * 125 + (128,))
+        assert encoder.encode(univ.BitString((1, 0) * 501)) == bytes((3, 127, 6) + (170,) * 125 + (128,))
 
 
 class OctetStringEncoderTestCase(BaseTestCase):
     def testShortMode(self):
         assert encoder.encode(
             univ.OctetString('Quick brown fox')
-        ) == ints2octs((4, 15, 81, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 111, 120))
+        ) == bytes((4, 15, 81, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 32, 102, 111, 120))
 
     def testLongMode(self):
         assert encoder.encode(
             univ.OctetString('Q' * 1001)
-        ) == ints2octs((36, 128, 4, 130, 3, 232) + (81,) * 1000 + (4, 1, 81, 0, 0))
+        ) == bytes((36, 128, 4, 130, 3, 232) + (81,) * 1000 + (4, 1, 81, 0, 0))
 
 
 class GeneralizedTimeEncoderTestCase(BaseTestCase):
@@ -93,37 +92,37 @@ class GeneralizedTimeEncoderTestCase(BaseTestCase):
     def testWithSubseconds(self):
         assert encoder.encode(
                 useful.GeneralizedTime('20170801120112.59Z')
-             ) == ints2octs((24, 18, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 46, 53, 57, 90))
+             ) == bytes((24, 18, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 46, 53, 57, 90))
 
     def testWithSubsecondsWithZeros(self):
         assert encoder.encode(
                 useful.GeneralizedTime('20170801120112.099Z')
-             ) == ints2octs((24, 18, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 46, 57, 57, 90))
+             ) == bytes((24, 18, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 46, 57, 57, 90))
 
     def testWithSubsecondsMax(self):
         assert encoder.encode(
                 useful.GeneralizedTime('20170801120112.999Z')
-             ) == ints2octs((24, 19, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 46, 57, 57, 57, 90))
+             ) == bytes((24, 19, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 46, 57, 57, 57, 90))
 
     def testWithSubsecondsMin(self):
         assert encoder.encode(
                 useful.GeneralizedTime('20170801120112.000Z')
-             ) == ints2octs((24, 15, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 90))
+             ) == bytes((24, 15, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 90))
 
     def testWithSubsecondsDanglingDot(self):
         assert encoder.encode(
                 useful.GeneralizedTime('20170801120112.Z')
-             ) == ints2octs((24, 15, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 90))
+             ) == bytes((24, 15, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 90))
 
     def testWithSeconds(self):
         assert encoder.encode(
                     useful.GeneralizedTime('20170801120112Z')
-             ) == ints2octs((24, 15, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 90))
+             ) == bytes((24, 15, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 90))
 
     def testWithMinutes(self):
         assert encoder.encode(
                     useful.GeneralizedTime('201708011201Z')
-             ) == ints2octs((24, 13, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 90))
+             ) == bytes((24, 13, 50, 48, 49, 55, 48, 56, 48, 49, 49, 50, 48, 49, 90))
 
 
 class UTCTimeEncoderTestCase(BaseTestCase):
@@ -141,7 +140,7 @@ class UTCTimeEncoderTestCase(BaseTestCase):
         try:
             assert encoder.encode(
                 useful.UTCTime('150501120112')
-            ) == ints2octs((23, 13, 49, 53, 48, 53, 48, 49, 49, 50, 48, 49, 49, 50, 90))
+            ) == bytes((23, 13, 49, 53, 48, 53, 48, 49, 49, 50, 48, 49, 49, 50, 90))
         except PyAsn1Error:
             pass
         else:
@@ -160,43 +159,43 @@ class UTCTimeEncoderTestCase(BaseTestCase):
     def testWithSeconds(self):
         assert encoder.encode(
                     useful.UTCTime('990801120112Z')
-             ) == ints2octs((23, 13, 57, 57, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 90))
+             ) == bytes((23, 13, 57, 57, 48, 56, 48, 49, 49, 50, 48, 49, 49, 50, 90))
 
     def testWithMinutes(self):
         assert encoder.encode(
                     useful.UTCTime('9908011201Z')
-             ) == ints2octs((23, 11, 57, 57, 48, 56, 48, 49, 49, 50, 48, 49, 90))
+             ) == bytes((23, 11, 57, 57, 48, 56, 48, 49, 49, 50, 48, 49, 90))
 
 
 class SequenceOfEncoderTestCase(BaseTestCase):
     def testEmpty(self):
         s = univ.SequenceOf()
         s.clear()
-        assert encoder.encode(s) == ints2octs((48, 128, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 0, 0))
 
     def testDefMode1(self):
         s = univ.SequenceOf()
         s.append(univ.OctetString('a'))
         s.append(univ.OctetString('ab'))
-        assert encoder.encode(s) == ints2octs((48, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
 
     def testDefMode2(self):
         s = univ.SequenceOf()
         s.append(univ.OctetString('ab'))
         s.append(univ.OctetString('a'))
-        assert encoder.encode(s) == ints2octs((48, 128, 4, 2, 97, 98, 4, 1, 97, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 4, 2, 97, 98, 4, 1, 97, 0, 0))
 
     def testDefMode3(self):
         s = univ.SequenceOf()
         s.append(univ.OctetString('b'))
         s.append(univ.OctetString('a'))
-        assert encoder.encode(s) == ints2octs((48, 128, 4, 1, 98, 4, 1, 97, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 4, 1, 98, 4, 1, 97, 0, 0))
 
     def testDefMode4(self):
         s = univ.SequenceOf()
         s.append(univ.OctetString('a'))
         s.append(univ.OctetString('b'))
-        assert encoder.encode(s) == ints2octs((48, 128, 4, 1, 97, 4, 1, 98, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 4, 1, 97, 4, 1, 98, 0, 0))
 
 
 class SequenceOfEncoderWithSchemaTestCase(BaseTestCase):
@@ -206,62 +205,62 @@ class SequenceOfEncoderWithSchemaTestCase(BaseTestCase):
 
     def testEmpty(self):
         self.s.clear()
-        assert encoder.encode(self.s) == ints2octs((48, 128, 0, 0))
+        assert encoder.encode(self.s) == bytes((48, 128, 0, 0))
 
     def testIndefMode1(self):
         self.s.clear()
         self.s.append('a')
         self.s.append('ab')
-        assert encoder.encode(self.s) == ints2octs((48, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
+        assert encoder.encode(self.s) == bytes((48, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
 
     def testIndefMode2(self):
         self.s.clear()
         self.s.append('ab')
         self.s.append('a')
-        assert encoder.encode(self.s) == ints2octs((48, 128, 4, 2, 97, 98, 4, 1, 97, 0, 0))
+        assert encoder.encode(self.s) == bytes((48, 128, 4, 2, 97, 98, 4, 1, 97, 0, 0))
 
     def testIndefMode3(self):
         self.s.clear()
         self.s.append('b')
         self.s.append('a')
-        assert encoder.encode(self.s) == ints2octs((48, 128, 4, 1, 98, 4, 1, 97, 0, 0))
+        assert encoder.encode(self.s) == bytes((48, 128, 4, 1, 98, 4, 1, 97, 0, 0))
 
     def testIndefMode4(self):
         self.s.clear()
         self.s.append('a')
         self.s.append('b')
-        assert encoder.encode(self.s) == ints2octs((48, 128, 4, 1, 97, 4, 1, 98, 0, 0))
+        assert encoder.encode(self.s) == bytes((48, 128, 4, 1, 97, 4, 1, 98, 0, 0))
 
 
 class SetOfEncoderTestCase(BaseTestCase):
     def testEmpty(self):
         s = univ.SetOf()
         s.clear()
-        assert encoder.encode(s) == ints2octs((49, 128, 0, 0))
+        assert encoder.encode(s) == bytes((49, 128, 0, 0))
 
     def testDefMode1(self):
         s = univ.SetOf()
         s.append(univ.OctetString('a'))
         s.append(univ.OctetString('ab'))
-        assert encoder.encode(s) == ints2octs((49, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
+        assert encoder.encode(s) == bytes((49, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
 
     def testDefMode2(self):
         s = univ.SetOf()
         s.append(univ.OctetString('ab'))
         s.append(univ.OctetString('a'))
-        assert encoder.encode(s) == ints2octs((49, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
+        assert encoder.encode(s) == bytes((49, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
 
     def testDefMode3(self):
         s = univ.SetOf()
         s.append(univ.OctetString('b'))
         s.append(univ.OctetString('a'))
-        assert encoder.encode(s) == ints2octs((49, 128, 4, 1, 97, 4, 1, 98, 0, 0))
+        assert encoder.encode(s) == bytes((49, 128, 4, 1, 97, 4, 1, 98, 0, 0))
 
     def testDefMode4(self):
         s = univ.SetOf()
         s.append(univ.OctetString('a'))
         s.append(univ.OctetString('b'))
-        assert encoder.encode(s) == ints2octs((49, 128, 4, 1, 97, 4, 1, 98, 0, 0))
+        assert encoder.encode(s) == bytes((49, 128, 4, 1, 97, 4, 1, 98, 0, 0))
 
 
 class SetOfEncoderWithSchemaTestCase(BaseTestCase):
@@ -271,35 +270,35 @@ class SetOfEncoderWithSchemaTestCase(BaseTestCase):
 
     def testEmpty(self):
         self.s.clear()
-        assert encoder.encode(self.s) == ints2octs((49, 128, 0, 0))
+        assert encoder.encode(self.s) == bytes((49, 128, 0, 0))
 
     def testIndefMode1(self):
         self.s.clear()
         self.s.append('a')
         self.s.append('ab')
 
-        assert encoder.encode(self.s) == ints2octs((49, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
+        assert encoder.encode(self.s) == bytes((49, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
 
     def testIndefMode2(self):
         self.s.clear()
         self.s.append('ab')
         self.s.append('a')
 
-        assert encoder.encode(self.s) == ints2octs((49, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
+        assert encoder.encode(self.s) == bytes((49, 128, 4, 1, 97, 4, 2, 97, 98, 0, 0))
 
     def testIndefMode3(self):
         self.s.clear()
         self.s.append('b')
         self.s.append('a')
 
-        assert encoder.encode(self.s) == ints2octs((49, 128, 4, 1, 97, 4, 1, 98, 0, 0))
+        assert encoder.encode(self.s) == bytes((49, 128, 4, 1, 97, 4, 1, 98, 0, 0))
 
     def testIndefMode4(self):
         self.s.clear()
         self.s.append('a')
         self.s.append('b')
 
-        assert encoder.encode(self.s) == ints2octs((49, 128, 4, 1, 97, 4, 1, 98, 0, 0))
+        assert encoder.encode(self.s) == bytes((49, 128, 4, 1, 97, 4, 1, 98, 0, 0))
 
 
 class SetEncoderTestCase(BaseTestCase):
@@ -311,22 +310,22 @@ class SetEncoderTestCase(BaseTestCase):
         self.s.setComponentByPosition(2, univ.Integer(1))
 
     def testIndefMode(self):
-        assert encoder.encode(self.s) == ints2octs((49, 128, 2, 1, 1, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
+        assert encoder.encode(self.s) == bytes((49, 128, 2, 1, 1, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
 
     def testWithOptionalIndefMode(self):
         assert encoder.encode(
             self.s
-        ) == ints2octs((49, 128, 2, 1, 1, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
+        ) == bytes((49, 128, 2, 1, 1, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
 
     def testWithDefaultedIndefMode(self):
         assert encoder.encode(
             self.s
-        ) == ints2octs((49, 128, 2, 1, 1, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
+        ) == bytes((49, 128, 2, 1, 1, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
 
     def testWithOptionalAndDefaultedIndefMode(self):
         assert encoder.encode(
             self.s
-        ) == ints2octs((49, 128, 2, 1, 1, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
+        ) == bytes((49, 128, 2, 1, 1, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
 
 
 class SetEncoderWithSchemaTestCase(BaseTestCase):
@@ -360,25 +359,25 @@ class SetEncoderWithSchemaTestCase(BaseTestCase):
 
     def testIndefMode(self):
         self.__init()
-        assert encoder.encode(self.s) == ints2octs((49, 128, 5, 0, 0, 0))
+        assert encoder.encode(self.s) == bytes((49, 128, 5, 0, 0, 0))
 
     def testWithOptionalIndefMode(self):
         self.__initWithOptional()
         assert encoder.encode(
             self.s
-        ) == ints2octs((49, 128, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
+        ) == bytes((49, 128, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
 
     def testWithDefaultedIndefMode(self):
         self.__initWithDefaulted()
         assert encoder.encode(
             self.s
-        ) == ints2octs((49, 128, 2, 1, 1, 5, 0, 0, 0))
+        ) == bytes((49, 128, 2, 1, 1, 5, 0, 0, 0))
 
     def testWithOptionalAndDefaultedIndefMode(self):
         self.__initWithOptionalAndDefaulted()
         assert encoder.encode(
             self.s
-        ) == ints2octs((49, 128, 2, 1, 1, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
+        ) == bytes((49, 128, 2, 1, 1, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 5, 0, 0, 0))
 
 
 class SetEncoderWithChoiceWithSchemaEncoderTestCase(BaseTestCase):
@@ -396,7 +395,7 @@ class SetEncoderWithChoiceWithSchemaEncoderTestCase(BaseTestCase):
         self.s.setComponentByPosition(0)
         self.s.setComponentByName('status')
         self.s.getComponentByName('status').setComponentByPosition(0, 1)
-        assert encoder.encode(self.s) == ints2octs((49, 128, 1, 1, 255, 5, 0, 0, 0))
+        assert encoder.encode(self.s) == bytes((49, 128, 1, 1, 255, 5, 0, 0, 0))
 
 
 class SetEncoderWithTaggedChoiceEncoderTestCase(BaseTestCase):
@@ -419,7 +418,7 @@ class SetEncoderWithTaggedChoiceEncoderTestCase(BaseTestCase):
         s.setComponentByName('name', 'A')
         s.getComponentByName('customer').setComponentByName('premium', True)
 
-        assert encoder.encode(s) == ints2octs((49, 128, 1, 1, 255, 4, 1, 65, 0, 0))
+        assert encoder.encode(s) == bytes((49, 128, 1, 1, 255, 4, 1, 65, 0, 0))
 
     def testWithTaggedChoice(self):
 
@@ -439,7 +438,7 @@ class SetEncoderWithTaggedChoiceEncoderTestCase(BaseTestCase):
         s.setComponentByName('name', 'A')
         s.getComponentByName('customer').setComponentByName('premium', True)
 
-        assert encoder.encode(s) == ints2octs((49, 128, 4, 1, 65, 167, 128, 1, 1, 255, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((49, 128, 4, 1, 65, 167, 128, 1, 1, 255, 0, 0, 0, 0))
 
 
 class SequenceEncoderTestCase(BaseTestCase):
@@ -451,22 +450,22 @@ class SequenceEncoderTestCase(BaseTestCase):
         self.s.setComponentByPosition(2, univ.Integer(1))
 
     def testIndefMode(self):
-        assert encoder.encode(self.s) == ints2octs((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1, 0, 0))
+        assert encoder.encode(self.s) == bytes((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1, 0, 0))
 
     def testWithOptionalIndefMode(self):
         assert encoder.encode(
             self.s
-        ) == ints2octs((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1, 0, 0))
+        ) == bytes((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1, 0, 0))
 
     def testWithDefaultedIndefMode(self):
         assert encoder.encode(
             self.s
-        ) == ints2octs((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1, 0, 0))
+        ) == bytes((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1, 0, 0))
 
     def testWithOptionalAndDefaultedIndefMode(self):
         assert encoder.encode(
             self.s
-        ) == ints2octs((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1, 0, 0))
+        ) == bytes((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1, 0, 0))
 
 
 class SequenceEncoderWithSchemaTestCase(BaseTestCase):
@@ -502,25 +501,25 @@ class SequenceEncoderWithSchemaTestCase(BaseTestCase):
 
     def testIndefMode(self):
         self.__init()
-        assert encoder.encode(self.s) == ints2octs((48, 128, 5, 0, 0, 0))
+        assert encoder.encode(self.s) == bytes((48, 128, 5, 0, 0, 0))
 
     def testWithOptionalIndefMode(self):
         self.__initWithOptional()
         assert encoder.encode(
             self.s
-        ) == ints2octs((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 0, 0))
+        ) == bytes((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 0, 0))
 
     def testWithDefaultedIndefMode(self):
         self.__initWithDefaulted()
         assert encoder.encode(
             self.s
-        ) == ints2octs((48, 128, 5, 0, 2, 1, 1, 0, 0))
+        ) == bytes((48, 128, 5, 0, 2, 1, 1, 0, 0))
 
     def testWithOptionalAndDefaultedIndefMode(self):
         self.__initWithOptionalAndDefaulted()
         assert encoder.encode(
             self.s
-        ) == ints2octs((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1, 0, 0))
+        ) == bytes((48, 128, 5, 0, 4, 11, 113, 117, 105, 99, 107, 32, 98, 114, 111, 119, 110, 2, 1, 1, 0, 0))
 
 
 class SequenceEncoderWithUntaggedOpenTypesTestCase(BaseTestCase):
@@ -545,7 +544,7 @@ class SequenceEncoderWithUntaggedOpenTypesTestCase(BaseTestCase):
         self.s[0] = 1
         self.s[1] = univ.Integer(12)
 
-        assert encoder.encode(self.s, asn1Spec=self.s) == ints2octs(
+        assert encoder.encode(self.s, asn1Spec=self.s) == bytes(
             (48, 128, 2, 1, 1, 49, 50, 0, 0)
         )
 
@@ -555,7 +554,7 @@ class SequenceEncoderWithUntaggedOpenTypesTestCase(BaseTestCase):
         self.s[0] = 2
         self.s[1] = univ.OctetString('quick brown')
 
-        assert encoder.encode(self.s, asn1Spec=self.s) == ints2octs(
+        assert encoder.encode(self.s, asn1Spec=self.s) == bytes(
             (48, 128, 2, 1, 2, 113, 117, 105, 99, 107, 32, 98, 114,
              111, 119, 110, 0, 0)
         )
@@ -607,7 +606,7 @@ class SequenceEncoderWithImplicitlyTaggedOpenTypesTestCase(BaseTestCase):
         self.s[0] = 1
         self.s[1] = univ.Integer(12)
 
-        assert encoder.encode(self.s, asn1Spec=self.s) == ints2octs(
+        assert encoder.encode(self.s, asn1Spec=self.s) == bytes(
             (48, 128, 2, 1, 1, 163, 128, 163, 128, 49, 50, 0, 0, 0, 0, 0, 0)
         )
 
@@ -634,7 +633,7 @@ class SequenceEncoderWithExplicitlyTaggedOpenTypesTestCase(BaseTestCase):
         self.s[0] = 1
         self.s[1] = univ.Integer(12)
 
-        assert encoder.encode(self.s, asn1Spec=self.s) == ints2octs(
+        assert encoder.encode(self.s, asn1Spec=self.s) == bytes(
             (48, 128, 2, 1, 1, 163, 128, 163, 128, 49, 50, 0, 0, 0, 0, 0, 0)
         )
 
@@ -662,7 +661,7 @@ class SequenceEncoderWithUntaggedSetOfOpenTypesTestCase(BaseTestCase):
         self.s[0] = 1
         self.s[1].append(univ.Integer(12))
 
-        assert encoder.encode(self.s, asn1Spec=self.s) == ints2octs(
+        assert encoder.encode(self.s, asn1Spec=self.s) == bytes(
             (48, 128, 2, 1, 1, 49, 128, 49, 50, 0, 0, 0, 0)
         )
 
@@ -672,7 +671,7 @@ class SequenceEncoderWithUntaggedSetOfOpenTypesTestCase(BaseTestCase):
         self.s[0] = 2
         self.s[1].append(univ.OctetString('quick brown'))
 
-        assert encoder.encode(self.s, asn1Spec=self.s) == ints2octs(
+        assert encoder.encode(self.s, asn1Spec=self.s) == bytes(
             (48, 128, 2, 1, 2, 49, 128, 113, 117, 105, 99, 107, 32, 98, 114,
              111, 119, 110, 0, 0, 0, 0)
         )
@@ -728,7 +727,7 @@ class SequenceEncoderWithImplicitlyTaggedSetOfOpenTypesTestCase(BaseTestCase):
         self.s[0] = 1
         self.s[1].append(univ.Integer(12))
 
-        assert encoder.encode(self.s, asn1Spec=self.s) == ints2octs(
+        assert encoder.encode(self.s, asn1Spec=self.s) == bytes(
             (48, 128, 2, 1, 1, 49, 128, 163, 128, 163, 128, 49, 50, 0, 0,
              0, 0, 0, 0, 0, 0)
         )
@@ -759,7 +758,7 @@ class SequenceEncoderWithExplicitlyTaggedSetOfOpenTypesTestCase(BaseTestCase):
         self.s[0] = 1
         self.s[1].append(univ.Integer(12))
 
-        assert encoder.encode(self.s, asn1Spec=self.s) == ints2octs(
+        assert encoder.encode(self.s, asn1Spec=self.s) == bytes(
             (48, 128, 2, 1, 1, 49, 128, 163, 128, 163, 128, 49, 50, 0, 0,
              0, 0, 0, 0, 0, 0)
         )
@@ -828,31 +827,31 @@ class NestedOptionalSequenceEncoderTestCase(BaseTestCase):
 
     def testOptionalWithDefaultAndOptional(self):
         s = self.__initOptionalWithDefaultAndOptional()
-        assert encoder.encode(s) == ints2octs((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 2, 1, 123, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 2, 1, 123, 0, 0, 0, 0))
 
     def testOptionalWithDefault(self):
         s = self.__initOptionalWithDefault()
-        assert encoder.encode(s) == ints2octs((48, 128, 48, 128, 2, 1, 123, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 48, 128, 2, 1, 123, 0, 0, 0, 0))
 
     def testOptionalWithOptional(self):
         s = self.__initOptionalWithOptional()
-        assert encoder.encode(s) == ints2octs((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 0, 0, 0, 0))
 
     def testOptional(self):
         s = self.__initOptional()
-        assert encoder.encode(s) == ints2octs((48, 128, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 0, 0))
 
     def testDefaultWithDefaultAndOptional(self):
         s = self.__initDefaultWithDefaultAndOptional()
-        assert encoder.encode(s) == ints2octs((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 2, 1, 123, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 2, 1, 123, 0, 0, 0, 0))
 
     def testDefaultWithDefault(self):
         s = self.__initDefaultWithDefault()
-        assert encoder.encode(s) == ints2octs((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 0, 0, 0, 0))
 
     def testDefaultWithOptional(self):
         s = self.__initDefaultWithOptional()
-        assert encoder.encode(s) == ints2octs((48, 128, 48, 128, 2, 1, 123, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 48, 128, 2, 1, 123, 0, 0, 0, 0))
 
 
 class NestedOptionalChoiceEncoderTestCase(BaseTestCase):
@@ -902,19 +901,19 @@ class NestedOptionalChoiceEncoderTestCase(BaseTestCase):
 
     def testOptionalWithDefaultAndOptional(self):
         s = self.__initOptionalWithDefaultAndOptional()
-        assert encoder.encode(s) == ints2octs((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 2, 1, 123, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 2, 1, 123, 0, 0, 0, 0))
 
     def testOptionalWithDefault(self):
         s = self.__initOptionalWithDefault()
-        assert encoder.encode(s) == ints2octs((48, 128, 48, 128, 2, 1, 123, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 48, 128, 2, 1, 123, 0, 0, 0, 0))
 
     def testOptionalWithOptional(self):
         s = self.__initOptionalWithOptional()
-        assert encoder.encode(s) == ints2octs((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 0, 0, 0, 0))
 
     def testOptional(self):
         s = self.__initOptional()
-        assert encoder.encode(s) == ints2octs((48, 128, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 0, 0))
 
 
 class NestedOptionalSequenceOfEncoderTestCase(BaseTestCase):
@@ -943,11 +942,11 @@ class NestedOptionalSequenceOfEncoderTestCase(BaseTestCase):
 
     def testOptionalWithValue(self):
         s = self.__initOptionalWithValue()
-        assert encoder.encode(s) == ints2octs((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 0, 0, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 48, 128, 4, 4, 116, 101, 115, 116, 0, 0, 0, 0))
 
     def testOptional(self):
         s = self.__initOptional()
-        assert encoder.encode(s) == ints2octs((48, 128, 0, 0))
+        assert encoder.encode(s) == bytes((48, 128, 0, 0))
 
 
 suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

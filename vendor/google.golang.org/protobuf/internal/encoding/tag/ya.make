@@ -2,10 +2,10 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-SRCS(tag.go)
+VERSION(v1.36.5)
 
-GO_XTEST_SRCS(tag_test.go)
+SRCS(
+    tag.go
+)
 
 END()
-
-RECURSE(gotest)

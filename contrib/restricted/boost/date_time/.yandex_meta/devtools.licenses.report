@@ -1,0 +1,261 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     BSL-1.0              05cc48a3f35f6c4cd26b75b91f9d84bb
+BELONGS ya.make
+    License text:
+         * Subject to the Boost Software License, Version 1.0. (See accompanying
+         * file LICENSE_1_0.txt or http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 78.12
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/date_time/compiler_config.hpp [5:6]
+        include/boost/date_time/local_time/posix_time_zone.hpp [5:6]
+        include/boost/date_time/string_convert.hpp [5:6]
+
+KEEP     BSL-1.0              17737caa978fa8ec0868ed818b864f37
+BELONGS ya.make
+    License text:
+         * Subject to the Boost Software License, Version 1.0. 
+         * (See accompanying file LICENSE_1_0.txt or 
+         * http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 78.12
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/date_time/date_duration_types.hpp [5:7]
+        include/boost/date_time/local_time/date_duration_operators.hpp [5:7]
+        include/boost/date_time/posix_time/date_duration_operators.hpp [5:7]
+
+KEEP     BSL-1.0              23fa5e94f51ba7a8e51ff1feb5b64098
+BELONGS ya.make
+    License text:
+         * Use, modification and distribution is subject to the 
+         * Boost Software License, Version 1.0. (See accompanying
+         * file LICENSE_1_0.txt or http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 90.62
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/date_time.hpp [5:7]
+        include/boost/date_time/c_local_time_adjustor.hpp [5:7]
+        include/boost/date_time/constrained_value.hpp [5:7]
+        include/boost/date_time/date_clock_device.hpp [5:7]
+        include/boost/date_time/date_defs.hpp [5:7]
+        include/boost/date_time/date_format_simple.hpp [5:7]
+        include/boost/date_time/date_formatting.hpp [5:7]
+        include/boost/date_time/date_formatting_limited.hpp [5:7]
+        include/boost/date_time/date_generator_formatter.hpp [5:7]
+        include/boost/date_time/date_generator_parser.hpp [6:8]
+        include/boost/date_time/dst_transition_generators.hpp [2:4]
+        include/boost/date_time/gregorian/formatters.hpp [5:7]
+        include/boost/date_time/gregorian/formatters_limited.hpp [5:7]
+        include/boost/date_time/gregorian/greg_day.hpp [5:7]
+        include/boost/date_time/gregorian/greg_day_of_year.hpp [5:7]
+        include/boost/date_time/gregorian/greg_duration.hpp [5:7]
+        include/boost/date_time/gregorian/greg_facet.hpp [5:7]
+        include/boost/date_time/gregorian/greg_month.hpp [5:7]
+        include/boost/date_time/gregorian/greg_serialize.hpp [5:7]
+        include/boost/date_time/gregorian/greg_weekday.hpp [5:7]
+        include/boost/date_time/gregorian/greg_year.hpp [5:7]
+        include/boost/date_time/gregorian/greg_ymd.hpp [5:7]
+        include/boost/date_time/gregorian/gregorian.hpp [5:7]
+        include/boost/date_time/gregorian/gregorian_types.hpp [5:7]
+        include/boost/date_time/gregorian/parsers.hpp [5:7]
+        include/boost/date_time/int_adapter.hpp [5:7]
+        include/boost/date_time/iso_format.hpp [5:7]
+        include/boost/date_time/local_time_adjustor.hpp [5:7]
+        include/boost/date_time/local_timezone_defs.hpp [5:7]
+        include/boost/date_time/parse_format_base.hpp [5:7]
+        include/boost/date_time/period.hpp [5:7]
+        include/boost/date_time/posix_time/posix_time.hpp [5:7]
+        include/boost/date_time/posix_time/posix_time_duration.hpp [5:7]
+        include/boost/date_time/posix_time/posix_time_legacy_io.hpp [5:7]
+        include/boost/date_time/posix_time/posix_time_system.hpp [5:7]
+        include/boost/date_time/posix_time/posix_time_types.hpp [2:4]
+        include/boost/date_time/posix_time/ptime.hpp [5:7]
+        include/boost/date_time/posix_time/time_parsers.hpp [5:7]
+        include/boost/date_time/posix_time/time_period.hpp [5:7]
+        include/boost/date_time/posix_time/time_serialize.hpp [5:7]
+        include/boost/date_time/special_defs.hpp [5:7]
+        include/boost/date_time/special_values_formatter.hpp [6:8]
+        include/boost/date_time/special_values_parser.hpp [6:8]
+        include/boost/date_time/time.hpp [5:7]
+        include/boost/date_time/time_defs.hpp [5:7]
+        include/boost/date_time/time_formatting_streams.hpp [5:7]
+        include/boost/date_time/time_parsing.hpp [5:7]
+        include/boost/date_time/time_zone_names.hpp [5:7]
+        include/boost/date_time/year_month_day.hpp [5:7]
+
+KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        LICENSE [1:23]
+
+KEEP     BSL-1.0              48493a6f602d8228b384d9aab3e50dbd
+BELONGS ya.make
+    License text:
+         * Subject to the Boost Software License, Version 1.0.
+         * (See accompanying file LICENSE_1_0.txt or http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 78.12
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/date_time/local_time/conversion.hpp [5:6]
+        include/boost/date_time/local_time/custom_time_zone.hpp [5:6]
+        include/boost/date_time/local_time/local_date_time.hpp [5:6]
+        include/boost/date_time/local_time/local_time_io.hpp [5:6]
+        include/boost/date_time/time_zone_base.hpp [5:6]
+
+KEEP     BSL-1.0              526847f759a8183ebfa4b8cff5c6effb
+BELONGS ya.make
+    License text:
+         * Subject to the Boost Software License, Version 1.0. 
+         * (See accompanying file LICENSE_1_0.txt or http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 78.12
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/date_time/local_time/dst_transition_day_rules.hpp [5:6]
+        include/boost/date_time/local_time/local_time.hpp [5:6]
+        include/boost/date_time/local_time/local_time_types.hpp [5:6]
+        include/boost/date_time/local_time/tz_database.hpp [5:6]
+        include/boost/date_time/tz_db_base.hpp [5:6]
+
+KEEP     BSL-1.0              648ee54e68cb4c96cfd2e41a7a53e0f8
+BELONGS ya.make
+    License text:
+        \### License
+        Distributed under the [Boost Software License, Version 1.0](http://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 60.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [3:5]
+
+KEEP     BSL-1.0              7e488dcc33e05aa7d1480d1328f86b4e
+BELONGS ya.make
+    License text:
+         * Subject to Boost Software License, Version 1.0. (See accompanying
+         * file LICENSE_1_0.txt or http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 81.48
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/date_time/gregorian/greg_duration_types.hpp [5:6]
+
+SKIP     BSL-1.0              901941bd35f9f19e23af80f6271c10c4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 60.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        README.md [38:38]
+
+KEEP     BSL-1.0              a481dd7f992b299b42a5bfb04aafbb70
+BELONGS ya.make
+    License text:
+         * Use, modification and distribution is subject to the
+         * Boost Software License, Version 1.0. (See accompanying
+         * file LICENSE_1_0.txt or http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 90.62
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/date_time/adjust_functors.hpp [5:7]
+        include/boost/date_time/c_time.hpp [5:7]
+        include/boost/date_time/date.hpp [5:7]
+        include/boost/date_time/date_duration.hpp [5:7]
+        include/boost/date_time/date_facet.hpp [5:7]
+        include/boost/date_time/date_formatting_locales.hpp [5:7]
+        include/boost/date_time/date_generators.hpp [5:7]
+        include/boost/date_time/date_iterator.hpp [5:7]
+        include/boost/date_time/date_names_put.hpp [5:7]
+        include/boost/date_time/date_parsing.hpp [5:7]
+        include/boost/date_time/dst_rules.hpp [5:7]
+        include/boost/date_time/filetime_functions.hpp [5:7]
+        include/boost/date_time/find_match.hpp [5:7]
+        include/boost/date_time/format_date_parser.hpp [6:8]
+        include/boost/date_time/gregorian/conversion.hpp [5:7]
+        include/boost/date_time/gregorian/greg_calendar.hpp [5:7]
+        include/boost/date_time/gregorian/greg_date.hpp [5:7]
+        include/boost/date_time/gregorian/gregorian_io.hpp [5:7]
+        include/boost/date_time/gregorian_calendar.hpp [5:7]
+        include/boost/date_time/gregorian_calendar.ipp [2:4]
+        include/boost/date_time/locale_config.hpp [5:7]
+        include/boost/date_time/microsec_time_clock.hpp [5:7]
+        include/boost/date_time/period_formatter.hpp [6:8]
+        include/boost/date_time/period_parser.hpp [6:8]
+        include/boost/date_time/posix_time/conversion.hpp [5:7]
+        include/boost/date_time/posix_time/posix_time_config.hpp [5:7]
+        include/boost/date_time/posix_time/posix_time_io.hpp [5:7]
+        include/boost/date_time/posix_time/time_formatters.hpp [5:7]
+        include/boost/date_time/posix_time/time_formatters_limited.hpp [5:7]
+        include/boost/date_time/string_parse_tree.hpp [5:7]
+        include/boost/date_time/strings_from_facet.hpp [5:7]
+        include/boost/date_time/time_clock.hpp [5:7]
+        include/boost/date_time/time_duration.hpp [5:7]
+        include/boost/date_time/time_facet.hpp [6:8]
+        include/boost/date_time/time_iterator.hpp [5:7]
+        include/boost/date_time/time_resolution_traits.hpp [5:7]
+        include/boost/date_time/time_system_counted.hpp [5:7]
+        include/boost/date_time/time_system_split.hpp [5:7]
+        include/boost/date_time/wrapping_int.hpp [5:7]

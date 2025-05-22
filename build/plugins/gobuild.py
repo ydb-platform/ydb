@@ -2,7 +2,6 @@ import base64
 import itertools
 from hashlib import md5
 import os
-import six
 from _common import rootrel_arc_src, tobuilddir
 import ymake
 
@@ -30,6 +29,10 @@ def get_import_path(unit):
 
     module_path = rootrel_arc_src(unit.path(), unit)
     assert len(module_path) > 0
+
+    if go_package_name(unit) == "main":
+        return "main"
+
     import_path = module_path.replace('\\', '/')
     if import_path.startswith(std_lib_prefix):
         import_path = import_path[len(std_lib_prefix) :]
@@ -38,6 +41,10 @@ def get_import_path(unit):
     else:
         import_path = arc_project_prefix + import_path
     assert len(import_path) > 0
+
+    if import_path.endswith("/gotest"):
+        return import_path[:-7]
+
     return import_path
 
 
@@ -63,17 +70,10 @@ def compare_versions(version1, version2):
     return 1 if v1 < v2 else -1
 
 
-def need_compiling_runtime(import_path, gostd_version):
-    return (
-        import_path in ('runtime', 'reflect', 'syscall')
-        or import_path.startswith('runtime/internal/')
-        or compare_versions('1.17', gostd_version) >= 0
-        and import_path == 'internal/bytealg'
-    )
-
-
 def go_package_name(unit):
-    name = unit.get('GO_PACKAGE_VALUE')
+    name = unit.get('_GO_PACKAGE_VALUE')
+    if not name and unit.enabled('GO_TEST_MODULE'):
+        name = unit.get('GO_PACKAGE_VALUE')
     if not name:
         name = unit.get('GO_TEST_IMPORT_PATH')
         if name:
@@ -161,8 +161,31 @@ def on_go_process_srcs(unit):
 
     is_test_module = unit.enabled('GO_TEST_MODULE')
 
+    unit_path = unit.path()
+
     # Add gofmt style checks
-    if unit.enabled('_GO_FMT_ADD_CHECK'):
+    add_fmt = True
+    if not unit.enabled('_GO_FMT_ADD_CHECK'):
+        allow_skip_fmt = unit.get('_GO_FMT_ALLOW_SKIP')
+        allow_skip_fmt_list = None
+        if allow_skip_fmt:
+            allow_skip_fmt_list = unit.get('_GO_FMT_ALLOW_SKIP').split(' ')
+
+        if allow_skip_fmt_list:
+            unit_rel_path = rootrel_arc_src(unit_path, unit)
+            if unit_rel_path in allow_skip_fmt_list:
+                add_fmt = False
+            else:
+                for item in allow_skip_fmt_list:
+                    if item:
+                        prefix = item if item[-1] == '/' else item + '/'
+                        if unit_rel_path.startswith(prefix):
+                            add_fmt = False
+                            break
+        if add_fmt:
+            ymake.report_configure_error('Disabling gofmt is prohibited, please contact devtools')
+
+    if add_fmt:
         resolved_go_files = []
         go_source_files = [] if is_test_module and unit.get(['GO_TEST_FOR_DIR']) else go_files
         for path in itertools.chain(go_source_files, go_test_files, go_xtest_files):
@@ -180,8 +203,6 @@ def on_go_process_srcs(unit):
             for basedir in basedirs:
                 unit.onadd_check(['gofmt'] + basedirs[basedir])
 
-    unit_path = unit.path()
-
     # Go coverage instrumentation (NOTE! go_files list is modified here)
     if is_test_module and unit.enabled('GO_TEST_COVER'):
         cover_info = []
@@ -189,7 +210,7 @@ def on_go_process_srcs(unit):
         for f in go_files:
             if f.endswith('_test.go'):
                 continue
-            cover_var = 'GoCover' + six.ensure_str(base64.b32encode(six.ensure_binary(f))).rstrip('=')
+            cover_var = 'GoCover' + base64.b32encode(f.encode('utf-8')).decode('utf-8').rstrip('=')
             cover_file = unit.resolve_arc_path(f)
             cover_file_output = '{}/{}'.format(unit_path, os.path.basename(f))
             unit.on_go_gen_cover_go([cover_file, cover_file_output, cover_var])
@@ -236,8 +257,6 @@ def on_go_process_srcs(unit):
         if compare_versions('1.16', gostd_version) >= 0:
             import_path = get_import_path(unit)
             symabis_flags.extend(['FLAGS', '-p', import_path])
-            if need_compiling_runtime(import_path, gostd_version):
-                symabis_flags.append('-compiling-runtime')
         unit.on_go_compile_symabis(asm_files + symabis_flags)
 
     # Process cgo files
@@ -291,7 +310,7 @@ def on_go_resource(unit, *args):
     args = list(args)
     files = args[::2]
     keys = args[1::2]
-    suffix_md5 = md5(six.ensure_binary('@'.join(args))).hexdigest()
+    suffix_md5 = md5('@'.join(args).encode()).hexdigest()
     resource_go = os.path.join("resource.{}.res.go".format(suffix_md5))
 
     unit.onpeerdir(["library/go/core/resource"])

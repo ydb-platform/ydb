@@ -1,0 +1,11 @@
+(
+#comment
+(let config (DataSource 'config))
+
+(let res_sink (DataSink 'result))
+(let udf (Udf 'SimpleUdf.Echo))
+(let data (Map (AsList (String 'a) (String 'b)) udf))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

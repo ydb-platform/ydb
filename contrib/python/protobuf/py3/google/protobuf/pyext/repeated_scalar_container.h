@@ -34,12 +34,11 @@
 #ifndef GOOGLE_PROTOBUF_PYTHON_CPP_REPEATED_SCALAR_CONTAINER_H__
 #define GOOGLE_PROTOBUF_PYTHON_CPP_REPEATED_SCALAR_CONTAINER_H__
 
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
-#include <memory>
-
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/pyext/message.h>
+#include "google/protobuf/descriptor.h"
+#include "google/protobuf/pyext/message.h"
 
 namespace google {
 namespace protobuf {

@@ -6,11 +6,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/fq/libs/config/protos
-    ydb/library/yql/public/issue/protos
+    yql/essentials/public/issue/protos
 )
 
 END()
 
-RECURSE(
-    protos
-)

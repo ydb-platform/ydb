@@ -15,10 +15,6 @@
 namespace NYT {
 namespace NDetail {
 
-namespace NRawClient {
-    class TRawBatchRequest;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class IYtPollerItem
@@ -33,7 +29,7 @@ public:
 public:
     virtual ~IYtPollerItem() = default;
 
-    virtual void PrepareRequest(NRawClient::TRawBatchRequest* batchRequest) = 0;
+    virtual void PrepareRequest(IRawBatchRequest* batchRequest) = 0;
 
     // Should return PollContinue if poller should continue polling this item.
     // Should return PollBreak if poller should stop polling this item.
@@ -50,7 +46,10 @@ class TYtPoller
     : public TThrRefBase
 {
 public:
-    TYtPoller(TClientContext context, const IClientRetryPolicyPtr& retryPolicy);
+    TYtPoller(
+        IRawClientPtr rawClient,
+        const TConfigPtr& config,
+        const IClientRetryPolicyPtr& retryPolicy);
     ~TYtPoller();
 
     void Watch(IYtPollerItemPtr item);
@@ -66,7 +65,8 @@ private:
 private:
     struct TItem;
 
-    const TClientContext Context_;
+    const IRawClientPtr RawClient_;
+    const TConfigPtr Config_;
     const IClientRetryPolicyPtr ClientRetryPolicy_;
 
 

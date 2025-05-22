@@ -69,6 +69,15 @@ attribute_name =
     "AttributeName" > { Num_ = 1; } ('.' int %{ Num_ = I; }) ?
         % { CurrentParams_->AttributeNames[Num_] = value; };
 
+tag =
+    "Tag" > { Num_ = 1; } ('.' int %{ Num_ = I; }) ? '.'
+        (("Key"   % { CurrentParams_->Tags[Num_].SetKey(value); }) |
+         ("Value" % { CurrentParams_->Tags[Num_].SetValue(value); }));
+
+tag_key =
+    "TagKey" > { Num_ = 1; } ('.' int %{ Num_ = I; }) ?
+        % { CurrentParams_->TagKeys[Num_] = value; };
+
 message_attribute =
     "MessageAttribute" > { Num_ = 1; } ('.' int %{ Num_ = I; }) ? '.'
         (("Name" % { CurrentParams_->MessageAttributes[Num_].SetName(value); }) |
@@ -149,6 +158,8 @@ main := |*
     delete_queue_entry;
     purge_queue_entry;
     get_queue_attributes_entry;
+    tag;
+    tag_key;
 *|;
 
 }%%

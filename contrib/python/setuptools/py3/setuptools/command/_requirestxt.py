@@ -6,26 +6,29 @@ The ``requires.txt`` file has an specific format:
 
 See https://setuptools.pypa.io/en/latest/deprecated/python_eggs.html#requires-txt
 """
+
+from __future__ import annotations
+
 import io
 from collections import defaultdict
+from collections.abc import Mapping
 from itertools import filterfalse
-from typing import Dict, List, Tuple, Mapping, TypeVar
+from typing import TypeVar
+
+from jaraco.text import yield_lines
+from packaging.requirements import Requirement
 
 from .. import _reqs
-from ..extern.jaraco.text import yield_lines
-from ..extern.packaging.requirements import Requirement
-
+from .._reqs import _StrOrIter
 
 # dict can work as an ordered set
 _T = TypeVar("_T")
-_Ordered = Dict[_T, None]
-_ordered = dict
-_StrOrIter = _reqs._StrOrIter
+_Ordered = dict[_T, None]
 
 
 def _prepare(
     install_requires: _StrOrIter, extras_require: Mapping[str, _StrOrIter]
-) -> Tuple[List[str], Dict[str, List[str]]]:
+) -> tuple[list[str], dict[str, list[str]]]:
     """Given values for ``install_requires`` and ``extras_require``
     create modified versions in a way that can be written in ``requires.txt``
     """
@@ -34,14 +37,14 @@ def _prepare(
 
 
 def _convert_extras_requirements(
-    extras_require: _StrOrIter,
-) -> Mapping[str, _Ordered[Requirement]]:
+    extras_require: Mapping[str, _StrOrIter],
+) -> defaultdict[str, _Ordered[Requirement]]:
     """
     Convert requirements in `extras_require` of the form
     `"extra": ["barbazquux; {marker}"]` to
     `"extra:{marker}": ["barbazquux"]`.
     """
-    output: Mapping[str, _Ordered[Requirement]] = defaultdict(dict)
+    output = defaultdict[str, _Ordered[Requirement]](dict)
     for section, v in extras_require.items():
         # Do not strip empty sections.
         output[section]
@@ -53,7 +56,7 @@ def _convert_extras_requirements(
 
 def _move_install_requirements_markers(
     install_requires: _StrOrIter, extras_require: Mapping[str, _Ordered[Requirement]]
-) -> Tuple[List[str], Dict[str, List[str]]]:
+) -> tuple[list[str], dict[str, list[str]]]:
     """
     The ``requires.txt`` file has an specific format:
         - Environment markers need to be part of the section headers and

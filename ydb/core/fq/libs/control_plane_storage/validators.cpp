@@ -33,17 +33,17 @@ TValidationQuery CreateUniqueNameValidator(const TString& tableName,
     auto validator = [error](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
         }
 
         ui64 countNames = parser.ColumnParser("count").GetUint64();
         if (countNames != 0) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
         }
 
         return false;
@@ -81,22 +81,22 @@ TValidationQuery CreateModifyUniqueNameValidator(const TString& tableName,
     auto validator = [error, visibility, name](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 2) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         {
             TResultSetParser parser(resultSets.front());
             if (!parser.TryNextRow()) {
-                ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
+                ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
             }
 
             FederatedQuery::Acl::Visibility oldVisibility =
                 static_cast<FederatedQuery::Acl::Visibility>(
                     parser.ColumnParser(VISIBILITY_COLUMN_NAME)
                         .GetOptionalInt64()
-                        .GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
+                        .value_or(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
             TString oldName =
-                parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().GetOrElse("");
+                parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().value_or("");
 
             if (oldVisibility == visibility && oldName == name) {
                 return false;
@@ -105,12 +105,12 @@ TValidationQuery CreateModifyUniqueNameValidator(const TString& tableName,
 
         TResultSetParser parser(resultSets.back());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
         }
 
         ui64 countNames = parser.ColumnParser("count").GetUint64();
         if (countNames != 0) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
         }
 
         return false;
@@ -135,17 +135,17 @@ TValidationQuery CreateCountEntitiesValidator(const TString& scope,
     auto validator = [error, limit](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
         }
 
         ui64 countEntities = parser.ColumnParser("count").GetUint64();
         if (countEntities >= limit) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
         }
 
         return false;
@@ -172,7 +172,7 @@ TValidationQuery CreateRevisionValidator(const TString& tableName,
     auto validator = [error, previousRevision](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
@@ -180,9 +180,9 @@ TValidationQuery CreateRevisionValidator(const TString& tableName,
             return false;
         }
 
-        i64 revision = parser.ColumnParser(REVISION_COLUMN_NAME).GetOptionalInt64().GetOrElse(0);
+        i64 revision = parser.ColumnParser(REVISION_COLUMN_NAME).GetOptionalInt64().value_or(0);
         if (revision != previousRevision) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
         }
 
         return false;
@@ -212,19 +212,19 @@ static TValidationQuery CreateAccessValidatorImpl(const TString& tableName,
     auto validator = [error, user, permissions, privatePermission, publicPermission](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << error;
         }
 
-        TString queryUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().GetOrElse("");
-        FederatedQuery::Acl::Visibility visibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
+        TString queryUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().value_or("");
+        FederatedQuery::Acl::Visibility visibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().value_or(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
         bool hasAccess = HasAccessImpl(permissions, visibility, queryUser, user, privatePermission, publicPermission);
         if (!hasAccess) {
-            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << error;
         }
 
         return false;
@@ -276,17 +276,17 @@ TValidationQuery CreateRelatedBindingsValidator(const TString& scope,
     auto validator = [error](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Not valid number of lines, one is expected. Please contact internal support";
         }
 
         ui64 countEntities = parser.ColumnParser("count").GetUint64();
         if (countEntities != 0) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
         }
 
         return false;
@@ -313,23 +313,23 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
     auto validator = [error, user, permissions, bindingVisibility](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << error;
         }
 
-        FederatedQuery::Acl::Visibility connectionVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
-        TString connectionUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().GetOrElse("");
+        FederatedQuery::Acl::Visibility connectionVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().value_or(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
+        TString connectionUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().value_or("");
 
         if (bindingVisibility == FederatedQuery::Acl::SCOPE && connectionVisibility == FederatedQuery::Acl::PRIVATE) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility";
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility";
         }
 
         if (!HasManageAccess(permissions, connectionVisibility, connectionUser, user)) {
-            ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::ACCESS_DENIED) << error;
         }
 
         return false;
@@ -357,7 +357,7 @@ TValidationQuery CreateConnectionOverrideBindingValidator(const TString& scope,
     auto validator = [connectionName, user, permissions](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
@@ -365,12 +365,12 @@ TValidationQuery CreateConnectionOverrideBindingValidator(const TString& scope,
             return false;
         }
 
-        TString bindingUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().GetOrElse("");
-        TString bindingName = parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().GetOrElse("");
-        FederatedQuery::Acl::Visibility bindingVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
+        TString bindingUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().value_or("");
+        TString bindingName = parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().value_or("");
+        FederatedQuery::Acl::Visibility bindingVisibility = static_cast<FederatedQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().value_or(FederatedQuery::Acl::VISIBILITY_UNSPECIFIED));
 
         if (HasViewAccess(permissions, bindingVisibility, bindingUser, user)) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection named " << connectionName << " overrides connection from binding " << bindingName << ". Please rename this connection";
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection named " << connectionName << " overrides connection from binding " << bindingName << ". Please rename this connection";
         }
 
         return false;
@@ -398,7 +398,7 @@ TValidationQuery CreateBindingConnectionValidator(const TString& scope,
     auto validator = [connectionId](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
@@ -406,10 +406,10 @@ TValidationQuery CreateBindingConnectionValidator(const TString& scope,
             return false;
         }
 
-        TString privateConnectionName = parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().GetOrElse("");
-        TString privateConnectionId = parser.ColumnParser(CONNECTION_ID_COLUMN_NAME).GetOptionalString().GetOrElse("");
+        TString privateConnectionName = parser.ColumnParser(NAME_COLUMN_NAME).GetOptionalString().value_or("");
+        TString privateConnectionId = parser.ColumnParser(CONNECTION_ID_COLUMN_NAME).GetOptionalString().value_or("");
 
-        ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "The connection with id " << connectionId << " is overridden by the private conection with id " << privateConnectionId << " (" << privateConnectionName << "). Please rename the private connection or use another connection";
+        ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "The connection with id " << connectionId << " is overridden by the private conection with id " << privateConnectionId << " (" << privateConnectionName << "). Please rename the private connection or use another connection";
     };
     const auto query = queryBuilder.Build();
     return {query.Sql, query.Params, validator};
@@ -433,12 +433,12 @@ TValidationQuery CreateTtlValidator(const TString& tableName,
     auto validator = [error](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << error;
         }
 
         return false;
@@ -465,23 +465,23 @@ TValidationQuery CreateQueryComputeStatusValidator(const std::vector<FederatedQu
     auto validator = [error, computeStatuses, parseProtobufError](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
         FederatedQuery::Query query;
         if (!query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
             parseProtobufError->Inc();
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
         }
 
         const FederatedQuery::QueryMeta::ComputeStatus status = query.meta().status();
         if (!IsIn(computeStatuses, status)) {
-            ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << error;
         }
 
         return false;

@@ -114,9 +114,9 @@ public:
     void AddChange(const TTableId& tableId, const TPathId& pathId, TChangeRecord::EKind kind, const TDataChange& body) override {
         NIceDb::TNiceDb db(Db);
 
-        Y_VERIFY_S(Self->IsUserTable(tableId), "Unknown table: " << tableId);
+        Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
         auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
-        Y_ABORT_UNLESS(userTable->GetTableSchemaVersion());
+        Y_ENSURE(userTable->GetTableSchemaVersion());
 
         TChangeRecordBuilder builder(kind);
         if (!WriteTxId) {
@@ -137,10 +137,11 @@ public:
             .WithPathId(pathId)
             .WithTableId(tableId.PathId)
             .WithSchemaVersion(userTable->GetTableSchemaVersion())
+            .WithSchema(userTable) // used for debugging purposes
             .WithBody(body.SerializeAsString())
             .Build();
 
-        const auto& record = *recordPtr->Get<TChangeRecord>();
+        const auto& record = *recordPtr;
         Self->PersistChangeRecord(db, record);
 
         if (record.GetLockId() == 0) {
@@ -206,7 +207,7 @@ IDataShardChangeCollector* CreateChangeCollector(
         NTable::TDatabase& db,
         ui64 tableId)
 {
-    Y_ABORT_UNLESS(dataShard.GetUserTables().contains(tableId));
+    Y_ENSURE(dataShard.GetUserTables().contains(tableId));
     const TUserTable& tableInfo = *dataShard.GetUserTables().at(tableId);
     return CreateChangeCollector(dataShard, userDb, groupProvider, db, tableInfo);
 }

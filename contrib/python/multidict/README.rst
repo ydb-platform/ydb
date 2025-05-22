@@ -2,12 +2,12 @@
 multidict
 =========
 
-.. image:: https://github.com/aio-libs/multidict/workflows/CI/badge.svg
-   :target: https://github.com/aio-libs/multidict/actions?query=workflow%3ACI
+.. image:: https://github.com/aio-libs/multidict/actions/workflows/ci-cd.yml/badge.svg
+   :target: https://github.com/aio-libs/multidict/actions
    :alt: GitHub status for master branch
 
-.. image:: https://codecov.io/gh/aio-libs/multidict/branch/master/graph/badge.svg
-   :target: https://codecov.io/gh/aio-libs/multidict
+.. image:: https://codecov.io/gh/aio-libs/multidict/branch/master/graph/badge.svg?flag=pytest
+   :target: https://codecov.io/gh/aio-libs/multidict?flags[]=pytest
    :alt: Coverage metrics
 
 .. image:: https://img.shields.io/pypi/v/multidict.svg
@@ -15,16 +15,24 @@ multidict
    :alt: PyPI
 
 .. image:: https://readthedocs.org/projects/multidict/badge/?version=latest
-   :target: http://multidict.readthedocs.org/en/latest/?badge=latest
-   :alt: Documentationb
+   :target: https://multidict.aio-libs.org
+   :alt: Read The Docs build status badge
+
+.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :target: https://codspeed.io/aio-libs/multidict
+   :alt: CodSpeed
 
 .. image:: https://img.shields.io/pypi/pyversions/multidict.svg
    :target: https://pypi.org/project/multidict
    :alt: Python versions
 
-.. image:: https://badges.gitter.im/Join%20Chat.svg
-   :target: https://gitter.im/aio-libs/Lobby
-   :alt: Chat on Gitter
+.. image:: https://img.shields.io/matrix/aio-libs:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
+   :target: https://matrix.to/#/%23aio-libs:matrix.org
+   :alt: Matrix Room — #aio-libs:matrix.org
+
+.. image:: https://img.shields.io/matrix/aio-libs-space:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs-space%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
+   :target: https://matrix.to/#/%23aio-libs-space:matrix.org
+   :alt: Matrix Space — #aio-libs-space:matrix.org
 
 Multidict is dict-like collection of *key-value pairs* where key
 might occur more than once in the container.
@@ -96,8 +104,13 @@ e.g.:
 Please note, the pure Python (uncompiled) version is about 20-50 times slower depending on
 the usage scenario!!!
 
+For extension development, set the ``MULTIDICT_DEBUG_BUILD`` environment variable to compile
+the extensions in debug mode:
 
+.. code-block:: console
+
+   $ MULTIDICT_DEBUG_BUILD=1 pip install multidict
 
 Changelog
 ---------
-See `RTD page <http://multidict.readthedocs.org/en/latest/changes.html>`_.
+See `RTD page <http://multidict.aio-libs.org/en/latest/changes>`_.

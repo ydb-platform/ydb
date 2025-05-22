@@ -29,6 +29,16 @@ using namespace NApi;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGetCurrentUserCommand::DoExecute(ICommandContextPtr context)
+{
+    auto userInfo = WaitFor(context->GetClient()->GetCurrentUser())
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(ConvertToYsonString(userInfo));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TAddMemberCommand::DoExecute(ICommandContextPtr context)
 {
     WaitFor(context->GetClient()->AddMember(
@@ -75,6 +85,11 @@ void TGetVersionCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// These features are guaranteed to be deployed before or with this code.
+constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
+    {"user_tokens_metadata", true},
+});
+
 void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
 {
     TGetClusterMetaOptions options;
@@ -87,9 +102,16 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     if (!meta.Features) {
         THROW_ERROR_EXCEPTION("Feature querying is not supported by current master version");
     }
+    auto features = meta.Features;
+    for (auto staticFeature : StaticFeatures) {
+        features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
+    }
+    features->AddChild(
+        "require_password_in_authentication_commands",
+        BuildYsonNodeFluently().Value(context->GetConfig()->RequirePasswordInAuthenticationCommands));
     context->ProduceOutputValue(BuildYsonStringFluently()
         .BeginMap()
-            .Item("features").Value(meta.Features)
+            .Item("features").Value(features)
         .EndMap());
 }
 
@@ -100,7 +122,7 @@ void TCheckPermissionCommand::Register(TRegistrar registrar)
     registrar.Parameter("user", &TThis::User);
     registrar.Parameter("permission", &TThis::Permission);
     registrar.Parameter("path", &TThis::Path);
-    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<std::string>>>(
         "columns",
         [] (TThis* command) -> auto& {
             return command->Options.Columns;
@@ -245,9 +267,11 @@ public:
         , MutationId_(mutationId)
         , Retry_(retry)
         , SyncInput_(Input_)
-        , AsyncInput_(CreateAsyncAdapter(
-            &SyncInput_,
-            Context_->GetClient()->GetConnection()->GetInvoker()))
+        , AsyncInput_(
+            CreateZeroCopyAdapter(
+                CreateAsyncAdapter(
+                    &SyncInput_,
+                    Context_->GetClient()->GetConnection()->GetInvoker())))
         , SyncOutput_(Output_)
         , AsyncOutput_(CreateAsyncAdapter(
             &SyncOutput_,
@@ -328,7 +352,7 @@ private:
 
     TString Input_;
     TStringInput SyncInput_;
-    IAsyncInputStreamPtr AsyncInput_;
+    IAsyncZeroCopyInputStreamPtr AsyncInput_;
 
     TString Output_;
     TStringOutput SyncOutput_;
@@ -394,26 +418,37 @@ void TExecuteBatchCommand::DoExecute(ICommandContextPtr context)
 
 void TDiscoverProxiesCommand::Register(TRegistrar registrar)
 {
-    registrar.Parameter("type", &TThis::Type)
-        .Default(EProxyType::Rpc);
+    registrar.Parameter("kind", &TThis::Kind)
+        .Alias("type")
+        .Default(EProxyKind::Rpc);
     registrar.Parameter("role", &TThis::Role)
-        .Default(DefaultRpcProxyRole);
+        .Optional();
     registrar.Parameter("address_type", &TThis::AddressType)
-        .Default(NApi::NRpcProxy::DefaultAddressType);
+        .Optional();
     registrar.Parameter("network_name", &TThis::NetworkName)
-        .Default(NApi::NRpcProxy::DefaultNetworkName);
+        .Default(NRpcProxy::DefaultNetworkName);
     registrar.Parameter("ignore_balancers", &TThis::IgnoreBalancers)
         .Default(false);
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->Kind == EProxyKind::Http) {
+            config->Role = config->Role.value_or(DefaultHttpProxyRole);
+            config->AddressType = config->AddressType.value_or(NRpcProxy::EAddressType::Http);
+        } else {
+            config->Role = config->Role.value_or(DefaultRpcProxyRole);
+            config->AddressType = config->AddressType.value_or(NRpcProxy::DefaultAddressType);
+        }
+    });
 }
 
 void TDiscoverProxiesCommand::DoExecute(ICommandContextPtr context)
 {
     TProxyDiscoveryRequest request{
-        .Type = Type,
-        .Role = Role,
-        .AddressType = AddressType,
+        .Kind = Kind,
+        .Role = Role.value_or(DefaultRpcProxyRole),
+        .AddressType = AddressType.value_or(NRpcProxy::DefaultAddressType),
         .NetworkName = NetworkName,
-        .IgnoreBalancers = IgnoreBalancers
+        .IgnoreBalancers = IgnoreBalancers,
     };
 
     const auto& proxyDiscoveryCache = context->GetDriver()->GetProxyDiscoveryCache();

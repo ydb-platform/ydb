@@ -34,8 +34,30 @@ namespace NKikimr::NBsController {
             }
 
             Schema::HostConfigDrive::TKey::Type key(id, drive.GetPath());
-            config.Drives.emplace(std::move(key), std::move(driveInfo));
+            const auto [it, inserted] = config.Drives.emplace(std::move(key), std::move(driveInfo));
+            if (!inserted) {
+                throw TExError() << "duplicate path# " << drive.GetPath();
+            }
         }
+
+        auto addDrives = [&](const auto& field, NKikimrBlobStorage::EPDiskType type) {
+            THostConfigInfo::TDriveInfo driveInfo;
+            driveInfo.Type = type;
+            driveInfo.SharedWithOs = false;
+            driveInfo.ReadCentric = false;
+            driveInfo.Kind = 0;
+            driveInfo.PDiskConfig = defaultPDiskConfig;
+
+            for (const auto& path : field) {
+                const auto [it, inserted] = config.Drives.emplace(Schema::HostConfigDrive::TKey::Type(id, path), driveInfo);
+                if (!inserted) {
+                    throw TExError() << "duplicate path# " << path;
+                }
+            }
+        };
+        addDrives(cmd.GetRot(), NKikimrBlobStorage::EPDiskType::ROT);
+        addDrives(cmd.GetSsd(), NKikimrBlobStorage::EPDiskType::SSD);
+        addDrives(cmd.GetNvme(), NKikimrBlobStorage::EPDiskType::NVME);
 
         auto &hostConfigs = HostConfigs.Unshare();
         hostConfigs[id] = std::move(config);

@@ -1,93 +1,120 @@
 #include "schema.h"
 
+#include <ydb/core/tx/schemeshard/common/validation.h>
+#include <ydb/core/tx/schemeshard/olap/ttl/validator.h>
+
 namespace NKikimr::NSchemeShard {
 
-    bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
-        if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), errors, NextColumnId)) {
-            return false;
-        }
-
-        if (!Indexes.ApplyUpdate(*this, schemaUpdate.GetIndexes(), errors, NextColumnId)) {
-            return false;
-        }
-
-        if (!HasEngine()) {
-            Engine = schemaUpdate.GetEngineDef(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
-        } else {
-            if (schemaUpdate.HasEngine()) {
-                errors.AddError(NKikimrScheme::StatusSchemeError, "No engine updates supported");
+bool TOlapSchema::ValidateTtlSettings(
+    const NKikimrSchemeOp::TColumnDataLifeCycle& ttl, const TOperationContext& context, IErrorCollector& errors) const {
+    using TTtlProto = NKikimrSchemeOp::TColumnDataLifeCycle;
+    switch (ttl.GetStatusCase()) {
+        case TTtlProto::kEnabled: 
+        {
+            const auto* column = Columns.GetByName(ttl.GetEnabled().GetColumnName());
+            if (!column) {
+                errors.AddError("Incorrect ttl column - not found in scheme");
                 return false;
             }
+            return TTTLValidator::ValidateColumnTableTtl(ttl.GetEnabled(), Indexes, {}, Columns.GetColumns(), Columns.GetColumnsByName(), context, errors);
         }
-
-        ++Version;
-        return true;
+        case TTtlProto::kDisabled:
+        default:
+            break;
     }
 
-    void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
-        NextColumnId = tableSchema.GetNextColumnId();
-        Version = tableSchema.GetVersion();
-        Y_ABORT_UNLESS(tableSchema.HasEngine());
-        Engine = tableSchema.GetEngine();
-        CompositeMarksFlag = tableSchema.GetCompositeMarks();
+    return true;
+}
 
-        Columns.Parse(tableSchema);
-        Indexes.Parse(tableSchema);
+bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector& errors) {
+    if (!ColumnFamilies.ApplyUpdate(schemaUpdate.GetColumnFamilies(), errors, NextColumnFamilyId)) {
+        return false;
     }
 
-    void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {
-        tableSchema.SetNextColumnId(NextColumnId);
-        tableSchema.SetVersion(Version);
-        tableSchema.SetCompositeMarks(CompositeMarksFlag);
-
-        Y_ABORT_UNLESS(HasEngine());
-        tableSchema.SetEngine(GetEngineUnsafe());
-
-        Columns.Serialize(tableSchema);
-        Indexes.Serialize(tableSchema);
+    if (!Columns.ApplyUpdate(schemaUpdate.GetColumns(), ColumnFamilies, errors, NextColumnId)) {
+        return false;
     }
 
-    bool TOlapSchema::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
-        if (!Columns.Validate(opSchema, errors)) {
-            return false;
-        }
-
-        if (!Indexes.Validate(opSchema, errors)) {
-            return false;
-        }
-
-        if (opSchema.GetEngine() != Engine) {
-            errors.AddError("Specified schema engine does not match schema preset");
-            return false;
-        }
-        return true;
+    if (!Indexes.ApplyUpdate(*this, schemaUpdate.GetIndexes(), errors, NextColumnId)) {
+        return false;
     }
 
-    void TOlapStoreSchemaPreset::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto) {
-        Y_ABORT_UNLESS(presetProto.HasId());
-        Y_ABORT_UNLESS(presetProto.HasName());
-        Y_ABORT_UNLESS(presetProto.HasSchema());
-        Id = presetProto.GetId();
-        Name = presetProto.GetName();
-        TOlapSchema::ParseFromLocalDB(presetProto.GetSchema());
+    if (!Options.ApplyUpdate(schemaUpdate.GetOptions(), errors)) {
+        return false;
     }
 
-    void TOlapStoreSchemaPreset::Serialize(NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto) const {
-        presetProto.SetId(Id);
-        presetProto.SetName(Name);
-        TOlapSchema::Serialize(*presetProto.MutableSchema());
+    ++Version;
+    return true;
+}
+
+void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
+    NextColumnId = tableSchema.GetNextColumnId();
+    NextColumnFamilyId = tableSchema.GetNextColumnFamilyId();
+    Version = tableSchema.GetVersion();
+
+    ColumnFamilies.Parse(tableSchema);
+    Columns.Parse(tableSchema);
+    Indexes.Parse(tableSchema);
+    Options.Parse(tableSchema);
+}
+
+void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt) const {
+    NKikimrSchemeOp::TColumnTableSchema resultLocal;
+    resultLocal.SetNextColumnId(NextColumnId);
+    resultLocal.SetNextColumnFamilyId(NextColumnFamilyId);
+    resultLocal.SetVersion(Version);
+
+    ColumnFamilies.Serialize(resultLocal);
+    Columns.Serialize(resultLocal);
+    Indexes.Serialize(resultLocal);
+    Options.Serialize(resultLocal);
+    std::swap(resultLocal, tableSchemaExt);
+}
+
+bool TOlapSchema::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+    if (!Columns.ValidateForStore(opSchema, errors)) {
+        return false;
     }
 
-    bool TOlapStoreSchemaPreset::ParseFromRequest(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto, IErrorCollector& errors) {
-        if (presetProto.HasId()) {
-            errors.AddError("Schema preset id cannot be specified explicitly");
-            return false;
-        }
-        if (!presetProto.GetName()) {
-            errors.AddError("Schema preset name cannot be empty");
-            return false;
-        }
-        Name = presetProto.GetName();
-        return true;
+    if (!Indexes.ValidateForStore(opSchema, errors)) {
+        return false;
     }
+
+    if (!Options.ValidateForStore(opSchema, errors)) {
+        return false;
+    }
+
+    if (!ColumnFamilies.ValidateForStore(opSchema, errors)) {
+        return false;
+    }
+    return true;
+}
+
+void TOlapStoreSchemaPreset::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto) {
+    Y_ABORT_UNLESS(presetProto.HasId());
+    Y_ABORT_UNLESS(presetProto.HasName());
+    Y_ABORT_UNLESS(presetProto.HasSchema());
+    Id = presetProto.GetId();
+    Name = presetProto.GetName();
+    TOlapSchema::ParseFromLocalDB(presetProto.GetSchema());
+}
+
+void TOlapStoreSchemaPreset::Serialize(NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto) const {
+    presetProto.SetId(Id);
+    presetProto.SetName(Name);
+    TOlapSchema::Serialize(*presetProto.MutableSchema());
+}
+
+bool TOlapStoreSchemaPreset::ParseFromRequest(const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto, IErrorCollector& errors) {
+    if (presetProto.HasId()) {
+        errors.AddError("Schema preset id cannot be specified explicitly");
+        return false;
+    }
+    if (!presetProto.GetName()) {
+        errors.AddError("Schema preset name cannot be empty");
+        return false;
+    }
+    Name = presetProto.GetName();
+    return true;
+}
 }

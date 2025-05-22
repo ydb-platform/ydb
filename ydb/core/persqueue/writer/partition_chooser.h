@@ -2,6 +2,8 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/writer/pipe_utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -24,16 +26,14 @@ struct TEvPartitionChooser {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ_PARTITION_CHOOSER), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ_PARTITION_CHOOSER)");
 
     struct TEvChooseResult: public TEventLocal<TEvChooseResult, EvChooseResult> {
-        TEvChooseResult(ui32 partitionId, ui64 tabletId, const TString& ownerCookie, std::optional<ui64> seqNo)
+        TEvChooseResult(ui32 partitionId, ui64 tabletId, std::optional<ui64> seqNo)
             : PartitionId(partitionId)
             , TabletId(tabletId)
-            , OwnerCookie(ownerCookie)
             , SeqNo(seqNo) {
         }
 
         ui32 PartitionId;
         ui64 TabletId;
-        TString OwnerCookie;
         std::optional<ui64> SeqNo;
     };
 
@@ -55,7 +55,7 @@ struct TEvPartitionChooser {
 class IPartitionChooser {
 public:
     struct TPartitionInfo {
-        TPartitionInfo(ui32 partitionId, ui64 tabletId)
+        explicit TPartitionInfo(ui32 partitionId = 0, ui64 tabletId = 0)
             : PartitionId(partitionId)
             , TabletId(tabletId) {}
 
@@ -72,11 +72,14 @@ public:
 
 std::shared_ptr<IPartitionChooser> CreatePartitionChooser(const NKikimrSchemeOp::TPersQueueGroupDescription& config, bool withoutHash = false);
 
+template<typename TPipeHelper = NTabletPipe::TPipeHelper>
 NActors::IActor* CreatePartitionChooserActor(TActorId parentId,
                                              const NKikimrSchemeOp::TPersQueueGroupDescription& config,
+                                             const std::shared_ptr<NPQ::IPartitionChooser>& chooser,
+                                             const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                                              NPersQueue::TTopicConverterPtr& fullConverter,
                                              const TString& sourceId,
                                              std::optional<ui32> preferedPartition,
-                                             bool withoutHash = false);
+                                             NWilson::TTraceId traceId);
 
 } // namespace NKikimr::NPQ

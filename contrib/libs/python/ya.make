@@ -1,5 +1,7 @@
 PY23_LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(Service-Py23-Proxy)
 
 WITHOUT_LICENSE_TEXTS()
@@ -34,8 +36,8 @@ IF (USE_ARCADIA_PYTHON)
             GLOBAL -DUSE_PYTHON3
         )
         PEERDIR(
-            contrib/tools/python3/lib
-            contrib/tools/python3/src
+            contrib/tools/python3/lib2
+            contrib/tools/python3
             library/python/runtime_py3
         )
     ENDIF()

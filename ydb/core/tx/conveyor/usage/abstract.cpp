@@ -1,45 +1,43 @@
 #include "abstract.h"
+#include "events.h"
+
 #include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/actors/core/log.h>
+
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NConveyor {
-bool ITask::Execute(std::shared_ptr<TTaskSignals> signals) {
+void ITask::Execute(std::shared_ptr<TTaskSignals> signals, const std::shared_ptr<ITask>& taskPtr) {
     AFL_VERIFY(!ExecutedFlag);
     ExecutedFlag = true;
-    bool result = false;
     const TMonotonic start = TMonotonic::Now();
     try {
-        result = DoExecute();
-        if (!result) {
-            if (signals) {
-                signals->Fails->Add(1);
-                signals->FailsDuration->Add((TMonotonic::Now() - start).MicroSeconds());
-            }
-            if (!ErrorMessage) {
-                ErrorMessage = "cannot execute task (not specified error message)";
-            }
-        } else {
-            if (signals) {
-                signals->Success->Add(1);
-                signals->SuccessDuration->Add((TMonotonic::Now() - start).MicroSeconds());
-            }
+        DoExecute(taskPtr);
+        if (signals) {
+            signals->Success->Add(1);
+            signals->SuccessDuration->Add((TMonotonic::Now() - start).MicroSeconds());
         }
     } catch (...) {
         if (signals) {
             signals->Fails->Add(1);
             signals->FailsDuration->Add((TMonotonic::Now() - start).MicroSeconds());
         }
-        TStringBuilder sbLocalMessage;
-        sbLocalMessage << "exception: " << CurrentExceptionMessage();
-        if (!ErrorMessage) {
-            ErrorMessage = sbLocalMessage;
-        } else {
-            ErrorMessage += sbLocalMessage;
-        }
+        AFL_ERROR(NKikimrServices::TX_CONVEYOR)("event", "exception_on_execute")("message", CurrentExceptionMessage());
     }
-    return result;
+}
+
+void ITask::DoOnCannotExecute(const TString& reason) {
+    AFL_VERIFY(false)("problem", "cannot execute conveyor task")("reason", reason);
+}
+
+void TProcessGuard::Finish() {
+    AFL_VERIFY(!Finished);
+    Finished = true;
+    if (ServiceActorId && NActors::TlsActivationContext) {
+        auto& context = NActors::TActorContext::AsActorContext();
+        context.Send(*ServiceActorId, new NConveyor::TEvExecution::TEvUnregisterProcess(ProcessId));
+    }
 }
 
 }

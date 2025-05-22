@@ -6,6 +6,7 @@
 #include <ydb/core/tablet_flat/flat_sausage_misc.h>
 #include <ydb/core/tablet_flat/flat_util_binary.h>
 #include <ydb/core/tablet_flat/util_deref.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/generic/xrange.h>
 #include <array>
@@ -24,8 +25,8 @@ namespace NTest {
 
         struct TEggs {
             bool Rooted;
-            TVector<TPageId> GroupIndexes;
-            TVector<TPageId> HistoricIndexes;
+            TVector<TPageId> FlatGroupIndexes;
+            TVector<TPageId> FlatHistoricIndexes;
             TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes;
             TVector<NPage::TBtreeIndexMeta> BTreeHistoricIndexes;
             TData *Scheme;
@@ -53,49 +54,49 @@ namespace NTest {
             return Groups + 1;
         }
 
-        const TSharedData* GetPage(ui32 room, ui32 page) const noexcept
+        const TSharedData* GetPage(ui32 room, ui32 page) const
         {
-            Y_ABORT_UNLESS(room < PageCollections.size(), "Room is out of bounds");
+            Y_ENSURE(room < PageCollections.size(), "Room is out of bounds");
 
             if (page == Max<TPageId>()) return nullptr;
 
             return &PageCollections.at(room).at(page);
         }
 
-        size_t GetPageSize(ui32 room, ui32 page) const noexcept
+        size_t GetPageSize(ui32 room, ui32 page) const
         {
-            Y_ABORT_UNLESS(room < PageCollections.size(), "Room is out of bounds");
+            Y_ENSURE(room < PageCollections.size(), "Room is out of bounds");
 
             return PageCollections.at(room).at(page).size();
         }
 
-        NPage::EPage GetPageType(ui32 room, ui32 page) const noexcept
+        NPage::EPage GetPageType(ui32 room, ui32 page) const
         {
-            Y_ABORT_UNLESS(room < PageCollections.size(), "Room is out of bounds");
+            Y_ENSURE(room < PageCollections.size(), "Room is out of bounds");
 
             return PageTypes.at(room).at(page);
         }
 
-        TArrayRef<const TSharedData> PageCollectionArray(ui32 room) const noexcept
+        TArrayRef<const TSharedData> PageCollectionArray(ui32 room) const
         {
-            Y_ABORT_UNLESS(room < PageCollections.size(), "Only regular rooms can be used as arr");
+            Y_ENSURE(room < PageCollections.size(), "Only regular rooms can be used as arr");
 
             return PageCollections[room];
         }
 
-        NPageCollection::TGlobId GlobForBlob(ui64 ref) const noexcept
+        NPageCollection::TGlobId GlobForBlob(ui64 ref) const
         {
             const auto& blob = PageCollections[GetExternRoom()].at(ref);
 
             return { TLogoBlobID(1, 2, 3, 7, blob.size(), GlobOffset + ref), /* fake group */ 123 };
         }
 
-        ui32 PageCollectionPagesCount(ui32 room) const noexcept
+        ui32 PageCollectionPagesCount(ui32 room) const
         {
             return PageCollections.at(room).size();
         }
 
-        ui64 PageCollectionBytes(ui32 room) const noexcept
+        ui64 PageCollectionBytes(ui32 room) const
         {
             auto &pages = PageCollections.at(room);
 
@@ -119,16 +120,16 @@ namespace NTest {
         /**
          * Used for legacy part from a binary file
          */
-        TEggs LegacyEggs() const noexcept
+        TEggs LegacyEggs() const
         {
             if (PageCollectionPagesCount(MainPageCollection) == 0) {
-                Y_ABORT("Cannot construct an empty part");
+                Y_TABLET_ERROR("Cannot construct an empty part");
             }
 
-            Y_ABORT_UNLESS(!Rooted, "Legacy store must not be rooted");
-            Y_ABORT_UNLESS(Groups == 1, "Legacy store must have a single main group");
-            Y_ABORT_UNLESS(Indexes.size() == 1, "Legacy store must have a single index");
-            Y_ABORT_UNLESS(Scheme != Max<TPageId>(), "Legacy store is missing a scheme page");
+            Y_ENSURE(!Rooted, "Legacy store must not be rooted");
+            Y_ENSURE(Groups == 1, "Legacy store must have a single main group");
+            Y_ENSURE(Indexes.size() == 1, "Legacy store must have a single index");
+            Y_ENSURE(Scheme != Max<TPageId>(), "Legacy store is missing a scheme page");
 
             return {
                 Rooted,
@@ -146,16 +147,16 @@ namespace NTest {
             };
         }
 
-        void Dump(IOutputStream &stream) const noexcept
+        void Dump(IOutputStream &stream) const
         {
             NUtil::NBin::TOut out(stream);
 
             if (Groups > 1) {
-                Y_ABORT("Cannot dump TStore with multiple column groups");
+                Y_TABLET_ERROR("Cannot dump TStore with multiple column groups");
             } else if (!PageCollections[MainPageCollection]) {
-                Y_ABORT("Cannot dump TStore with empty leader page collection");
+                Y_TABLET_ERROR("Cannot dump TStore with empty leader page collection");
             } else if (PageCollections[GetOuterRoom()] || PageCollections[GetExternRoom()]) {
-                Y_ABORT("TStore has auxillary rooms, cannot be dumped");
+                Y_TABLET_ERROR("TStore has auxillary rooms, cannot be dumped");
             }
 
             /* Dump pages as is, without any special markup as it already
@@ -166,7 +167,7 @@ namespace NTest {
             for (auto it: xrange(pages.size())) {
                 auto got = NPage::TLabelWrapper().Read(pages[it], EPage::Undef);
 
-                Y_ABORT_UNLESS(got.Page.end() == pages[it].end());
+                Y_ENSURE(got.Page.end() == pages[it].end());
 
                 out.Put(pages[it]);
             }
@@ -178,7 +179,7 @@ namespace NTest {
             NPage::TLabel label;
 
             while (auto got = in.Load(&label, sizeof(label))) {
-                Y_ABORT_UNLESS(got == sizeof(label), "Invalid pages stream");
+                Y_ENSURE(got == sizeof(label), "Invalid pages stream");
 
                 TSharedData to = TSharedData::Uninitialized(label.Size);
 
@@ -189,7 +190,7 @@ namespace NTest {
                 got = in.Load(begin,  to.mutable_end() - begin);
 
                 if (got + sizeof(NPage::TLabel) != label.Size) {
-                    Y_ABORT("Stausage loading stalled in middle of page");
+                    Y_TABLET_ERROR("Stausage loading stalled in middle of page");
                 } else if (label.Type == EPage::Scheme) {
                     /* Required for Read(Evolution < 16), hack for old style
                         scheme pages without leading label. It was ecoded in
@@ -206,78 +207,82 @@ namespace NTest {
             return storage;
         }
 
-        TPageId WriteOuter(TSharedData page) noexcept
+        TPageId WriteOuter(TSharedData page)
         {
-            Y_ABORT_UNLESS(!Finished, "This store is already finished");
+            Y_ENSURE(!Finished, "This store is already finished");
 
-            auto& pages = PageCollections[GetOuterRoom()];
+            auto room = GetOuterRoom();
+            TPageId pageId = PageCollections[room].size();
 
-            pages.emplace_back(std::move(page));
+            PageCollections[room].emplace_back(std::move(page));
+            PageTypes[room].push_back(EPage::Opaque);
 
-            return pages.size() - 1;
+            return pageId;
         }
 
-        TPageId Write(TSharedData page, EPage type, ui32 group) noexcept
+        TPageId Write(TSharedData page, EPage type, ui32 group)
         {
-            Y_ABORT_UNLESS(group < PageCollections.size() - 1, "Invalid column group");
-            Y_ABORT_UNLESS(!Finished, "This store is already finished");
-            NPageCollection::Checksum(page); /* will catch uninitialised values */
+            Y_ENSURE(group < PageCollections.size() - 1, "Invalid column group");
+            Y_ENSURE(!Finished, "This store is already finished");
+            NPageCollection::Checksum(page); /* will catch uninitialized values */
 
             if (type == EPage::DataPage) {
                 DataBytes[group] += page.size();
             }
-            TPageId id = PageCollections[group].size();
-            PageCollections[group].push_back(std::move(page));
+            TPageId pageId = PageCollections[group].size();
+            PageCollections[group].emplace_back(std::move(page));
             PageTypes[group].push_back(type);
 
             if (group == 0) {
                 switch (type) {
-                    case EPage::Index:
-                        Indexes.push_back(id);
+                    case EPage::FlatIndex:
+                        Indexes.push_back(pageId);
                         break;
                     case EPage::Frames:
-                        Large = id;
+                        Large = pageId;
                         break;
                     case EPage::Globs:
-                        Globs = id;
+                        Globs = pageId;
                         break;
                     case EPage::Scheme:
                     case EPage::Schem2:
-                        Scheme = id;
+                        Scheme = pageId;
                         Rooted = (type == EPage::Schem2);
                         break;
                     case EPage::Bloom:
-                        ByKey = id;
+                        ByKey = pageId;
                         break;
                     default:
                         break;
                 }
             }
 
-            return id;
+            return pageId;
         }
 
-        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept
+        void WriteInplace(TPageId page, TArrayRef<const char> body)
         {
-            Y_ABORT_UNLESS(page == Scheme);
+            Y_ENSURE(page == Scheme);
 
             Meta = TSharedData::Copy(body.data(), body.size());
         }
 
-        NPageCollection::TGlobId WriteLarge(TSharedData data) noexcept
+        NPageCollection::TGlobId WriteLarge(TSharedData data)
         {
-            Y_ABORT_UNLESS(!Finished, "This store is already finished");
+            Y_ENSURE(!Finished, "This store is already finished");
 
-            auto& pages = PageCollections[GetExternRoom()];
+            auto room = GetExternRoom();
+            TPageId pageId = PageCollections[room].size();
 
-            pages.emplace_back(std::move(data));
+            PageCollections[room].emplace_back(std::move(data));
+            PageTypes[room].push_back(EPage::Opaque);
 
-            return GlobForBlob(pages.size() - 1);
+            return GlobForBlob(pageId);
         }
 
-        void Finish() noexcept
+        void Finish()
         {
-            Y_ABORT_UNLESS(!Finished, "Cannot finish test store more than once");
+            Y_ENSURE(!Finished, "Cannot finish test store more than once");
             Finished = true;
         }
 

@@ -11,12 +11,14 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/core/fq/libs/quota_manager/proto/quota_internal.pb.h>
 
 namespace NFq {
 
 constexpr auto SUBJECT_TYPE_CLOUD = "cloud";
+constexpr auto SUBJECT_TYPE_SCOPE = "scope";
 
 // Quota per cloud
 constexpr auto QUOTA_ANALYTICS_COUNT_LIMIT    = "yq.analyticsQuery.count";
@@ -207,9 +209,15 @@ struct TEvQuotaService {
         TString SubjectType;
         TString SubjectId;
         TString MetricName;
-        ui64 Usage;
+        ui64 Usage = 0;
+        bool Success = true;
+        NYql::TIssues Issues;
         TQuotaUsageResponse(const TString& subjectType, const TString& subjectId, const TString& metricName, ui64 usage)
             : SubjectType(subjectType), SubjectId(subjectId), MetricName(metricName), Usage(usage)
+        {}
+
+        TQuotaUsageResponse(const TString& subjectType, const TString& subjectId, const TString& metricName, const NYql::TIssues& issues)
+            : SubjectType(subjectType), SubjectId(subjectId), MetricName(metricName), Success(false), Issues(issues)
         {}
     };
 

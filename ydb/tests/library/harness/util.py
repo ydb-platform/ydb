@@ -42,6 +42,9 @@ class PDiskState(enum.Enum):
     CommonLoggerInitError = _pdisk_state(9, is_valid_state=False)
     Normal = _pdisk_state(10, is_valid_state=True)
     OpenFileError = _pdisk_state(11, is_valid_state=False)
+    ChunkQuotaError = _pdisk_state(12, is_valid_state=False)
+    DeviceIoError = _pdisk_state(13, is_valid_state=False)
+    Stopped = _pdisk_state(14, is_valid_state=False)
 
     def __init__(self, id_, is_valid_state):
         self.__id = id_

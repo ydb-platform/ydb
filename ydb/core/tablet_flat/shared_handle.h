@@ -8,7 +8,7 @@
 
 #include <atomic>
 
-namespace NKikimr {
+namespace NKikimr::NSharedCache {
 
 class TSharedPageGCList;
 
@@ -19,7 +19,7 @@ public:
     /**
      * Returns true if handle is initialized
      *
-     * Unitialized handle may not be shared with other threads.
+     * Uninitialized handle may not be shared with other threads.
      */
     bool IsInitialized() const noexcept {
         return Flags.load(std::memory_order_relaxed) != FlagsUninitialized;
@@ -316,13 +316,13 @@ public:
         Drop();
     }
 
-    TSharedPageRef(const TSharedPageRef& ref) noexcept
+    TSharedPageRef(const TSharedPageRef& ref)
         : Handle(ref.Handle)
         , GCList(ref.GCList)
         , Used(false)
     {
         if (ref.Used) {
-            Y_ABORT_UNLESS(Use());
+            Y_ENSURE(Use());
         }
     }
 
@@ -332,13 +332,13 @@ public:
         , Used(std::exchange(ref.Used, false))
     { }
 
-    TSharedPageRef& operator=(const TSharedPageRef& ref) noexcept {
+    TSharedPageRef& operator=(const TSharedPageRef& ref) {
         if (this != &ref) {
             Drop();
             Handle = ref.Handle;
             GCList = ref.GCList;
             if (ref.Used) {
-                Y_ABORT_UNLESS(Use());
+                Y_ENSURE(Use());
             }
         }
 
@@ -446,8 +446,8 @@ public:
         : Data_(std::move(data))
     { }
 
-    explicit TPinnedPageRef(const TSharedPageRef& ref) noexcept {
-        Y_ABORT_UNLESS(ref.IsUsed(), "Cannot pin pages not marked as used");
+    explicit TPinnedPageRef(const TSharedPageRef& ref) {
+        Y_ENSURE(ref.IsUsed(), "Cannot pin pages not marked as used");
         Data_ = ref.GetHandle()->Pin();
         Handle_ = ref.GetHandle();
     }

@@ -1,0 +1,5 @@
+{%- if publish %}
+
+group = "{{ target.publish_group }}"
+version = {% if target.publish_version and target.publish_version != "no" -%}"{{ target.publish_version }}"{%- else -%}project.properties["version"]!!{%- endif %}
+{% endif -%}

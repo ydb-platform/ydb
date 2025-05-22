@@ -10,6 +10,8 @@
 
 #include <stddef.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_linked_list_node {
     struct aws_linked_list_node *next;
     struct aws_linked_list_node *prev;
@@ -180,9 +182,15 @@ AWS_STATIC_IMPL void aws_linked_list_move_all_front(
     struct aws_linked_list *AWS_RESTRICT dst,
     struct aws_linked_list *AWS_RESTRICT src);
 
+/**
+ * Returns true if the node is currently in a list, false otherwise.
+ */
+AWS_STATIC_IMPL bool aws_linked_list_node_is_in_list(struct aws_linked_list_node *node);
+AWS_EXTERN_C_END
+
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/linked_list.inl>
 #endif /* AWS_NO_STATIC_IMPL */
-AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_LINKED_LIST_H */

@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::DataShard), &CreateDataShard);
 
         TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvTabletActive));
         runtime.DispatchEvents(options);
 
         Y_UNUSED(sender);
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                 if (rec.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
                     TString body = rec.GetTxBody();
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
-                    Y_PROTOBUF_SUPPRESS_NODISCARD tx.ParseFromArray(body.Data(), body.Size());
+                    Y_PROTOBUF_SUPPRESS_NODISCARD tx.ParseFromArray(body.data(), body.size());
                     if (tx.HasCreateTable()) {
                         tableId = tx.GetCreateTable().GetId_Deprecated();
                         if (tx.GetCreateTable().HasPathId()) {

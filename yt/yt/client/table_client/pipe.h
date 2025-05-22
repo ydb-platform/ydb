@@ -27,6 +27,8 @@ public:
     //! When called, propagates the error to the reader.
     void Fail(const TError& error);
 
+    void SetDataStatistics(NChunkClient::NProto::TDataStatistics dataStatistics);
+
 private:
     class TImpl;
     using TImplPtr = TIntrusivePtr<TImpl>;

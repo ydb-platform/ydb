@@ -1,3 +1,4 @@
+{%- set publish = target.publish -%}
 import com.google.protobuf.gradle.*
 
 val buildProtoDir = File("${buildDir}", "__proto__")
@@ -5,16 +6,16 @@ val buildProtoDir = File("${buildDir}", "__proto__")
 plugins {
     id("java-library")
     id("com.google.protobuf") version "0.8.19"
-{% if targets|selectattr('publish') -%}
+{%  if publish -%}
     `maven-publish`
     `signing`
-{% endif -%}
+{%  endif -%}
 }
 
-{% if targets|selectattr('publish') -%}
-group = "{{ targets[0].publish_group }}"
+{%  if publish -%}
+group = "{{ target.publish_group }}"
 version = project.properties["version"]
-{% endif -%}
+{%  endif -%}
 
 repositories {
     mavenCentral()
@@ -26,31 +27,32 @@ java {
 }
 
 dependencies {
-{%  if targets[0].consumer is defined -%}
-{%-    for library in targets[0].consumer -%}
-    api({{ library.classpath }})
-{%     endfor -%}
-{%- endif -%}
-
-{% if targets[0].proto_namespace is defined -%}
-    protobuf(files(File(buildProtoDir, "{{ targets[0].proto_namespace }}")))
-{% else -%}
+{%- for library in target.consumer -%}
+{%      set classpath = library.classpath -%}
+{%      if classpath|replace('"','') == classpath -%}
+{%          set classpath = '"' + classpath + '"' -%}
+{%      endif %}
+    api({{ classpath }})
+{%- endfor %}
+{%  if target.proto_namespace %}
+    protobuf(files(File(buildProtoDir, "{{ target.proto_namespace }}")))
+{%- else %}
     protobuf(files(buildProtoDir))
-{% endif -%}
+{%- endif %}
 }
 
 protobuf {
     protoc {
         // Download from repositories
         artifact = "com.google.protobuf:protoc:
-{%- if targets[0].proto_compiler_version is defined -%}
-{{ targets[0].proto_compiler_version }}
+{%- if target.proto_compiler_version -%}
+{{ target.proto_compiler_version }}
 {%- else -%}
 3.22.5
 {%- endif -%}
 "
     }
-{%  if targets[0].proto_grpc is defined -%}
+{%  if target.proto_grpc -%}
     plugins {
         id("grpc") {
             artifact = "io.grpc:protoc-gen-grpc-java:1.45.0"
@@ -68,9 +70,9 @@ protobuf {
 
 val prepareProto = tasks.register<Copy>("prepareProto") {
     from(rootDir) {
-{% for proto in targets[0].proto_files -%}
+{%  for proto in target.proto_files -%}
         include("{{ proto }}")
-{% endfor -%}
+{%  endfor -%}
     }
     into(buildProtoDir)
 }
@@ -78,6 +80,6 @@ val prepareProto = tasks.register<Copy>("prepareProto") {
 afterEvaluate {
     tasks.getByName("extractProto").dependsOn(prepareProto)
 }
-{% if targets|selectattr('publish') -%}
-{% include 'publish.gradle.kts' -%}
-{% endif -%}
+{%  if publish -%}
+{%  include 'publish.gradle.kts' -%}
+{%  endif -%}

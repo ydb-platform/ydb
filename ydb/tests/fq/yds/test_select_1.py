@@ -7,6 +7,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1, yq_all
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 import ydb.public.api.protos.ydb_value_pb2 as ydb
+from google.protobuf.struct_pb2 import NullValue
 
 
 class TestSelect1(object):
@@ -28,7 +29,7 @@ class TestSelect1(object):
         assert result_set.columns[0].type.type_id == ydb.Type.INT32
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].int32_value == 1
-        assert sum(kikimr.control_plane.get_metering()) == 10
+        assert sum(kikimr.control_plane.get_metering(1)) == 10
 
     @yq_all
     def test_select_z_x_y(self, client):
@@ -60,8 +61,9 @@ class TestSelect1(object):
     def test_select_pg(self, client):
         sql = R'''select ARRAY[ARRAY[1,2,3]], null, 'null', 1, true, null::int4'''
 
-        query_id = client.create_query("simple4", sql, type=fq.QueryContent.QueryType.ANALYTICS,
-                                       pg_syntax=True).result.query_id
+        query_id = client.create_query(
+            "simple4", sql, type=fq.QueryContent.QueryType.ANALYTICS, pg_syntax=True
+        ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         data = client.get_result_data(query_id)
 
@@ -93,11 +95,11 @@ class TestSelect1(object):
 
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].text_value == "{{1,2,3}}"
-        assert result_set.rows[0].items[1].WhichOneof("value") is None
+        assert result_set.rows[0].items[1].null_flag_value == NullValue.NULL_VALUE
         assert result_set.rows[0].items[2].text_value == "null"
         assert result_set.rows[0].items[3].text_value == "1"
         assert result_set.rows[0].items[4].text_value == "t"
-        assert result_set.rows[0].items[5].WhichOneof("value") is None
+        assert result_set.rows[0].items[5].null_flag_value == NullValue.NULL_VALUE
 
     @yq_all
     def test_select_10_p_19_plus_1(self, client):
@@ -113,18 +115,20 @@ class TestSelect1(object):
         query_id = client.create_query("simple1", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         describe_string = str(client.describe_query(query_id).result)
-        assert "Query failed with code " + ("ABORTED" if yq_version == "v1" else "GENERIC_ERROR") in describe_string, describe_string
-        assert "Unexpected token" in describe_string, describe_string
+        assert (
+            "Query failed with code " + ("ABORTED" if yq_version == "v1" else "GENERIC_ERROR") in describe_string
+        ), describe_string
+        assert "Unexpected token" in describe_string or "extraneous input" in describe_string, describe_string
         # Failed to parse query is added in YQv1 only
         if yq_version == "v1":
             assert "Failed to parse query" in describe_string, describe_string
 
     @yq_all
-    def test_ast_in_failed_query(self, client):
-        sql = "SELECT unwrap(1 / 0)"
+    def test_ast_in_failed_query_runtime(self, client):
+        sql = "SELECT unwrap(42 / 0) AS error_column"
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
 
-        ast = str(client.describe_query(query_id).result.query.ast)
-        assert ast != "", "Query ast not found"
+        ast = client.describe_query(query_id).result.query.ast.data
+        assert "(\'\"error_column\" (Unwrap (/ (Int32 \'\"42\")" in ast, "Invalid query ast"

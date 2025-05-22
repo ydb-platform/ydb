@@ -1,0 +1,5 @@
+--- a/include/boost/move/core.hpp	(index)
++++ b/include/boost/move/core.hpp	(working tree)
+@@ -82,1 +82,1 @@
+-      ~rv() throw();
++      ~rv();

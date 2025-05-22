@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    kqp_resource_tracker.cpp
     kqp_resource_estimation.cpp
     kqp_resource_info_exchanger.cpp
     kqp_rm_service.cpp

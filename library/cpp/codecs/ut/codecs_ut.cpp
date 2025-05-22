@@ -881,7 +881,7 @@ private:
         sout << " != \n";
         sout << HexEncode(test.data(), test.size()); //NEscJ::EscapeJ<true>(test, sout);
 
-        if (s.Size() > 1536) {
+        if (s.size() > 1536) {
             TString res = s.substr(0, 512);
             res.append("...<skipped ").append(ToString(s.size() - 1024)).append(">...");
             res.append(s.substr(s.size() - 512));

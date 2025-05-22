@@ -1,8 +1,7 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.3
 Name: rsa
-Version: 4.9
+Version: 4.9.1
 Summary: Pure-Python RSA implementation
-Home-page: https://stuvel.eu/rsa
 License: Apache-2.0
 Author: Sybren A. Stüvel
 Author-email: sybren@stuvel.eu
@@ -15,17 +14,52 @@ Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Security :: Cryptography
 Requires-Dist: pyasn1 (>=0.1.3)
+Project-URL: Homepage, https://stuvel.eu/rsa
 Project-URL: Repository, https://github.com/sybrenstuvel/python-rsa
 Description-Content-Type: text/markdown
+
+# Python-RSA has been archived
+
+Hi folks,
+
+I'm Sybren, one of the original authors and the maintainer of this project.
+Unfortunately I don't have the time and brain space left to properly maintain
+Python-RSA. As you can see from the lack of activity on the open issues, and the
+lack of commits, that has been the case for a while now.
+
+As Python-RSA is included as a dependency in quite a few high-profile projects,
+I don't feel comfortable handing over the project to someone else. It's just too
+big of a risk.
+
+Thanks for having used this little library for so long, and in so many projects.
+I truely didn't expect that when I started working on it. Also big thanks to all
+the people helping out and improving the project.
+
+There are improvements that haven't made it into a new release. As I said, I
+don't have the time and the brain space to really investigate and oversee the
+security impact of all those changes. It's not a decision I've made lightly.
+
+So that's it. If you want to keep the project alive, please fork it. Give it the
+love it deserves, investigate those yet-unreleased improvements, and have a
+project that's then already better than how I left this one.
+
+Cheers,
+Sybren
+
+
+---------------------------------------------
 
 # Pure Python RSA implementation
 
@@ -96,8 +130,8 @@ index-servers =
 pip install twine
 
 poetry build
-twine check dist/rsa-4.9.tar.gz dist/rsa-4.9-*.whl
-twine upload -r rsa dist/rsa-4.9.tar.gz dist/rsa-4.9-*.whl
+twine check dist/rsa-4.9.1.tar.gz dist/rsa-4.9.1-*.whl
+twine upload -r rsa dist/rsa-4.9.1.tar.gz dist/rsa-4.9.1-*.whl
 ```
 
 The `pip install twine` is necessary as Python-RSA requires Python >= 3.6, and

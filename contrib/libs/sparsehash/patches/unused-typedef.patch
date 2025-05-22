@@ -1,0 +1,5 @@
+--- a/src/sparsehash/internal/hashtable-common.h
++++ b/src/sparsehash/internal/hashtable-common.h
+@@ -51,1 +51,1 @@ _START_GOOGLE_NAMESPACE_
+-  __attribute__((unused)) typedef SparsehashCompileAssert<(bool(expr))> msg[bool(expr) ? 1 : -1]
++  [[maybe_unused]] typedef SparsehashCompileAssert<(bool(expr))> msg[bool(expr) ? 1 : -1]

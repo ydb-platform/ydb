@@ -9,6 +9,7 @@
 #include <ydb/core/mind/tenant_pool.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <util/system/hostname.h>
 #include <util/generic/ptr.h>
 
@@ -47,8 +48,9 @@ public:
             const NKikimrConfig::TAppConfig &currentConfig,
             bool processYaml,
             ui64 version,
-            const TString &yamlConfig,
-            const TMap<ui64, TString> &volatileYamlConfigs)
+            const TString &mainYamlConfig,
+            const TMap<ui64, TString> &volatileYamlConfigs,
+            const std::optional<TNodeInfo> explicitNodeInfo)
         : OwnerId(ownerId)
         , Cookie(cookie)
         , Kinds(kinds)
@@ -58,14 +60,23 @@ public:
         , CurrentConfig(currentConfig)
         , ServeYaml(processYaml)
         , Version(version)
-        , YamlConfig(yamlConfig)
+        , MainYamlConfig(mainYamlConfig)
         , VolatileYamlConfigs(volatileYamlConfigs)
     {
-        if (ServeYaml && !YamlConfig.empty()) {
-            YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
+        if (ServeYaml && !MainYamlConfig.empty()) {
+            MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
             for (auto &[id, config] : VolatileYamlConfigs) {
                 VolatileYamlConfigHashes[id] = THash<TString>()(config);
             }
+        }
+
+        if (explicitNodeInfo) {
+            if (explicitNodeInfo->Tenant) {
+                Tenant = explicitNodeInfo->Tenant;
+            } else {
+                Tenant = "<none>";
+            }
+            NodeType = explicitNodeInfo->NodeType;
         }
     }
 
@@ -74,8 +85,7 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        if (dinfo->Domains.size() != 1) {
+        if (!AppData()->DomainsInfo->Domain) {
             Send(OwnerId, new NConsole::TEvConsole::TEvConfigSubscriptionError(Ydb::StatusIds::GENERIC_ERROR, "Ambiguous domain (use --domain option)"), 0, Cookie);
 
             Die(ctx);
@@ -83,10 +93,11 @@ public:
             return;
         }
 
-        DomainUid = dinfo->Domains.begin()->second->DomainUid;
-        StateStorageGroup = dinfo->GetDefaultStateStorageGroup(DomainUid);
-
-        SendPoolStatusRequest(ctx);
+        if (!Tenant) {
+            SendPoolStatusRequest(ctx);
+        } else {
+            Subscribe(ctx);
+        }
         Become(&TThis::StateWork);
     }
 
@@ -113,8 +124,7 @@ public:
     }
 
     void SendPoolStatusRequest(const TActorContext &ctx) {
-        ctx.Send(MakeTenantPoolID(ctx.SelfID.NodeId(), DomainUid), new TEvTenantPool::TEvGetStatus(true),
-            IEventHandle::FlagTrackDelivery);
+        ctx.Send(MakeTenantPoolID(ctx.SelfID.NodeId()), new TEvTenantPool::TEvGetStatus(true), IEventHandle::FlagTrackDelivery);
     }
 
     void Handle(TEvPrivate::TEvRetryPoolStatus::TPtr &/*ev*/, const TActorContext &ctx) {
@@ -170,7 +180,7 @@ public:
 
     void Handle(TEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) {
         if (!FirstUpdateSent) {
-            ctx.ExecutorThread.Send(
+            ctx.Send(
                 new NActors::IEventHandle(
                     SelfId(),
                     ev->Sender,
@@ -210,10 +220,13 @@ public:
         bool notChanged = true;
 
         if (ServeYaml) {
-            if (!(rec.HasYamlConfigNotChanged() && rec.GetYamlConfigNotChanged())) {
-                if (rec.HasYamlConfig()) {
-                    YamlConfig = rec.GetYamlConfig();
-                    YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
+            if (!(rec.HasDatabaseYamlConfigNotChanged() && rec.GetDatabaseYamlConfigNotChanged())) {
+                notChanged = false;
+            }
+            if (!(rec.HasMainYamlConfigNotChanged() && rec.GetMainYamlConfigNotChanged())) {
+                if (rec.HasMainYamlConfig()) {
+                    MainYamlConfig = rec.GetMainYamlConfig();
+                    MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
                 }
 
                 notChanged = false;
@@ -251,11 +264,16 @@ public:
         auto *reflection = CurrentConfig.GetReflection();
         for (auto kind : rec.GetAffectedKinds()) {
             auto *field = desc1->FindFieldByNumber(kind);
-            if (field && reflection->HasField(CurrentConfig, field))
+            if (field && reflection->HasField(CurrentConfig, field)) {
                 reflection->ClearField(&CurrentConfig, field);
+            }
+            if (field && reflection->HasField(CurrentDynConfig, field)) {
+                reflection->ClearField(&CurrentDynConfig, field);
+            }
         }
 
         CurrentConfig.MergeFrom(rec.GetConfig());
+        CurrentDynConfig.MergeFrom(rec.GetConfig());
         if (newVersion.GetItems().empty())
             CurrentConfig.ClearVersion();
         else
@@ -264,7 +282,14 @@ public:
         notChanged &= changes.empty();
 
         if (!notChanged || !FirstUpdateSent) {
-            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(Generation, CurrentConfig, changes, YamlConfig, VolatileYamlConfigs),
+            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(
+                     Generation,
+                     CurrentConfig,
+                     changes,
+                     MainYamlConfig,
+                     VolatileYamlConfigs,
+                     CurrentDynConfig,
+                     rec.HasDatabaseYamlConfig() ? TMaybe<TString>(rec.GetDatabaseYamlConfig()) : TMaybe<TString>{}),
                 IEventHandle::FlagTrackDelivery, Cookie);
 
             FirstUpdateSent = true;
@@ -349,8 +374,8 @@ private:
             request->Record.MutableKnownVersion()->CopyFrom(CurrentConfig.GetVersion());
 
         if (ServeYaml) {
-            if (!YamlConfig.empty()) {
-                request->Record.SetYamlVersion(YamlConfigVersion);
+            if (!MainYamlConfig.empty()) {
+                request->Record.SetMainYamlVersion(MainYamlConfigVersion);
                 for (auto &[id, hash] : VolatileYamlConfigHashes) {
                     auto *item = request->Record.AddVolatileYamlVersion();
                     item->SetId(id);
@@ -369,12 +394,12 @@ private:
     }
 
     void OpenPipe(const TActorContext &ctx) {
-        auto console = MakeConsoleID(StateStorageGroup);
+        auto console = MakeConsoleID();
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, console, pipeConfig);
-        Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        Pipe = ctx.Register(pipe);
     }
 
 private:
@@ -388,19 +413,17 @@ private:
     ui64 LastOrder;
 
     NKikimrConfig::TAppConfig CurrentConfig;
+    NKikimrConfig::TAppConfig CurrentDynConfig;
 
     bool ServeYaml = false;
     ui64 Version;
-    TString YamlConfig;
+    TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
-    ui64 YamlConfigVersion = 0;
+    ui64 MainYamlConfigVersion = 0;
     TMap<ui64, ui64> VolatileYamlConfigHashes;
 
     TString Tenant;
     TString NodeType;
-
-    ui32 DomainUid;
-    ui32 StateStorageGroup;
 
     TActorId Pipe;
 };
@@ -413,9 +436,19 @@ IActor *CreateConfigsSubscriber(
     bool processYaml,
     ui64 version,
     const TString &yamlConfig,
-    const TMap<ui64, TString> &volatileYamlConfigs)
+    const TMap<ui64, TString> &volatileYamlConfigs,
+    const std::optional<TNodeInfo> explicitNodeInfo)
 {
-    return new TConfigsSubscriber(ownerId, cookie, kinds, currentConfig, processYaml, version, yamlConfig, volatileYamlConfigs);
+    return new TConfigsSubscriber(
+        ownerId,
+        cookie,
+        kinds,
+        currentConfig,
+        processYaml,
+        version,
+        yamlConfig,
+        volatileYamlConfigs,
+        explicitNodeInfo);
 }
 
 } // namespace NKikimr::NConsole

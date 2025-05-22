@@ -1,7 +1,7 @@
 #include "mkql_engine_flat_host.h"
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 

@@ -1,4 +1,0 @@
-### Garbage collection
-
-### Tablet suspension
-

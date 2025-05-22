@@ -1,0 +1,12 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'OrderedColumns))
+(let res_sink (DataSink 'result))
+(let list (AsList (AsStruct '('a (Int32 '1)) '('b (String 'foo)))))
+(let data (OrderedSqlRename (AssumeColumnOrder list '('a 'b)) '('b 'a)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)
+

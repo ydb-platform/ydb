@@ -62,18 +62,8 @@ private:
         // (e.g. DS blobs from the same tablet residing on the same DS group, or 2 small blobs from the same tablet)
         std::tuple<ui64, ui32, EReadVariant> BlobSource() const {
             const TUnifiedBlobId& blobId = BlobRange.BlobId;
-
             Y_ABORT_UNLESS(blobId.IsValid());
-
-            if (blobId.IsDsBlob()) {
-                // Tablet & group restriction
-                return {blobId.GetTabletId(), blobId.GetDsGroup(), ReadVariant()};
-            } else if (blobId.IsSmallBlob()) {
-                // Tablet restriction, no group restrictions
-                return {blobId.GetTabletId(), 0, ReadVariant()};
-            }
-
-            return {0, 0, EReadVariant::FAST};
+            return {blobId.GetTabletId(), blobId.GetDsGroup(), ReadVariant()};
         }
     };
 
@@ -102,7 +92,6 @@ private:
     static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
     static constexpr i64 MAX_REQUEST_BYTES = 8ll << 20;
     static constexpr TDuration DEFAULT_READ_DEADLINE = TDuration::Seconds(30);
-    static constexpr TDuration FAST_READ_DEADLINE = TDuration::Seconds(10);
 
     TLRUCache<TBlobRange, TString> Cache;
     /// List of cached ranges by blob id.
@@ -248,7 +237,7 @@ private:
         if (it != Cache.End()) {
             Hits->Inc();
             HitsBytes->Add(blobRange.Size);
-            SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), ctx, true);
+            SendResult(sender, blobRange, NKikimrProto::OK, it.Value(),  {}, ctx, true);
             return true;
         }
 
@@ -368,12 +357,11 @@ private:
     }
 
     static TInstant ReadDeadline(TReadItem::EReadVariant variant) {
-        if (variant == TReadItem::EReadVariant::FAST) {
-            return TAppData::TimeProvider->Now() + FAST_READ_DEADLINE;
-        } else if (variant == TReadItem::EReadVariant::DEFAULT) {
+        if (variant == TReadItem::EReadVariant::DEFAULT) {
             return TAppData::TimeProvider->Now() + DEFAULT_READ_DEADLINE;
         }
-        return TInstant::Max(); // EReadVariant::DEFAULT_NO_DEADLINE
+        // We want to wait for data anyway in this case. This behaviour is similar to datashard
+        return TInstant::Max(); // EReadVariant::DEFAULT_NO_DEADLINE || EReadVariant::FAST
     }
 
     void MakeReadRequests(const TActorContext& ctx) {
@@ -409,7 +397,6 @@ private:
             ui64 requestSize = 0;
             ui32 dsGroup = std::get<1>(target);
             TReadItem::EReadVariant readVariant = std::get<2>(target);
-            Y_ABORT_UNLESS(rangesGroup.begin()->BlobId.IsDsBlob());
 
             std::vector<ui64> dsReads;
 
@@ -436,10 +423,10 @@ private:
     }
 
     void SendResult(const TActorId& to, const TBlobRange& blobRange, NKikimrProto::EReplyStatus status,
-                    const TString& data, const TActorContext& ctx, const bool fromCache = false) {
+                    const TString& data, const TString& detailedError, const TActorContext& ctx, const bool fromCache = false) {
         LOG_S_DEBUG("Send result: " << blobRange << " to: " << to << " status: " << status);
 
-        ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, fromCache));
+        ctx.Send(to, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, detailedError, fromCache));
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev, const TActorContext& ctx) {
@@ -449,7 +436,9 @@ private:
             Y_ABORT("Unexpected reply from blobstorage");
         }
 
+        TString detailedError;
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
+            detailedError = ev->Get()->ToString();
             AFL_WARN(NKikimrServices::BLOB_CACHE)("fail", ev->Get()->ToString());
             ReadSimpleFailedBytes->Add(ev->Get()->ResponseSz);
             ReadSimpleFailedCount->Add(1);
@@ -471,14 +460,14 @@ private:
 
         for (size_t i = 0; i < ev->Get()->ResponseSz; ++i) {
             const auto& res = ev->Get()->Responses[i];
-            ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), ctx);
+            ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), detailedError, ctx);
         }
 
         MakeReadRequests(ctx);
     }
 
     void ProcessSingleRangeResult(const TBlobRange& blobRange, const ui64 readCookie,
-        ui32 status, const TString& data, const TActorContext& ctx) noexcept
+        ui32 status, const TString& data, const TString& detailedError, const TActorContext& ctx) noexcept
     {
         AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange);
         auto readIt = OutstandingReads.find(blobRange);
@@ -513,7 +502,7 @@ private:
         AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange)("send_replies", readIt->second.Waiting.size());
         // Send results to all waiters
         for (const auto& to : readIt->second.Waiting) {
-            SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, ctx);
+            SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, detailedError, ctx);
         }
 
         OutstandingReads.erase(readIt);
@@ -538,7 +527,7 @@ private:
 
             for (size_t i = 0; i < blobRanges.size(); ++i) {
                 Y_ABORT_UNLESS(blobRanges[i].BlobId.GetTabletId() == tabletId);
-                ProcessSingleRangeResult(blobRanges[i], readCookie, NKikimrProto::EReplyStatus::NOTREADY, {}, ctx);
+                ProcessSingleRangeResult(blobRanges[i], readCookie, NKikimrProto::EReplyStatus::NOTREADY, {}, {}, ctx);
             }
         }
 

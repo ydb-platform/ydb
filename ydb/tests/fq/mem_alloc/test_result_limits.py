@@ -33,7 +33,13 @@ def kikimr(request):
         kikimr.control_plane.fq_config['quotas_manager']['enabled'] = True
         kikimr.control_plane.fq_config['quotas_manager']['quotas'] = []
         for cloud, limit in request.param.items():
-            kikimr.control_plane.fq_config['quotas_manager']['quotas'].append({"subject_type": "cloud", "subject_id": cloud, "limit": [{"name": QUOTA_QUERY_RESULT_LIMIT, "limit": limit}]})
+            kikimr.control_plane.fq_config['quotas_manager']['quotas'].append(
+                {
+                    "subject_type": "cloud",
+                    "subject_id": cloud,
+                    "limit": [{"name": QUOTA_QUERY_RESULT_LIMIT, "limit": limit}],
+                }
+            )
     kikimr.start_mvp_mock_server()
     kikimr.start()
     yield kikimr
@@ -53,7 +59,6 @@ def wait_until(predicate, wait_time=10, wait_step=0.5):
 
 class TestResultLimits(object):
     def test_many_rows(self, kikimr):
-
         kikimr.control_plane.wait_bootstrap(1)
         assert kikimr.control_plane.get_mkql_allocated(1) == 0, "Incorrect Alloc"
 
@@ -69,10 +74,11 @@ SELECT * FROM AS_TABLE(()->(Yql::ToStream(ListReplicate(<|x:
         client.wait_query_status(query_id, fq.QueryMeta.FAILED, timeout=600)
         issue = client.describe_query(query_id).result.query.issue[0]
         assert "LIMIT_EXCEEDED" in issue.message, "Incorrect issue " + issue.message
-        assert "Can not write results with size > 20971520 byte(s)" in issue.issues[0].message, "Incorrect issue " + issue.issues[0].message
+        assert "Can not write results with size > 20971520 byte(s)" in issue.issues[0].message, (
+            "Incorrect issue " + issue.issues[0].message
+        )
 
     def test_large_row(self, kikimr):
-
         kikimr.control_plane.wait_bootstrap(1)
         assert kikimr.control_plane.get_mkql_allocated(1) == 0, "Incorrect Alloc"
 
@@ -86,17 +92,25 @@ SELECT ListReplicate("A", 10000000);
         client.wait_query_status(query_id, fq.QueryMeta.FAILED, timeout=600)
         issue = client.describe_query(query_id).result.query.issue[0]
         assert "LIMIT_EXCEEDED" in issue.message, "Incorrect issue " + issue.message
-        assert "Can not write Row[0] with size" in issue.issues[0].message and "(> 10_MB)" in issue.issues[0].message, "Incorrect issue " + issue.issues[0].message
+        assert "Can not write Row[0] with size" in issue.issues[0].message and "(> 10_MB)" in issue.issues[0].message, (
+            "Incorrect issue " + issue.issues[0].message
+        )
 
     @pytest.mark.parametrize("kikimr", [{"tiny": 2, "huge": 1000000}], indirect=["kikimr"])
     def test_quotas(self, kikimr):
         huge_client = FederatedQueryClient("my_folder@huge", streaming_over_kikimr=kikimr)
-        huge_query_id = huge_client.create_query("simple", "select 1000", type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        huge_query_id = huge_client.create_query(
+            "simple", "select 1000", type=fq.QueryContent.QueryType.STREAMING
+        ).result.query_id
         huge_client.wait_query_status(huge_query_id, fq.QueryMeta.COMPLETED)
 
         tiny_client = FederatedQueryClient("my_folder@tiny", streaming_over_kikimr=kikimr)
-        tiny_query_id = tiny_client.create_query("simple", "select 1000", type=fq.QueryContent.QueryType.STREAMING).result.query_id
+        tiny_query_id = tiny_client.create_query(
+            "simple", "select 1000", type=fq.QueryContent.QueryType.STREAMING
+        ).result.query_id
         tiny_client.wait_query_status(tiny_query_id, fq.QueryMeta.FAILED)
         issue = tiny_client.describe_query(tiny_query_id).result.query.issue[0]
         assert "LIMIT_EXCEEDED" in issue.message, "Incorrect issue " + issue.message
-        assert "Can not write results with size > 2 byte(s)" in issue.issues[0].message, "Incorrect issue " + issue.issues[0].message
+        assert "Can not write results with size > 2 byte(s)" in issue.issues[0].message, (
+            "Incorrect issue " + issue.issues[0].message
+        )

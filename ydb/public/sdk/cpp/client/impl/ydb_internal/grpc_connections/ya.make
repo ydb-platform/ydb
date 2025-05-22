@@ -14,6 +14,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/impl/ydb_stats
     ydb/public/sdk/cpp/client/resources
     ydb/public/sdk/cpp/client/ydb_types/exceptions
+    ydb/library/yql/public/ydb_issue
 )
 
 END()

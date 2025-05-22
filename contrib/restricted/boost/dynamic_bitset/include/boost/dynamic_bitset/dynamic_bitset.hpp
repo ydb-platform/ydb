@@ -34,7 +34,7 @@
 #endif
 
 #if defined(BOOST_OLD_IOSTREAMS)
-#  include <iostream.h>
+#  error #include <iostream.h>
 #  include <ctype.h> // for isspace
 #else
 #  include <istream>
@@ -325,6 +325,7 @@ public:
 
     // lookup
     size_type find_first() const;
+    size_type find_first(size_type pos) const;
     size_type find_next(size_type pos) const;
 
 
@@ -729,7 +730,7 @@ dynamic_bitset(dynamic_bitset<Block, Allocator>&& b)
   : m_bits(boost::move(b.m_bits)), m_num_bits(boost::move(b.m_num_bits))
 {
     // Required so that assert(m_check_invariants()); works.
-    assert((b.m_bits = buffer_type()).empty());
+    assert((b.m_bits = buffer_type(get_allocator())).empty());
     b.m_num_bits = 0;
 }
 
@@ -742,7 +743,7 @@ operator=(dynamic_bitset<Block, Allocator>&& b)
     m_bits = boost::move(b.m_bits);
     m_num_bits = boost::move(b.m_num_bits);
     // Required so that assert(m_check_invariants()); works.
-    assert((b.m_bits = buffer_type()).empty());
+    assert((b.m_bits = buffer_type(get_allocator())).empty());
     b.m_num_bits = 0;
     return *this;
 }
@@ -815,8 +816,7 @@ void dynamic_bitset<Block, Allocator>::
 push_back(bool bit)
 {
   const size_type sz = size();
-  resize(sz + 1);
-  set(sz, bit);
+  resize(sz + 1, bit);
 }
 
 template <typename Block, typename Allocator>
@@ -1326,7 +1326,7 @@ to_ulong() const
 
   // Check for overflows. This may be a performance burden on very
   // large bitsets but is required by the specification, sorry
-  if (find_next(ulong_width - 1) != npos)
+  if (find_first(ulong_width) != npos)
     BOOST_THROW_EXCEPTION(std::overflow_error("boost::dynamic_bitset::to_ulong overflow"));
 
 
@@ -1486,17 +1486,12 @@ dynamic_bitset<Block, Allocator>::find_first() const
     return m_do_find_from(0);
 }
 
-
 template <typename Block, typename Allocator>
 typename dynamic_bitset<Block, Allocator>::size_type
-dynamic_bitset<Block, Allocator>::find_next(size_type pos) const
+dynamic_bitset<Block, Allocator>::find_first(size_type pos) const
 {
-
     const size_type sz = size();
-    if (pos >= (sz-1) || sz == 0)
-        return npos;
-
-    ++pos;
+    if (pos >= sz) return npos;
 
     const size_type blk = block_index(pos);
     const block_width_type ind = bit_index(pos);
@@ -1508,7 +1503,15 @@ dynamic_bitset<Block, Allocator>::find_next(size_type pos) const
         pos + static_cast<size_type>(detail::lowest_bit(fore))
         :
         m_do_find_from(blk + 1);
+}
 
+
+template <typename Block, typename Allocator>
+typename dynamic_bitset<Block, Allocator>::size_type
+dynamic_bitset<Block, Allocator>::find_next(size_type pos) const
+{
+    if (pos == npos) return npos;
+    return find_first(pos + 1);
 }
 
 

@@ -3,23 +3,22 @@ UNITTEST_FOR(ydb/core/actorlib_impl)
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(2400)
     SPLIT_FACTOR(20)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
 
 PEERDIR(
+    ydb/apps/version
     ydb/library/actors/core
     ydb/library/actors/interconnect
     library/cpp/getopt
     library/cpp/svnversion
     ydb/core/testlib/actors
     ydb/core/testlib/basics/default
-    ydb/library/yql/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
 )
 
 SRCS(

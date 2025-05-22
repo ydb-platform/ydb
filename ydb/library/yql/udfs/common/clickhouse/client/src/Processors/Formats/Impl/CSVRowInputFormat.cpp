@@ -429,6 +429,9 @@ bool CSVRowInputFormat::readField(IColumn & column, const DataTypePtr & type, co
     if (format_settings.csv.empty_as_default
         && (at_delimiter || at_last_column_line_end))
     {
+        if (!type->isNullable() && type->getName() != "String" && !type->getName().starts_with("FixedString")) {
+            throw ParsingException("Invalid data format", NDB::ErrorCodes::INCORRECT_DATA);
+        }
         /// Treat empty unquoted column value as default value, if
         /// specified in the settings. Tuple columns might seem
         /// problematic, because they are never quoted but still contain

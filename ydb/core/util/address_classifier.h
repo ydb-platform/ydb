@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/protos/netclassifier.pb.h>
+
 #include <library/cpp/ipmath/range_set.h>
 
 #include <util/generic/hash.h>
@@ -10,7 +12,9 @@
 
 namespace NKikimr::NAddressClassifier {
 
-TString ExtractAddress(const TString& grpcPeer);
+TString ExtractAddress(const TString& peer);
+
+TString ParseAddress(const TString& address, TString& hostname, ui32& port);
 
 class TAddressClassifier {
 public:

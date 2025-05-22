@@ -3,13 +3,14 @@
 using namespace NLastGetopt;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NStatusHelpers;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TStatus DeleteSeries(TSession& session, const TString& prefix, ui64 seriesId, ui64& deletedCount) {
-    auto queryText = Sprintf(R"(
+static TStatus DeleteSeries(TSession& session, const std::string& prefix, uint64_t seriesId, uint64_t& deletedCount) {
+    auto queryText = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%1$s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $seriesId AS Uint64;
 
@@ -18,7 +19,7 @@ static TStatus DeleteSeries(TSession& session, const TString& prefix, ui64 serie
 
         $data = (
             SELECT series_id, ($maxUint64 - views) AS rev_views
-            FROM [series]
+            FROM series
             WHERE series_id = $seriesId
         );
 
@@ -29,7 +30,7 @@ static TStatus DeleteSeries(TSession& session, const TString& prefix, ui64 serie
         ON SELECT rev_views, series_id FROM $data;
 
         SELECT COUNT(*) AS cnt FROM $data;
-    )", prefix.data());
+    )", prefix);
 
     auto prepareResult = session.PrepareDataQuery(queryText).ExtractValueSync();
     if (!prepareResult.IsSuccess()) {
@@ -58,22 +59,22 @@ static TStatus DeleteSeries(TSession& session, const TString& prefix, ui64 serie
     return result;
 }
 
-int RunDeleteSeries(TDriver& driver, const TString& prefix, int argc, char** argv) {
+int RunDeleteSeries(TDriver& driver, const std::string& prefix, int argc, char** argv) {
     TOpts opts = TOpts::Default();
 
-    ui64 seriesId;
+    uint64_t seriesId;
 
     opts.AddLongOption("id", "Series id").Required().RequiredArgument("NUM")
         .StoreResult(&seriesId);
 
     TOptsParseResult res(&opts, argc, argv);
 
-    ui64 deletedCount = 0;
+    uint64_t deletedCount = 0;
     TTableClient client(driver);
     ThrowOnError(client.RetryOperationSync([&](TSession session) -> TStatus {
         return DeleteSeries(session, prefix, seriesId, deletedCount);
     }));
 
-    Cout << "Deleted " << deletedCount << " rows" << Endl;
+    std::cout << "Deleted " << deletedCount << " rows" << std::endl;
     return 0;
 }

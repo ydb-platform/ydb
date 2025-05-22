@@ -1,6 +1,7 @@
 #include "kqp_compute.h"
 #include "kqp_scan_data_meta.h"
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 namespace NKikimr::NMiniKQL {

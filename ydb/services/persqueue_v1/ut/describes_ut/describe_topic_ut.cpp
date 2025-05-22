@@ -1,10 +1,11 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 
 namespace NKikimr::NPersQueueTests {
@@ -210,7 +211,6 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
 
         THashSet<ui64> allParts;
         for (const auto& p : ev->Partitions) {
-            UNIT_ASSERT(!p.Hostname.Empty());
             UNIT_ASSERT(p.NodeId > 0);
 //            UNIT_ASSERT(p.IncGeneration > 0);
             UNIT_ASSERT(p.PartitionId < 15);

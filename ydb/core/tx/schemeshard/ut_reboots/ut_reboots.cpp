@@ -390,7 +390,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                    { NLs::Finished,
-                                    NLs::PathVersionEqual(5),
+                                    NLs::PathVersionEqual(6),
                                     NLs::ChildrenCount(1)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/Table1"),
                                    { NLs::Finished,
@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                    {NLs::Finished,
-                                    NLs::PathVersionEqual(7),
+                                    NLs::PathVersionEqual(9),
                                     NLs::ChildrenCount(0)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/Table1"),
                                    {NLs::PathNotExist});
@@ -508,7 +508,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
                 dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                                  {NLs::Finished,
-                                                  NLs::PathVersionEqual(5),
+                                                  NLs::PathVersionEqual(6),
                                                   NLs::ChildrenCount(1)});
             }
 
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
 
                 dirAVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
                                                  {NLs::Finished,
-                                                  NLs::PathVersionEqual(5),
+                                                  NLs::PathVersionEqual(6),
                                                   NLs::ChildrenCount(1)});
             }
 
@@ -617,7 +617,7 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::Finished,
-                                    NLs::PathVersionOneOf({8, 9}),
+                                    NLs::PathVersionOneOf({10, 11}),
                                     NLs::ChildrenCount(1)});
             }
         });

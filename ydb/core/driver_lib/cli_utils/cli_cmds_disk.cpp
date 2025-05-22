@@ -1,5 +1,5 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
-#include <util/random/entropy.h>
+#include <ydb/core/util/random.h>
 #include "cli.h"
 #include "cli_cmds.h"
 
@@ -29,19 +29,19 @@ public:
             .Optional().AppendTo(&MainKeyTmp); // TODO: make required
         config.Opts->AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM")
             .Optional().AppendTo(&MainKeyTmp); // TODO: remove after migration
-        config.Opts->AddLongOption('v', "verbose", "output detailed information for debugging").Optional().NoArgument()
-            .SetFlag(&IsVerbose);
-        config.Opts->AddLongOption('l', "lock", "lock device before reading disk info").Optional().NoArgument()
-            .SetFlag(&LockDevice);
+        config.Opts->AddLongOption('v', "verbose", "output detailed information for debugging").Optional()
+            .StoreTrue(&IsVerbose);
+        config.Opts->AddLongOption('l', "lock", "lock device before reading disk info").Optional()
+            .StoreTrue(&LockDevice);
     }
 
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         Path = config.ParseResult->GetFreeArgs()[0];
         // TODO: remove after master->main key migration
-        bool hasMainOption = config.ParseResult->FindLongOptParseResult("main-key");
-        bool hasMasterOption = config.ParseResult->FindLongOptParseResult("master-key");
-        bool hasKOption = config.ParseResult->FindCharOptParseResult('k');
+        bool hasMainOption = config.ParseResult->Has("main-key");
+        bool hasMasterOption = config.ParseResult->Has("master-key");
+        bool hasKOption = config.ParseResult->Has('k');
         if (!hasMainOption && !hasMasterOption && !hasKOption)
             ythrow yexception() << "missing main-key param";
 
@@ -148,7 +148,7 @@ public:
         config.Opts->AddLongOption('t', "text-message", "text message to store in format sector (up to 4000 characters long)")
             .OptionalArgument("STR").Optional().StoreResult(&TextMessage);
         config.Opts->AddLongOption('e', "erasure-encode", "erasure-encode data to recover from single-sector failures")
-            .Optional().NoArgument().SetFlag(&IsErasureEncode);
+            .Optional().StoreTrue(&IsErasureEncode);
 
         config.Opts->SetCmdLineDescr("\n\n"
             "Kikimr was designed to work with large block-devices, like 4 TiB HDDs and 1 TiB SSDs\n"
@@ -164,12 +164,12 @@ public:
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
         Path = config.ParseResult->GetFreeArgs()[0];
-        EntropyPool().Read(&ChunkKey, sizeof(NKikimr::NPDisk::TKey));
-        EntropyPool().Read(&LogKey, sizeof(NKikimr::NPDisk::TKey));
-        EntropyPool().Read(&SysLogKey, sizeof(NKikimr::NPDisk::TKey));
-        bool hasMainOption = config.ParseResult->FindLongOptParseResult("main-key");
-        bool hasMasterOption = config.ParseResult->FindLongOptParseResult("master-key");
-        bool hasKOption = config.ParseResult->FindCharOptParseResult('k');
+        SafeEntropyPoolRead(&ChunkKey, sizeof(NKikimr::NPDisk::TKey));
+        SafeEntropyPoolRead(&LogKey, sizeof(NKikimr::NPDisk::TKey));
+        SafeEntropyPoolRead(&SysLogKey, sizeof(NKikimr::NPDisk::TKey));
+        bool hasMainOption = config.ParseResult->Has("main-key");
+        bool hasMasterOption = config.ParseResult->Has("master-key");
+        bool hasKOption = config.ParseResult->Has('k');
         if (!hasMainOption && !hasMasterOption && !hasKOption)
             ythrow yexception() << "missing main-key param";
 

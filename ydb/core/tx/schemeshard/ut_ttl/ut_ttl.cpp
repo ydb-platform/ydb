@@ -10,10 +10,21 @@ using namespace NSchemeShardUT_Private;
 namespace {
 
 template <typename TTtlSettings>
-void CheckTtlSettings(const TTtlSettings& ttl, const char* ttlColumnName) {
+void CheckTtlSettings(const TTtlSettings& ttl, const char* ttlColumnName, bool legacyTiering = false) {
     UNIT_ASSERT(ttl.HasEnabled());
     UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), ttlColumnName);
     UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 3600);
+    if (legacyTiering) {
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 0);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
+        UNIT_ASSERT(ttl.GetEnabled().GetTiers(0).HasDelete());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetTiers(0).GetApplyAfterSeconds(), 3600);
+    }
+}
+
+void LegacyOltpTtlChecker(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckTtlSettings(record.GetPathDescription().GetTable().GetTTLSettings(), "modified_at", true);
 }
 
 void OltpTtlChecker(const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -39,9 +50,9 @@ void CheckTtlSettings(TTestActorRuntime& runtime, NLs::TCheckFunc func, const ch
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
-    void CreateTableShouldSucceed(const char* name, const char* ttlColumnType, const char* unit = "UNIT_AUTO") {
+    void CreateTableShouldSucceed(const char* name, const char* ttlColumnType, bool enableTablePgTypes, const char* unit = "UNIT_AUTO") {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(enableTablePgTypes));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -54,6 +65,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
                 ColumnUnit: %s
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
               }
             }
         )", name, ttlColumnType, unit));
@@ -61,14 +76,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         CheckTtlSettings(runtime, OltpTtlChecker, name);
     }
 
-    Y_UNIT_TEST(CreateTableShouldSucceed) {
-        for (auto ct : {"Date", "Datetime", "Timestamp"}) {
-            CreateTableShouldSucceed(Sprintf("TTLTableWith%sColumn", ct).data(), ct);
+    Y_UNIT_TEST_FLAG(CreateTableShouldSucceed, EnableTablePgTypes) {
+        const auto& datetimeTypes = EnableTablePgTypes
+            ? TVector<const char*>{"Date", "Datetime", "Timestamp", "Date32", "Datetime64", "Timestamp64", "pgdate", "pgtimestamp"}
+            : TVector<const char*>{"Date", "Datetime", "Timestamp", "Date32", "Datetime64", "Timestamp64"};
+        for (const auto& ct : datetimeTypes) {
+            CreateTableShouldSucceed(Sprintf("TTLTableWith%sColumn", ct).data(), ct, EnableTablePgTypes);
         }
 
-        for (auto ct : {"Uint32", "Uint64", "DyNumber"}) {
+        const auto& intTypes = EnableTablePgTypes
+            ? TVector<const char*>{"Uint32", "Uint64", "DyNumber", "pgint4", "pgint8"}
+            : TVector<const char*>{"Uint32", "Uint64", "DyNumber"};
+        for (const auto& ct : intTypes) {
             for (auto unit : {"UNIT_SECONDS", "UNIT_MILLISECONDS", "UNIT_MICROSECONDS", "UNIT_NANOSECONDS"}) {
-                CreateTableShouldSucceed(Sprintf("TTLTableWith%sColumn_%s", ct, unit).data(), ct, unit);
+                CreateTableShouldSucceed(Sprintf("TTLTableWith%sColumn_%s", ct, unit).data(), ct, EnableTablePgTypes, unit);
             }
         }
     }
@@ -88,7 +109,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "created_at"
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {{NKikimrScheme::StatusSchemeError, "Cannot enable TTL on unknown column: 'created_at'"}});
     }
 
     Y_UNIT_TEST(CreateTableShouldFailOnWrongColumnType) {
@@ -106,15 +127,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {{NKikimrScheme::StatusSchemeError, "Unsupported column type"}});
     }
 
-    void CreateTableShouldFailOnWrongUnit(const char* ttlColumnType, const char* unit) {
+    void CreateTableShouldFailOnWrongUnit(const char* ttlColumnType, bool enableTablePgTypes, const char* unit) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(enableTablePgTypes));
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot",
+            Sprintf(R"(
             Name: "TTLEnabledTable"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "modified_at" Type: "%s" }
@@ -125,18 +147,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnUnit: %s
               }
             }
-        )", ttlColumnType, unit), {NKikimrScheme::StatusSchemeError});
+        )",
+        ttlColumnType, unit), {
+            { NKikimrScheme::StatusSchemeError, "To enable TTL on date PG type column 'DateTypeColumnModeSettings' should be specified" },
+            { NKikimrScheme::StatusSchemeError, "To enable TTL on date type column 'DateTypeColumnModeSettings' should be specified" },
+            { NKikimrScheme::StatusSchemeError, "To enable TTL on integral type column 'ValueSinceUnixEpochModeSettings' should be specified" },
+            { NKikimrScheme::StatusSchemeError, "To enable TTL on integral PG type column 'ValueSinceUnixEpochModeSettings' should be specified" }
+        });
     }
 
-    Y_UNIT_TEST(CreateTableShouldFailOnWrongUnit) {
-        for (auto ct : {"Date", "Datetime", "Timestamp"}) {
+    Y_UNIT_TEST_FLAG(CreateTableShouldFailOnWrongUnit, EnableTablePgTypes) {
+        const auto& datetimeTypes = EnableTablePgTypes
+            ? TVector<const char*>{"Date", "Datetime", "Timestamp", "Date32", "Datetime64", "Timestamp64", "pgdate", "pgtimestamp"}
+            : TVector<const char*>{"Date", "Datetime", "Timestamp", "Date32", "Datetime64", "Timestamp64"};
+        for (auto ct : datetimeTypes) {
             for (auto unit : {"UNIT_SECONDS", "UNIT_MILLISECONDS", "UNIT_MICROSECONDS", "UNIT_NANOSECONDS"}) {
-                CreateTableShouldFailOnWrongUnit(ct, unit);
+                CreateTableShouldFailOnWrongUnit(ct, EnableTablePgTypes, unit);
             }
         }
 
-        for (auto ct : {"Uint32", "Uint64", "DyNumber"}) {
-            CreateTableShouldFailOnWrongUnit(ct, "UNIT_AUTO");
+        const auto& intTypes = EnableTablePgTypes
+            ? TVector<const char*>{"Uint32", "Uint64", "DyNumber", "pgint4", "pgint8"}
+            : TVector<const char*>{"Uint32", "Uint64", "DyNumber"};
+        for (auto ct : intTypes) {
+            CreateTableShouldFailOnWrongUnit(ct, EnableTablePgTypes, "UNIT_AUTO");
         }
     }
 
@@ -152,8 +186,35 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
             KeyColumnNames: ["key"]
             TTLSettings {
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {{NKikimrScheme::StatusSchemeError, "TTL status must be specified"}});
     }
+
+    Y_UNIT_TEST(CreateTableShouldFailOnBeforeEpochTTL) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // An attempt to create 100-year TTL.
+        // The TTL behaviour is undefined before 1970,
+        // so it's forbidden.
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "modified_at" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3153600000
+                Tiers: {
+                  ApplyAfterSeconds: 3153600000
+                  Delete: {}
+                }
+              }
+            }
+        )", {{NKikimrScheme::StatusSchemeError, "TTL should be less than"}});
+    }    
 
     void CreateTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType) {
         TTestBasicRuntime runtime;
@@ -170,6 +231,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 Enabled {
                   ColumnName: "modified_at"
                   ExpireAfterSeconds: 3600
+                  Tiers: {
+                    ApplyAfterSeconds: 3600
+                    Delete: {}
+                  }
                 }
               }
             }
@@ -211,6 +276,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
               Enabled {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
               }
             }
         )");
@@ -220,7 +289,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
             DropColumns { Name: "modified_at" }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "Can't drop TTL column: 'modified_at', disable TTL first"}});
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
@@ -261,6 +330,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
               Enabled {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
               }
             }
         )");
@@ -289,7 +362,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
               }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "Cannot enable TTL on dropped column: 'modified_at'"}});
     }
 
     void AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType) {
@@ -318,6 +391,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
               Enabled {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
               }
             }
         )");
@@ -349,6 +426,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
               Enabled {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
               }
             }
         )");
@@ -489,6 +570,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                   Enabled {
                     ColumnName: "ts"
                     ExpireAfterSeconds: 3600
+                    Tiers: {
+                      ApplyAfterSeconds: 3600
+                      Delete: {}
+                    }
                   }
                 }
             )");
@@ -750,6 +835,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
               Enabled {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
               }
             }
         )");
@@ -767,6 +856,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ExpireAfterSeconds: 3600
                 SysSettings {
                   RunInterval: 1800000000
+                }
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
                 }
               }
             }
@@ -786,9 +879,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 SysSettings {
                   RunInterval: 1799999999
                 }
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {{NKikimrScheme::StatusSchemeError, "TTL run interval cannot be less than limit"}});
     }
 
     Y_UNIT_TEST(ShouldSkipDroppedColumn) {
@@ -832,6 +929,53 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         WaitForCondErase(runtime);
     }
 
+    Y_UNIT_TEST(LegacyTtlSettingsNoTiers) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "modified_at" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3600
+              }
+            }
+        )"));
+        env.TestWaitNotification(runtime, txId);
+        CheckTtlSettings(runtime, LegacyOltpTtlChecker);
+    }
+
+    Y_UNIT_TEST(LegacyTtlSettingsNoTiersAlterTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "modified_at" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+        )"));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3600
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        CheckTtlSettings(runtime, LegacyOltpTtlChecker);
+    }
+
     NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestBasicRuntime& runtime) {
         const auto sender = runtime.AllocateEdgeActor();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, new TEvTablet::TEvGetCounters);
@@ -859,32 +1003,42 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         UNIT_ASSERT_VALUES_EQUAL(value, GetSimpleCounter(runtime, name));
     }
 
-    ui64 GetPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const TString& range) {
+    auto GetPercentileCounters(TTestBasicRuntime& runtime, const TString& name) {
         const auto counters = GetCounters(runtime);
         for (const auto& counter : counters.GetTabletCounters().GetAppCounters().GetPercentileCounters()) {
             if (name != counter.GetName()) {
                 continue;
             }
 
-            for (ui32 i = 0; i < counter.RangesSize(); ++i) {
-                if (range != counter.GetRanges(i)) {
-                    continue;
-                }
-
-                UNIT_ASSERT(i < counter.ValuesSize());
-                return counter.GetValues(i);
-            }
-
-            UNIT_ASSERT_C(false, "Range not found: " << range);
+            return counter;
         }
 
-        UNIT_ASSERT_C(false, "Counter not found: " << name);
-        return 0; // unreachable
+        Y_FAIL("Counter not found: %s", name.c_str());
+    }
+
+    ui64 GetPercentileCounter(const auto& counters, const TString& range) {
+        for (ui32 i = 0; i < counters.RangesSize(); ++i) {
+            if (range != counters.GetRanges(i)) {
+                continue;
+            }
+
+            UNIT_ASSERT(i < counters.ValuesSize());
+            return counters.GetValues(i);
+        }
+
+        Y_FAIL("Range not found: %s", range.c_str());
+    }
+
+    ui64 GetPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const TString& range) {
+        auto counters = GetPercentileCounters(runtime, name);
+        return GetPercentileCounter(counters, range);
     }
 
     void CheckPercentileCounter(TTestBasicRuntime& runtime, const TString& name, const THashMap<TString, ui64>& rangeValues) {
+        auto counters = GetPercentileCounters(runtime, name);
+        Cerr << counters.DebugString();
         for (const auto& [range, value] : rangeValues) {
-            const auto v = GetPercentileCounter(runtime, name, range);
+            const auto v = GetPercentileCounter(counters, range);
             UNIT_ASSERT_VALUES_EQUAL_C(v, value, "Unexpected value in range"
                 << ": range# " << range
                 << ", expected# " << value
@@ -930,6 +1084,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         // after erase
         WaitForCondErase(runtime);
         WaitForStats(runtime, 1);
+        if (GetPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", "0") > 0) {
+            // Sometimes stats arrive too quickly?
+            WaitForStats(runtime, 1);
+        }
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
 
         // after a little more time
@@ -1034,6 +1192,56 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         WaitForStats(runtime, 2);
         CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
     }
+
+    Y_UNIT_TEST(TtlTiersValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "modified_at" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+        )"));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                Tiers {
+                    Delete {}
+                    ApplyAfterSeconds: 3600
+                }
+                Tiers {
+                    Delete {}
+                    ApplyAfterSeconds: 7200
+                }
+              }
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Tier 0: only the last tier in TTL settings can have Delete action"}});
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                Tiers {
+                    EvictToExternalStorage {
+                        Storage: "/Root/abc"
+                    }
+                    ApplyAfterSeconds: 3600
+                }
+                Tiers {
+                    Delete {}
+                    ApplyAfterSeconds: 7200
+                }
+              }
+            }
+        )", {{NKikimrScheme::StatusInvalidParameter, "Only DELETE via TTL is allowed for row-oriented tables"}});
+    }
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
@@ -1046,14 +1254,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             Name: "%s"
             Schema {
                 Columns { Name: "key" Type: "Uint64" NotNull: true }
-                Columns { Name: "modified_at" Type: "%s" }
-                KeyColumnNames: ["key"]
+                Columns { Name: "modified_at" Type: "%s" NotNull: true }
+                KeyColumnNames: ["modified_at"]
             }
             TtlSettings {
                 Enabled {
                     ColumnName: "modified_at"
                     ExpireAfterSeconds: 3600
                     ColumnUnit: %s
+                    Tiers: {
+                      ApplyAfterSeconds: 3600
+                      Delete: {}
+                    }
                 }
             }
         )", name, ttlColumnType, unit));
@@ -1079,7 +1291,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
         ui64 txId = 100;
 
         for (auto ct : {"String", "DyNumber"}) {
-            TestCreateColumnTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+                Sprintf(R"(
                 Name: "TTLEnabledTable"
                 Schema {
                     Columns { Name: "key" Type: "Uint64" NotNull: true }
@@ -1090,9 +1303,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                     Enabled {
                         ColumnName: "modified_at"
                         ExpireAfterSeconds: 3600
+                        Tiers: {
+                            ApplyAfterSeconds: 3600
+                            Delete: {}
+                        }
                     }
                 }
-            )", ct), {NKikimrScheme::StatusSchemeError});
+            )",
+            ct), {
+                { NKikimrScheme::StatusSchemeError, "Type 'DyNumber' specified for column 'modified_at' is not supported" },
+                { NKikimrScheme::StatusSchemeError, "Unsupported column type"
+            } });
         }
     }
 
@@ -1113,7 +1334,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                 ColumnName: "created_at"
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {{NKikimrScheme::StatusSchemeError, "Incorrect ttl column - not found in scheme"}});
     }
 
     Y_UNIT_TEST(AlterColumnTable) {
@@ -1125,9 +1346,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
             Name: "TTLEnabledTable"
             Schema {
                 Columns { Name: "key" Type: "Uint64" NotNull: true }
-                Columns { Name: "modified_at" Type: "Timestamp" }
+                Columns { Name: "modified_at" Type: "Timestamp" NotNull: true }
                 Columns { Name: "saved_at" Type: "Datetime" }
-                KeyColumnNames: ["key"]
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: ["modified_at"]
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -1147,23 +1369,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
               Enabled {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
               }
             }
         )");
         env.TestWaitNotification(runtime, txId);
         CheckTtlSettings(runtime, OlapTtlChecker());
-
-        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "TTLEnabledTable"
-            AlterTtlSettings {
-              Enabled {
-                ColumnName: "saved_at"
-                ExpireAfterSeconds: 3600
-              }
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
-        CheckTtlSettings(runtime, OlapTtlChecker("saved_at"));
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
@@ -1183,6 +1397,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                 }
             }
         );
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            AlterSchema {
+                AlterColumns {Name: "data" DefaultValue: "10"}
+            }
+        )", {{NKikimrScheme::StatusSchemeError, "sparsed columns are disabled"}});
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST(AlterColumnTable_Negative) {
@@ -1216,9 +1437,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
               Enabled {
                 ColumnName: "str"
                 ExpireAfterSeconds: 3600
+                Tiers: {
+                  ApplyAfterSeconds: 3600
+                  Delete: {}
+                }
               }
             }
-        )", {NKikimrScheme::StatusSchemeError});
+        )", {{NKikimrScheme::StatusSchemeError, "Unsupported column type"}});
     }
 }
 
@@ -1235,6 +1460,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
                   Enabled {
                     ColumnName: "modified_at"
                     ExpireAfterSeconds: 3600
+                    Tiers: {
+                      ApplyAfterSeconds: 3600
+                      Delete: {}
+                    }
                   }
                 }
             )");
@@ -1267,6 +1496,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
                   Enabled {
                     ColumnName: "modified_at"
                     ExpireAfterSeconds: 3600
+                    Tiers: {
+                      ApplyAfterSeconds: 3600
+                      Delete: {}
+                    }
                   }
                 }
             )");
@@ -1293,6 +1526,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
                       Enabled {
                         ColumnName: "modified_at"
                         ExpireAfterSeconds: 3600
+                        Tiers: {
+                          ApplyAfterSeconds: 3600
+                          Delete: {}
+                        }
                       }
                     }
                 )");
@@ -1323,6 +1560,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
                       Enabled {
                         ColumnName: "modified_at"
                         ExpireAfterSeconds: 3600
+                        Tiers: {
+                          ApplyAfterSeconds: 3600
+                          Delete: {}
+                        }
                       }
                     }
                 )");

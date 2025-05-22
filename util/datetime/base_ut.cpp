@@ -33,19 +33,19 @@ struct TTestTime {
 };
 
 namespace {
-    inline void OldDate8601(char* buf, time_t when) {
+    inline void OldDate8601(char* buf, size_t bufLen, time_t when) {
         struct tm theTm;
         struct tm* ret = nullptr;
 
         ret = GmTimeR(&when, &theTm);
 
         if (ret) {
-            sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02dZ", theTm.tm_year + 1900, theTm.tm_mon + 1, theTm.tm_mday, theTm.tm_hour, theTm.tm_min, theTm.tm_sec);
+            snprintf(buf, bufLen, "%04d-%02d-%02dT%02d:%02d:%02dZ", theTm.tm_year + 1900, theTm.tm_mon + 1, theTm.tm_mday, theTm.tm_hour, theTm.tm_min, theTm.tm_sec);
         } else {
             *buf = '\0';
         }
     }
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TestSprintDate) {
     Y_UNIT_TEST(Year9999) {
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TestSprintDate) {
 
         UNIT_ASSERT_VALUES_EQUAL(expectedYear, YearToString(timestamp));
     }
-}
+} // Y_UNIT_TEST_SUITE(TestSprintDate)
 
 Y_UNIT_TEST_SUITE(TDateTimeTest) {
     Y_UNIT_TEST(Test8601) {
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         for (size_t i = 0; i < 1000000; ++i) {
             const time_t t = RandomNumber<ui32>();
 
-            OldDate8601(buf1, t);
+            OldDate8601(buf1, sizeof(buf1), t);
             sprint_date8601(buf2, t);
 
             UNIT_ASSERT_VALUES_EQUAL(TStringBuf(buf1), TStringBuf(buf2));
@@ -207,8 +207,8 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
 
         UNIT_ASSERT(mlsecB + 90 < mlsecA);
         UNIT_ASSERT((mcrsecB + 90000 < mcrsecA));
-        //UNIT_ASSERT(ToMicroSeconds(&tvB) + 90000 < ToMicroSeconds(&tvA));
-        //UNIT_ASSERT(TVdiff(tvB, tvA) == long(ToMicroSeconds(&tvA) - ToMicroSeconds(&tvB)));
+        // UNIT_ASSERT(ToMicroSeconds(&tvB) + 90000 < ToMicroSeconds(&tvA));
+        // UNIT_ASSERT(TVdiff(tvB, tvA) == long(ToMicroSeconds(&tvA) - ToMicroSeconds(&tvB)));
     }
 
     Y_UNIT_TEST(TestCompatFuncs) {
@@ -310,10 +310,8 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
                && true;
     }
 
-    Y_UNIT_TEST(TestGmTimeR) {
-        time_t starttime = static_cast<time_t>(Max<i64>(-12244089600LL, Min<time_t>())); // 1-Jan-1582
-        time_t finishtime = static_cast<time_t>(Min<i64>(0xFFFFFFFF * 20, Max<time_t>()));
-        time_t step = (finishtime - starttime) / 25;
+    void TestGmTimeR(time_t starttime, time_t finishtime, int steps) {
+        time_t step = (finishtime - starttime) / steps;
         struct tm tms0, tms1;
         struct tm* ptm0 = nullptr;
         struct tm* ptm1 = nullptr;
@@ -336,7 +334,19 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
             UNIT_ASSERT(CompareTMFull(ptm0, ptm1));
         }
     }
-}
+
+    Y_UNIT_TEST(TestGmTimeRLongRange) {
+        time_t starttime = static_cast<time_t>(-86397839500LL); // 29-Jan-2668 B.C.
+        time_t finishtime = static_cast<time_t>(0xFFFFFFFF * 20);
+        TestGmTimeR(starttime, finishtime, 101);
+    }
+
+    Y_UNIT_TEST(TestGmTimeRNowdays) {
+        time_t starttime = static_cast<time_t>(0);             // 1970
+        time_t finishtime = static_cast<time_t>(6307200000LL); // 2170
+        TestGmTimeR(starttime, finishtime, 303);
+    }
+} // Y_UNIT_TEST_SUITE(TDateTimeTest)
 
 Y_UNIT_TEST_SUITE(DateTimeTest) {
     Y_UNIT_TEST(TestDurationFromFloat) {
@@ -534,7 +544,6 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
     }
 
     Y_UNIT_TEST(TestTDurationConstructorFromStdChronoDuration) {
-
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), TDuration(0ms));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::MicroSeconds(42), TDuration(42us));
         UNIT_ASSERT_VALUES_EQUAL(TDuration::MicroSeconds(42000000000000L), TDuration(42000000000000us));
@@ -653,4 +662,4 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
         static_assert(TDuration::Zero() + 1s == 1s);
         static_assert(TInstant::Seconds(1) + 1s == TInstant::Seconds(2));
     }
-}
+} // Y_UNIT_TEST_SUITE(DateTimeTest)

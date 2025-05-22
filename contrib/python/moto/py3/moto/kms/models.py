@@ -1,19 +1,27 @@
 import json
 import os
 from collections import defaultdict
+from copy import copy
 from datetime import datetime, timedelta
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes
 
-from moto.core import get_account_id, BaseBackend, BaseModel, CloudFormationModel
-from moto.core.utils import get_random_hex, unix_time, BackendDict
+from cryptography.hazmat.primitives.asymmetric import padding
+
+from moto.core import BaseBackend, BaseModel, CloudFormationModel
+from moto.core.utils import unix_time, BackendDict
+from moto.moto_api._internal import mock_random
 from moto.utilities.tagging_service import TaggingService
 from moto.core.exceptions import JsonRESTError
 
+from .exceptions import ValidationException
 from .utils import (
     RESERVED_ALIASES,
     decrypt,
     encrypt,
     generate_key_id,
     generate_master_key,
+    generate_private_key,
 )
 
 
@@ -33,8 +41,8 @@ class Grant(BaseModel):
         self.retiring_principal = retiring_principal
         self.operations = operations
         self.constraints = constraints
-        self.id = get_random_hex()
-        self.token = get_random_hex()
+        self.id = mock_random.get_random_hex()
+        self.token = mock_random.get_random_hex()
 
     def to_json(self):
         return {
@@ -50,23 +58,33 @@ class Grant(BaseModel):
 
 class Key(CloudFormationModel):
     def __init__(
-        self, policy, key_usage, customer_master_key_spec, description, region
+        self,
+        policy,
+        key_usage,
+        key_spec,
+        description,
+        account_id,
+        region,
+        multi_region=False,
     ):
-        self.id = generate_key_id()
+        self.id = generate_key_id(multi_region)
         self.creation_date = unix_time()
+        self.account_id = account_id
         self.policy = policy or self.generate_default_policy()
         self.key_usage = key_usage
         self.key_state = "Enabled"
         self.description = description or ""
         self.enabled = True
         self.region = region
-        self.account_id = get_account_id()
+        self.multi_region = multi_region
         self.key_rotation_status = False
         self.deletion_date = None
         self.key_material = generate_master_key()
+        self.private_key = generate_private_key()
         self.origin = "AWS_KMS"
         self.key_manager = "CUSTOMER"
-        self.customer_master_key_spec = customer_master_key_spec or "SYMMETRIC_DEFAULT"
+        self.key_spec = key_spec or "SYMMETRIC_DEFAULT"
+        self.arn = f"arn:aws:kms:{region}:{account_id}:key/{self.id}"
 
         self.grants = dict()
 
@@ -96,7 +114,8 @@ class Key(CloudFormationModel):
         ]
 
     def revoke_grant(self, grant_id) -> None:
-        self.grants.pop(grant_id, None)
+        if not self.grants.pop(grant_id, None):
+            raise JsonRESTError("NotFoundException", f"Grant ID {grant_id} not found")
 
     def retire_grant(self, grant_id) -> None:
         self.grants.pop(grant_id, None)
@@ -117,7 +136,7 @@ class Key(CloudFormationModel):
                     {
                         "Sid": "Enable IAM User Permissions",
                         "Effect": "Allow",
-                        "Principal": {"AWS": f"arn:aws:iam::{get_account_id()}:root"},
+                        "Principal": {"AWS": f"arn:aws:iam::{self.account_id}:root"},
                         "Action": "kms:*",
                         "Resource": "*",
                     }
@@ -130,16 +149,10 @@ class Key(CloudFormationModel):
         return self.id
 
     @property
-    def arn(self):
-        return "arn:aws:kms:{0}:{1}:key/{2}".format(
-            self.region, self.account_id, self.id
-        )
-
-    @property
     def encryption_algorithms(self):
         if self.key_usage == "SIGN_VERIFY":
             return None
-        elif self.customer_master_key_spec == "SYMMETRIC_DEFAULT":
+        elif self.key_spec == "SYMMETRIC_DEFAULT":
             return ["SYMMETRIC_DEFAULT"]
         else:
             return ["RSAES_OAEP_SHA_1", "RSAES_OAEP_SHA_256"]
@@ -148,11 +161,11 @@ class Key(CloudFormationModel):
     def signing_algorithms(self):
         if self.key_usage == "ENCRYPT_DECRYPT":
             return None
-        elif self.customer_master_key_spec in ["ECC_NIST_P256", "ECC_SECG_P256K1"]:
+        elif self.key_spec in ["ECC_NIST_P256", "ECC_SECG_P256K1"]:
             return ["ECDSA_SHA_256"]
-        elif self.customer_master_key_spec == "ECC_NIST_P384":
+        elif self.key_spec == "ECC_NIST_P384":
             return ["ECDSA_SHA_384"]
-        elif self.customer_master_key_spec == "ECC_NIST_P521":
+        elif self.key_spec == "ECC_NIST_P521":
             return ["ECDSA_SHA_512"]
         else:
             return [
@@ -170,7 +183,8 @@ class Key(CloudFormationModel):
                 "AWSAccountId": self.account_id,
                 "Arn": self.arn,
                 "CreationDate": self.creation_date,
-                "CustomerMasterKeySpec": self.customer_master_key_spec,
+                "CustomerMasterKeySpec": self.key_spec,
+                "KeySpec": self.key_spec,
                 "Description": self.description,
                 "Enabled": self.enabled,
                 "EncryptionAlgorithms": self.encryption_algorithms,
@@ -178,6 +192,7 @@ class Key(CloudFormationModel):
                 "KeyManager": self.key_manager,
                 "KeyUsage": self.key_usage,
                 "KeyState": self.key_state,
+                "MultiRegion": self.multi_region,
                 "Origin": self.origin,
                 "SigningAlgorithms": self.signing_algorithms,
             }
@@ -186,8 +201,8 @@ class Key(CloudFormationModel):
             key_dict["KeyMetadata"]["DeletionDate"] = unix_time(self.deletion_date)
         return key_dict
 
-    def delete(self, region_name):
-        kms_backends[region_name].delete_key(self.id)
+    def delete(self, account_id, region_name):
+        kms_backends[account_id][region_name].delete_key(self.id)
 
     @staticmethod
     def cloudformation_name_type():
@@ -200,18 +215,17 @@ class Key(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
-        kms_backend = kms_backends[region_name]
+        kms_backend = kms_backends[account_id][region_name]
         properties = cloudformation_json["Properties"]
 
         key = kms_backend.create_key(
             policy=properties["KeyPolicy"],
             key_usage="ENCRYPT_DECRYPT",
-            customer_master_key_spec="SYMMETRIC_DEFAULT",
+            key_spec="SYMMETRIC_DEFAULT",
             description=properties["Description"],
             tags=properties.get("Tags", []),
-            region=region_name,
         )
         key.key_rotation_status = properties["EnableKeyRotation"]
         key.enabled = properties["Enabled"]
@@ -253,19 +267,42 @@ class KmsBackend(BaseBackend):
                 "SYMMETRIC_DEFAULT",
                 "Default key",
                 None,
-                self.region_name,
             )
             self.add_alias(key.id, alias_name)
             return key.id
 
     def create_key(
-        self, policy, key_usage, customer_master_key_spec, description, tags, region
+        self, policy, key_usage, key_spec, description, tags, multi_region=False
     ):
-        key = Key(policy, key_usage, customer_master_key_spec, description, region)
+        key = Key(
+            policy,
+            key_usage,
+            key_spec,
+            description,
+            self.account_id,
+            self.region_name,
+            multi_region,
+        )
         self.keys[key.id] = key
         if tags is not None and len(tags) > 0:
             self.tag_resource(key.id, tags)
         return key
+
+    # https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html#mrk-sync-properties
+    # In AWS replicas of a key only share some properties with the original key. Some of those properties get updated
+    # in all replicas automatically if those properties change in the original key. Also, such properties can not be
+    # changed for replicas directly.
+    #
+    # In our implementation with just create a copy of all the properties once without any protection from change,
+    # as the exact implementation is currently infeasible.
+    def replicate_key(self, key_id, replica_region):
+        # Using copy() instead of deepcopy(), as the latter results in exception:
+        #    TypeError: cannot pickle '_cffi_backend.FFI' object
+        # Since we only update top level properties, copy() should suffice.
+        replica_key = copy(self.keys[key_id])
+        replica_key.region = replica_region
+        to_region_backend = kms_backends[self.account_id][replica_region]
+        to_region_backend.keys[replica_key.id] = replica_key
 
     def update_key_description(self, key_id, description):
         key = self.keys[self.get_key_id(key_id)]
@@ -302,7 +339,7 @@ class KmsBackend(BaseBackend):
     def get_alias_name(alias_name):
         # Allow use of ARN as well as alias name
         if alias_name.startswith("arn:") and ":alias/" in alias_name:
-            return alias_name.split(":alias/")[1]
+            return "alias/" + alias_name.split(":alias/")[1]
 
         return alias_name
 
@@ -515,6 +552,92 @@ class KmsBackend(BaseBackend):
         else:
             key = self.describe_key(key_id)
             key.retire_grant(grant_id)
+
+    def __ensure_valid_sign_and_verify_key(self, key: Key):
+        if key.key_usage != "SIGN_VERIFY":
+            raise ValidationException(
+                (
+                    "1 validation error detected: Value '{key_id}' at 'KeyId' failed "
+                    "to satisfy constraint: Member must point to a key with usage: 'SIGN_VERIFY'"
+                ).format(key_id=key.id)
+            )
+
+    def __ensure_valid_signing_augorithm(self, key: Key, signing_algorithm):
+        if signing_algorithm not in key.signing_algorithms:
+            raise ValidationException(
+                (
+                    "1 validation error detected: Value '{signing_algorithm}' at 'SigningAlgorithm' failed "
+                    "to satisfy constraint: Member must satisfy enum value set: "
+                    "{valid_sign_algorithms}"
+                ).format(
+                    signing_algorithm=signing_algorithm,
+                    valid_sign_algorithms=key.signing_algorithms,
+                )
+            )
+
+    def sign(self, key_id, message, signing_algorithm):
+        """Sign message using generated private key.
+
+        - signing_algorithm is ignored and hardcoded to RSASSA_PSS_SHA_256
+
+        - grant_tokens are not implemented
+        """
+        key = self.describe_key(key_id)
+
+        self.__ensure_valid_sign_and_verify_key(key)
+        self.__ensure_valid_signing_augorithm(key, signing_algorithm)
+
+        # TODO: support more than one hardcoded algorithm based on KeySpec
+        signature = key.private_key.sign(
+            message,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256(),
+        )
+
+        return key.arn, signature, signing_algorithm
+
+    def verify(self, key_id, message, signature, signing_algorithm):
+        """Verify message using public key from generated private key.
+
+        - signing_algorithm is ignored and hardcoded to RSASSA_PSS_SHA_256
+
+        - grant_tokens are not implemented
+        """
+        key = self.describe_key(key_id)
+
+        self.__ensure_valid_sign_and_verify_key(key)
+        self.__ensure_valid_signing_augorithm(key, signing_algorithm)
+
+        if signing_algorithm not in key.signing_algorithms:
+            raise ValidationException(
+                (
+                    "1 validation error detected: Value '{signing_algorithm}' at 'SigningAlgorithm' failed "
+                    "to satisfy constraint: Member must satisfy enum value set: "
+                    "{valid_sign_algorithms}"
+                ).format(
+                    signing_algorithm=signing_algorithm,
+                    valid_sign_algorithms=key.signing_algorithms,
+                )
+            )
+
+        public_key = key.private_key.public_key()
+
+        try:
+            # TODO: support more than one hardcoded algorithm based on KeySpec
+            public_key.verify(
+                signature,
+                message,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
+                hashes.SHA256(),
+            )
+            return key.arn, True, signing_algorithm
+        except InvalidSignature:
+            return key.arn, False, signing_algorithm
 
 
 kms_backends = BackendDict(KmsBackend, "kms")

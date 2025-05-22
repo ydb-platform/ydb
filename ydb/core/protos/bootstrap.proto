@@ -1,0 +1,67 @@
+import "ydb/core/protos/compile_service_config.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/node_limits.proto";
+import "ydb/core/protos/resource_broker.proto";
+import "ydb/core/protos/shared_cache.proto";
+import "ydb/core/protos/tablet.proto";
+import "ydb/core/protos/tablet_database.proto";
+
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TBootstrap {
+    enum ETabletType {
+        TX_DUMMY = 0;
+
+        HIVE = 1;
+
+        TX_COORDINATOR = 10;
+        TX_MEDIATOR = 11;
+        TX_PROXY = 12;
+        FLAT_TX_COORDINATOR = 13;
+        FLAT_HIVE = 14;
+        FLAT_BS_CONTROLLER = 15;
+        FLAT_TX_PROXY = 17;
+        TX_ALLOCATOR = 18;
+
+        BS_DOMAINCONTROLLER = 20;
+
+        SCHEMESHARD = 30;
+        DATASHARD = 31;
+        FLAT_SCHEMESHARD = 32;
+        KEYVALUEFLAT = 33;
+
+        JOBRUNNER_POOL_MANAGER = 40;
+        FLAT_JOBRUNNER_POOL_MANAGER = 41;
+
+        CMS = 51;
+        NODE_BROKER = 52;
+
+        TENANT_SLOT_BROKER = 53;
+        CONSOLE = 54;
+
+        FAKE_DATASHARD = 700;
+    }
+
+    message TTablet {
+        optional ETabletType Type = 1;
+        repeated uint32 Node = 2;
+        optional NKikimrTabletBase.TTabletStorageInfo Info = 3;
+        optional bool StandBy = 4;
+        optional uint64 WatchThreshold = 5;
+        optional bool StartFollowers = 6;
+        optional bool AllowDynamicConfiguration = 7 [default = false];
+    }
+
+    repeated TTablet Tablet = 1;
+
+    optional uint64 ProxySchemeCacheNodes = 2;
+    optional uint64 ProxySchemeCacheDistNodes = 3;
+    optional NKikimrTablet.TCompactionBroker CompactionBroker = 4;
+    optional NKikimrNodeLimits.TNodeLimitsConfig NodeLimits = 5;
+    optional NKikimrResourceBroker.TResourceBrokerConfig ResourceBroker = 6;
+    optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 7;
+    repeated NKikimrSchemeOp.TResourceProfile ResourceProfiles = 8;
+    optional TCompileServiceConfig CompileServiceConfig = 9; //may be need special file with resource limits?
+    optional bool EnableIntrospection = 10;
+}

@@ -6,6 +6,8 @@
 #include <util/system/compiler.h>
 #include <util/generic/array_ref.h>
 
+#include <atomic>
+
 namespace NActors {
 
     class TSharedData {
@@ -25,8 +27,13 @@ namespace NActors {
         static_assert(sizeof(TPrivateHeader) == 16, "TPrivateHeader has an unexpected size");
 
         struct THeader {
-            TAtomic RefCount;
+            std::atomic<size_t> RefCount;
             IOwner* Owner;
+
+            explicit THeader(IOwner* owner)
+                : RefCount{ 1 }
+                , Owner(owner)
+            {}
         };
 
         static_assert(sizeof(THeader) == 16, "THeader has an unexpected size");
@@ -193,19 +200,19 @@ namespace NActors {
         }
 
         static bool IsPrivate(THeader* header) noexcept {
-            return 1 == AtomicGet(header->RefCount);
+            return 1 == header->RefCount.load(std::memory_order_relaxed);
         }
 
         void AddRef() noexcept {
             if (Data_) {
-                AtomicIncrement(Header()->RefCount);
+                Header()->RefCount.fetch_add(1, std::memory_order_relaxed);
             }
         }
 
         void Release() noexcept {
             if (Data_) {
                 auto* header = Header();
-                if (IsPrivate(header) || 0 == AtomicDecrement(header->RefCount)) {
+                if (1 == header->RefCount.fetch_sub(1, std::memory_order_acq_rel)) {
                     if (auto* owner = header->Owner) {
                         owner->Deallocate(Data_);
                     } else {

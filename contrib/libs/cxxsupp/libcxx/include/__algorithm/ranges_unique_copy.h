@@ -21,7 +21,6 @@
 #include <__iterator/concepts.h>
 #include <__iterator/iterator_traits.h>
 #include <__iterator/projected.h>
-#include <__iterator/readable_traits.h>
 #include <__ranges/access.h>
 #include <__ranges/concepts.h>
 #include <__ranges/dangling.h>
@@ -33,7 +32,10 @@
 #  pragma GCC system_header
 #endif
 
-#if _LIBCPP_STD_VER > 17
+_LIBCPP_PUSH_MACROS
+#include <__undef_macros>
+
+#if _LIBCPP_STD_VER >= 20
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
@@ -42,12 +44,10 @@ namespace ranges {
 template <class _InIter, class _OutIter>
 using unique_copy_result = in_out_result<_InIter, _OutIter>;
 
-namespace __unique_copy {
-
 template <class _InIter, class _OutIter>
 concept __can_reread_from_output = (input_iterator<_OutIter> && same_as<iter_value_t<_InIter>, iter_value_t<_OutIter>>);
 
-struct __fn {
+struct __unique_copy {
   template <class _InIter, class _OutIter>
   static consteval auto __get_algo_tag() {
     if constexpr (forward_iterator<_InIter>) {
@@ -87,9 +87,9 @@ struct __fn {
             class _Proj                                                               = identity,
             indirect_equivalence_relation<projected<iterator_t<_Range>, _Proj>> _Comp = ranges::equal_to>
     requires indirectly_copyable<iterator_t<_Range>, _OutIter> &&
-      (forward_iterator<iterator_t<_Range>> ||
-       (input_iterator<_OutIter> && same_as<range_value_t<_Range>, iter_value_t<_OutIter>>) ||
-       indirectly_copyable_storable<iterator_t<_Range>, _OutIter>)
+             (forward_iterator<iterator_t<_Range>> ||
+              (input_iterator<_OutIter> && same_as<range_value_t<_Range>, iter_value_t<_OutIter>>) ||
+              indirectly_copyable_storable<iterator_t<_Range>, _OutIter>)
   _LIBCPP_HIDE_FROM_ABI constexpr unique_copy_result<borrowed_iterator_t<_Range>, _OutIter>
   operator()(_Range&& __range, _OutIter __result, _Comp __comp = {}, _Proj __proj = {}) const {
     auto __ret = std::__unique_copy<_RangeAlgPolicy>(
@@ -102,15 +102,15 @@ struct __fn {
   }
 };
 
-} // namespace __unique_copy
-
 inline namespace __cpo {
-inline constexpr auto unique_copy = __unique_copy::__fn{};
+inline constexpr auto unique_copy = __unique_copy{};
 } // namespace __cpo
 } // namespace ranges
 
 _LIBCPP_END_NAMESPACE_STD
 
-#endif // _LIBCPP_STD_VER > 17
+#endif // _LIBCPP_STD_VER >= 20
+
+_LIBCPP_POP_MACROS
 
 #endif // _LIBCPP___ALGORITHM_RANGES_UNIQUE_COPY_H

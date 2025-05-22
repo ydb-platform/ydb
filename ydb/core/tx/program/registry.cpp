@@ -1,24 +1,24 @@
 #include "registry.h"
 
-#include <ydb/library/yql/core/arrow_kernels/registry/registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <util/system/tls.h>
+#include <yql/essentials/core/arrow_kernels/registry/registry.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NArrow::NSSA {
 
-::NTls::TValue<NMiniKQL::IBuiltinFunctionRegistry::TPtr> Registry;
+::NTls::TValue<TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry>> Registry;
 
 bool TKernelsRegistry::Parse(const TString& serialized) {
     Y_ABORT_UNLESS(!!serialized);
     if (!Registry.Get()) {
-        Registry = NMiniKQL::CreateBuiltinRegistry();
+        auto registry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry())->Clone();
+        NMiniKQL::FillStaticModules(*registry.Get());
+        Registry = std::move(registry);
     }
-    auto copy = Registry.Get();
-    auto functionRegistry = NMiniKQL::CreateFunctionRegistry(std::move(copy))->Clone();
-    NMiniKQL::FillStaticModules(*functionRegistry);
+
     auto nodeFactory = NMiniKQL::GetBuiltinFactory();
-    auto kernels =  NYql::LoadKernels(serialized, *functionRegistry, nodeFactory);
+    auto kernels = NYql::LoadKernels(serialized, *Registry.Get(), nodeFactory);
     Kernels.swap(kernels);
     for (const auto& kernel : Kernels) {
         arrow::compute::Arity arity(kernel->signature->in_types().size(), kernel->signature->is_varargs());
@@ -30,13 +30,13 @@ bool TKernelsRegistry::Parse(const TString& serialized) {
         Functions.push_back(func);
     }
     return true;
-}   
+}
 
-NKikimr::NSsa::TFunctionPtr TKernelsRegistry::GetFunction(const size_t index) const {
+std::shared_ptr<arrow::compute::ScalarFunction> TKernelsRegistry::GetFunction(const size_t index) const {
     if (index < Functions.size()) {
         return Functions[index];
     }
     return nullptr;
 }
 
-}
+}   // namespace NKikimr::NOlap::NSSA

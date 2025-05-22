@@ -14,6 +14,9 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
+#include <ydb/services/persqueue_v1/actors/helpers.h>
+
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 
 #include <util/string/strip.h>
@@ -142,8 +145,8 @@ TString PartitionResponseToLog(const NKikimrClient::TPersQueuePartitionResponse&
 class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor> {
 public:
      TPartitionActor(const TActorId& parentId, const TString& clientId, const ui64 cookie, const TString& session, const ui32 generation,
-                        const ui32 step, const NPersQueue::TTopicConverterPtr& topic, const ui32 partition, const ui64 tabletID,
-                        const TReadSessionActor::TTopicCounters& counters, const TString& clientDC);
+                        const ui32 step, const NPersQueue::TTopicConverterPtr& topic, const TString& database, const ui32 partition, const ui64 tabletID,
+                        const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, std::set<NPQ::TPartitionGraph::Node*> parents);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -154,21 +157,24 @@ public:
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(NActors::TEvents::TSystem::Wakeup, HandleWakeup)
-            HFunc(TEvPQProxy::TEvDeadlineExceeded, Handle)
+            CFunc(NActors::TEvents::TSystem::Wakeup, HandleWakeup);
+            HFunc(TEvPQProxy::TEvDeadlineExceeded, Handle);
 
-            HFunc(NActors::TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvPQProxy::TEvRead, Handle)
-            HFunc(TEvPQProxy::TEvCommit, Handle)
-            HFunc(TEvPQProxy::TEvReleasePartition, Handle)
-            HFunc(TEvPQProxy::TEvLockPartition, Handle)
-            HFunc(TEvPQProxy::TEvGetStatus, Handle)
-            HFunc(TEvPQProxy::TEvRestartPipe, Handle)
+            HFunc(NActors::TEvents::TEvPoisonPill, HandlePoison);
+            HFunc(TEvPQProxy::TEvRead, Handle);
+            HFunc(TEvPQProxy::TEvCommit, Handle);
+            HFunc(TEvPQProxy::TEvReleasePartition, Handle);
+            HFunc(TEvPQProxy::TEvLockPartition, Handle);
+            HFunc(TEvPQProxy::TEvGetStatus, Handle);
+            HFunc(TEvPQProxy::TEvRestartPipe, Handle);
 
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
+
+            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
         default:
             break;
         };
@@ -190,6 +196,9 @@ private:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
 
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
+
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);
 
@@ -200,6 +209,8 @@ private:
     void RestartPipe(const NActors::TActorContext& ctx, const TString& reason, const NPersQueue::NErrorCode::EErrorCode errorCode);
     void WaitDataInPartition(const NActors::TActorContext& ctx);
     void SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx);
+    void CommitDone(ui64 cookie, const TActorContext& ctx);
+    void SendPartitionReady(const TActorContext& ctx);
 
 private:
     const TActorId ParentId;
@@ -211,6 +222,7 @@ private:
     const ui32 Step;
 
     NPersQueue::TTopicConverterPtr Topic;
+    TString Database;
     const ui32 Partition;
 
     const ui64 TabletID;
@@ -234,6 +246,7 @@ private:
 
     ui64 EndOffset;
     ui64 SizeLag;
+    bool ClientHasAnyCommits = false;
 
     TString ReadGuid; // empty if not reading
 
@@ -249,6 +262,12 @@ private:
     std::deque<std::pair<ui64, ui64>> CommitsInfly; //ReadId, Offset
 
     TReadSessionActor::TTopicCounters Counters;
+
+    bool FirstRead;
+    bool ReadingFinishedSent;
+
+    std::unordered_map<ui64, std::shared_ptr<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>> Kqps;
+    std::set<NPQ::TPartitionGraph::Node*> Parents;
 };
 
 
@@ -292,8 +311,7 @@ TReadSessionActor::TReadSessionActor(
     , BytesInflight_(0)
     , RequestedBytes(0)
     , ReadsInfly(0)
-    , TopicsHandler(topicsHandler)
-{
+    , TopicsHandler(topicsHandler) {
     Y_ASSERT(Handler);
 }
 
@@ -567,7 +585,7 @@ void TReadSessionActor::AnswerForCommitsIfCan(const TActorContext& ctx) {
         ui64 diff = result.ByteSize();
         BytesInflight_ += diff;
         if (BytesInflight) (*BytesInflight) += diff;
-        Handler->Reply(result);
+        Handler->Reply(std::move(result));
 
         ui32 commitDurationMs = (ctx.Now() - it->second.StartTime).MilliSeconds();
         CommitLatency.IncFor(commitDurationMs, 1);
@@ -652,6 +670,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     Session = session;
     ProtocolVersion = init.GetProtocolVersion();
     CommitsDisabled = init.GetCommitsDisabled();
+    UserAgent = init.GetVersion();
 
     if (ProtocolVersion >= NPersQueue::TReadRequest::ReadParamsInInit) {
         ReadSettingsInited = true;
@@ -699,7 +718,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         if (SessionsWithoutAuth) {
             ++(*SessionsWithoutAuth);
         }
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             CloseSession("Unauthenticated access is forbidden, please provide credentials", NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
             return;
         }
@@ -832,6 +851,14 @@ void TReadSessionActor::RegisterSessions(const TActorContext& ctx) {
     }
 }
 
+void TReadSessionActor::SetupBytesReadByUserAgentCounter() {
+    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", "pqv0")
+        ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("user_agent", V1::DropUserAgentSuffix(V1::CleanupCounterValueString(UserAgent)))
+        ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
+}
 
 void TReadSessionActor::SetupCounters()
 {
@@ -861,6 +888,8 @@ void TReadSessionActor::SetupCounters()
     if (ProtocolVersion < NPersQueue::TReadRequest::Batching) {
         ++(*SessionsWithOldBatchingVersion);
     }
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 
@@ -881,6 +910,8 @@ void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic)
     topicCounters.Errors                 = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"PartitionsErrors"}, true);
     topicCounters.Commits                = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"Commits"}, true);
     topicCounters.WaitsForData           = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"WaitsForData"}, true);
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic, const TString& cloudId,
@@ -899,6 +930,8 @@ void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic, cons
     topicCounters.PartitionsInfly        = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.count"}, false, "name");
     topicCounters.Errors                 = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.errors"}, true, "name");
     topicCounters.Commits                = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.commits"}, true, "name");
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
@@ -938,7 +971,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
         BytesInflight_ += diff;
         if (BytesInflight) (*BytesInflight) += diff;
 
-        Handler->Reply(result);
+        Handler->Reply(std::move(result));
 
         Handler->ReadyForNextRead();
 
@@ -954,6 +987,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
             topicHolder.IsServerless = t.IsServerless;
             topicHolder.FolderId = t.FolderId;
             topicHolder.FullConverter = t.TopicNameConverter;
+            topicHolder.PartitionGraph = t.PartitionGraph;
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
             const auto& second = t.TopicNameConverter->GetSecondaryPath();
             if (!second.empty()) {
@@ -975,13 +1009,20 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
         ctx.Schedule(Min(CommitInterval, CHECK_ACL_DELAY), new TEvents::TEvWakeup());
     } else {
         for (auto& [name, t] : ev->Get()->TopicAndTablets) {
-            if (Topics.find(t.TopicNameConverter->GetInternalName()) == Topics.end()) {
+            auto it = Topics.find(t.TopicNameConverter->GetInternalName());
+            if (it == Topics.end()) {
                 CloseSession(TStringBuilder() << "list of topics changed - new topic '" <<
                              t.TopicNameConverter->GetInternalName() << "' found",
                              NPersQueue::NErrorCode::BAD_REQUEST, ctx);
                 return;
             }
+            it->second.PartitionGraph = t.PartitionGraph;
         }
+    }
+
+    while (!Locks.empty()) {
+        ctx.Send(ctx.SelfID, std::move(Locks.front()));
+        Locks.pop_front();
     }
 }
 
@@ -1023,6 +1064,20 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
         );
         return;
     }
+
+    auto* partitionNode = jt->second.PartitionGraph->GetPartition(record.GetPartition());
+    if (!partitionNode) {
+        LOG_DEBUG_S(
+            ctx, NKikimrServices::PQ_READ_PROXY,
+            PQ_LOG_PREFIX << " lock for unknown partition = " << record.GetPartition()
+        );
+        Locks.push_back(ev->Release());
+        if (!AuthInflight) {
+            SendAuthRequest(ctx);
+        }
+        return;
+    }
+
     // ToDo[counters]
     if (NumPartitionsFromTopic[intName]++ == 0) {
         if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
@@ -1037,8 +1092,8 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
 
     IActor* partitionActor = new TPartitionActor(
             ctx.SelfID, InternalClientId, Cookie, Session, record.GetGeneration(),
-            record.GetStep(), jt->second.FullConverter, record.GetPartition(), record.GetTabletId(), it->second,
-            ClientDC
+            record.GetStep(), jt->second.FullConverter, Database.empty() ? NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig) : Database, record.GetPartition(), record.GetTabletId(), it->second,
+            ClientDC, jt->second.PartitionGraph->GetPartition(record.GetPartition())->AllParents
     );
 
     TActorId actorId = ctx.Register(partitionActor);
@@ -1098,7 +1153,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const T
             ui64 diff = result.ByteSize();
             BytesInflight_ += diff;
             if (BytesInflight) (*BytesInflight) += diff;
-            Handler->Reply(result);
+            Handler->Reply(std::move(result));
         } else {
             jt->second->ControlMessages.push_back(result);
         }
@@ -1117,7 +1172,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const T
             ui64 diff = result.ByteSize();
             BytesInflight_ += diff;
             if (BytesInflight) (*BytesInflight) += diff;
-            Handler->Reply(result);
+            Handler->Reply(std::move(result));
         } else {
             jt->second->ControlMessages.push_back(result);
         }
@@ -1161,37 +1216,35 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
         return;
     }
 
-    for (ui32 c = 0; c < record.GetCount(); ++c) {
-        Y_ABORT_UNLESS(!Partitions.empty());
+    Y_ABORT_UNLESS(!Partitions.empty());
 
-        TActorId actorId = TActorId{};
-        auto jt = Partitions.begin();
-        ui32 i = 0;
-        for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
-            if (it->first.first == clientName && !it->second.Releasing && (group == 0 || it->first.second + 1 == group)) {
-                ++i;
-                if (rand() % i == 0) { //will lead to 1/n probability for each of n partitions
-                    actorId = it->second.Actor;
-                    jt = it;
-                }
+    TActorId actorId = TActorId{};
+    auto jt = Partitions.begin();
+    ui32 i = 0;
+    for (auto it = Partitions.begin(); it != Partitions.end(); ++it) {
+        if (it->first.first == clientName && !it->second.Releasing && (group == 0 || it->first.second + 1 == group)) {
+            ++i;
+            if (rand() % i == 0) { //will lead to 1/n probability for each of n partitions
+                actorId = it->second.Actor;
+                jt = it;
             }
         }
-        Y_ABORT_UNLESS(actorId);
+    }
+    Y_ABORT_UNLESS(actorId);
 
-        {
-            auto it = TopicCounters.find(name);
-            Y_ABORT_UNLESS(it != TopicCounters.end());
-            it->second.PartitionsToBeReleased.Inc();
-        }
+    {
+        auto it = TopicCounters.find(name);
+        Y_ABORT_UNLESS(it != TopicCounters.end());
+        it->second.PartitionsToBeReleased.Inc();
+    }
 
-        LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " releasing " << jt->first.first << ":" << jt->first.second);
-        jt->second.Releasing = true;
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " releasing " << jt->first.first << ":" << jt->first.second);
+    jt->second.Releasing = true;
 
-        ctx.Send(actorId, new TEvPQProxy::TEvReleasePartition());
-        if (ClientsideLocksAllowed && jt->second.LockSent && !jt->second.Reading) { //locked and no active reads
-            if (!ProcessReleasePartition(jt, BalanceRightNow, false, ctx)) { // returns false if actor died
-                return;
-            }
+    ctx.Send(actorId, new TEvPQProxy::TEvReleasePartition());
+    if (ClientsideLocksAllowed && jt->second.LockSent && !jt->second.Reading) { //locked and no active reads
+        if (!ProcessReleasePartition(jt, BalanceRightNow, false, ctx)) { // returns false if actor died
+            return;
         }
     }
     AnswerForCommitsIfCan(ctx); // in case of killing partition
@@ -1272,7 +1325,7 @@ void TReadSessionActor::CloseSession(const TString& errorReason, const NPersQueu
             ui64 diff = result.ByteSize();
             BytesInflight_ += diff;
             if (BytesInflight) (*BytesInflight) += diff;
-            Handler->Reply(result);
+            Handler->Reply(std::move(result));
         } else {
             LOG_WARN_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " GRps is shutting dows, skip reply");
         }
@@ -1321,7 +1374,7 @@ bool TReadSessionActor::ProcessReleasePartition(const THashMap<std::pair<TString
             ui64 diff = result.ByteSize();
             BytesInflight_ += diff;
             if (BytesInflight) (*BytesInflight) += diff;
-            Handler->Reply(result);
+            Handler->Reply(std::move(result));
         } else {
             jt->second->ControlMessages.push_back(result);
         }
@@ -1524,7 +1577,10 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
 
     Y_ABORT_UNLESS(formedResponse->RequestsInfly == 0);
     i64 diff = formedResponse->Response.ByteSize();
-    const bool hasMessages = RemoveEmptyMessages(*formedResponse->Response.MutableBatchedData());
+
+    BytesReadByUserAgent->Add(diff);
+
+    const bool hasMessages = HasMessages(formedResponse->Response.GetBatchedData());
     if (hasMessages) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign read id " << ReadIdToResponse << " to read request " << formedResponse->Guid);
         formedResponse->Response.MutableBatchedData()->SetCookie(ReadIdToResponse);
@@ -1533,7 +1589,7 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
             ConvertToOldBatch(formedResponse->Response);
         }
         diff -= formedResponse->Response.ByteSize(); // Bytes will be tracked inside handler
-        Handler->Reply(formedResponse->Response);
+        Handler->Reply(std::move(formedResponse->Response));
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " empty read result " << formedResponse->Guid << ", start new reading");
     }
@@ -1545,7 +1601,7 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
         ui64 diff = r.ByteSize();
         BytesInflight_ += diff;
         if (BytesInflight) (*BytesInflight) += diff;
-        Handler->Reply(r);
+        Handler->Reply(std::move(r));
     }
 
     for (const TActorId& p : formedResponse->PartitionsTookPartInRead) {
@@ -1757,26 +1813,40 @@ void TReadSessionActor::HandleWakeup(const TActorContext& ctx) {
     }
 }
 
-bool TReadSessionActor::RemoveEmptyMessages(TReadResponse::TBatchedData& data) {
-    bool hasNonEmptyMessages = false;
-    auto isMessageEmpty = [&](TReadResponse::TBatchedData::TMessageData& message) -> bool {
-        if (message.GetData().empty()) {
-            return true;
-        } else {
-            hasNonEmptyMessages = true;
-            return false;
+bool TReadSessionActor::HasMessages(const TReadResponse::TBatchedData& data) {
+    for (const auto& partData : data.GetPartitionData()) {
+        for (const auto& batch : partData.GetBatch()) {
+            if (batch.MessageDataSize() > 0) {
+                return true;
+            }
         }
-    };
-    auto batchRemover = [&](TReadResponse::TBatchedData::TBatch& batch) -> bool {
-        NProtoBuf::RemoveRepeatedFieldItemIf(batch.MutableMessageData(), isMessageEmpty);
-        return batch.MessageDataSize() == 0;
-    };
-    auto partitionDataRemover = [&](TReadResponse::TBatchedData::TPartitionData& partition) -> bool {
-        NProtoBuf::RemoveRepeatedFieldItemIf(partition.MutableBatch(), batchRemover);
-        return partition.BatchSize() == 0;
-    };
-    NProtoBuf::RemoveRepeatedFieldItemIf(data.MutablePartitionData(), partitionDataRemover);
-    return hasNonEmptyMessages;
+    }
+    return false;
+}
+
+
+void TReadSessionActor::Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx) {
+    auto* msg = ev->Get();
+
+    auto it = Topics.find(msg->Topic);
+    if (it == Topics.end()) {
+        return;
+    }
+
+    auto& topic = it->second;
+    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionStartedRequest(InternalClientId, msg->PartitionId));
+}
+
+void TReadSessionActor::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
+    auto* msg = ev->Get();
+
+    auto it = Topics.find(msg->Topic);
+    if (it == Topics.end()) {
+        return;
+    }
+
+    auto& topic = it->second;
+    NTabletPipe::SendData(ctx, topic.PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(InternalClientId, msg->PartitionId, false, msg->FirstMessage));
 }
 
 
@@ -1784,8 +1854,8 @@ bool TReadSessionActor::RemoveEmptyMessages(TReadResponse::TBatchedData& data) {
 
 TPartitionActor::TPartitionActor(
         const TActorId& parentId, const TString& internalClientId, const ui64 cookie, const TString& session,
-        const ui32 generation, const ui32 step, const NPersQueue::TTopicConverterPtr& topic, const ui32 partition,
-        const ui64 tabletID, const TReadSessionActor::TTopicCounters& counters, const TString& clientDC
+        const ui32 generation, const ui32 step, const NPersQueue::TTopicConverterPtr& topic, const TString& database, const ui32 partition,
+        const ui64 tabletID, const TReadSessionActor::TTopicCounters& counters, const TString& clientDC, std::set<NPQ::TPartitionGraph::Node*> parents
 )
     : ParentId(parentId)
     , InternalClientId(internalClientId)
@@ -1795,6 +1865,7 @@ TPartitionActor::TPartitionActor(
     , Generation(generation)
     , Step(step)
     , Topic(topic)
+    , Database(database)
     , Partition(partition)
     , TabletID(tabletID)
     , ReadOffset(0)
@@ -1819,6 +1890,9 @@ TPartitionActor::TPartitionActor(
     , WaitForData(false)
     , LockCounted(false)
     , Counters(counters)
+    , FirstRead(true)
+    , ReadingFinishedSent(false)
+    , Parents(parents)
 {
 }
 
@@ -1851,29 +1925,94 @@ void TPartitionActor::CheckRelease(const TActorContext& ctx) {
 
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    NKikimrClient::TPersQueueRequest request;
-    request.MutablePartitionRequest()->SetTopic(Topic->GetClientsideName());
-    request.MutablePartitionRequest()->SetPartition(Partition);
-    request.MutablePartitionRequest()->SetCookie(readId);
+    if (!ClientHasAnyCommits && Parents.size() != 0) {
+        std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;
+        for (auto& parent: Parents) {
+            NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
+            commits.push_back(commit);
+        }
+        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
+        commits.push_back(commit);
+        auto kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Database, InternalClientId, Topic->GetPrimaryPath(), commits, readId);
+        Kqps.emplace(readId, kqp);
 
-    Y_ABORT_UNLESS(PipeClient);
+        kqp->SendCreateSessionRequest(ctx);
+    } else {
+        NKikimrClient::TPersQueueRequest request;
+        request.MutablePartitionRequest()->SetTopic(Topic->GetClientsideName());
+        request.MutablePartitionRequest()->SetPartition(Partition);
+        request.MutablePartitionRequest()->SetCookie(readId);
 
-    ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
-    auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
-    commit->SetClientId(InternalClientId);
-    commit->SetOffset(offset);
-    Y_ABORT_UNLESS(!Session.empty());
-    commit->SetSessionId(Session);
+        Y_ABORT_UNLESS(PipeClient);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString() << " partition:"
-                        << Partition << " committing to position " << offset << " prev " << CommittedOffset
-                        << " end " << EndOffset << " by cookie " << readId);
+        ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
+        auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
+        commit->SetClientId(InternalClientId);
+        commit->SetOffset(offset);
+        Y_ABORT_UNLESS(!Session.empty());
+        commit->SetSessionId(Session);
 
-    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
-    req->Record.Swap(&request);
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString() << " partition:"
+                            << Partition << " committing to position " << offset << " prev " << CommittedOffset
+                            << " end " << EndOffset << " by cookie " << readId);
 
-    NTabletPipe::SendData(ctx, PipeClient, req.Release());
+        TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+        req->Record.Swap(&request);
+
+        NTabletPipe::SendData(ctx, PipeClient, req.Release());
+    }
 }
+
+void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
+    if (CommitsInfly.empty()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString()
+                        << " partition:" << Partition
+                        << " unwaited commit-response with cookie " << cookie << "; waiting for nothing");
+        return;
+    }
+    ui64 readId = CommitsInfly.front().first;
+
+    if (cookie != readId) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString()
+                        << " partition:" << Partition
+                        << " unwaited commit-response with cookie " << cookie << "; waiting for " << readId);
+        return;
+    }
+
+    Counters.Commits.Inc();
+    ClientHasAnyCommits = true;
+
+    CommittedOffset = CommitsInfly.front().second;
+    CommitsInfly.pop_front();
+    if (readId != Max<ui64>()) //this readId is reserved for upcommits on client skipping with ClientCommitOffset
+        ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(readId, Topic, Partition));
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString()
+                    << " partition:" << Partition
+                    << " commit done to position " << CommittedOffset << " endOffset " << EndOffset << " with cookie " << readId);
+
+    while (!CommitsInfly.empty() && CommitsInfly.front().second == Max<ui64>()) { //this is cookies that have no effect on this partition
+        readId = CommitsInfly.front().first;
+        CommitsInfly.pop_front();
+        ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(readId, Topic, Partition));
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString()
+                    << "partition :" << Partition
+                    << " commit done with no effect with cookie " << readId);
+    }
+
+    CheckRelease(ctx);
+    PipeGeneration = 0; //reset tries counter - all ok
+}
+
+void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << Topic->GetPrintableString() << " partition:" << Partition
+                        << " ready for read with readOffset " << ReadOffset << " endOffset " << EndOffset);
+    if (FirstRead) {
+        ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition));
+        FirstRead = false;
+    }
+    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Topic, Partition, WTime, SizeLag, ReadOffset, EndOffset));
+}
+
 
 void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reason, const NPersQueue::NErrorCode::EErrorCode errorCode) {
 
@@ -2002,6 +2141,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         if (resp.HasWriteTimestampMS())
             WTime = resp.GetWriteTimestampMS();
         WriteTimestampEstimateMs = resp.GetWriteTimestampEstimateMS();
+        ClientHasAnyCommits = resp.GetClientHasAnyCommits();
         InitDone = true;
         PipeGeneration = 0; //reset tries counter - all ok
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INIT DONE " << Topic->GetPrintableString()
@@ -2017,43 +2157,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         return;
     }
 
-    if (!result.HasCmdReadResult()) { //this is commit response
-        if (CommitsInfly.empty()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString()
-                            << " partition:" << Partition
-                            << " unwaited commit-response with cookie " << result.GetCookie() << "; waiting for nothing");
-            return;
-        }
-        ui64 readId = CommitsInfly.front().first;
-
-        if (result.GetCookie() != readId) {
-            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString()
-                            << " partition:" << Partition
-                            << " unwaited commit-response with cookie " << result.GetCookie() << "; waiting for " << readId);
-            return;
-        }
-
-        Counters.Commits.Inc();
-
-        CommittedOffset = CommitsInfly.front().second;
-        CommitsInfly.pop_front();
-        if (readId != Max<ui64>()) //this readId is reserved for upcommits on client skipping with ClientCommitOffset
-            ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(readId, Topic, Partition));
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString()
-                        << " partition:" << Partition
-                        << " commit done to position " << CommittedOffset << " endOffset " << EndOffset << " with cookie " << readId);
-
-        while (!CommitsInfly.empty() && CommitsInfly.front().second == Max<ui64>()) { //this is cookies that have no effect on this partition
-            readId = CommitsInfly.front().first;
-            CommitsInfly.pop_front();
-            ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(readId, Topic, Partition));
-            LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Topic->GetPrintableString()
-                        << "partition :" << Partition
-                        << " commit done with no effect with cookie " << readId);
-        }
-
-        CheckRelease(ctx);
-        PipeGeneration = 0; //reset tries counter - all ok
+    if (!result.HasCmdReadResult()) { // this is commit response
+        CommitDone(result.GetCookie(), ctx);
         return;
     }
 
@@ -2098,6 +2203,11 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         if (proto.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue; //TODO - no such chunks must be on prod
         }
+
+        if (!proto.has_codec()) {
+            proto.set_codec(NPersQueueCommon::RAW);
+        }
+
         TString sourceId = "";
         if (!r.GetSourceId().empty()) {
             if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {
@@ -2185,7 +2295,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     Y_ABORT_UNLESS(!WaitForData);
 
     if (EndOffset > ReadOffset) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Topic, Partition, WTime, SizeLag, ReadOffset, EndOffset));
+        SendPartitionReady(ctx);
     } else {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
@@ -2263,6 +2373,46 @@ void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActo
     InitLockPartition(ctx);
 }
 
+void TPartitionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+    auto kqpIt = Kqps.find(ev->Cookie);
+    if (kqpIt == Kqps.end()) {
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("unexpected cookie at KQP create session response", NPersQueue::NErrorCode::ERROR));
+        return;
+    }
+
+    if (!kqpIt->second->Handle(ev, ctx)) {
+        const auto& record = ev->Get()->Record;
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("status is not ok: " + record.GetError(), NPersQueue::NErrorCode::ERROR));
+    }
+}
+
+void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+
+    auto kqpIt = Kqps.find(ev->Cookie);
+    if (kqpIt == Kqps.end()) {
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("unexpected cookie at KQP query response", NPersQueue::NErrorCode::ERROR));
+        return;
+    }
+
+    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+
+        auto kqpQueryError = TStringBuilder() << "Kqp error. Status# " << record.GetYdbStatus() << ", ";
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+        kqpQueryError << issues.ToString();
+
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(kqpQueryError, NPersQueue::NErrorCode::ERROR));
+        return;
+    }
+
+    auto step = kqpIt->second->Handle(ev, ctx);
+    if (step == NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep::DONE) {
+        CommitDone(ev->Cookie, ctx);
+    }
+}
+
 void TPartitionActor::InitStartReading(const TActorContext& ctx) {
 
     Y_ABORT_UNLESS(AllPrepareInited);
@@ -2311,7 +2461,7 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
     }
 
     if (EndOffset > ReadOffset) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Topic, Partition, WTime, SizeLag, ReadOffset, EndOffset));
+        SendPartitionReady(ctx);
     } else {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
@@ -2378,15 +2528,16 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
 
 void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
-
-    if (WaitDataInfly.size() > 1) //already got 2 requests inflight
+    if (WaitDataInfly.size() > 1) { //already got 2 requests inflight
         return;
-    Y_ABORT_UNLESS(InitDone);
+    }
 
+    Y_ABORT_UNLESS(InitDone);
     Y_ABORT_UNLESS(PipeClient);
 
-    if (!WaitForData)
+    if (!WaitForData) {
         return;
+    }
 
     Y_ABORT_UNLESS(ReadOffset >= EndOffset);
 
@@ -2407,7 +2558,6 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     NTabletPipe::SendData(ctx, PipeClient, event.Release());
 
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
-
     ctx.Schedule(WAIT_DATA, new TEvPQProxy::TEvDeadlineExceeded(WaitDataCookie));
 
     WaitDataInfly.insert(WaitDataCookie);
@@ -2448,19 +2598,28 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
 
-    if (ReadOffset < EndOffset) {
-        WaitForData = false;
-        WaitDataInfly.clear();
-        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Topic, Partition, WTime, SizeLag, ReadOffset, EndOffset));
-        LOG_DEBUG_S(
-                ctx, NKikimrServices::PQ_READ_PROXY,
-                PQ_LOG_PREFIX << " " << Topic->GetPrintableString() << " partition:" << Partition
-                              << " ready for read with readOffset " << ReadOffset << " endOffset " << EndOffset
-        );
-    } else {
-        if (PipeClient)
+    if (!record.GetReadingFinished()) {
+        if (ReadOffset < EndOffset) {
+            WaitForData = false;
+            WaitDataInfly.clear();
+            SendPartitionReady(ctx);
+        } else if (PipeClient) {
             WaitDataInPartition(ctx);
+        }
     }
+
+    if (!ReadingFinishedSent) {
+        if (record.GetReadingFinished()) {
+            ReadingFinishedSent = true;
+
+            // TODO Tx
+            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition, FirstRead));
+        } else if (FirstRead) {
+            ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition));
+        }
+        FirstRead = false;
+    }
+
     CheckRelease(ctx); //just for logging purpose
 }
 
@@ -2575,7 +2734,6 @@ void TPartitionActor::HandlePoison(TEvents::TEvPoisonPill::TPtr&, const TActorCo
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvDeadlineExceeded::TPtr& ev, const TActorContext& ctx) {
-
     WaitDataInfly.erase(ev->Get()->Cookie);
     if (ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) {
         Y_ABORT_UNLESS(WaitForData);

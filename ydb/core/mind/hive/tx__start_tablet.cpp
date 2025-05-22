@@ -10,6 +10,7 @@ class TTxStartTablet : public TTransactionBase<THive> {
     ui64 Cookie;
     bool External;
     TSideEffects SideEffects;
+    bool Success;
 
 public:
     TTxStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external, THive *hive)
@@ -23,10 +24,13 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_START_TABLET; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        Success = false;
         SideEffects.Reset(Self->SelfId());
         BLOG_D("THive::TTxStartTablet::Execute Tablet " << TabletId);
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
+            NIceDb::TNiceDb db(txc.DB);
+            tablet->BootTime = TActivationContext::Now();
             // finish fast-move operation
             if (tablet->LastNodeId != 0 && tablet->LastNodeId != Local.NodeId()) {
                 TNodeInfo* lastNode = Self->FindNode(tablet->LastNodeId);
@@ -39,16 +43,28 @@ public:
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
                 if (leader.IsStarting() || leader.IsBootingSuppressed() && External) {
-                    NIceDb::TNiceDb db(txc.DB);
                     leader.IncreaseGeneration();
                     db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::KnownGeneration>(leader.KnownGeneration);
                 } else {
                     BLOG_W("THive::TTxStartTablet::Execute Tablet " << leader.ToString() << " (" << leader.StateString() << ") skipped generation increment " << (ui64)leader.State);
                 }
             }
+            // reset usage impact estimate on each tablet restart
+            tablet->UsageImpact = 0;
+            db.Table<Schema::Metrics>().Key(tablet->GetFullTabletId()).Update<Schema::Metrics::UsageImpact>(0.);
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
                 if (leader.IsStartingOnNode(Local.NodeId()) || leader.IsBootingSuppressed() && External) {
+                    if (!leader.DeletedHistory.empty()) {
+                        if (!leader.WasAliveSinceCutHistory) {
+                            BLOG_ERROR("THive::TTxStartTablet::Execute Tablet " << TabletId << " failed to start after cutting history - will restore history");
+                            Self->TabletCounters->Cumulative()[NHive::COUNTER_HISTORY_RESTORED].Increment(leader.DeletedHistory.size());
+                            Self->UpdateCounterTabletChannelHistorySize();
+                            leader.RestoreDeletedHistory(txc);
+                        } else {
+                            leader.WasAliveSinceCutHistory = false;
+                        }
+                    }
                     BLOG_D("THive::TTxStartTablet::Execute, Sending TEvBootTablet(" << leader.ToString() << ")"
                             << " to node " << Local.NodeId()
                             << " storage " << leader.TabletStorageInfo->ToString());
@@ -57,6 +73,7 @@ public:
                                 new TEvLocal::TEvBootTablet(*leader.TabletStorageInfo, promotableFollowerId, leader.KnownGeneration),
                                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
                                 Cookie);
+                    Success = true;
                     return true;
                 } else {
                     BLOG_W("THive::TTxStartTablet::Execute, ignoring TEvBootTablet(" << leader.ToString() << ") - wrong state or node");
@@ -71,6 +88,7 @@ public:
                              new TEvLocal::TEvBootTablet(*follower.LeaderTablet.TabletStorageInfo, follower.Id),
                              IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
                              Cookie);
+                    Success = true;
                     return true;
                 } else {
                     BLOG_W("THive::TTxStartTablet::Execute, ignoring TEvBootTablet(" << follower.ToString() << ") - wrong state or node");
@@ -100,6 +118,9 @@ public:
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxStartTablet::Complete Tablet " << TabletId << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
+        if (Success) {
+            Self->UpdateCounterTabletsStarting(+1);
+        }
     }
 };
 

@@ -51,6 +51,7 @@ public:
     uint8_t   returnAddressRegister;
 #if defined(_LIBUNWIND_TARGET_AARCH64)
     bool      addressesSignedWithBKey;
+    bool      mteTaggedFrame;
 #endif
   };
 
@@ -90,6 +91,9 @@ public:
     int64_t           cfaExpression;      // CFA = expression
     uint32_t          spExtraArgSize;
     RegisterLocation  savedRegisters[kMaxRegisterNumber + 1];
+#if defined(_LIBUNWIND_TARGET_AARCH64)
+    pint_t ptrAuthDiversifier;
+#endif
     enum class InitializeTime { kLazy, kNormal };
 
     // When saving registers, this data structure is lazily initialized.
@@ -325,6 +329,7 @@ const char *CFI_Parser<A>::parseCIE(A &addressSpace, pint_t cie,
   cieInfo->fdesHaveAugmentationData = false;
 #if defined(_LIBUNWIND_TARGET_AARCH64)
   cieInfo->addressesSignedWithBKey = false;
+  cieInfo->mteTaggedFrame = false;
 #endif
   cieInfo->cieStart = cie;
   pint_t p = cie;
@@ -353,7 +358,7 @@ const char *CFI_Parser<A>::parseCIE(A &addressSpace, pint_t cie,
   while (addressSpace.get8(p) != 0)
     ++p;
   ++p;
-  // parse code aligment factor
+  // parse code alignment factor
   cieInfo->codeAlignFactor = (uint32_t)addressSpace.getULEB128(p, cieContentEnd);
   // parse data alignment factor
   cieInfo->dataAlignFactor = (int)addressSpace.getSLEB128(p, cieContentEnd);
@@ -394,6 +399,9 @@ const char *CFI_Parser<A>::parseCIE(A &addressSpace, pint_t cie,
       case 'B':
         cieInfo->addressesSignedWithBKey = true;
         break;
+      case 'G':
+        cieInfo->mteTaggedFrame = true;
+        break;
 #endif
       default:
         // ignore unknown letters
@@ -407,7 +415,7 @@ const char *CFI_Parser<A>::parseCIE(A &addressSpace, pint_t cie,
 }
 
 
-/// "run" the DWARF instructions and create the abstact PrologInfo for an FDE
+/// "run" the DWARF instructions and create the abstract PrologInfo for an FDE
 template <typename A>
 bool CFI_Parser<A>::parseFDEInstructions(A &addressSpace,
                                          const FDE_Info &fdeInfo,
@@ -793,6 +801,24 @@ bool CFI_Parser<A>::parseFDEInstructions(A &addressSpace,
 #endif
         }
         break;
+
+#if defined(_LIBUNWIND_TARGET_AARCH64)
+      case DW_CFA_AARCH64_negate_ra_state_with_pc: {
+        int64_t value =
+            results->savedRegisters[UNW_AARCH64_RA_SIGN_STATE].value ^ 0x3;
+        results->setRegisterValue(UNW_AARCH64_RA_SIGN_STATE, value,
+                                  initialState);
+        // When calculating the value of the PC, it is assumed that the CFI
+        // instruction is placed before the signing instruction, however it is
+        // placed after. Because of this, we need to take into account the CFI
+        // instruction is one instruction call later than expected, and reduce
+        // the PC value by 4 bytes to compensate.
+        results->ptrAuthDiversifier = fdeInfo.pcStart + codeOffset - 0x4;
+        _LIBUNWIND_TRACE_DWARF(
+            "DW_CFA_AARCH64_negate_ra_state_with_pc(pc=0x%" PRIx64 ")\n",
+            static_cast<uint64_t>(results->ptrAuthDiversifier));
+      } break;
+#endif
 
 #else
         (void)arch;

@@ -3,6 +3,7 @@
 #include "node_checkers.h"
 
 #include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -60,12 +61,12 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
         return true;
     }
 
-    if (!ScheduledLocks.empty() && ScheduledLocks.begin()->Order < DeactivatedLocksOrder) {
+    if (!ScheduledLocks.empty() && ScheduledLocks.begin()->Priority < DeactivatedLocksPriority) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = Sprintf("%s has scheduled action %s owned by %s (order %" PRIu64 " vs %" PRIu64 ")",
+        error.Reason = Sprintf("%s has scheduled action %s owned by %s (priority %" PRIi32 " vs %" PRIi32 ")",
                                PrettyItemName().data(), ScheduledLocks.begin()->RequestId.data(),
-                               ScheduledLocks.begin()->Owner.data(), ScheduledLocks.begin()->Order,
-                               DeactivatedLocksOrder);
+                               ScheduledLocks.begin()->Owner.data(), ScheduledLocks.begin()->Priority,
+                               DeactivatedLocksPriority);
         error.Deadline = now + defaultRetryTime;
         return true;
     }
@@ -113,12 +114,12 @@ void TLockableItem::RollbackLocks(ui64 point)
 
 void TLockableItem::ReactivateScheduledLocks()
 {
-    DeactivatedLocksOrder = Max<ui64>();
+    DeactivatedLocksPriority = Max<i32>();
 }
 
-void TLockableItem::DeactivateScheduledLocks(ui64 order)
+void TLockableItem::DeactivateScheduledLocks(i32 priority)
 {
-    DeactivatedLocksOrder = order;
+    DeactivatedLocksPriority = priority;
 }
 
 void TLockableItem::RemoveScheduledLocks(const TString &requestId)
@@ -261,7 +262,7 @@ TString TVDiskInfo::PrettyItemName() const
 
 TString TVDiskInfo::GetDeviceName() const
 {
-    return Sprintf("vdisk-%u-%u-%u-%u-%u", VDiskId.GroupID, VDiskId.GroupGeneration,
+    return Sprintf("vdisk-%u-%u-%u-%u-%u", VDiskId.GroupID.GetRawId(), VDiskId.GroupGeneration,
                    VDiskId.FailRealm, VDiskId.FailDomain, VDiskId.VDisk);
 }
 
@@ -277,7 +278,7 @@ bool TVDiskInfo::NameToId(const TString &name, TVDiskID &id)
     if (size != static_cast<int>(name.size()))
         return false;
 
-    id = TVDiskID(group, gen, ring, domain, vdisk);
+    id = TVDiskID(TGroupId::FromValue(group), gen, ring, domain, vdisk);
 
     return true;
 }
@@ -496,13 +497,12 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
 void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
 {
     ui32 nodeId = info.GetVSlotId().GetNodeId();
-    Y_DEBUG_ABORT_UNLESS(HasNode(nodeId));
     if (!HasNode(nodeId)) {
         BLOG_ERROR("Got VDisk info from BSC base config for unknown node " << nodeId);
         return;
     }
 
-    TVDiskID vdiskId(info.GetGroupId(),
+    TVDiskID vdiskId(TGroupId::FromProto(&info, &NKikimrBlobStorage::TBaseConfig::TVSlot::GetGroupId),
                      info.GetGroupGeneration(),
                      info.GetFailRealmIdx(),
                      info.GetFailDomainIdx(),
@@ -650,8 +650,11 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
     case TAction::REBOOT_HOST:
         if (auto nodes = NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
-                for (auto &nodeGroup: node->NodeGroups)
-                    nodeGroup->LockNode(node->NodeId);
+                for (auto &nodeGroup: node->NodeGroups) {
+                    if (!nodeGroup->IsNodeLocked(node->NodeId)) {
+                        nodeGroup->LockNode(node->NodeId);
+                    }
+                }
             }
         }
         break;
@@ -659,12 +662,18 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
         for (const auto &device : action.GetDevices()) {
             if (HasPDisk(device)) {
                 auto pdisk = &PDiskRef(device);
-                for (auto &nodeGroup: NodeRef(pdisk->NodeId).NodeGroups)
-                    nodeGroup->LockNode(pdisk->NodeId);
+                for (auto &nodeGroup: NodeRef(pdisk->NodeId).NodeGroups) {
+                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId)) {
+                        nodeGroup->LockNode(pdisk->NodeId);
+                    }
+                }
             } else if (HasVDisk(device)) {
                 auto vdisk = &VDiskRef(device);
-                for (auto &nodeGroup: NodeRef(vdisk->NodeId).NodeGroups)
-                    nodeGroup->LockNode(vdisk->NodeId);
+                for (auto &nodeGroup: NodeRef(vdisk->NodeId).NodeGroups) {
+                    if (!nodeGroup->IsNodeLocked(vdisk->NodeId)) {
+                        nodeGroup->LockNode(vdisk->NodeId);
+                    }
+                } 
             }
         }
         break;
@@ -715,6 +724,8 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
 
             if (HasPDisk(device))
                 item = &PDiskRef(device);
+            else if (HasPDisk(action.GetHost(), device))
+                item = &PDiskRef(action.GetHost(), device);
             else if (HasVDisk(device))
                 item = &VDiskRef(device);
 
@@ -756,7 +767,7 @@ ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorConte
                 || permission.Action.GetType() == TAction::REBOOT_HOST
                 || permission.Action.GetType() == TAction::REPLACE_DEVICES)) {
             item->State = RESTART;
-            lock = true;;
+            lock = true;
         }
 
         if (lock) {
@@ -854,7 +865,7 @@ ui64 TClusterInfo::ScheduleActions(const TRequestInfo &request, const TActorCont
         auto items = FindLockedItems(action, ctx);
 
         for (auto item : items)
-            item->ScheduleLock({action, request.Owner, request.RequestId, request.Order});
+            item->ScheduleLock({action, request.Owner, request.RequestId, request.Priority});
 
         locks += items.size();
     }
@@ -868,10 +879,10 @@ void TClusterInfo::UnscheduleActions(const TString &requestId)
         entry.second->RemoveScheduledLocks(requestId);
 }
 
-void TClusterInfo::DeactivateScheduledLocks(ui64 order)
+void TClusterInfo::DeactivateScheduledLocks(i32 priority)
 {
     for (auto &entry : LockableItems)
-        entry.second->DeactivateScheduledLocks(order);
+        entry.second->DeactivateScheduledLocks(priority);
 }
 
 void TClusterInfo::ReactivateScheduledLocks()
@@ -999,7 +1010,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
         TStringStream ss;
         auto &group = entry.second;
         ss << "BSGroup {" << Endl
-           << "  Id: " << (ui32)group.GroupId << Endl;
+           << "  Id: " << group.GroupId << Endl;
         if (group.Erasure.GetErasure() == TErasureType::ErasureSpeciesCount)
             ss << "  Erasure: UNKNOWN" << Endl;
         else
@@ -1020,8 +1031,11 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
     case NKikimrCms::TAction::REBOOT_HOST:
         if (auto nodes = clusterState->NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
-                for (auto &nodeGroup: node->NodeGroups)
-                    AddNodeLockOperation(node->NodeId, nodeGroup);
+                for (auto &nodeGroup: node->NodeGroups) {
+                    if (!nodeGroup->IsNodeLocked(node->NodeId)) {
+                        AddNodeLockOperation(node->NodeId, nodeGroup);
+                    }
+                }     
             }
         }
         break;
@@ -1029,13 +1043,18 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
         for (const auto &device : action.GetDevices()) {
             if (clusterState->HasPDisk(device)) {
                 auto pdisk = &clusterState->PDisk(device);
-                for (auto &nodeGroup: clusterState->NodeRef(pdisk->NodeId).NodeGroups)
-                    AddNodeLockOperation(pdisk->NodeId, nodeGroup);
-
+                for (auto &nodeGroup: clusterState->NodeRef(pdisk->NodeId).NodeGroups) {
+                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId)) {
+                        AddNodeLockOperation(pdisk->NodeId, nodeGroup);
+                    }
+                }       
             } else if (clusterState->HasVDisk(device)) {
                 auto vdisk = &clusterState->VDisk(device);
-                for (auto &nodeGroup: clusterState->NodeRef(vdisk->NodeId).NodeGroups)
-                    AddNodeLockOperation(vdisk->NodeId, nodeGroup);
+                for (auto &nodeGroup: clusterState->NodeRef(vdisk->NodeId).NodeGroups) {
+                    if (!nodeGroup->IsNodeLocked(vdisk->NodeId)) {
+                        AddNodeLockOperation(vdisk->NodeId, nodeGroup);
+                    }
+                }     
             }
         }
         break;

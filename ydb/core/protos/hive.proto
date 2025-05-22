@@ -47,6 +47,22 @@ enum EMigrationState {
     MIGRATION_COMPLETE = 3;
 }
 
+enum EDrainDownPolicy {
+    DRAIN_POLICY_NO_DOWN = 0;
+    DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART = 1;
+    DRAIN_POLICY_KEEP_DOWN = 2;
+}
+
+enum ELockLostReason {
+    LOCK_LOST_REASON_UNKNOWN = 0;
+    LOCK_LOST_REASON_NODE_DISCONNECTED = 1;
+    LOCK_LOST_REASON_HIVE_RESTART = 2;
+    LOCK_LOST_REASON_TABLET_DELETED = 3;
+    LOCK_LOST_REASON_NEW_LOCK = 4;
+    LOCK_LOST_REASON_TABLET_RELEASED = 5;
+    LOCK_LOST_REASON_UNLOCKED = 6;
+}
+
 message TChannelInfo {
     message THistorySlot {
         optional uint32 FromGeneration = 1;
@@ -239,7 +255,9 @@ message TTabletMetrics {
 message TEvTabletMetrics {
     repeated TTabletMetrics TabletMetrics = 1;
     optional NKikimrTabletBase.TMetrics TotalResourceUsage = 2;
+    optional NKikimrTabletBase.TMetrics ResourceMaximum = 4;
     optional double TotalNodeUsage = 3;
+    optional double TotalNodeCpuUsage = 5;
 }
 
 message TEvReassignTablet {
@@ -305,6 +323,7 @@ message TEvRequestHiveNodeStats {
     // The next 2 fields should always be used together
     optional uint64 FilterTabletsByPathId = 7;
     optional uint64 FilterTabletsBySchemeShardId = 8;
+    optional NKikimrSubDomains.TDomainKey FilterTabletsByObjectDomain = 9;
 }
 
 message THiveNodeStats {
@@ -314,6 +333,7 @@ message THiveNodeStats {
     optional uint32 RestartsPerPeriod = 6;
     optional uint64 LastAliveTimestamp = 7;
     optional NKikimrSubDomains.TDomainKey NodeDomain = 8;
+    optional string NodeName = 9;
 }
 
 message TEvResponseHiveNodeStats {
@@ -354,8 +374,10 @@ message TTabletOwner {
 message TEvDrainNode {
     optional uint32 NodeID = 1;
     optional bool Persist = 3 [default = true];
-    optional bool KeepDown = 4 [default = false];
+    optional bool KeepDown = 4 [default = false]; // deprecated in favor of DownPolicy
     optional uint32 DrainInFlight = 5;
+    optional EDrainDownPolicy DownPolicy = 6 [default = DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART];
+    optional uint64 SeqNo = 7;
 }
 
 message TEvDrainNodeResult {
@@ -395,6 +417,7 @@ message TEvLockTabletExecution {
 
 message TEvLockTabletExecutionLost {
     optional fixed64 TabletID = 1;
+    optional ELockLostReason Reason = 2;
 }
 
 message TEvLockTabletExecutionResult {
@@ -485,6 +508,7 @@ message TTabletInfo {
     optional uint32 RestartsPerPeriod = 22;
     optional uint64 LastAliveTimestamp = 23;
     optional EBalancerPolicy BalancerPolicy = 24;
+    optional bool InWaitQueue = 25;
 }
 
 message TEvSeizeTabletsReply {
@@ -566,4 +590,50 @@ message TEvUpdateDomain {
 message TEvUpdateDomainReply {
     optional fixed64 Origin = 1;
     optional uint64 TxId = 2;
+}
+
+message TEvRequestTabletDistribution {
+    repeated fixed64 TabletIds = 1;
+}
+
+message TEvResponseTabletDistribution {
+    message TNode {
+        optional uint32 NodeId = 1;
+        repeated fixed64 TabletIds = 2;
+    }
+    repeated TNode Nodes = 1;
+}
+
+message TEvRequestScaleRecommendation {
+    optional NKikimrSubDomains.TDomainKey DomainKey = 1;
+}
+
+message TEvResponseScaleRecommendation {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional uint32 RecommendedNodes = 2;
+}
+
+message TScaleRecommenderPolicies {
+    message TScaleRecommenderPolicy {
+        message TTargetTrackingPolicy {
+            oneof Target {
+                uint32 AverageCpuUtilizationPercent = 1;
+            }
+        }
+
+        oneof Policy {
+            TTargetTrackingPolicy TargetTrackingPolicy = 1;
+        }
+    }
+
+    repeated TScaleRecommenderPolicy Policies = 1;
+}
+
+message TEvConfigureScaleRecommender {
+    optional NKikimrSubDomains.TDomainKey DomainKey = 1;
+    optional TScaleRecommenderPolicies Policies = 2;
+}
+
+message TEvConfigureScaleRecommenderReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
 }

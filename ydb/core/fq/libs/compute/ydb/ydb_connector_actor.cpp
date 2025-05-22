@@ -3,10 +3,11 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -24,12 +25,8 @@ public:
         : YqSharedResources(params.YqSharedResources)
         , CredentialsProviderFactory(params.CredentialsProviderFactory)
         , ComputeConnection(params.ComputeConnection)
-    {
-        StatsMode = params.Config.GetControlPlaneStorage().GetStatsMode();
-        if (StatsMode == Ydb::Query::StatsMode::STATS_MODE_UNSPECIFIED) {
-            StatsMode = Ydb::Query::StatsMode::STATS_MODE_FULL;
-        }
-    }
+        , WorkloadManager(params.WorkloadManager)
+    {}
 
     void Bootstrap() {
         auto querySettings = NFq::GetClientSettings<NYdb::NQuery::TClientSettings>(ComputeConnection, CredentialsProviderFactory);
@@ -52,32 +49,45 @@ public:
         const auto& event = *ev->Get();
         NYdb::NQuery::TExecuteScriptSettings settings;
         settings.ResultsTtl(event.ResultTtl);
-        settings.OperationTimeout(event.OperationTimeout);
+        settings.OperationTimeout(event.OperationDeadline - TInstant::Now());
         settings.Syntax(event.Syntax);
         settings.ExecMode(event.ExecMode);
-        settings.StatsMode(StatsMode);
+        settings.StatsMode(event.StatsMode);
         settings.TraceId(event.TraceId);
+
+        if (WorkloadManager.GetEnable()) {
+            settings.ResourcePool(WorkloadManager.GetExecutionResourcePool());
+        }
+
+        NYdb::TParamsBuilder paramsBuilder;
+        for (const auto& [k, v] : event.QueryParameters) {
+            paramsBuilder.AddParam(k, NYdb::TValue(NYdb::TType(v.type()), v.value()));
+        }
+
+        const NYdb::TParams params = paramsBuilder.Build();
         QueryClient
-            ->ExecuteScript(event.Sql, settings)
+            ->ExecuteScript(event.Sql, params, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.Status().IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvExecuteScriptResponse(response.Id(), response.Metadata().ExecutionId), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvExecuteScriptResponse(response.Id(), TString{response.Metadata().ExecutionId}), 0, cookie);
                     } else {
                         actorSystem->Send(
                             recipient,
                             MakeResponse<TEvYdbCompute::TEvExecuteScriptResponse>(
-                                response.Status().GetIssues(),
-                                response.Status().GetStatus(), database),
+                                database,
+                                NYdb::NAdapters::ToYqlIssues(response.Status().GetIssues()),
+                                response.Status().GetStatus()),
                             0, cookie);
                     }
                 } catch (...) {
                     actorSystem->Send(
                         recipient,
                         MakeResponse<TEvYdbCompute::TEvExecuteScriptResponse>(
+                            database,
                             CurrentExceptionMessage(),
-                            NYdb::EStatus::GENERIC_ERROR, database),
+                            NYdb::EStatus::GENERIC_ERROR),
                         0, cookie);
                 }
             });
@@ -89,22 +99,35 @@ public:
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
-                    if (response.Id().GetKind() != Ydb::TOperationId::UNUSED) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Metadata().ExecStatus, static_cast<Ydb::StatusIds::StatusCode>(response.Status().GetStatus()), response.Metadata().ResultSetsMeta, response.Metadata().ExecStats, RemoveDatabaseFromIssues(response.Status().GetIssues(), database)), 0, cookie);
+                    if (response.Id().GetKind() != NKikimr::NOperationId::TOperationId::UNUSED) {
+                        actorSystem->Send(
+                            recipient, 
+                            new TEvYdbCompute::TEvGetOperationResponse(
+                                response.Metadata().ExecStatus,
+                                static_cast<Ydb::StatusIds::StatusCode>(response.Status().GetStatus()),
+                                response.Metadata().ResultSetsMeta,
+                                response.Metadata().ExecStats,
+                                RemoveDatabaseFromIssues(NYdb::NAdapters::ToYqlIssues(response.Status().GetIssues()), database),
+                                response.Ready()),
+                            0, cookie);
                     } else {
                         actorSystem->Send(
                             recipient,
                             MakeResponse<TEvYdbCompute::TEvGetOperationResponse>(
-                                response.Status().GetIssues(),
-                                response.Status().GetStatus(), database),
+                                database,
+                                NYdb::NAdapters::ToYqlIssues(response.Status().GetIssues()),
+                                response.Status().GetStatus(),
+                                true),
                             0, cookie);
                     }
                 } catch (...) {
                     actorSystem->Send(
                         recipient,
                         MakeResponse<TEvYdbCompute::TEvGetOperationResponse>(
+                            database,
                             CurrentExceptionMessage(),
-                            NYdb::EStatus::GENERIC_ERROR, database),
+                            NYdb::EStatus::GENERIC_ERROR,
+                            true),
                         0, cookie);
                 }
             });
@@ -113,27 +136,30 @@ public:
     void Handle(const TEvYdbCompute::TEvFetchScriptResultRequest::TPtr& ev) {
         NYdb::NQuery::TFetchScriptResultsSettings settings;
         settings.FetchToken(ev->Get()->FetchToken);
+        settings.RowsLimit(ev->Get()->RowsLimit);
         QueryClient
             ->FetchScriptResults(ev->Get()->OperationId, ev->Get()->ResultSetId, settings)
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.ExtractResultSet(), response.GetNextFetchToken()), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.ExtractResultSet(), TString{response.GetNextFetchToken()}), 0, cookie);
                     } else {
                         actorSystem->Send(
                             recipient,
                             MakeResponse<TEvYdbCompute::TEvFetchScriptResultResponse>(
-                                response.GetIssues(),
-                                response.GetStatus(), database),
+                                database,
+                                NYdb::NAdapters::ToYqlIssues(response.GetIssues()),
+                                response.GetStatus()),
                             0, cookie);
                     }
                 } catch (...) {
                     actorSystem->Send(
                         recipient,
                         MakeResponse<TEvYdbCompute::TEvFetchScriptResultResponse>(
+                            database,
                             CurrentExceptionMessage(),
-                            NYdb::EStatus::GENERIC_ERROR, database),
+                            NYdb::EStatus::GENERIC_ERROR),
                         0, cookie);
                 }
             });
@@ -148,15 +174,17 @@ public:
                     actorSystem->Send(
                         recipient,
                         MakeResponse<TEvYdbCompute::TEvCancelOperationResponse>(
-                            response.GetIssues(),
-                            response.GetStatus(), database),
+                            database,
+                            NYdb::NAdapters::ToYqlIssues(response.GetIssues()),
+                            response.GetStatus()),
                         0, cookie);
                 } catch (...) {
                     actorSystem->Send(
                         recipient,
                         MakeResponse<TEvYdbCompute::TEvCancelOperationResponse>(
+                            database,
                             CurrentExceptionMessage(),
-                            NYdb::EStatus::GENERIC_ERROR, database),
+                            NYdb::EStatus::GENERIC_ERROR),
                         0, cookie);
                 }
             });
@@ -171,37 +199,39 @@ public:
                     actorSystem->Send(
                         recipient,
                         MakeResponse<TEvYdbCompute::TEvForgetOperationResponse>(
-                            response.GetIssues(),
-                            response.GetStatus(), database),
+                            database,
+                            NYdb::NAdapters::ToYqlIssues(response.GetIssues()),
+                            response.GetStatus()),
                         0, cookie);
                 } catch (...) {
                     actorSystem->Send(
                         recipient,
                         MakeResponse<TEvYdbCompute::TEvForgetOperationResponse>(
+                            database,
                             CurrentExceptionMessage(),
-                            NYdb::EStatus::GENERIC_ERROR, database),
+                            NYdb::EStatus::GENERIC_ERROR),
                         0, cookie);
                 }
             });
     }
     
-    template<typename TResponse>
-    static TResponse* MakeResponse(TString msg, NYdb::EStatus status, TString databasePath) {
-        return new TResponse(NYql::TIssues{NYql::TIssue{RemoveDatabaseFromStr(msg, databasePath)}}, status);
+    template<typename TResponse, typename... TArgs>
+    static TResponse* MakeResponse(TString databasePath, TString msg, TArgs&&... args) {
+        return new TResponse(NYql::TIssues{NYql::TIssue{RemoveDatabaseFromStr(msg, databasePath)}}, std::forward<TArgs>(args)...);
     }
 
-    template<typename TResponse>
-    static TResponse* MakeResponse(const NYql::TIssues& issues, NYdb::EStatus status, TString databasePath) {
-        return new TResponse(RemoveDatabaseFromIssues(issues, databasePath), status);
+    template<typename TResponse, typename... TArgs>
+    static TResponse* MakeResponse(TString databasePath, const NYql::TIssues& issues, TArgs&&... args) {
+        return new TResponse(RemoveDatabaseFromIssues(issues, databasePath), std::forward<TArgs>(args)...);
     }
 
 private:
     TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     NConfig::TYdbStorageConfig ComputeConnection;
+    NConfig::TWorkloadManagerConfig WorkloadManager;
     std::unique_ptr<NYdb::NQuery::TQueryClient> QueryClient;
     std::unique_ptr<NYdb::NOperation::TOperationClient> OperationClient;
-    Ydb::Query::StatsMode StatsMode;
 };
 
 std::unique_ptr<NActors::IActor> CreateConnectorActor(const TRunActorParams& params) {

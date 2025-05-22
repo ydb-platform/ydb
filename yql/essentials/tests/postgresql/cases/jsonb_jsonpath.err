@@ -1,0 +1,3233 @@
+<sql-statement>
+select jsonb '{"a": 12}' @? '$';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": 12}' @? '1';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": 12}' @? '$.a.b';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": 12}' @? '$.b';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": 12}' @? '$.a + 2';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": 12}' @? '$.b + 2';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"a": 12}}' @? '$.a.a';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"a": 12}}' @? '$.*.a';
+</sql-statement>
+<sql-statement>
+select jsonb '{"b": {"a": 12}}' @? '$.*.a';
+</sql-statement>
+<sql-statement>
+select jsonb '{"b": {"a": 12}}' @? '$.*.b';
+</sql-statement>
+<sql-statement>
+select jsonb '{"b": {"a": 12}}' @? 'strict $.*.b';
+</sql-statement>
+<sql-statement>
+select jsonb '{}' @? '$.*';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": 1}' @? '$.*';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"b": 1}}' @? 'lax $.**{1}';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"b": 1}}' @? 'lax $.**{2}';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"b": 1}}' @? 'lax $.**{3}';
+</sql-statement>
+<sql-statement>
+select jsonb '[]' @? '$[*]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1]' @? '$[*]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1]' @? '$[1]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1]' @? 'strict $[1]';
+</sql-statement>
+<sql-statement>
+select jsonb_path_query('[1]', 'strict $[1]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1]', 'strict $[1]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1]', 'strict $[1]', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1]', 'strict $[1]', silent => true);
+	       ^
+<sql-statement>
+select jsonb '[1]' @? 'lax $[10000000000000000]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1]' @? 'strict $[10000000000000000]';
+</sql-statement>
+<sql-statement>
+select jsonb_path_query('[1]', 'lax $[10000000000000000]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1]', 'lax $[10000000000000000]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1]', 'strict $[10000000000000000]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1]', 'strict $[10000000000000000]');
+	       ^
+<sql-statement>
+select jsonb '[1]' @? '$[0]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1]' @? '$[0.3]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1]' @? '$[0.5]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1]' @? '$[0.9]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1]' @? '$[1.2]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1]' @? 'strict $[1.2]';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": [1,2,3], "b": [3,4,5]}' @? '$ ? (@.a[*] >  @.b[*])';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": [1,2,3], "b": [3,4,5]}' @? '$ ? (@.a[*] >= @.b[*])';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": [1,2,3], "b": [3,4,"5"]}' @? '$ ? (@.a[*] >= @.b[*])';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": [1,2,3], "b": [3,4,"5"]}' @? 'strict $ ? (@.a[*] >= @.b[*])';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": [1,2,3], "b": [3,4,null]}' @? '$ ? (@.a[*] >= @.b[*])';
+</sql-statement>
+<sql-statement>
+select jsonb '1' @? '$ ? ((@ == "1") is unknown)';
+</sql-statement>
+<sql-statement>
+select jsonb '1' @? '$ ? ((@ == 1) is unknown)';
+</sql-statement>
+<sql-statement>
+select jsonb '[{"a": 1}, {"a": 2}]' @? '$[0 to 1] ? (@.a > 1)';
+</sql-statement>
+<sql-statement>
+select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'lax $[*].a', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'lax $[*].a', silent => false);
+	       ^
+<sql-statement>
+select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'lax $[*].a', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'lax $[*].a', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'strict $[*].a', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'strict $[*].a', silent => false);
+	       ^
+<sql-statement>
+select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'strict $[*].a', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select jsonb_path_exists('[{"a": 1}, {"a": 2}, 3]', 'strict $[*].a', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'lax $.a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'lax $.a');
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'strict $.a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'strict $.a');
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'strict $.*');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'strict $.*');
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'strict $.a', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'strict $.a', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'strict $.*', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'strict $.*', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'lax $.a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'lax $.a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $.a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $.a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $.a', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $.a', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('{}', 'lax $.a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{}', 'lax $.a');
+	       ^
+<sql-statement>
+select jsonb_path_query('{}', 'strict $.a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{}', 'strict $.a');
+	       ^
+<sql-statement>
+select jsonb_path_query('{}', 'strict $.a', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{}', 'strict $.a', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'strict $[1]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'strict $[1]');
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'strict $[*]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'strict $[*]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $[1]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $[1]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $["a"]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $["a"]');
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'strict $[1]', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'strict $[1]', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'strict $[*]', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'strict $[*]', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $[1]', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $[1]', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $["a"]', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $["a"]', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": 12, "b": {"a": 13}}', '$.a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": 12, "b": {"a": 13}}', '$.a');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": 12, "b": {"a": 13}}', '$.b');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": 12, "b": {"a": 13}}', '$.b');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": 12, "b": {"a": 13}}', '$.*');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": 12, "b": {"a": 13}}', '$.*');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": 12, "b": {"a": 13}}', 'lax $.*.a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": 12, "b": {"a": 13}}', 'lax $.*.a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[*].a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[*].a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[*].*');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[*].*');
+	       ^
+<sql-statement>
+select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0].a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0].a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[1].a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[1].a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[2].a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[2].a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0,1].a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0,1].a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0 to 10].a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0 to 10].a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0 to 10 / 0].a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[12, {"a": 13}, {"b": 14}]', 'lax $[0 to 10 / 0].a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[12, {"a": 13}, {"b": 14}, "ccc", true]', '$[2.5 - 1 to $.size() - 2]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[12, {"a": 13}, {"b": 14}, "ccc", true]', '$[2.5 - 1 to $.size() - 2]');
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'lax $[0]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'lax $[0]');
+	       ^
+<sql-statement>
+select jsonb_path_query('1', 'lax $[*]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', 'lax $[*]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1]', 'lax $[0]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1]', 'lax $[0]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1]', 'lax $[*]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1]', 'lax $[*]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,2,3]', 'lax $[*]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,2,3]', 'lax $[*]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,2,3]', 'strict $[*].a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,2,3]', 'strict $[*].a');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,2,3]', 'strict $[*].a', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,2,3]', 'strict $[*].a', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', '$[last]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', '$[last]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', '$[last ? (exists(last))]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', '$[last ? (exists(last))]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $[last]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $[last]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $[last]', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $[last]', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('[1]', '$[last]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1]', '$[last]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,2,3]', '$[last]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,2,3]', '$[last]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,2,3]', '$[last - 1]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,2,3]', '$[last - 1]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "number")]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,2,3]', '$[last ? (@.type() == "string")]', silent => true);
+	       ^
+<sql-statement>
+select * from jsonb_path_query('{"a": 10}', '$');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('{"a": 10}', '$');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('{"a": 10}', '$');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown)
+            	select * from jsonb_path_query('{"a": 10}', '$');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown)
+            	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '1');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '1');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '1');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown,unknown)
+            	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '1');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '[{"value" : 13}]');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '[{"value" : 13}]');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '[{"value" : 13}]');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown,unknown)
+            	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '[{"value" : 13}]');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 13}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 13}');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 13}');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown,unknown)
+            	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 13}');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 8}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 8}');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 8}');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown,unknown)
+            	select * from jsonb_path_query('{"a": 10}', '$ ? (@.a < $value)', '{"value" : 8}');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('{"a": 10}', '$.a ? (@ < $value)', '{"value" : 13}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('{"a": 10}', '$.a ? (@ < $value)', '{"value" : 13}');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('{"a": 10}', '$.a ? (@ < $value)', '{"value" : 13}');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown,unknown)
+            	select * from jsonb_path_query('{"a": 10}', '$.a ? (@ < $value)', '{"value" : 13}');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('[10,11,12,13,14,15]', '$[*] ? (@ < $value)', '{"value" : 13}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('[10,11,12,13,14,15]', '$[*] ? (@ < $value)', '{"value" : 13}');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('[10,11,12,13,14,15]', '$[*] ? (@ < $value)', '{"value" : 13}');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown,unknown)
+            	select * from jsonb_path_query('[10,11,12,13,14,15]', '$[*] ? (@ < $value)', '{"value" : 13}');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('[10,11,12,13,14,15]', '$[0,1] ? (@ < $x.value)', '{"x": {"value" : 13}}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('[10,11,12,13,14,15]', '$[0,1] ? (@ < $x.value)', '{"x": {"value" : 13}}');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('[10,11,12,13,14,15]', '$[0,1] ? (@ < $x.value)', '{"x": {"value" : 13}}');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown,unknown)
+            	select * from jsonb_path_query('[10,11,12,13,14,15]', '$[0,1] ? (@ < $x.value)', '{"x": {"value" : 13}}');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('[10,11,12,13,14,15]', '$[0 to 2] ? (@ < $value)', '{"value" : 15}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('[10,11,12,13,14,15]', '$[0 to 2] ? (@ < $value)', '{"value" : 15}');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('[10,11,12,13,14,15]', '$[0 to 2] ? (@ < $value)', '{"value" : 15}');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown,unknown)
+            	select * from jsonb_path_query('[10,11,12,13,14,15]', '$[0 to 2] ? (@ < $value)', '{"value" : 15}');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == "1")');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == "1")');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == "1")');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown)
+            	select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == "1")');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == $value)', '{"value" : "1"}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == $value)', '{"value" : "1"}');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == $value)', '{"value" : "1"}');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown,unknown)
+            	select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == $value)', '{"value" : "1"}');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == $value)', '{"value" : null}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == $value)', '{"value" : null}');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == $value)', '{"value" : null}');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown,unknown)
+            	select * from jsonb_path_query('[1,"1",2,"2",null]', '$[*] ? (@ == $value)', '{"value" : null}');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('[1, "2", null]', '$[*] ? (@ != null)');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('[1, "2", null]', '$[*] ? (@ != null)');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('[1, "2", null]', '$[*] ? (@ != null)');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown)
+            	select * from jsonb_path_query('[1, "2", null]', '$[*] ? (@ != null)');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('[1, "2", null]', '$[*] ? (@ == null)');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('[1, "2", null]', '$[*] ? (@ == null)');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('[1, "2", null]', '$[*] ? (@ == null)');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown)
+            	select * from jsonb_path_query('[1, "2", null]', '$[*] ? (@ == null)');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('{}', '$ ? (@ == @)');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('{}', '$ ? (@ == @)');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('{}', '$ ? (@ == @)');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown)
+            	select * from jsonb_path_query('{}', '$ ? (@ == @)');
+	              ^
+<sql-statement>
+select * from jsonb_path_query('[]', 'strict $ ? (@ == @)');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from jsonb_path_query('[]', 'strict $ ? (@ == @)');
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from jsonb_path_query('[]', 'strict $ ? (@ == @)');
+	              ^
+            -stdin-:<main>:1:15: Error: Unable to find an overload for proc jsonb_path_query with given argument types: (unknown,unknown)
+            	select * from jsonb_path_query('[]', 'strict $ ? (@ == @)');
+	              ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0}');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0 to last}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0 to last}');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1}');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1 to last}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1 to last}');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{2}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{2}');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{2 to last}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{2 to last}');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{3 to last}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{3 to last}');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{last}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{last}');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0 to last}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{0 to last}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1 to last}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1 to last}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1 to 2}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"b": 1}}', 'lax $.**{1 to 2}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{0}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{0}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{1}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{1}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{0 to last}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{0 to last}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{1 to last}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{1 to last}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{1 to 2}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{1 to 2}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{2 to 3}.b ? (@ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": {"c": {"b": 1}}}', 'lax $.**{2 to 3}.b ? (@ > 0)');
+	       ^
+<sql-statement>
+select jsonb '{"a": {"b": 1}}' @? '$.**.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"b": 1}}' @? '$.**{0}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"b": 1}}' @? '$.**{1}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"b": 1}}' @? '$.**{0 to last}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"b": 1}}' @? '$.**{1 to last}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"b": 1}}' @? '$.**{1 to 2}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{0}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{0 to last}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1 to last}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{1 to 2}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": {"c": {"b": 1}}}' @? '$.**{2 to 3}.b ? ( @ > 0)';
+</sql-statement>
+<sql-statement>
+select jsonb_path_query('{"g": {"x": 2}}', '$.g ? (exists (@.x))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"g": {"x": 2}}', '$.g ? (exists (@.x))');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"g": {"x": 2}}', '$.g ? (exists (@.y))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"g": {"x": 2}}', '$.g ? (exists (@.y))');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"g": {"x": 2}}', '$.g ? (exists (@.x ? (@ >= 2) ))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"g": {"x": 2}}', '$.g ? (exists (@.x ? (@ >= 2) ))');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? (exists (@.x))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? (exists (@.x))');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? (exists (@.x + "3"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? (exists (@.x + "3"))');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? ((exists (@.x + "3")) is unknown)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'lax $.g ? ((exists (@.x + "3")) is unknown)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? (exists (@.x))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? (exists (@.x))');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? ((exists (@.x)) is unknown)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g[*] ? ((exists (@.x)) is unknown)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? (exists (@[*].x))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? (exists (@[*].x))');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? ((exists (@[*].x)) is unknown)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"g": [{"x": 2}, {"y": 3}]}', 'strict $.g ? ((exists (@[*].x)) is unknown)');
+	       ^
+<sql-statement>
+--test ternary logic
+select
+	x, y,
+	jsonb_path_query(
+		'[true, false, null]',
+		'$[*] ? (@ == true  &&  ($x == true && $y == true) ||
+				 @ == false && !($x == true && $y == true) ||
+				 @ == null  &&  ($x == true && $y == true) is unknown)',
+		jsonb_build_object('x', x, 'y', y)
+	) as "x && y"
+from
+	(values (jsonb 'true'), ('false'), ('"null"')) x(x),
+	(values (jsonb 'true'), ('false'), ('"null"')) y(y);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:4:2: Error: Generator functions are not allowed in: SELECT
+    		jsonb_path_query(
+	 ^
+<sql-statement>
+select
+	x, y,
+	jsonb_path_query(
+		'[true, false, null]',
+		'$[*] ? (@ == true  &&  ($x == true || $y == true) ||
+				 @ == false && !($x == true || $y == true) ||
+				 @ == null  &&  ($x == true || $y == true) is unknown)',
+		jsonb_build_object('x', x, 'y', y)
+	) as "x || y"
+from
+	(values (jsonb 'true'), ('false'), ('"null"')) x(x),
+	(values (jsonb 'true'), ('false'), ('"null"')) y(y);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:2: Error: Generator functions are not allowed in: SELECT
+    		jsonb_path_query(
+	 ^
+<sql-statement>
+select jsonb '{"a": 1, "b":1}' @? '$ ? (@.a == @.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": 1, "b":1}}' @? '$ ? (@.a == @.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": 1, "b":1}}' @? '$.c ? (@.a == @.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": 1, "b":1}}' @? '$.c ? ($.c.a == @.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": 1, "b":1}}' @? '$.* ? (@.a == @.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": 1, "b":1}' @? '$.** ? (@.a == @.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": 1, "b":1}}' @? '$.** ? (@.a == @.b)';
+</sql-statement>
+<sql-statement>
+select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == 1 + 1)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == 1 + 1)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == (1 + 1))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == (1 + 1))');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == @.b + 1)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == @.b + 1)');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == (@.b + 1))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"c": {"a": 2, "b":1}}', '$.** ? (@.a == (@.b + 1))');
+	       ^
+<sql-statement>
+select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == - 1)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == -1)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == -@.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": -1, "b":1}}' @? '$.** ? (@.a == - @.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": 0, "b":1}}' @? '$.** ? (@.a == 1 - @.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": 2, "b":1}}' @? '$.** ? (@.a == 1 - - @.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '{"c": {"a": 0, "b":1}}' @? '$.** ? (@.a == 1 - +@.b)';
+</sql-statement>
+<sql-statement>
+select jsonb '[1,2,3]' @? '$ ? (+@[*] > +2)';
+</sql-statement>
+<sql-statement>
+select jsonb '[1,2,3]' @? '$ ? (+@[*] > +3)';
+</sql-statement>
+<sql-statement>
+select jsonb '[1,2,3]' @? '$ ? (-@[*] < -2)';
+</sql-statement>
+<sql-statement>
+select jsonb '[1,2,3]' @? '$ ? (-@[*] < -3)';
+</sql-statement>
+<sql-statement>
+select jsonb '1' @? '$ ? ($ > 0)';
+</sql-statement>
+<sql-statement>
+-- arithmetic errors
+select jsonb_path_query('[1,2,0,3]', '$[*] ? (2 / @ > 0)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,2,0,3]', '$[*] ? (2 / @ > 0)');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,2,0,3]', '$[*] ? ((2 / @ > 0) is unknown)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,2,0,3]', '$[*] ? ((2 / @ > 0) is unknown)');
+	       ^
+<sql-statement>
+select jsonb_path_query('0', '1 / $');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('0', '1 / $');
+	       ^
+<sql-statement>
+select jsonb_path_query('0', '1 / $ + 2');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('0', '1 / $ + 2');
+	       ^
+<sql-statement>
+select jsonb_path_query('0', '-(3 + 1 % $)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('0', '-(3 + 1 % $)');
+	       ^
+<sql-statement>
+select jsonb_path_query('1', '$ + "2"');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', '$ + "2"');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1, 2]', '3 * $');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1, 2]', '3 * $');
+	       ^
+<sql-statement>
+select jsonb_path_query('"a"', '-$');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"a"', '-$');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,"2",3]', '+$');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,"2",3]', '+$');
+	       ^
+<sql-statement>
+select jsonb_path_query('1', '$ + "2"', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', '$ + "2"', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('[1, 2]', '3 * $', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1, 2]', '3 * $', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('"a"', '-$', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"a"', '-$', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,"2",3]', '+$', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,"2",3]', '+$', silent => true);
+	       ^
+<sql-statement>
+select jsonb '["1",2,0,3]' @? '-$[*]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1,"2",0,3]' @? '-$[*]';
+</sql-statement>
+<sql-statement>
+select jsonb '["1",2,0,3]' @? 'strict -$[*]';
+</sql-statement>
+<sql-statement>
+select jsonb '[1,"2",0,3]' @? 'strict -$[*]';
+</sql-statement>
+<sql-statement>
+-- unwrapping of operator arguments in lax mode
+select jsonb_path_query('{"a": [2]}', 'lax $.a * 3');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": [2]}', 'lax $.a * 3');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": [2]}', 'lax $.a + 3');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": [2]}', 'lax $.a + 3');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": [2, 3, 4]}', 'lax -$.a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": [2, 3, 4]}', 'lax -$.a');
+	       ^
+<sql-statement>
+-- should fail
+select jsonb_path_query('{"a": [1, 2]}', 'lax $.a * 3');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": [1, 2]}', 'lax $.a * 3');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": [1, 2]}', 'lax $.a * 3', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": [1, 2]}', 'lax $.a * 3', silent => true);
+	       ^
+<sql-statement>
+-- extension: boolean expressions
+select jsonb_path_query('2', '$ > 1');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('2', '$ > 1');
+	       ^
+<sql-statement>
+select jsonb_path_query('2', '$ <= 1');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('2', '$ <= 1');
+	       ^
+<sql-statement>
+select jsonb_path_query('2', '$ == "2"');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('2', '$ == "2"');
+	       ^
+<sql-statement>
+select jsonb '2' @? '$ == "2"';
+</sql-statement>
+<sql-statement>
+select jsonb '2' @@ '$ > 1';
+</sql-statement>
+<sql-statement>
+select jsonb '2' @@ '$ <= 1';
+</sql-statement>
+<sql-statement>
+select jsonb '2' @@ '$ == "2"';
+</sql-statement>
+<sql-statement>
+select jsonb '2' @@ '1';
+</sql-statement>
+<sql-statement>
+select jsonb '{}' @@ '$';
+</sql-statement>
+<sql-statement>
+select jsonb '[]' @@ '$';
+</sql-statement>
+<sql-statement>
+select jsonb '[1,2,3]' @@ '$[*]';
+</sql-statement>
+<sql-statement>
+select jsonb '[]' @@ '$[*]';
+</sql-statement>
+<sql-statement>
+select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] > $x) [1]', '{"x": 1}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] > $x) [1]', '{"x": 1}');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] > $x) [1]', '{"x": 1}');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_match with given argument types: (unknown,unknown,unknown)
+            	select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] > $x) [1]', '{"x": 1}');
+	       ^
+<sql-statement>
+select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] < $x) [1]', '{"x": 2}');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] < $x) [1]', '{"x": 2}');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] < $x) [1]', '{"x": 2}');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_match with given argument types: (unknown,unknown,unknown)
+            	select jsonb_path_match('[[1, true], [2, false]]', 'strict $[*] ? (@[0] < $x) [1]', '{"x": 2}');
+	       ^
+<sql-statement>
+select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'lax exists($[*].a)', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'lax exists($[*].a)', silent => false);
+	       ^
+<sql-statement>
+select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'lax exists($[*].a)', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'lax exists($[*].a)', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'strict exists($[*].a)', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'strict exists($[*].a)', silent => false);
+	       ^
+<sql-statement>
+select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'strict exists($[*].a)', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select jsonb_path_match('[{"a": 1}, {"a": 2}, 3]', 'strict exists($[*].a)', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('[null,1,true,"a",[],{}]', '$.type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null,1,true,"a",[],{}]', '$.type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null,1,true,"a",[],{}]', 'lax $.type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null,1,true,"a",[],{}]', 'lax $.type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null,1,true,"a",[],{}]', '$[*].type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null,1,true,"a",[],{}]', '$[*].type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('null', 'null.type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('null', 'null.type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('null', 'true.type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('null', 'true.type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('null', '(123).type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('null', '(123).type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('null', '"123".type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('null', '"123".type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": 2}', '($.a - 5).abs() + 10');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": 2}', '($.a - 5).abs() + 10');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": 2.5}', '-($.a * $.a).floor() % 4.3');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": 2.5}', '-($.a * $.a).floor() % 4.3');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1, 2, 3]', '($[*] > 2) ? (@ == true)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1, 2, 3]', '($[*] > 2) ? (@ == true)');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1, 2, 3]', '($[*] > 3).type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1, 2, 3]', '($[*] > 3).type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1, 2, 3]', '($[*].a > 3).type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1, 2, 3]', '($[*].a > 3).type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1, 2, 3]', 'strict ($[*].a > 3).type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1, 2, 3]', 'strict ($[*].a > 3).type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'strict $[*].size()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'lax $[*].size()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[1,null,true,"11",[],[1],[1,2,3],{},{"a":1,"b":2}]', 'lax $[*].size()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].abs()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].abs()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].floor()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].floor()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling().abs()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling().abs()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling().abs().type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[0, 1, -2, -3.4, 5.6]', '$[*].ceiling().abs().type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[{},1]', '$[*].keyvalue()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[{},1]', '$[*].keyvalue()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[{},1]', '$[*].keyvalue()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[{},1]', '$[*].keyvalue()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('{}', '$.keyvalue()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{}', '$.keyvalue()');
+	       ^
+<sql-statement>
+select jsonb_path_query('{"a": 1, "b": [1, 2], "c": {"a": "bbb"}}', '$.keyvalue()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{"a": 1, "b": [1, 2], "c": {"a": "bbb"}}', '$.keyvalue()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', '$[*].keyvalue()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', '$[*].keyvalue()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', 'strict $.keyvalue()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', 'strict $.keyvalue()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', 'lax $.keyvalue()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', 'lax $.keyvalue()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', 'strict $.keyvalue().a');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[{"a": 1, "b": [1, 2]}, {"c": {"a": "bbb"}}]', 'strict $.keyvalue().a');
+	       ^
+<sql-statement>
+select jsonb '{"a": 1, "b": [1, 2]}' @? 'lax $.keyvalue()';
+</sql-statement>
+<sql-statement>
+select jsonb '{"a": 1, "b": [1, 2]}' @? 'lax $.keyvalue().key';
+</sql-statement>
+<sql-statement>
+select jsonb_path_query('null', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('null', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('true', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('true', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('null', '$.double()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('null', '$.double()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('true', '$.double()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('true', '$.double()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('{}', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{}', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $.double()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $.double()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('{}', '$.double()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{}', '$.double()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('1.23', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1.23', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"1.23"', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"1.23"', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"1.23aaa"', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"1.23aaa"', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('1e1000', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1e1000', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"nan"', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"nan"', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"NaN"', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"NaN"', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"inf"', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"inf"', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"-inf"', '$.double()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"-inf"', '$.double()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"inf"', '$.double()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"inf"', '$.double()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('"-inf"', '$.double()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"-inf"', '$.double()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('{}', '$.abs()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{}', '$.abs()');
+	       ^
+<sql-statement>
+select jsonb_path_query('true', '$.floor()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('true', '$.floor()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"1.2"', '$.ceiling()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"1.2"', '$.ceiling()');
+	       ^
+<sql-statement>
+select jsonb_path_query('{}', '$.abs()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{}', '$.abs()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('true', '$.floor()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('true', '$.floor()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('"1.2"', '$.ceiling()', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"1.2"', '$.ceiling()', silent => true);
+	       ^
+<sql-statement>
+select jsonb_path_query('["", "a", "abc", "abcabc"]', '$[*] ? (@ starts with "abc")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('["", "a", "abc", "abcabc"]', '$[*] ? (@ starts with "abc")');
+	       ^
+<sql-statement>
+select jsonb_path_query('["", "a", "abc", "abcabc"]', 'strict $ ? (@[*] starts with "abc")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('["", "a", "abc", "abcabc"]', 'strict $ ? (@[*] starts with "abc")');
+	       ^
+<sql-statement>
+select jsonb_path_query('["", "a", "abd", "abdabc"]', 'strict $ ? (@[*] starts with "abc")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('["", "a", "abd", "abdabc"]', 'strict $ ? (@[*] starts with "abc")');
+	       ^
+<sql-statement>
+select jsonb_path_query('["abc", "abcabc", null, 1]', 'strict $ ? (@[*] starts with "abc")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('["abc", "abcabc", null, 1]', 'strict $ ? (@[*] starts with "abc")');
+	       ^
+<sql-statement>
+select jsonb_path_query('["abc", "abcabc", null, 1]', 'strict $ ? ((@[*] starts with "abc") is unknown)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('["abc", "abcabc", null, 1]', 'strict $ ? ((@[*] starts with "abc") is unknown)');
+	       ^
+<sql-statement>
+select jsonb_path_query('[[null, 1, "abc", "abcabc"]]', 'lax $ ? (@[*] starts with "abc")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[[null, 1, "abc", "abcabc"]]', 'lax $ ? (@[*] starts with "abc")');
+	       ^
+<sql-statement>
+select jsonb_path_query('[[null, 1, "abd", "abdabc"]]', 'lax $ ? ((@[*] starts with "abc") is unknown)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[[null, 1, "abd", "abdabc"]]', 'lax $ ? ((@[*] starts with "abc") is unknown)');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "abd", "abdabc"]', 'lax $[*] ? ((@ starts with "abc") is unknown)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "abd", "abdabc"]', 'lax $[*] ? ((@ starts with "abc") is unknown)');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c")');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "i")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "i")');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "m")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "m")');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "s")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'lax $[*] ? (@ like_regex "^ab.*c" flag "s")');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "a\\b" flag "q")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "a\\b" flag "q")');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "a\\b" flag "")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "a\\b" flag "")');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\b$" flag "q")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\b$" flag "q")');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\B$" flag "q")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\B$" flag "q")');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\B$" flag "iq")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\B$" flag "iq")');
+	       ^
+<sql-statement>
+select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\b$" flag "")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[null, 1, "a\b", "a\\b", "^a\\b$"]', 'lax $[*] ? (@ like_regex "^a\\b$" flag "")');
+	       ^
+<sql-statement>
+select jsonb_path_query('null', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('null', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('true', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('true', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('1', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('1', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('[]', 'strict $.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('[]', 'strict $.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('{}', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('{}', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"bogus"', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"bogus"', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34"', '$.datetime("aaa")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34"', '$.datetime("aaa")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"aaaa"', '$.datetime("HH24")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"aaaa"', '$.datetime("HH24")');
+	       ^
+<sql-statement>
+select jsonb '"10-03-2017"' @? '$.datetime("dd-mm-yyyy")';
+</sql-statement>
+<sql-statement>
+select jsonb_path_query('"10-03-2017"', '$.datetime("dd-mm-yyyy")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017"', '$.datetime("dd-mm-yyyy")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017"', '$.datetime("dd-mm-yyyy").type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017"', '$.datetime("dd-mm-yyyy").type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy").type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy").type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34"', '       $.datetime("dd-mm-yyyy HH24:MI").type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34"', '       $.datetime("dd-mm-yyyy HH24:MI").type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34 +05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM").type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34 +05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM").type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34:56"', '$.datetime("HH24:MI:SS").type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34:56"', '$.datetime("HH24:MI:SS").type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34:56 +05:20"', '$.datetime("HH24:MI:SS TZH:TZM").type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34:56 +05:20"', '$.datetime("HH24:MI:SS TZH:TZM").type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017T12:34:56"', '$.datetime("dd-mm-yyyy\"T\"HH24:MI:SS")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017T12:34:56"', '$.datetime("dd-mm-yyyy\"T\"HH24:MI:SS")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017t12:34:56"', '$.datetime("dd-mm-yyyy\"T\"HH24:MI:SS")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017t12:34:56"', '$.datetime("dd-mm-yyyy\"T\"HH24:MI:SS")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34:56"', '$.datetime("dd-mm-yyyy\"T\"HH24:MI:SS")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34:56"', '$.datetime("dd-mm-yyyy\"T\"HH24:MI:SS")');
+	       ^
+<sql-statement>
+set time zone '+00';
+</sql-statement>
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34 +05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34 +05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34 -05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34 -05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34 +05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34 +05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34 -05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34 -05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34"', '$.datetime("HH24:MI")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34"', '$.datetime("HH24:MI")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34"', '$.datetime("HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34"', '$.datetime("HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34 +05"', '$.datetime("HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34 +05"', '$.datetime("HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34 -05"', '$.datetime("HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34 -05"', '$.datetime("HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34 +05:20"', '$.datetime("HH24:MI TZH:TZM")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34 +05:20"', '$.datetime("HH24:MI TZH:TZM")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34 -05:20"', '$.datetime("HH24:MI TZH:TZM")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34 -05:20"', '$.datetime("HH24:MI TZH:TZM")');
+	       ^
+<sql-statement>
+set time zone '+10';
+</sql-statement>
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34 +05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34 +05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34 -05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34 -05"', '$.datetime("dd-mm-yyyy HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34 +05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34 +05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"10-03-2017 12:34 -05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"10-03-2017 12:34 -05:20"', '$.datetime("dd-mm-yyyy HH24:MI TZH:TZM")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34"', '$.datetime("HH24:MI")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34"', '$.datetime("HH24:MI")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34"', '$.datetime("HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34"', '$.datetime("HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34 +05"', '$.datetime("HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34 +05"', '$.datetime("HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34 -05"', '$.datetime("HH24:MI TZH")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34 -05"', '$.datetime("HH24:MI TZH")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34 +05:20"', '$.datetime("HH24:MI TZH:TZM")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34 +05:20"', '$.datetime("HH24:MI TZH:TZM")');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34 -05:20"', '$.datetime("HH24:MI TZH:TZM")');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34 -05:20"', '$.datetime("HH24:MI TZH:TZM")');
+	       ^
+<sql-statement>
+set time zone default;
+</sql-statement>
+<sql-statement>
+select jsonb_path_query('"2017-03-10"', '$.datetime().type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"2017-03-10"', '$.datetime().type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"2017-03-10"', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"2017-03-10"', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"2017-03-10 12:34:56"', '$.datetime().type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"2017-03-10 12:34:56"', '$.datetime().type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"2017-03-10 12:34:56"', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"2017-03-10 12:34:56"', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"2017-03-10 12:34:56+3"', '$.datetime().type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"2017-03-10 12:34:56+3"', '$.datetime().type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"2017-03-10 12:34:56+3"', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"2017-03-10 12:34:56+3"', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"2017-03-10 12:34:56+3:10"', '$.datetime().type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"2017-03-10 12:34:56+3:10"', '$.datetime().type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"2017-03-10 12:34:56+3:10"', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"2017-03-10 12:34:56+3:10"', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"2017-03-10T12:34:56+3:10"', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"2017-03-10T12:34:56+3:10"', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"2017-03-10t12:34:56+3:10"', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"2017-03-10t12:34:56+3:10"', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34:56"', '$.datetime().type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34:56"', '$.datetime().type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34:56"', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34:56"', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34:56+3"', '$.datetime().type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34:56+3"', '$.datetime().type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34:56+3"', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34:56+3"', '$.datetime()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34:56+3:10"', '$.datetime().type()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34:56+3:10"', '$.datetime().type()');
+	       ^
+<sql-statement>
+select jsonb_path_query('"12:34:56+3:10"', '$.datetime()');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"12:34:56+3:10"', '$.datetime()');
+	       ^
+<sql-statement>
+set time zone '+00';
+</sql-statement>
+<sql-statement>
+-- date comparison
+select jsonb_path_query(
+	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+	'$[*].datetime() ? (@ == "10.03.2017".datetime("dd.mm.yyyy"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query(
+	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+	'$[*].datetime() ? (@ >= "10.03.2017".datetime("dd.mm.yyyy"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query(
+	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+	'$[*].datetime() ? (@ <  "10.03.2017".datetime("dd.mm.yyyy"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+	'$[*].datetime() ? (@ == "10.03.2017".datetime("dd.mm.yyyy"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+	'$[*].datetime() ? (@ >= "10.03.2017".datetime("dd.mm.yyyy"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["2017-03-10", "2017-03-11", "2017-03-09", "12:34:56", "01:02:03+04", "2017-03-10 00:00:00", "2017-03-10 12:34:56", "2017-03-10 01:02:03+04", "2017-03-10 03:00:00+03"]',
+	'$[*].datetime() ? (@ <  "10.03.2017".datetime("dd.mm.yyyy"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+-- time comparison
+select jsonb_path_query(
+	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+	'$[*].datetime() ? (@ == "12:35".datetime("HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query(
+	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+	'$[*].datetime() ? (@ >= "12:35".datetime("HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query(
+	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+	'$[*].datetime() ? (@ <  "12:35".datetime("HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+	'$[*].datetime() ? (@ == "12:35".datetime("HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+	'$[*].datetime() ? (@ >= "12:35".datetime("HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["12:34:00", "12:35:00", "12:36:00", "12:35:00+00", "12:35:00+01", "13:35:00+01", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00+01"]',
+	'$[*].datetime() ? (@ <  "12:35".datetime("HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+-- timetz comparison
+select jsonb_path_query(
+	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+	'$[*].datetime() ? (@ == "12:35 +1".datetime("HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query(
+	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+	'$[*].datetime() ? (@ >= "12:35 +1".datetime("HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query(
+	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+	'$[*].datetime() ? (@ <  "12:35 +1".datetime("HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+	'$[*].datetime() ? (@ == "12:35 +1".datetime("HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+	'$[*].datetime() ? (@ >= "12:35 +1".datetime("HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["12:34:00+01", "12:35:00+01", "12:36:00+01", "12:35:00+02", "12:35:00-02", "10:35:00", "11:35:00", "12:35:00", "2017-03-10", "2017-03-10 12:35:00", "2017-03-10 12:35:00 +1"]',
+	'$[*].datetime() ? (@ <  "12:35 +1".datetime("HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+-- timestamp comparison
+select jsonb_path_query(
+	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ == "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query(
+	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ >= "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query(
+	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ < "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ == "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ >= "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["2017-03-10 12:34:00", "2017-03-10 12:35:00", "2017-03-10 12:36:00", "2017-03-10 12:35:00+01", "2017-03-10 13:35:00+01", "2017-03-10 12:35:00-01", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ < "10.03.2017 12:35".datetime("dd.mm.yyyy HH24:MI"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+-- timestamptz comparison
+select jsonb_path_query(
+	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ == "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query(
+	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ >= "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query(
+	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ < "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ == "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ >= "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+select jsonb_path_query_tz(
+	'["2017-03-10 12:34:00+01", "2017-03-10 12:35:00+01", "2017-03-10 12:36:00+01", "2017-03-10 12:35:00+02", "2017-03-10 12:35:00-02", "2017-03-10 10:35:00", "2017-03-10 11:35:00", "2017-03-10 12:35:00", "2017-03-10", "2017-03-11", "12:34:56", "12:34:56+01"]',
+	'$[*].datetime() ? (@ < "10.03.2017 12:35 +1".datetime("dd.mm.yyyy HH24:MI TZH"))');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query_tz(
+	       ^
+<sql-statement>
+-- overflow during comparison
+select jsonb_path_query('"1000000-01-01"', '$.datetime() > "2020-01-01 12:00:00".datetime()'::jsonpath);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	select jsonb_path_query('"1000000-01-01"', '$.datetime() > "2020-01-01 12:00:00".datetime()'::jsonpath);
+	       ^
+<sql-statement>
+set time zone default;
+</sql-statement>
+<sql-statement>
+-- jsonpath operators
+SELECT jsonb_path_query('[{"a": 1}, {"a": 2}]', '$[*]');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT jsonb_path_query('[{"a": 1}, {"a": 2}]', '$[*]');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query('[{"a": 1}, {"a": 2}]', '$[*] ? (@.a > 10)');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT jsonb_path_query('[{"a": 1}, {"a": 2}]', '$[*] ? (@.a > 10)');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_query_array with given argument types: (unknown,unknown)
+            	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_query_array with given argument types: (unknown,unknown)
+            	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_query_array with given argument types: (unknown,unknown)
+            	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_query_array with given argument types: (unknown,unknown)
+            	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 3, "max": 4}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_query_array('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 3, "max": 4}');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_query_first with given argument types: (unknown,unknown)
+            	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {}]', 'strict $[*].a', silent => true);
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_query_first with given argument types: (unknown,unknown)
+            	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_query_first with given argument types: (unknown,unknown)
+            	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ == 1)');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_query_first with given argument types: (unknown,unknown)
+            	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 10)');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 1, "max": 4}');
+	       ^
+<sql-statement>
+SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 3, "max": 4}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_query_first('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*].a ? (@ > $min && @ < $max)', vars => '{"min": 3, "max": 4}');
+	       ^
+<sql-statement>
+SELECT jsonb '[{"a": 1}, {"a": 2}]' @? '$[*].a ? (@ > 1)';
+</sql-statement>
+<sql-statement>
+SELECT jsonb '[{"a": 1}, {"a": 2}]' @? '$[*] ? (@.a > 2)';
+</sql-statement>
+<sql-statement>
+SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 1)');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 1)');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 1)');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_exists with given argument types: (unknown,unknown)
+            	SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}]', '$[*].a ? (@ > 1)');
+	       ^
+<sql-statement>
+SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 1, "max": 4}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 1, "max": 4}');
+	       ^
+<sql-statement>
+SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 3, "max": 4}');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_exists('[{"a": 1}, {"a": 2}, {"a": 3}, {"a": 5}]', '$[*] ? (@.a > $min && @.a < $max)', vars => '{"min": 3, "max": 4}');
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('true', '$', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('true', '$', silent => false);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('false', '$', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('false', '$', silent => false);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('null', '$', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('null', '$', silent => false);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('1', '$', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('1', '$', silent => true);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('1', '$', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('1', '$', silent => false);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('"a"', '$', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('"a"', '$', silent => false);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('{}', '$', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('{}', '$', silent => false);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('[true]', '$', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('[true]', '$', silent => false);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('{}', 'lax $.a', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('{}', 'lax $.a', silent => false);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('{}', 'strict $.a', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('{}', 'strict $.a', silent => false);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('{}', 'strict $.a', silent => true);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('{}', 'strict $.a', silent => true);
+	       ^
+<sql-statement>
+SELECT jsonb_path_match('[true, true]', '$[*]', silent => false);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	SELECT jsonb_path_match('[true, true]', '$[*]', silent => false);
+	       ^
+<sql-statement>
+SELECT jsonb '[{"a": 1}, {"a": 2}]' @@ '$[*].a > 1';
+</sql-statement>
+<sql-statement>
+SELECT jsonb '[{"a": 1}, {"a": 2}]' @@ '$[*].a > 2';
+</sql-statement>
+<sql-statement>
+SELECT jsonb_path_match('[{"a": 1}, {"a": 2}]', '$[*].a > 1');
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT jsonb_path_match('[{"a": 1}, {"a": 2}]', '$[*].a > 1');
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT jsonb_path_match('[{"a": 1}, {"a": 2}]', '$[*].a > 1');
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc jsonb_path_match with given argument types: (unknown,unknown)
+            	SELECT jsonb_path_match('[{"a": 1}, {"a": 2}]', '$[*].a > 1');
+	       ^
+<sql-statement>
+-- test string comparison (Unicode codepoint collation)
+WITH str(j, num) AS
+(
+	SELECT jsonb_build_object('s', s), num
+	FROM unnest('{"", "a", "ab", "abc", "abcd", "b", "A", "AB", "ABC", "ABc", "ABcD", "B"}'::text[]) WITH ORDINALITY AS a(s, num)
+)
+SELECT
+	s1.j, s2.j,
+	jsonb_path_query_first(s1.j, '$.s < $s', vars => s2.j) lt,
+	jsonb_path_query_first(s1.j, '$.s <= $s', vars => s2.j) le,
+	jsonb_path_query_first(s1.j, '$.s == $s', vars => s2.j) eq,
+	jsonb_path_query_first(s1.j, '$.s >= $s', vars => s2.j) ge,
+	jsonb_path_query_first(s1.j, '$.s > $s', vars => s2.j) gt
+FROM str s1, str s2
+ORDER BY s1.num, s2.num;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:6: Error: RangeFunction: unsupported ordinality
+    	WITH str(j, num) AS
+	     ^

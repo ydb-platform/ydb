@@ -2,7 +2,7 @@
 
 #include "sample.h"
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/generic/singleton.h>

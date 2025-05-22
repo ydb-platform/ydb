@@ -1,24 +1,30 @@
 #include "storage.h"
 
+#include <ydb/library/actors/core/log.h>
+
+#include <util/generic/serialized_enum.h>
+
 namespace NKikimr::NOlap::NBlobOperations {
 
 TStorageCounters::TStorageCounters(const TString& storageId)
-    : TBase("BlobStorages")
-{
+    : TBase("BlobStorages") {
     DeepSubGroup("StorageId", storageId);
+    Consumers.resize((ui32)EConsumer::COUNT);
+    for (auto&& i : GetEnumAllValues<EConsumer>()) {
+        if (i == EConsumer::COUNT) {
+            continue;
+        }
+        Consumers[(ui32)i] = std::make_shared<TConsumerCounters>(::ToString(i), *this);
+    }
 }
 
-std::shared_ptr<NKikimr::NOlap::NBlobOperations::TConsumerCounters> TStorageCounters::GetConsumerCounter(const TString& consumerId) {
-    auto it = ConsumerCounters.find(consumerId);
-    if (it == ConsumerCounters.end()) {
-        it = ConsumerCounters.emplace(consumerId, std::make_shared<TConsumerCounters>(consumerId, *this)).first;
-    }
-    return it->second;
+std::shared_ptr<TConsumerCounters> TStorageCounters::GetConsumerCounter(const EConsumer consumer) {
+    AFL_VERIFY((ui32)consumer < Consumers.size());
+    return Consumers[(ui32)consumer];
 }
 
 TConsumerCounters::TConsumerCounters(const TString& consumerId, const TStorageCounters& parent)
-    : TBase(parent)
-{
+    : TBase(parent) {
     DeepSubGroup("Consumer", consumerId);
     ReadCounters = std::make_shared<TReadCounters>(*this);
     WriteCounters = std::make_shared<TWriteCounters>(*this);
@@ -26,4 +32,4 @@ TConsumerCounters::TConsumerCounters(const TString& consumerId, const TStorageCo
     RemoveGCCounters = std::make_shared<TRemoveGCCounters>(*this);
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations

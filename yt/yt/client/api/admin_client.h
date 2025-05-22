@@ -28,6 +28,10 @@ struct TBuildMasterSnapshotsOptions
     bool Retry = true;
 };
 
+struct TGetMasterConsistentStateOptions
+    : public TTimeoutOptions
+{ };
+
 struct TExitReadOnlyOptions
     : public TTimeoutOptions
 { };
@@ -154,7 +158,14 @@ struct TResurrectChunkLocationsResult
     std::vector<TGuid> LocationUuids;
 };
 
+struct TMasterConsistentState
+{
+    i64 SequenceNumber;
+    int SegmentId;
+};
+
 using TCellIdToSnapshotIdMap = THashMap<NHydra::TCellId, int>;
+using TCellIdToConsistentStateMap = THashMap<NHydra::TCellId, TMasterConsistentState>;
 
 struct TAddMaintenanceOptions
     : public TTimeoutOptions
@@ -174,7 +185,7 @@ struct TMaintenanceFilter
     // Empty means no filtering by id.
     std::vector<TMaintenanceId> Ids;
     std::optional<EMaintenanceType> Type;
-    std::variant<TByUser::TAll, TByUser::TMine, TString> User;
+    std::variant<TByUser::TAll, TByUser::TMine, std::string> User;
 };
 
 struct TRemoveMaintenanceOptions
@@ -188,6 +199,15 @@ struct TRequestRestartOptions
 struct TRequestRestartResult
 { };
 
+struct TCollectCoverageOptions
+    : public TTimeoutOptions
+{ };
+
+struct TCollectCoverageResult
+{
+    TString CoverageMap;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IAdminClient
@@ -199,6 +219,9 @@ struct IAdminClient
 
     virtual TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options = {}) = 0;
+
+    virtual TFuture<TCellIdToConsistentStateMap> GetMasterConsistentState(
+        const TGetMasterConsistentStateOptions& options = {}) = 0;
 
     virtual TFuture<void> ExitReadOnly(
         NHydra::TCellId cellId,
@@ -213,7 +236,7 @@ struct IAdminClient
 
     virtual TFuture<void> SwitchLeader(
         NHydra::TCellId cellId,
-        const TString& newLeaderAddress,
+        const std::string& newLeaderAddress,
         const TSwitchLeaderOptions& options = {}) = 0;
 
     virtual TFuture<void> ResetStateHash(
@@ -224,15 +247,15 @@ struct IAdminClient
         const TGCCollectOptions& options = {}) = 0;
 
     virtual TFuture<void> KillProcess(
-        const TString& address,
+        const std::string& address,
         const TKillProcessOptions& options = {}) = 0;
 
     virtual TFuture<TString> WriteCoreDump(
-        const TString& address,
+        const std::string& address,
         const TWriteCoreDumpOptions& options = {}) = 0;
 
     virtual TFuture<TGuid> WriteLogBarrier(
-        const TString& address,
+        const std::string& address,
         const TWriteLogBarrierOptions& options) = 0;
 
     virtual TFuture<TString> WriteOperationControllerCoreDump(
@@ -240,7 +263,7 @@ struct IAdminClient
         const TWriteOperationControllerCoreDumpOptions& options = {}) = 0;
 
     virtual TFuture<void> HealExecNode(
-        const TString& address,
+        const std::string& address,
         const THealExecNodeOptions& options = {}) = 0;
 
     virtual TFuture<void> SuspendCoordinator(
@@ -271,38 +294,42 @@ struct IAdminClient
         const std::vector<NObjectClient::TCellId>& cellIds,
         const TResumeTabletCellsOptions& options = {}) = 0;
 
-    virtual TFuture<TMaintenanceId> AddMaintenance(
+    virtual TFuture<TMaintenanceIdPerTarget> AddMaintenance(
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         EMaintenanceType type,
         const TString& comment,
         const TAddMaintenanceOptions& options = {}) = 0;
 
-    virtual TFuture<TMaintenanceCounts> RemoveMaintenance(
+    virtual TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(
         EMaintenanceComponent component,
-        const TString& address,
+        const std::string& address,
         const TMaintenanceFilter& filter,
         const TRemoveMaintenanceOptions& options = {}) = 0;
 
     virtual TFuture<TDisableChunkLocationsResult> DisableChunkLocations(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TDisableChunkLocationsOptions& options = {}) = 0;
 
     virtual TFuture<TDestroyChunkLocationsResult> DestroyChunkLocations(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         bool recoverUnlinkedDisks,
         const std::vector<TGuid>& locationUuids,
         const TDestroyChunkLocationsOptions& options = {}) = 0;
 
     virtual TFuture<TResurrectChunkLocationsResult> ResurrectChunkLocations(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const std::vector<TGuid>& locationUuids,
         const TResurrectChunkLocationsOptions& options = {}) = 0;
 
     virtual TFuture<TRequestRestartResult> RequestRestart(
-        const TString& nodeAddress,
+        const std::string& nodeAddress,
         const TRequestRestartOptions& options = {}) = 0;
+
+    virtual TFuture<TCollectCoverageResult> CollectCoverage(
+        const std::string& address,
+        const TCollectCoverageOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

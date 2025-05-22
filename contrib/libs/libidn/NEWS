@@ -1,5 +1,47 @@
 Libidn NEWS -- History of user-visible changes.                 -*- outline -*-
 
+* Noteworthy changes in release 1.42 (2024-01-13) [stable]
+
+** Bump required gettext version to 0.19.8 for musl-libc.
+
+** Compiler warning improvements.
+As before, compiler warnings are enabled by default.  You may disable
+them using ./configure --disable-gcc-warnings or turn them into fatal
+errors using ./configure --enable-gcc-warnings=error to add -Werror
+and sensible -Wno-error='s.  Based on gnulib's manywarnings, see
+<https://www.gnu.org/software/gnulib//manual/html_node/manywarnings.html>.
+
+** Fix type confusion on LLP64/Windows platforms.
+While libidn has worked using cygwin libc, it has never worked on
+ucrt/msvcrt libc.  Report and tiny patch by Francesco Pretto in
+<https://lists.gnu.org/archive/html/help-libidn/2022-02/msg00000.html>.
+
+** tests: Added script tests/standalone.sh suitable for integrators.
+The main purpose is to test a system-installed libidn, suitable for
+distributor checking (a'la Debian's autopkgtest/debci).  It may also
+be used to test a newly built libidn outside the usual 'make check'
+infrastructure.  To check that your system libidn is working, invoke
+the script with `srcdir` as an environment variable indicating where
+it can be find the source code for libidn's tests/ directory (it will
+use the directory name where the script is by default):
+
+tests/standalone.sh
+
+To check that a newly built static libidn behaves, invoke:
+
+env STANDALONE_CFLAGS="-Ilib lib/.libs/libidn.a" tests/standalone.sh
+
+To check that a newly built shared libidn behaves, invoke:
+
+env srcdir=tests STANDALONE_CFLAGS="-Ilib -Wl,-rpath lib/.libs lib/.libs/libidn.so" tests/standalone.sh
+
+If the libidn under testing is too old and has known bugs, that should
+cause tests to fail, which is intentional.
+
+** Updated translations.
+
+** Update gnulib files and build fixes.
+
 * Noteworthy changes in release 1.41 (2022-06-25) [stable]
 
 ** Bump LT_REVISION for new release.
@@ -1687,7 +1729,7 @@ used is included.
 ** Initial release
 
 ----------------------------------------------------------------------
-Copyright (C) 2002-2022 Simon Josefsson
+Copyright (C) 2002-2024 Simon Josefsson
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright
 notice and this notice are preserved.

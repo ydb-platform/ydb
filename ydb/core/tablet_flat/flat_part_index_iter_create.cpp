@@ -1,14 +1,15 @@
-#include "flat_part_index_iter.h"
-#include "flat_part_btree_index_iter.h"
+
+#include "flat_part_index_iter_bree_index.h"
+#include "flat_part_index_iter_flat_index.h"
 
 namespace NKikimr::NTable {
 
-THolder<IIndexIter> CreateIndexIter(const TPart* part, IPages* env, NPage::TGroupId groupId)
+THolder<IPartGroupIndexIter> CreateIndexIter(const TPart* part, IPages* env, NPage::TGroupId groupId)
 {
-    if (groupId.Index < (groupId.IsHistoric() ? part->IndexPages.BTreeHistoric : part->IndexPages.BTreeGroups).size()) {
-        return MakeHolder<TPartBtreeIndexIt>(part, env, groupId);
+    if (part->IndexPages.HasBTree()) {
+        return MakeHolder<TPartGroupBtreeIndexIter>(part, env, groupId);
     } else {
-        return MakeHolder<TPartIndexIt>(part, env, groupId);
+        return MakeHolder<TPartGroupFlatIndexIter>(part, env, groupId);
     }
 }
 

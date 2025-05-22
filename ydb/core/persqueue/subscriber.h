@@ -1,11 +1,13 @@
 #pragma once
 
-#include "header.h"
 #include "blob.h"
+#include "header.h"
+#include "partition_id.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/blob_refcounter.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -42,6 +44,8 @@ struct TReadInfo {
     ui64 LastOffset = 0;
     bool Error = false;
 
+    TBlobKeyTokens BlobKeyTokens;
+
     TReadInfo() = delete;
     TReadInfo(
         const TString& user,
@@ -77,27 +81,35 @@ struct TReadInfo {
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
         const TEvPQ::TEvBlobResponse& response,
+        const ui64 startOffset,
         const ui64 endOffset,
-        const ui32 partition,
-        TUserInfo* ui,
-        const ui64 dst, 
-        const ui64 sizeLag,
-        const TActorId& tablet,
-        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
-    );
-
-    TReadAnswer FormAnswer(
-        const TActorContext& ctx,
-        const ui64 endOffset,
-        const ui32 partition,
+        const TPartitionId& partition,
         TUserInfo* ui,
         const ui64 dst,
         const ui64 sizeLag,
         const TActorId& tablet,
-        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
+        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
+        const bool isActive
+    );
+
+    TReadAnswer FormAnswer(
+        const TActorContext& ctx,
+        const TEvPQ::TEvBlobResponse* response,
+        const ui64 startOffset,
+        const ui64 endOffset,
+        const TPartitionId& partition,
+        TUserInfo* ui,
+        const ui64 dst,
+        const ui64 sizeLag,
+        const TActorId& tablet,
+        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
+        const bool isActive
     ) {
-        TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
-        return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode);
+        static TEvPQ::TEvBlobResponse fakeBlobResponse(0, TVector<TRequestedBlob>());
+        if (!response) {
+            response = &fakeBlobResponse;
+        }
+        return FormAnswer(ctx, *response, startOffset, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive);
     }
 };
 
@@ -127,7 +139,7 @@ private:
 
 class TSubscriber : public TNonCopyable {
 public:
-    TSubscriber(const ui32 partition, TTabletCountersBase& counters, const TActorId& tablet);
+    TSubscriber(const TPartitionId& partition, TTabletCountersBase& counters, const TActorId& tablet);
 
     //will wait for new data or timeout for this read and set timer for timeout ms
     void AddSubscription(TReadInfo&& info, const ui32 timeout, const ui64 cookie, const TActorContext& ctx);
@@ -140,7 +152,7 @@ public:
 
 private:
     TSubscriberLogic Subscriber;
-    const ui32 Partition;
+    const TPartitionId Partition;
     TTabletCountersBase& Counters;
     TActorId Tablet;
 };

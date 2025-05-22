@@ -1,3 +1,4 @@
+#include "sentinel_ut_helpers.h"
 #include "cms_ut_common.h"
 #include "sentinel.h"
 #include "sentinel_impl.h"
@@ -13,33 +14,18 @@
 
 namespace NKikimr::NCmsTest {
 
-static constexpr ui32 DefaultStateLimit = 5;
-static constexpr ui32 DefaultErrorStateLimit = 60;
-auto DefaultStateLimits = NCms::TCmsSentinelConfig::DefaultStateLimits();
-
-static constexpr NCms::EPDiskState ErrorStates[] = {
-    NKikimrBlobStorage::TPDiskState::InitialFormatReadError,
-    NKikimrBlobStorage::TPDiskState::InitialSysLogReadError,
-    NKikimrBlobStorage::TPDiskState::InitialSysLogParseError,
-    NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError,
-    NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError,
-    NKikimrBlobStorage::TPDiskState::CommonLoggerInitError,
-    NKikimrBlobStorage::TPDiskState::OpenFileError,
-    NKikimrBlobStorage::TPDiskState::ChunkQuotaError,
-    NKikimrBlobStorage::TPDiskState::DeviceIoError,
-};
-
-constexpr NCms::EPDiskState FaultyStates[] = {
-    NKikimrBlobStorage::TPDiskState::Initial,
-    NKikimrBlobStorage::TPDiskState::InitialFormatRead,
-    NKikimrBlobStorage::TPDiskState::InitialSysLogRead,
-    NKikimrBlobStorage::TPDiskState::InitialCommonLogRead,
-};
-
 Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     using namespace NCms;
     using namespace NCms::NSentinel;
     using TPDiskID = NCms::TPDiskID;
+
+    void AddState(TPDiskStatus& st, const EPDiskState state) {
+        st.AddState(state, false);
+    }
+
+    void AddStateNodeLocked(TPDiskStatus& st, const EPDiskState state) {
+        st.AddState(state, true);
+    }
 
     Y_UNIT_TEST(PDiskInitialStatus) {
         const EPDiskStatus AllStatuses[] = {
@@ -52,7 +38,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         };
 
         for (const EPDiskStatus status : AllStatuses) {
-            TPDiskStatus st(status, DefaultStateLimit, DefaultStateLimits);
+            TPDiskStatus st(status, DefaultStateLimit, GoodStateLimit, DefaultStateLimits);
 
             UNIT_ASSERT(!st.IsChanged());
             UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), status);
@@ -62,15 +48,15 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     Y_UNIT_TEST(PDiskErrorState) {
         for (const EPDiskState state : ErrorStates) {
             const EPDiskStatus initialStatus = EPDiskStatus::ACTIVE;
-            TPDiskStatus st(initialStatus, DefaultStateLimit, DefaultStateLimits);
+            TPDiskStatus st(initialStatus, DefaultStateLimit, GoodStateLimit, DefaultStateLimits);
 
             for (ui32 i = 1; i < DefaultStateLimits[state]; ++i) {
-                st.AddState(state);
+                AddState(st, state);
 
                 UNIT_ASSERT(!st.IsChanged());
                 UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), initialStatus);
             }
-            st.AddState(state);
+            AddState(st, state);
             UNIT_ASSERT(st.IsChanged());
 
             st.ApplyChanges();
@@ -81,15 +67,15 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     Y_UNIT_TEST(PDiskInactiveAfterStateChange) {
         for (const EPDiskState state : ErrorStates) {
             const EPDiskStatus initialStatus = EPDiskStatus::ACTIVE;
-            TPDiskStatus st(initialStatus, DefaultStateLimit, DefaultStateLimits);
+            TPDiskStatus st(initialStatus, DefaultStateLimit, GoodStateLimit, DefaultStateLimits);
 
             for (ui32 i = 1; i < DefaultStateLimits[state]; ++i) {
-                st.AddState(state);
+                AddState(st, state);
 
                 UNIT_ASSERT(!st.IsChanged());
                 UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), initialStatus);
             }
-            st.AddState(state);
+            AddState(st, state);
             UNIT_ASSERT(st.IsChanged());
             st.ApplyChanges();
             UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::FAULTY);
@@ -97,7 +83,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             auto it = DefaultStateLimits.find(NKikimrBlobStorage::TPDiskState::Normal);
             const ui32 stateLimit = (it != DefaultStateLimits.end()) ? it->second : DefaultStateLimit;
             for (ui32 i = 1; i < stateLimit; ++i) {
-                st.AddState(NKikimrBlobStorage::TPDiskState::Normal);
+                AddState(st, NKikimrBlobStorage::TPDiskState::Normal);
 
                 if (i == 1) {
                     UNIT_ASSERT(st.IsChanged());
@@ -107,7 +93,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
                 }
                 UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::INACTIVE);
             }
-            st.AddState(NKikimrBlobStorage::TPDiskState::Normal);
+            AddState(st, NKikimrBlobStorage::TPDiskState::Normal);
             UNIT_ASSERT(st.IsChanged());
             st.ApplyChanges();
             UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::ACTIVE);
@@ -117,22 +103,169 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     Y_UNIT_TEST(PDiskFaultyState) {
         for (const EPDiskState state : FaultyStates) {
             const EPDiskStatus initialStatus = EPDiskStatus::ACTIVE;
-            TPDiskStatus st(initialStatus, DefaultStateLimit, DefaultStateLimits);
+            TPDiskStatus st(initialStatus, DefaultStateLimit, GoodStateLimit, DefaultStateLimits);
 
             for (ui32 i = 1; i < DefaultStateLimit; ++i) {
-                st.AddState(state);
+                AddState(st, state);
 
                 UNIT_ASSERT(!st.IsChanged());
                 UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), initialStatus);
             }
 
-            st.AddState(state);
+            AddState(st, state);
 
             UNIT_ASSERT(st.IsChanged());
 
             st.ApplyChanges();
             UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::FAULTY);
         }
+    }
+
+    Y_UNIT_TEST(PDiskStateChangeNormalFlow) {
+        // If disk has only been in good state, then change to Normal state within GoodStateLimit
+        const EPDiskStatus initialStatus = EPDiskStatus::ACTIVE;
+        const ui32 defaultStateLimit = 60;
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits);
+
+        AddState(st, NKikimrBlobStorage::TPDiskState::Initial);
+        UNIT_ASSERT(!st.IsChanged());
+
+        AddState(st, NKikimrBlobStorage::TPDiskState::InitialFormatRead);
+        UNIT_ASSERT(st.IsChanged());
+        st.ApplyChanges();
+        UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::INACTIVE);
+
+        AddState(st, NKikimrBlobStorage::TPDiskState::InitialSysLogRead);
+        UNIT_ASSERT(!st.IsChanged());
+
+        AddState(st, NKikimrBlobStorage::TPDiskState::InitialCommonLogRead);
+        UNIT_ASSERT(!st.IsChanged());
+
+        for (ui32 i = 0; i < GoodStateLimit - 1; ++i) {
+            AddState(st, NKikimrBlobStorage::TPDiskState::Normal);
+            UNIT_ASSERT(!st.IsChanged());
+        }
+
+        AddState(st, NKikimrBlobStorage::TPDiskState::Normal);
+
+        UNIT_ASSERT(st.IsChanged());
+        st.ApplyChanges();
+        UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::ACTIVE);
+    }
+
+    Y_UNIT_TEST(PDiskStateChangeNodePermanentlyBad) {
+        // If node is restarting all the time, then disk should never become ACTIVE
+        const EPDiskStatus initialStatus = EPDiskStatus::INACTIVE;
+        const ui32 defaultStateLimit = 60;
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits);
+
+        AddState(st, NKikimrBlobStorage::TPDiskState::Unknown);
+        UNIT_ASSERT(!st.IsChanged());
+        UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::INACTIVE);
+
+        auto goodStates = {
+            NKikimrBlobStorage::TPDiskState::InitialFormatRead,
+            NKikimrBlobStorage::TPDiskState::InitialSysLogRead,
+            NKikimrBlobStorage::TPDiskState::InitialCommonLogRead,
+            NKikimrBlobStorage::TPDiskState::Normal,
+        };
+
+        for (ui32 i = 0; i < 10; ++i) {
+            for (auto state : goodStates) {
+                for (ui32 j = 0; j < 2; ++j) {
+                    AddState(st, state);
+                    UNIT_ASSERT(!st.IsChanged());
+                }
+            }
+
+            AddState(st, NKikimrBlobStorage::TPDiskState::NodeDisconnected);
+            UNIT_ASSERT(!st.IsChanged());
+        }
+    }
+
+    Y_UNIT_TEST(PDiskStateChangeNodeNotExpectedRestart) {
+        // Node restarts and it is not planned, so disk should become ACTIVE only after defaultStateLimit
+        const EPDiskStatus initialStatus = EPDiskStatus::INACTIVE;
+        const ui32 defaultStateLimit = 60;
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits);
+
+        auto nodeStartFn = [&st]() {
+            AddState(st, NKikimrBlobStorage::TPDiskState::Unknown);
+            UNIT_ASSERT(!st.IsChanged());
+            UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::INACTIVE);
+
+            AddState(st, NKikimrBlobStorage::TPDiskState::InitialFormatRead);
+            UNIT_ASSERT(!st.IsChanged());
+
+            AddState(st, NKikimrBlobStorage::TPDiskState::InitialSysLogRead);
+            UNIT_ASSERT(!st.IsChanged());
+
+            AddState(st, NKikimrBlobStorage::TPDiskState::InitialSysLogRead);
+            UNIT_ASSERT(!st.IsChanged());
+
+            for (ui32 i = 0; i < GoodStateLimit; ++i) {
+                AddState(st, NKikimrBlobStorage::TPDiskState::Normal);
+            }
+            UNIT_ASSERT(!st.IsChanged());
+
+            for (ui32 i = 0; i < defaultStateLimit - GoodStateLimit; ++i) {
+                AddState(st, NKikimrBlobStorage::TPDiskState::Normal);
+            }
+
+            UNIT_ASSERT(st.IsChanged());
+            st.ApplyChanges();
+            UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::ACTIVE);
+        };
+
+        nodeStartFn();
+
+        AddState(st, NKikimrBlobStorage::TPDiskState::NodeDisconnected);
+
+        UNIT_ASSERT(st.IsChanged());
+        st.ApplyChanges();
+        UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::INACTIVE);
+
+        nodeStartFn();
+    }
+
+    Y_UNIT_TEST(PDiskStateChangeNodeExpectedRestart) {
+        // Node restarts, but it is planned (node is locked by CMS), so disk should become ACTIVE after GoodStateLimit
+        const EPDiskStatus initialStatus = EPDiskStatus::INACTIVE;
+        const ui32 defaultStateLimit = 60;
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits);
+
+        auto nodeStartFn = [&st]() {
+            AddStateNodeLocked(st, NKikimrBlobStorage::TPDiskState::Unknown);
+            UNIT_ASSERT(!st.IsChanged());
+            UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::INACTIVE);
+
+            AddStateNodeLocked(st, NKikimrBlobStorage::TPDiskState::InitialFormatRead);
+            UNIT_ASSERT(!st.IsChanged());
+
+            AddStateNodeLocked(st, NKikimrBlobStorage::TPDiskState::InitialSysLogRead);
+            UNIT_ASSERT(!st.IsChanged());
+
+            AddStateNodeLocked(st, NKikimrBlobStorage::TPDiskState::InitialSysLogRead);
+            UNIT_ASSERT(!st.IsChanged());
+
+            for (ui32 i = 0; i < GoodStateLimit; ++i) {
+                AddStateNodeLocked(st, NKikimrBlobStorage::TPDiskState::Normal);
+            }
+
+            UNIT_ASSERT(st.IsChanged());
+            st.ApplyChanges();
+            UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::ACTIVE);
+        };
+
+        nodeStartFn();
+
+        AddStateNodeLocked(st, NKikimrBlobStorage::TPDiskState::NodeDisconnected);
+
+        UNIT_ASSERT(st.IsChanged());
+        st.ApplyChanges();
+        UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), EPDiskStatus::INACTIVE);
+
+        nodeStartFn();
     }
 
     std::pair<TCmsStatePtr, TSentinelState::TPtr> MockCmsState(ui16 numDataCenter, ui16 racksPerDataCenter, ui16 nodesPerRack, ui16 pdisksPerNode, bool anyDC, bool anyRack) {
@@ -242,6 +375,67 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         GuardianDataCenterRatio(1, {3, 4, 5}, true);
     }
 
+    void GuardianBadPDisksByNode(ui32 shelvesPerNode, ui32 disksPerShelf, ui32 badDisks) {
+        ui32 disksPerNode = shelvesPerNode * disksPerShelf;
+        ui32 maxFaultyDisksPerNode = disksPerShelf - 1;
+
+        auto [state, sentinelState] = MockCmsState(1, 8, 1, disksPerNode, true, false);
+        TClusterMap all(sentinelState);
+
+        TGuardian changed(sentinelState, 100, 100, 100, maxFaultyDisksPerNode);
+
+        const auto& nodes = state->ClusterInfo->AllNodes();
+
+        for (const auto& node : nodes) {
+            const ui64 nodeId = node.second->NodeId;
+            
+            for (ui32 i = 0; i < disksPerNode; i++) {
+                const TPDiskID id(nodeId, i);
+    
+                if (i < badDisks) {
+                    all.AddPDisk(id, false);
+                    changed.AddPDisk(id, false);
+                } else {
+                    all.AddPDisk(id);
+                }
+            }
+        }
+
+        TString issues;
+        TClusterMap::TPDiskIgnoredMap disallowed;
+
+        auto allowed = changed.GetAllowedPDisks(all, issues, disallowed);
+
+        THashMap<ui64, ui32> allowedDisksByNode;
+        THashMap<ui64, ui32> disallowedDisksByNode;
+
+        for (const auto& id : allowed) {
+            allowedDisksByNode[id.NodeId]++;
+        }
+
+        for (const auto& kv : disallowed) {
+            UNIT_ASSERT(kv.second == NKikimrCms::TPDiskInfo::TOO_MANY_FAULTY_PER_NODE);
+            disallowedDisksByNode[kv.first.NodeId]++;
+        }
+
+        for (const auto& node : nodes) {
+            const ui64 nodeId = node.second->NodeId;
+            if (badDisks <= maxFaultyDisksPerNode) {
+                UNIT_ASSERT_VALUES_EQUAL(allowedDisksByNode[nodeId], badDisks);
+                UNIT_ASSERT_VALUES_EQUAL(disallowedDisksByNode[nodeId], 0);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(allowedDisksByNode[nodeId], 0);
+                UNIT_ASSERT_VALUES_EQUAL(disallowedDisksByNode[nodeId], badDisks);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(GuardianFaultyPDisks) {
+        for (ui32 i = 0; i < 56; i++) {
+            GuardianBadPDisksByNode(2, 28, i);
+        }
+    }
+
     void GuardianRackRatio(ui16 numRacks, const TVector<ui16>& nodesPerRackVariants, ui16 numPDisks, bool anyRack) {
         for (ui16 nodesPerRack : nodesPerRackVariants) {
             auto [state, sentinelState] = MockCmsState(1, numRacks, nodesPerRack, numPDisks, false, anyRack);
@@ -314,215 +508,6 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
 } // TSentinelBaseTests
 
 Y_UNIT_TEST_SUITE(TSentinelTests) {
-    using namespace NCms;
-    using namespace NCms::NSentinel;
-    using TPDiskID = NCms::TPDiskID;
-
-    const auto& MockConfig = TFakeNodeWhiteboardService::Config;
-    auto& MockNodes = TFakeNodeWhiteboardService::Info;
-
-    class TTestEnv: public TCmsTestEnv {
-        static void MockClusterInfo(TClusterInfoPtr& info) {
-            info.Reset(new TClusterInfo);
-
-            for (const auto& pdisk : MockConfig.GetResponse().GetStatus(0).GetBaseConfig().GetPDisk()) {
-                const ui32 nodeId = pdisk.GetNodeId();
-
-                if (info->HasNode(nodeId)) {
-                    info->AddPDisk(pdisk);
-                    continue;
-                }
-
-                const TString name = TStringBuilder() << "node-" << nodeId;
-                NActorsInterconnect::TNodeLocation location;
-                location.SetRack(TStringBuilder() << "rack-" << (nodeId - 1) % 8 + 1);
-                info->AddNode(TEvInterconnect::TNodeInfo(nodeId, name, name, name, 10000, TNodeLocation(location)), nullptr);
-                info->AddPDisk(pdisk);
-            }
-        }
-
-        void WaitForSentinelBoot() {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvSentinel::TEvConfigUpdated::EventType);
-            options.FinalEvents.emplace_back(TEvSentinel::TEvStateUpdated::EventType);
-            UNIT_ASSERT(DispatchEvents(options));
-        }
-
-        void SetPDiskStateImpl(const TSet<TPDiskID>& ids, EPDiskState state) {
-            for (const auto& id : ids) {
-                Y_ABORT_UNLESS(MockNodes.contains(id.NodeId));
-                auto& node = MockNodes.at(id.NodeId);
-
-                Y_ABORT_UNLESS(node.PDiskStateInfo.contains(id.DiskId));
-                auto& pdisk = node.PDiskStateInfo.at(id.DiskId);
-
-                pdisk.SetState(state);
-            }
-
-            Send(new IEventHandle(Sentinel, TActorId(), new TEvSentinel::TEvUpdateState));
-        }
-
-    public:
-        explicit TTestEnv(ui32 nodeCount, ui32 pdisks)
-            : TCmsTestEnv(nodeCount, pdisks)
-        {
-            SetLogPriority(NKikimrServices::CMS, NLog::PRI_DEBUG);
-
-            SetScheduledEventFilter([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev, TDuration, TInstant&) -> bool {
-                if (ev->Recipient != Sentinel) {
-                    return true;
-                }
-
-                switch (ev->GetTypeRewrite()) {
-                    case TEvSentinel::TEvUpdateConfig::EventType:
-                    case TEvSentinel::TEvUpdateState::EventType:
-                    case TEvents::TEvWakeup::EventType:
-                        return false;
-
-                    default:
-                        return true;
-                }
-            });
-
-            auto prevObserver = SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
-            SetObserverFunc([this, prevObserver](TAutoPtr<IEventHandle>& ev) {
-                if (ev->GetTypeRewrite() == TEvCms::TEvClusterStateRequest::EventType) {
-                    auto response = MakeHolder<TEvCms::TEvClusterStateResponse>();
-                    auto& record = response->Record;
-                    if (State) {
-                        record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
-                        for (auto [_, nodeInfo]: State->ClusterInfo->AllNodes()) {
-                            NCms::TCms::AddHostState(State->ClusterInfo, *nodeInfo, record, State->ClusterInfo->GetTimestamp());
-                        }
-                    }
-                    Send(ev->Sender, TActorId(), response.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-
-                return prevObserver(ev);
-            });
-
-            State = new TCmsState;
-            MockClusterInfo(State->ClusterInfo);
-            State->CmsActorId = GetSender();
-
-            Sentinel = Register(CreateSentinel(State));
-            EnableScheduleForActor(Sentinel, true);
-            WaitForSentinelBoot();
-        }
-
-        TPDiskID RandomPDiskID() const {
-            const auto& config = MockConfig.GetResponse().GetStatus(0).GetBaseConfig();
-            const auto& pdisk = config.GetPDisk(RandomNumber(config.PDiskSize() - 1));
-            return TPDiskID(pdisk.GetNodeId(), pdisk.GetPDiskId());
-        }
-
-        TSet<TPDiskID> PDisksForRandomRack() const {
-            auto nodes = State->ClusterInfo->AllNodes();
-            size_t idx = RandomNumber(nodes.size() - 1);
-            auto target = std::next(nodes.begin(), idx)->second;
-
-            TString targetRack = target->Location.HasKey(TNodeLocation::TKeys::Rack)
-                ? target->Location.GetRackId()
-                : "";
-
-            TSet<TPDiskID> res;
-            for (const auto& [id, info] : nodes) {
-                TString foundRack = info->Location.HasKey(TNodeLocation::TKeys::Rack)
-                    ? info->Location.GetRackId()
-                    : "";
-                if (targetRack == foundRack) {
-                    std::copy(info->PDisks.begin(), info->PDisks.end(), std::inserter(res, res.begin()));
-                }
-            }
-            return res;
-        }
-
-        TSet<TPDiskID> PDisksForRandomNode() const {
-            auto nodes = State->ClusterInfo->AllNodes();
-            size_t idx = RandomNumber(nodes.size() - 1);
-
-            auto info = std::next(nodes.begin(), idx)->second;
-            Y_ABORT_UNLESS(info);
-            return info->PDisks;
-        }
-
-        void SetPDiskState(const TSet<TPDiskID>& pdisks, EPDiskState state) {
-            SetPDiskStateImpl(pdisks, state);
-
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvSentinel::TEvStateUpdated::EventType, 1);
-            UNIT_ASSERT(DispatchEvents(options));
-        }
-
-        void SetPDiskState(const TSet<TPDiskID>& pdisks, EPDiskState state, EPDiskStatus expectedStatus) {
-            SetPDiskStateImpl(pdisks, state);
-
-            bool stateUpdated = false;
-
-            struct TPDiskUpdates {
-                bool UpdateStatusRequested = false;
-                ui32 IgnoredUpdateRequests = 0;
-            };
-            THashMap<TPDiskID, TPDiskUpdates, TPDiskIDHash> pdiskUpdates;
-            for (const auto& id : pdisks) {
-                pdiskUpdates[id] = {};// TPDiskUpdates {false, 0});
-            }
-
-            auto check = [&](IEventHandle& ev) {
-                switch (ev.GetTypeRewrite()) {
-                case TEvSentinel::TEvStateUpdated::EventType:
-                    stateUpdated = true;
-                    break;
-
-                case TEvBlobStorage::TEvControllerConfigRequest::EventType:
-                    {
-                        TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
-                        const auto& request = ev.Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record;
-
-                        UNIT_ASSERT(request.HasRequest());
-                        for (ui32 i = 0; i < request.GetRequest().CommandSize(); ++i) {
-                            if (request.GetRequest().GetCommand(i).HasUpdateDriveStatus()) {
-                                const auto& update = request.GetRequest().GetCommand(i).GetUpdateDriveStatus();
-                                TPDiskID id(update.GetHostKey().GetNodeId(), update.GetPDiskId());
-
-                                auto it = pdiskUpdates.find(id);
-                                if (it != pdiskUpdates.end()) {
-                                    if (expectedStatus == update.GetStatus()) {
-                                        auto& vec = TFakeNodeWhiteboardService::BSControllerResponsePatterns[id];
-                                        if (!(TFakeNodeWhiteboardService::NoisyBSCPipeCounter % 3) && (vec.empty() || *vec.begin())) {
-                                            it->second.UpdateStatusRequested = true;
-                                        } else {
-                                            it->second.IgnoredUpdateRequests++;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    break;
-                default:
-                    break;
-                }
-
-                bool allUpdateStatusRequestedOrIgnored = true;
-                for (const auto& [id, info] : pdiskUpdates) {
-                    allUpdateStatusRequestedOrIgnored &= (info.UpdateStatusRequested || info.IgnoredUpdateRequests == 6);
-                }
-                return stateUpdated && pdiskUpdates.size() && allUpdateStatusRequestedOrIgnored;
-            };
-
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(check);
-            UNIT_ASSERT(DispatchEvents(options));
-        }
-
-    private:
-        TCmsStatePtr State;
-        TActorId Sentinel;
-
-    }; // TTestEnv
-
     Y_UNIT_TEST(Smoke) {
         TTestEnv env(8, 4);
     }
@@ -531,9 +516,9 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         TTestEnv env(8, 4);
 
         const auto reservedStates = TVector<EPDiskState>{
-            NKikimrBlobStorage::TPDiskState::Reserved14,
             NKikimrBlobStorage::TPDiskState::Reserved15,
             NKikimrBlobStorage::TPDiskState::Reserved16,
+            NKikimrBlobStorage::TPDiskState::Reserved17,
         };
 
         for (const auto state : reservedStates) {
@@ -608,6 +593,107 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
         }
     }
 
+    Y_UNIT_TEST(PDiskFaultyGuard) {
+        ui32 nodes = 2;
+        ui32 disksPerShelf = 5;
+        ui32 disksPerNode = 2 * disksPerShelf;
+
+        for (auto wholeShelfFailure : {true, false}) {
+            NKikimrCms::TCmsConfig config;
+
+            config.MutableSentinelConfig()->SetFaultyPDisksThresholdPerNode(disksPerShelf - 1);
+            TTestEnv env(nodes, disksPerNode, config);
+            env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_ERROR);
+
+            for (ui32 nodeIdx = 0; nodeIdx < nodes; ++nodeIdx) {
+                ui32 badDisks = wholeShelfFailure ? disksPerShelf : disksPerShelf / 2;
+
+                for (ui32 pdiskIdx = 0; pdiskIdx < badDisks - 1; ++pdiskIdx) {
+                    const TPDiskID id = env.PDiskId(nodeIdx, pdiskIdx);
+
+                    env.SetPDiskState({id}, FaultyStates[0]);
+                }
+
+                // Next disk (last badDisk)
+                const TPDiskID id = env.PDiskId(nodeIdx, badDisks);
+
+                bool targetSeenFaulty = false;
+
+                auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+                    const auto& request = event->Get()->Record;
+                    for (const auto& command : request.GetRequest().GetCommand()) {
+                        if (command.HasUpdateDriveStatus()) {
+                            const auto& update = command.GetUpdateDriveStatus();
+                            ui32 nodeId = update.GetHostKey().GetNodeId();
+                            ui32 pdiskId = update.GetPDiskId();
+
+                            if (id.NodeId == nodeId && id.DiskId == pdiskId) {
+                                if (update.GetStatus() == NKikimrBlobStorage::EDriveStatus::FAULTY) {
+                                    targetSeenFaulty = true;
+                                }
+                            }
+                        }
+                    }
+                });
+
+                for (ui32 i = 1; i < DefaultErrorStateLimit + 1; ++i) { // More than DefaultErrorStateLimit just to be sure
+                    env.SetPDiskState({id}, FaultyStates[0]);
+                }
+
+                env.SimulateSleep(TDuration::Minutes(5));
+
+                observerHolder.Remove();
+
+                if (wholeShelfFailure) {
+                    UNIT_ASSERT_C(!targetSeenFaulty, "Faulty state should not have been sent to BS controller because whole shelf failed");
+                } else {
+                    UNIT_ASSERT_C(targetSeenFaulty, "Faulty state should have been sent to BS controller");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PDiskFaultyGuardWithForced) {
+        ui32 nodes = 2;
+        ui32 disksPerShelf = 5;
+        ui32 disksPerNode = 2 * disksPerShelf;
+
+        NKikimrCms::TCmsConfig config;
+
+        config.MutableSentinelConfig()->SetFaultyPDisksThresholdPerNode(disksPerShelf - 1);
+        TTestEnv env(nodes, disksPerNode, config);
+        env.SetLogPriority(NKikimrServices::CMS, NLog::PRI_ERROR);
+
+        std::map<ui32, std::set<ui32>> faultyDisks;
+
+        auto observerHolder = env.AddObserver<TEvBlobStorage::TEvControllerConfigRequest>([&](TEvBlobStorage::TEvControllerConfigRequest::TPtr& event) {
+            const auto& request = event->Get()->Record;
+            for (const auto& command : request.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    const auto& update = command.GetUpdateDriveStatus();
+                    ui32 nodeId = update.GetHostKey().GetNodeId();
+                    ui32 pdiskId = update.GetPDiskId();
+
+                    faultyDisks[nodeId].insert(pdiskId);
+                }
+            }
+        });
+
+        for (ui32 nodeIdx = 0; nodeIdx < nodes; ++nodeIdx) {
+            env.SetNodeFaulty(env.GetNodeId(nodeIdx), true);
+
+            env.SimulateSleep(TDuration::Minutes(5));
+        }
+
+        observerHolder.Remove();
+
+        for (ui32 nodeIdx = 0; nodeIdx < nodes; ++nodeIdx) {
+            ui32 nodeId = env.GetNodeId(nodeIdx);
+
+            UNIT_ASSERT_VALUES_EQUAL(faultyDisks[nodeId].size(), disksPerNode);
+        }
+    }
+
     Y_UNIT_TEST(BSControllerUnresponsive) {
         TTestEnv env(8, 4);
         env.EnableNoisyBSCPipe();
@@ -626,27 +712,6 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             env.SetPDiskState({id1, id2, id3}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
         }
     }
-
-    Y_UNIT_TEST(BSControllerCantChangeStatus) {
-        TTestEnv env(8, 4);
-
-        const TPDiskID id1 = env.RandomPDiskID();
-        const TPDiskID id2 = env.RandomPDiskID();
-        const TPDiskID id3 = env.RandomPDiskID();
-
-        for (size_t i = 0; i < sizeof(ErrorStates) / sizeof(ErrorStates[0]); ++i) {
-            env.AddBSCFailures(id1, {true, false, false, true, false, false});
-            // will fail for all requests assuming there is only 5 retries
-            env.AddBSCFailures(id2, {false, false, false, false, false, false});
-            env.AddBSCFailures(id3, {false, true, false, false, true, false});
-        }
-
-        for (const EPDiskState state : ErrorStates) {
-            env.SetPDiskState({id1, id2, id3}, state, EPDiskStatus::FAULTY);
-            env.SetPDiskState({id1, id2, id3}, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
-        }
-    }
-
 } // TSentinelTests
 
 }

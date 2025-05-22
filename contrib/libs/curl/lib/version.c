@@ -54,7 +54,7 @@
 #endif
 
 #ifdef USE_LIBRTMP
-#include <librtmp/rtmp.h>
+#error #include <librtmp/rtmp.h>
 #endif
 
 #ifdef HAVE_LIBZ
@@ -67,14 +67,14 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wvla"
 #endif
-#error #include <brotli/decode.h>
+#include <brotli/decode.h>
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
 #endif
 
 #ifdef HAVE_ZSTD
-#error #include <zstd.h>
+#include <zstd.h>
 #endif
 
 #ifdef USE_GSASL

@@ -2,6 +2,8 @@
 
 #include "validator.h"
 
+#include <ydb/core/protos/resource_broker.pb.h>
+
 namespace NKikimr::NConsole {
 
 class TBootstrapConfigValidator : public IConfigValidator {

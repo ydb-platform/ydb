@@ -3,6 +3,7 @@
 #include "flat_sausage_meta.h"
 #include "flat_sausage_solid.h"
 #include "flat_sausage_gut.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NPageCollection {
@@ -15,8 +16,9 @@ namespace NPageCollection {
             : LargeGlobId(largeGlobId)
             , Meta(std::move(raw), LargeGlobId.Group)
         {
-            if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup)
-                Y_ABORT("Invalid TLargeGlobId of page collection meta blob");
+            if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup) {
+                Y_TABLET_ERROR("Invalid TLargeGlobId of page collection meta blob");
+            }
         }
 
         const TLogoBlobID& Label() const noexcept override
@@ -29,22 +31,22 @@ namespace NPageCollection {
             return Meta.TotalPages();
         }
 
-        TBorder Bounds(ui32 page) const noexcept override
+        TBorder Bounds(ui32 page) const override
         {
             return Meta.Bounds(page);
         }
 
-        TGlobId Glob(ui32 blob) const noexcept override
+        TGlobId Glob(ui32 blob) const override
         {
             return Meta.Glob(blob);
         }
 
-        TInfo Page(ui32 page) const noexcept override
+        TInfo Page(ui32 page) const override
         {
             return Meta.Page(page);
         }
 
-        bool Verify(ui32 page, TArrayRef<const char> body) const noexcept override
+        bool Verify(ui32 page, TArrayRef<const char> body) const override
         {
             return
                 Meta.Page(page).Size == body.size()
@@ -62,7 +64,7 @@ namespace NPageCollection {
             LargeGlobId.MaterializeTo(vec);
 
             {
-                const auto &blobs = Meta.Blobs();
+                auto blobs = Meta.Blobs();
                 vec.insert(vec.end(), blobs.begin(), blobs.end());
             }
         }

@@ -26,7 +26,7 @@ public:
         Result->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
         Result->Record.SetOrigin(Self->TabletID());
 
-        const auto pathId = PathIdFromPathId(record.GetPathId());
+        const auto pathId = TPathId::FromProto(record.GetPathId());
         if (Self->Find(pathId)) {
             CLOG_W(ctx, "Replication already exists"
                 << ": pathId# " << pathId);

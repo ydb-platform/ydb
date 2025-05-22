@@ -1,15 +1,15 @@
 import json
-import uuid
 
 from moto.awslambda.exceptions import (
     PreconditionFailedException,
     UnknownPolicyException,
 )
+from moto.moto_api._internal import mock_random
 
 
 class Policy:
     def __init__(self, parent):
-        self.revision = str(uuid.uuid4())
+        self.revision = str(mock_random.uuid4())
         self.statements = []
         self.parent = parent
 
@@ -45,7 +45,8 @@ class Policy:
                 policy.statements[0]["Resource"] + ":" + qualifier
             )
         self.statements.append(policy.statements[0])
-        self.revision = str(uuid.uuid4())
+        self.revision = str(mock_random.uuid4())
+        return policy.statements[0]
 
     # removes the statement that matches 'sid' from the policy
     def del_statement(self, sid, revision=""):
@@ -73,7 +74,7 @@ class Policy:
         # set some default values if these keys are not set
         self.ensure_set(obj, "Effect", "Allow")
         self.ensure_set(obj, "Resource", self.parent.function_arn + ":$LATEST")
-        self.ensure_set(obj, "StatementId", str(uuid.uuid4()))
+        self.ensure_set(obj, "StatementId", str(mock_random.uuid4()))
 
         # transform field names and values
         self.transform_property(obj, "StatementId", "Sid", self.nop_formatter)
@@ -84,6 +85,9 @@ class Policy:
         )
         self.transform_property(
             obj, "SourceAccount", "SourceAccount", self.source_account_formatter
+        )
+        self.transform_property(
+            obj, "PrincipalOrgID", "Condition", self.principal_org_id_formatter
         )
 
         # remove RevisionId and EventSourceToken if they are set
@@ -117,6 +121,9 @@ class Policy:
 
     def source_arn_formatter(self, obj):
         return {"ArnLike": {"AWS:SourceArn": obj}}
+
+    def principal_org_id_formatter(self, obj):
+        return {"StringEquals": {"aws:PrincipalOrgID": obj}}
 
     def transform_property(self, obj, old_name, new_name, formatter):
         if old_name in obj:

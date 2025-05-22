@@ -3,7 +3,8 @@
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvRange>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvRange>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TRangeQuery : public TBlobStorageQuery<TEvBlobStorage::TEvRange> {
             struct TRead {
                 TLogoBlobID Id;
@@ -24,7 +25,7 @@ namespace NKikimr::NBlobDepot {
                     (U.MustRestoreFirst, Request.MustRestoreFirst), (U.IndexOnly, Request.IsIndexOnly));
 
                 Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, Request.From, Request.To,
-                    Agent.VirtualGroupId);
+                    TGroupId::FromValue(Agent.VirtualGroupId));
 
                 // issue resolve query
                 TString from = Request.From.AsBinaryString();
@@ -179,7 +180,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        return new TRangeQuery(*this, std::move(ev));
+        return new TRangeQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

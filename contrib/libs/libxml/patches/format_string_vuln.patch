@@ -1,0 +1,38 @@
+--- a/xmlschemas.c
++++ b/xmlschemas.c
+@@ -2295,7 +2295,7 @@ xmlSchemaInternalErr(xmlSchemaAbstractCt
+ 		     const char *funcName,
+ 		     const char *message)
+ {
+-    xmlSchemaInternalErr2(actxt, funcName, message, NULL, NULL);
++    xmlSchemaInternalErr2(actxt, funcName, "%s", message, NULL);
+ }
+ 
+ #if 0
+@@ -2332,7 +2332,7 @@ xmlSchemaCustomErr4(xmlSchemaAbstractCtx
+     msg = xmlStrcat(msg, (const xmlChar *) message);
+     msg = xmlStrcat(msg, BAD_CAST ".\n");
+     xmlSchemaErr4(actxt, error, node,
+-	(const char *) msg, str1, str2, str3, str4);
++	   message, str1, str2, str3, str4);
+     FREE_AND_NULL(msg)
+ }
+ 
+@@ -2369,7 +2369,7 @@ xmlSchemaCustomWarning(xmlSchemaAbstract
+ 
+     /* URGENT TODO: Set the error code to something sane. */
+     xmlSchemaErr4Line(actxt, XML_ERR_WARNING, error, node, 0,
+-	(const char *) msg, str1, str2, str3, NULL);
++	   message, str1, str2, str3, NULL);
+ 
+     FREE_AND_NULL(msg)
+ }
+@@ -2749,7 +2749,7 @@ xmlSchemaFacetErr(xmlSchemaAbstractCtxtP
+ }
+ 
+ #define VERROR(err, type, msg) \
+-    xmlSchemaCustomErr(ACTXT_CAST vctxt, err, NULL, type, msg, NULL, NULL);
++    xmlSchemaCustomErr(ACTXT_CAST vctxt, err, NULL, type, "%s", msg, NULL);
+ 
+ #define VERROR_INT(func, msg) xmlSchemaInternalErr(ACTXT_CAST vctxt, func, msg);
+ 

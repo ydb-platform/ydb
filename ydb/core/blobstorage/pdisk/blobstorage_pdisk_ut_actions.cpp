@@ -172,7 +172,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
     case 70:
         TEST_RESPONSE(EvChunkReadResult, ERROR);
         VERBOSE_COUT(" Sending TEvChunkRead");
-        ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, 3, 100500, 128, 1, nullptr));
+        ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx0 + 1, 100500, 128, 1, nullptr));
         break;
     case 80:
     {
@@ -190,7 +190,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvLogResult, ERROR);
         VERBOSE_COUT(" Sending TEvLog to commit");
         NPDisk::TCommitRecord commitRecord;
-        commitRecord.CommitChunks.push_back(3);
+        commitRecord.CommitChunks.push_back(ChunkIdx0 + 1);
         auto lsn = NextLsn();
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TRcBuf(), TLsnSeg(lsn, lsn),
                     (void*)43));
@@ -223,7 +223,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvLogResult, ERROR);
         VERBOSE_COUT(" Sending TEvLog to commit");
         NPDisk::TCommitRecord commitRecord;
-        commitRecord.DeleteChunks.push_back(3);
+        commitRecord.DeleteChunks.push_back(ChunkIdx0 + 1);
         auto lsn = NextLsn();
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, TRcBuf(), TLsnSeg(lsn, lsn),
                     (void*)43));
@@ -267,16 +267,18 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
     case 170:
         TEST_RESPONSE(EvChunkWriteResult, ERROR);
         VERBOSE_COUT(" Sending TEvChunkWrite that actually does the thing");
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx0, ChunkWriteData.size(),
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx0, 0,
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
-    case 180:
+    case 180: {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ChunkIdx = LastResponse.ChunkIdx;
+        size_t blockSize = LastResponse.AppendBlockSize;
         VERBOSE_COUT(" Sending TEvChunkWrite");
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, ChunkWriteData.size() / 2,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, ChunkWriteData.size() / 2 / blockSize * blockSize,
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
+    }
     case 190:
         TEST_RESPONSE(EvChunkWriteResult, OK);
         VERBOSE_COUT(" Sending TEvInit for invalid id");
@@ -1115,9 +1117,9 @@ void TTestChunkUnlockRestart::TestFSM(const TActorContext &ctx) {
     switch (TestStep) {
     case 0:
         WhiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(WhiteboardID, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(WhiteboardID, SelfId());
         NodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(NodeWardenId, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(NodeWardenId, SelfId());
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid, TActorId(), SelfId()));
@@ -1136,7 +1138,7 @@ void TTestChunkUnlockRestart::TestFSM(const TActorContext &ctx) {
             SignalDoneEvent();
             break;
         }
-        ctx.Send(NodeWardenId, new TEvBlobStorage::TEvAskRestartPDisk(LastResponse.whiteboardPDiskResult->Record.GetPDiskId()));
+        ctx.Send(NodeWardenId, new TEvBlobStorage::TEvAskWardenRestartPDisk(LastResponse.whiteboardPDiskResult->Record.GetPDiskId(), false));
         break;
     case 30:
         TEST_RESPONSE(EvHarakiri, OK);
@@ -1322,11 +1324,11 @@ void TTestWhiteboard::TestFSM(const TActorContext &ctx) {
     {
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         TActorId whiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(whiteboardID, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(whiteboardID, SelfId());
         TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(nodeWardenId, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(nodeWardenId, SelfId());
         for (int owner = 0; owner < ExpectedOwnerCount; ++owner) {
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, TVDiskID(0, 0, 0, 0, owner), *PDiskGuid, TActorId(), SelfId()));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, TVDiskID(TGroupId::Zero(), 0, 0, 0, owner), *PDiskGuid, TActorId(), SelfId()));
         }
         TestStep += 10;
         break;
@@ -2758,14 +2760,7 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
     case 30:
     {
         //TEST_RESPONSE(EvLogResult, ERROR);
-        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceRed)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceOrange)
-            | ui32(NKikimrBlobStorage::StatusDiskSpacePreOrange)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop)
-            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove));
+        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid));
         VERBOSE_COUT(" Sending TEvLog to delete a chunk");
         NPDisk::TCommitRecord commitRecord;
         TRcBuf commitData = TRcBuf(TString("hello"));
@@ -2783,14 +2778,17 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
         TEST_RESPONSE(EvLogResult, OK);
 
         VERBOSE_COUT(" Sending TEvLog to log ChunkSize bytes");
-        TRcBuf largeData = TRcBuf(PrepareData(ChunkSize * 20));
+        TRcBuf largeData = TRcBuf(PrepareData(ChunkSize * 130));
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, largeData, TLsnSeg(3, 3), (void*)43));
         break;
     }
     case 50:
     {
         TEST_RESPONSE(EvLogResult, OK);
-        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid));
+        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop));
 
         VERBOSE_COUT(" Sending TEvLog to log 3 * ChunkSize bytes");
         TRcBuf largeData = TRcBuf(PrepareData(ChunkSize * 3));
@@ -2800,7 +2798,10 @@ void TTestRedZoneSurvivability::TestFSM(const TActorContext &ctx) {
     case 60:
     {
         TEST_RESPONSE(EvLogResult, OK);
-        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid));
+        TEST_PDISK_STATUS(ui32(NKikimrBlobStorage::StatusIsValid)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceCyan)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)
+            | ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop));
 
         VERBOSE_COUT(" Sending TEvLog to cut log");
         NPDisk::TCommitRecord commitRecord;
@@ -3412,7 +3413,7 @@ void TTestChunkDeletionWhileWritingIt::TestFSM(const TActorContext &ctx) {
         ChunkWriteData = PrepareData(ChunkSize - 1);
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 1,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 5));
 
         VERBOSE_COUT(" Sending TEvLog to commit");

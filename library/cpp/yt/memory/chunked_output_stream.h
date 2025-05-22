@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blob.h"
+#include "memory_usage_tracker.h"
 
 #include <library/cpp/yt/memory/ref.h>
 
@@ -53,7 +54,6 @@ private:
 
     TBlob CurrentChunk_;
     std::vector<TSharedRef> FinishedChunks_;
-
 
     void ReserveNewChunk(size_t spaceRequired);
 

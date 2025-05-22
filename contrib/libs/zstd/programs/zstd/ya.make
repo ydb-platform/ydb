@@ -4,6 +4,8 @@ PROGRAM()
 
 WITHOUT_LICENSE_TEXTS()
 
+VERSION(1.5.7)
+
 PEERDIR(
     contrib/libs/zstd
 )
@@ -32,6 +34,7 @@ SRCS(
     dibio.c
     fileio.c
     fileio_asyncio.c
+    lorem.c
     timefn.c
     util.c
     zstdcli.c

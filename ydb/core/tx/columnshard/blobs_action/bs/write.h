@@ -1,26 +1,23 @@
 #pragma once
 
+#include "blob_manager.h"
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
-#include <ydb/core/tx/columnshard/blob_manager.h>
-#include <ydb/core/tx/columnshard/blob_cache.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
 class TWriteAction: public IBlobsWritingAction {
 private:
     using TBase = IBlobsWritingAction;
-    NColumnShard::TBlobBatch BlobBatch;
-    std::shared_ptr<NColumnShard::IBlobManager> Manager;
+    TBlobBatch BlobBatch;
+    std::shared_ptr<IBlobManager> Manager;
 protected:
-    virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override {
-        return BlobBatch.SendWriteBlobRequest(data, blobId, TInstant::Max(), TActorContext::AsActorContext());
-    }
+    virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override;
 
     virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) override {
         return BlobBatch.OnBlobWriteResult(blobId.GetLogoBlobId(), status);
     }
 
-    virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& /*dbBlobs*/) override {
+    virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& /*dbBlobs*/) override {
         return;
     }
 
@@ -28,10 +25,8 @@ protected:
         return;
     }
 
-    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) override;
-    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool /*blobsWroteSuccessfully*/) override {
-
-    }
+    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) override;
+    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) override;
 public:
     virtual bool NeedDraftTransaction() const override {
         return false;
@@ -41,7 +36,7 @@ public:
         return BlobBatch.AllocateNextBlobId(data);
     }
 
-    TWriteAction(const TString& storageId, const std::shared_ptr<NColumnShard::IBlobManager>& manager)
+    TWriteAction(const TString& storageId, const std::shared_ptr<IBlobManager>& manager)
         : TBase(storageId)
         , BlobBatch(manager->StartBlobBatch())
         , Manager(manager)

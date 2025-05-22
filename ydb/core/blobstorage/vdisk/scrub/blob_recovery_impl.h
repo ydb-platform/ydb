@@ -99,15 +99,15 @@ namespace NKikimr {
 
         // a map to fill upon receiving VGet result
         struct TPerBlobInfo {
-            const TInstant Deadline;
             std::weak_ptr<TInFlightContext> Context;
             TEvRecoverBlobResult::TItem *Item; // item to update
             ui32 BlobReplyCounter = 0; // number of unreplied queries for this blob
         };
         std::unordered_multimap<TLogoBlobID, TPerBlobInfo, THash<TLogoBlobID>> VGetResultMap;
+        std::set<std::tuple<TVDiskIdShort, TLogoBlobID>> GetsInFlight;
 
         void AddBlobQuery(const TLogoBlobID& id, NMatrix::TVectorType needed, const std::shared_ptr<TInFlightContext>& context, TEvRecoverBlobResult::TItem *item);
-        void AddExtremeQuery(const TVDiskID& vdiskId, const TLogoBlobID& id, TInstant deadline, ui32 worstReplySize);
+        void AddExtremeQuery(const TVDiskID& vdiskId, const TLogoBlobID& id, TInstant deadline, ui32 idxInSubgroup);
         void SendPendingQueries();
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev);
         NKikimrProto::EReplyStatus ProcessItemData(TEvRecoverBlobResult::TItem& item);

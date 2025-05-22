@@ -1,3 +1,4 @@
+#include <contrib/libs/openssl/redef.h>
 /*
  * Copyright 1995-2022 The OpenSSL Project Authors. All Rights Reserved.
  *
@@ -98,7 +99,7 @@ struct servent *PASCAL getservbyname(const char *, const char *);
      /* ioctl is only in VMS > 7.0 and when socketshr is not used */
 #    include <sys/ioctl.h>
 #   endif
-#   include <unixio.h>
+#   error #include <unixio.h>
 #   if defined(TCPIP_TYPE_SOCKETSHR)
 #    include <socketshr.h>
 #   endif

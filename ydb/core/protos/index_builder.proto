@@ -4,6 +4,7 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
 
 
 package NKikimrIndexBuilder;
@@ -21,6 +22,12 @@ message TColumnBuildSettings {
     optional string Table = 2;
 }
 
+message TIndexBuildScanSettings {
+    optional uint32 MaxBatchRows = 1 [ default = 50000 ];
+    optional uint64 MaxBatchBytes = 2 [ default = 8388608 ];
+    optional uint32 MaxBatchRetries = 3 [ default = 50 ];
+}
+
 message TIndexBuildSettings {
     optional string source_path = 1;
     optional Ydb.Table.TableIndex index = 2;
@@ -28,12 +35,15 @@ message TIndexBuildSettings {
     optional bool pg_mode = 8 [ default = false];
     optional bool if_not_exist = 9 [ default = false];
 
-    optional uint32 max_batch_rows = 3 [ default = 500 ];
-    optional uint64 max_batch_bytes = 4 [ default = 8388608 ];
+    reserved 3; // max_batch_rows
+    reserved 4; // max_batch_bytes
+
     optional uint32 max_shards_in_flight = 5 [ default = 32 ];
-    optional uint32 max_retries_upload_batch = 6 [ default = 50 ];
+    reserved 6; // max_retries_upload_batch
 
     optional google.protobuf.Any AlterMainTablePayload = 10;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
 }
 
 message TIndexBuild {
@@ -42,6 +52,9 @@ message TIndexBuild {
     optional Ydb.Table.IndexBuildState.State State = 3;
     optional TIndexBuildSettings Settings = 4;
     optional float Progress = 5 [default = 0];
+    optional google.protobuf.Timestamp StartTime = 6;
+    optional google.protobuf.Timestamp EndTime = 7;
+    optional string UserSID = 8;
 }
 
 message TEvCreateRequest {
@@ -49,6 +62,9 @@ message TEvCreateRequest {
     optional uint64 TxId = 2;
     optional string DatabaseName = 3;
     optional TIndexBuildSettings Settings = 4;
+    // Internal flag is true for system-generated operations and is false for those initiated directly by the user.
+    optional bool Internal = 5 [default = false];
+    optional string UserSID = 6;
 }
 
 message TEvCreateResponse {
@@ -105,4 +121,25 @@ message TEvListResponse {
     repeated Ydb.Issue.IssueMessage Issues = 2;
     repeated TIndexBuild Entries = 3;
     optional string NextPageToken = 4;
+}
+
+enum EBuildStatus {
+    INVALID = 0;
+    ACCEPTED = 1; // DEPRECATED don't use it, it does nothing, we cannot remove it for now, because old nodes can send it
+    IN_PROGRESS = 2;
+    DONE = 3;
+
+    ABORTED = 4;
+    BUILD_ERROR = 5;
+    BAD_REQUEST = 6;
+}
+
+message TEvUploadSampleKResponse {
+    optional uint64 Id = 1;
+
+    optional Ydb.StatusIds.StatusCode UploadStatus = 2;
+    repeated Ydb.Issue.IssueMessage Issues = 3;
+
+    optional uint64 UploadRows = 4;
+    optional uint64 UploadBytes = 5;
 }

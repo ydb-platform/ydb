@@ -1,0 +1,85 @@
+diff --git a/include/__config b/include/__config
+index acedbdb..fdb3b18 100644
+--- a/include/__config
++++ b/include/__config
+@@ -91,7 +91,12 @@
+ // Previously libc++ used "unsigned int" exclusively.
+ #  define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
+ // Unstable attempt to provide a more optimized std::function
++#ifdef __EMSCRIPTEN__
++// XXX EMSCRIPTEN https://github.com/emscripten-core/emscripten/issues/11022
++//#    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#else
+ #  define _LIBCPP_ABI_OPTIMIZED_FUNCTION
++#endif
+ // All the regex constants must be distinct and nonzero.
+ #  define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
+ // Use raw pointers, not wrapped ones, for std::span's iterator type.
+diff --git a/include/typeinfo b/include/typeinfo
+index 3d23458..e46956e 100644
+--- a/include/typeinfo
++++ b/include/typeinfo
+@@ -106,6 +106,11 @@ public:
+ 
+     size_t hash_code() const _NOEXCEPT;
+ 
++#ifdef __EMSCRIPTEN__
++    // XXX Emscripten: adding `always_inline` fixes
++    // https://github.com/emscripten-core/emscripten/issues/13330
++    __attribute__((always_inline))
++#endif
+     _LIBCPP_INLINE_VISIBILITY
+     bool operator==(const type_info& __arg) const _NOEXCEPT {
+       return __compare(__arg) == 0;
+diff --git a/src/new.cpp b/src/new.cpp
+index 48d6f99..cfef148 100644
+--- a/src/new.cpp
++++ b/src/new.cpp
+@@ -74,8 +74,17 @@ operator new(std::size_t size) _THROW_BAD_ALLOC
+         else
+ #ifndef _LIBCPP_NO_EXCEPTIONS
+             throw std::bad_alloc();
++#else
++#ifdef __EMSCRIPTEN__
++            // Abort here so that when exceptions are disabled, we do not just
++            // return 0 when malloc returns 0.
++            // We could also do this with set_new_handler, but that adds a
++            // global constructor and a table entry, overhead that we can avoid
++            // by doing it this way.
++            abort();
+ #else
+             break;
++#endif
+ #endif
+     }
+     return p;
+diff --git a/src/support/runtime/exception_fallback.ipp b/src/support/runtime/exception_fallback.ipp
+index ade9335..100ee6d 100644
+--- a/src/support/runtime/exception_fallback.ipp
++++ b/src/support/runtime/exception_fallback.ipp
+@@ -47,6 +47,7 @@ get_terminate() noexcept
+   return __libcpp_atomic_load(&__terminate_handler);
+ }
+ 
++#ifndef __EMSCRIPTEN__ // We provide this in JS
+ _LIBCPP_NORETURN
+ void
+ terminate() noexcept
+@@ -69,7 +70,9 @@ terminate() noexcept
+     }
+ #endif // _LIBCPP_NO_EXCEPTIONS
+ }
++#endif // !__EMSCRIPTEN__
+ 
++#if !defined(__EMSCRIPTEN__)
+ bool uncaught_exception() noexcept { return uncaught_exceptions() > 0; }
+ 
+ int uncaught_exceptions() noexcept
+@@ -78,6 +81,7 @@ int uncaught_exceptions() noexcept
+   fprintf(stderr, "uncaught_exceptions not yet implemented\n");
+   ::abort();
+ }
++#endif // !__EMSCRIPTEN__
+ 
+ 
+ exception::~exception() noexcept

@@ -23,10 +23,10 @@ namespace {
             return ret;
         }
 
-        //clash almost impossible, ONLY if we have threads with ids 0 and 1!
+        // clash almost impossible, ONLY if we have threads with ids 0 and 1!
         return 1;
     }
-}
+} // namespace
 
 void NPrivate::FillWithTrash(void* ptr, size_t len) {
 #if defined(NDEBUG)

@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+import "ydb/public/api/protos/draft/ydb_replication.proto";
+
+package Ydb.Replication.V1;
+option java_package = "com.yandex.ydb.replication.v1";
+
+service ReplicationService {
+    rpc DescribeReplication(Replication.DescribeReplicationRequest) returns (Replication.DescribeReplicationResponse);
+}

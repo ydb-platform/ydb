@@ -68,7 +68,7 @@ TDataStatistics& operator += (TDataStatistics& lhs, const TDataStatistics& rhs)
     return lhs;
 }
 
-TDataStatistics  operator +  (const TDataStatistics& lhs, const TDataStatistics& rhs)
+TDataStatistics operator + (const TDataStatistics& lhs, const TDataStatistics& rhs)
 {
     auto result = lhs;
     result += rhs;
@@ -93,11 +93,6 @@ bool operator == (const TDataStatistics& lhs, const TDataStatistics& rhs)
             HasInvalidUnmergedDataWeight(lhs) ||
             HasInvalidUnmergedDataWeight(rhs) ||
             lhs.unmerged_data_weight() == rhs.unmerged_data_weight());
-}
-
-bool operator != (const TDataStatistics& lhs, const TDataStatistics& rhs)
-{
-    return !(lhs == rhs);
 }
 
 void Serialize(const TDataStatistics& statistics, NYson::IYsonConsumer* consumer)
@@ -170,11 +165,6 @@ void FormatValue(TStringBuilderBase* builder, const TDataStatistics* statistics,
     }
 }
 
-TString ToString(const TDataStatistics& statistics)
-{
-    return ToStringViaBuilder(statistics);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NProto
@@ -193,11 +183,19 @@ TCodecStatistics& TCodecStatistics::Append(const std::pair<ECodec, TDuration>& c
     return *this;
 }
 
+TCodecStatistics& TCodecStatistics::AppendToValueDictionaryCompression(TDuration duration)
+{
+    ValueDictionaryCompressionDuration_ += duration;
+    TotalDuration_ += duration;
+    return *this;
+}
+
 TCodecStatistics& TCodecStatistics::operator+=(const TCodecStatistics& other)
 {
     for (const auto& pair : other.CodecToDuration_) {
         Append(pair);
     }
+    AppendToValueDictionaryCompression(other.ValueDictionaryCompressionDuration_);
     return *this;
 }
 
@@ -208,12 +206,11 @@ TDuration TCodecStatistics::GetTotalDuration() const
 
 void FormatValue(TStringBuilderBase* builder, const TCodecStatistics& statistics, TStringBuf /* spec */)
 {
-    FormatKeyValueRange(builder, statistics.CodecToDuration(), TDefaultFormatter());
-}
-
-TString ToString(const TCodecStatistics& statistics)
-{
-    return ToStringViaBuilder(statistics);
+    ::NYT::FormatKeyValueRange(builder, statistics.CodecToDuration(), TDefaultFormatter());
+    if (statistics.ValueDictionaryCompressionDuration() != TDuration::Zero()) {
+        builder->AppendFormat(", ValueDictionaryCompressionDuration: %v",
+            statistics.ValueDictionaryCompressionDuration());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

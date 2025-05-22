@@ -1,24 +1,29 @@
 #include "executor_pool_io.h"
 #include "actor.h"
+#include "thread_context.h"
+#include "config.h"
 #include "mailbox.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
 
 namespace NActors {
-    TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity)
-        : TExecutorPoolBase(poolId, threads, affinity)
+    TIOExecutorPool::TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName, TAffinity* affinity, bool useRingQueue)
+        : TExecutorPoolBase(poolId, threads, affinity, useRingQueue)
         , Threads(new TExecutorThreadCtx[threads])
         , PoolName(poolName)
     {}
 
-    TIOExecutorPool::TIOExecutorPool(const TIOExecutorPoolConfig& cfg)
+    TIOExecutorPool::TIOExecutorPool(const TIOExecutorPoolConfig& cfg, IHarmonizer *harmonizer)
         : TIOExecutorPool(
             cfg.PoolId,
             cfg.Threads,
             cfg.PoolName,
-            new TAffinity(cfg.Affinity)
+            new TAffinity(cfg.Affinity),
+            cfg.UseRingQueue
         )
-    {}
+    {
+        Harmonizer = harmonizer;
+    }
 
     TIOExecutorPool::~TIOExecutorPool() {
         Threads.Destroy();
@@ -26,36 +31,36 @@ namespace NActors {
             ;
     }
 
-    ui32 TIOExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
-        i16 workerId = wctx.WorkerId;
+    TMailbox* TIOExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
+        Y_ABORT_UNLESS(TlsThreadContext, "TlsThreadContext is nullptr");
+        i16 workerId = TlsThreadContext->WorkerId();
         Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
 
-        NHPTimer::STime elapsed = 0;
-        NHPTimer::STime parked = 0;
-        NHPTimer::STime hpstart = GetCycleCountFast();
-        NHPTimer::STime hpnow;
-
-        const TAtomic x = AtomicDecrement(Semaphore);
-        if (x < 0) {
+        const TAtomic semaphoreRaw = AtomicDecrement(Semaphore);
+        if (semaphoreRaw < 0) {
             TExecutorThreadCtx& threadCtx = Threads[workerId];
             ThreadQueue.Push(workerId + 1, revolvingCounter);
-            hpnow = GetCycleCountFast();
-            elapsed += hpnow - hpstart;
+
+            TExecutionStats *stats = TlsThreadContext->ExecutionStats;
+            TThreadActivityContext *activityCtx = &TlsThreadContext->ActivityContext;
+
+            NHPTimer::STime hpnow = GetCycleCountFast();
+            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+            activityCtx->ElapsingActorActivity.store(SleepActivity, std::memory_order_release);
+            stats->AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
+
             if (threadCtx.WaitingPad.Park())
                 return 0;
-            hpstart = GetCycleCountFast();
-            parked += hpstart - hpnow;
+
+            hpnow = GetCycleCountFast();
+            hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+            activityCtx->ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
+            stats->AddParkedCycles(hpnow - hpprev);
         }
 
         while (!StopFlag.load(std::memory_order_acquire)) {
-            if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
-                hpnow = GetCycleCountFast();
-                elapsed += hpnow - hpstart;
-                wctx.AddElapsedCycles(ActorSystemIndex, elapsed);
-                if (parked > 0) {
-                    wctx.AddParkedCycles(parked);
-                }
-                return activation;
+            if (const ui32 activation = std::visit([&revolvingCounter](auto &queue){return queue.Pop(++revolvingCounter);}, Activations)) {
+                return MailboxTable->Get(activation);
             }
             SpinLockPause();
         }
@@ -86,13 +91,15 @@ namespace NActors {
         ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
     }
 
-    void TIOExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) {
-        Activations.Push(activation, revolvingWriteCounter);
-        const TAtomic x = AtomicIncrement(Semaphore);
-        if (x <= 0) {
+    void TIOExecutorPool::ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) {
+        std::visit([mailbox, revolvingWriteCounter](auto &queue) {
+            queue.Push(mailbox->Hint, revolvingWriteCounter);
+        }, Activations);
+        const TAtomic semaphoreRaw = AtomicIncrement(Semaphore);
+        if (semaphoreRaw <= 0) {
             for (;; ++revolvingWriteCounter) {
-                if (const ui32 x = ThreadQueue.Pop(revolvingWriteCounter)) {
-                    const ui32 threadIdx = x - 1;
+                if (const ui32 threadId = ThreadQueue.Pop(revolvingWriteCounter)) {
+                    const ui32 threadIdx = threadId - 1;
                     Threads[threadIdx].WaitingPad.Unpark();
                     return;
                 }
@@ -109,7 +116,7 @@ namespace NActors {
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
 
         for (i16 i = 0; i != PoolThreads; ++i) {
-            Threads[i].Thread.Reset(new TExecutorThread(i, 0, actorSystem, this, MailboxTable.Get(), PoolName));
+            Threads[i].Thread.reset(new TExecutorThread(i, actorSystem, this, PoolName));
         }
 
         *scheduleReaders = &ScheduleQueue->Reader;
@@ -151,7 +158,26 @@ namespace NActors {
         }
     }
 
+    void TIOExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
+        if (Harmonizer) {
+            TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
+            poolState.ElapsedCpu = stats.AvgElapsedCpu;
+        }
+        poolState.CurrentLimit = PoolThreads;
+        poolState.MaxLimit = PoolThreads;
+        poolState.MinLimit = PoolThreads;
+        poolState.PossibleMaxLimit = PoolThreads;
+    }
+
     TString TIOExecutorPool::GetName() const {
         return PoolName;
+    }
+
+    ui64 TIOExecutorPool::TimePerMailboxTs() const {
+        return NHPTimer::GetClockRate() * TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat();
+    }
+
+    ui32 TIOExecutorPool::EventsPerMailbox() const {
+        return TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
     }
 }

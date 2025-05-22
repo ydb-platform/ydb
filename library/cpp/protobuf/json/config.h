@@ -86,14 +86,20 @@ namespace NProtobufJson {
         /// Print map as object, otherwise print it as array of key/value objects
         bool MapAsObject = false;
 
-        /// Stringify long integers which are not exactly representable by float or double values
         enum EStringifyNumbersMode {
             StringifyLongNumbersNever = 0, // default
             StringifyLongNumbersForFloat,
             StringifyLongNumbersForDouble,
             StringifyInt64Always,
         };
+        /// Stringify long integers which are not exactly representable by float or double values. Not affect repeated numbers, for repeated use StringifyNumbersRepeated
         EStringifyNumbersMode StringifyNumbers = StringifyLongNumbersNever;
+
+        /// Stringify repeated long integers which are not exactly representable by float or double values. May cause heterogenous arrays, use StringifyInt64Always or StringifyLongNumbersNever to avoid
+        EStringifyNumbersMode StringifyNumbersRepeated = StringifyLongNumbersNever;
+
+        /// Decode Any fields content
+        bool ConvertAny = false;
 
         /// Custom field names generator.
         TNameGenerator NameGenerator = {};
@@ -102,6 +108,9 @@ namespace NProtobufJson {
         TEnumValueGenerator EnumValueGenerator = {};
 
         bool WriteNanAsString = false;
+
+        // Sort keys in maps before serialization.
+        bool SortMapKeys = false;
 
         TSelf& SetDoubleNDigits(ui32 ndigits) {
             DoubleNDigits = ndigits;
@@ -183,8 +192,18 @@ namespace NProtobufJson {
             return *this;
         }
 
+        TSelf& SetSortMapKeys(bool value) {
+            SortMapKeys = value;
+            return *this;
+        }
+
         TSelf& SetStringifyNumbers(EStringifyNumbersMode stringify) {
             StringifyNumbers = stringify;
+            return *this;
+        }
+
+        TSelf& SetStringifyNumbersRepeated(EStringifyNumbersMode stringify) {
+            StringifyNumbersRepeated = stringify;
             return *this;
         }
 
@@ -202,6 +221,12 @@ namespace NProtobufJson {
             WriteNanAsString = value;
             return *this;
         }
+
+        TSelf& SetConvertAny(bool value) {
+            ConvertAny = value;
+            return *this;
+        }
+
     };
 
 }

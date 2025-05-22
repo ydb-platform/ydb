@@ -13,7 +13,9 @@ void TSideEffects::ProposeToCoordinator(TOperationId opId, TPathId pathId, TStep
 }
 
 void TSideEffects::CoordinatorAck(TActorId coordinator, TStepId stepId, TTxId txId) {
-    CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
+    if (coordinator) {
+        CoordinatorAcks.push_back(TCoordinatorAck(coordinator, stepId, txId));
+    }
 }
 
 void TSideEffects::MediatorAck(TActorId mediator, TStepId stepId) {
@@ -51,6 +53,24 @@ void TSideEffects::BindMsgToPipe(TOperationId opId, TTabletId dst, TPathId pathI
 
 void TSideEffects::UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie) {
     BindedMessageAcks.push_back(TBindMsgAck(opId, dst, cookie));
+}
+
+void  TSideEffects::UpdateTempDirsToMakeState(const TActorId& ownerActorId, const TPathId& pathId) {
+    auto it = TempDirsToMakeState.find(ownerActorId);
+    if (it == TempDirsToMakeState.end()) {
+        TempDirsToMakeState[ownerActorId] = { pathId };
+    } else {
+        it->second.push_back(pathId);
+    }
+}
+
+void  TSideEffects::UpdateTempDirsToRemoveState(const TActorId& ownerActorId, const TPathId& pathId) {
+    auto it = TempDirsToRemoveState.find(ownerActorId);
+    if (it == TempDirsToRemoveState.end()) {
+        TempDirsToRemoveState[ownerActorId] = { pathId };
+    } else {
+        it->second.push_back(pathId);
+    }
 }
 
 void TSideEffects::RouteByTabletsFromOperation(TOperationId opId) {
@@ -147,6 +167,7 @@ void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransa
     DoDoneParts(ss, ctx);
     DoSetBarriers(ss, ctx);
     DoCheckBarriers(ss, txc, ctx);
+    DoDoneParts(ss, ctx);
 
     DoWaitShardCreated(ss, ctx);
     DoActivateShardCreated(ss, ctx);
@@ -192,6 +213,9 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
 
     DoWaitPublication(ss, ctx);
     DoPublishToSchemeBoard(ss, ctx);
+
+    DoUpdateTempDirsToMakeState(ss, ctx);
+    DoUpdateTempDirsToRemoveState(ss, ctx);
 
     DoSend(ss, ctx);
     DoBindMsg(ss, ctx);
@@ -531,7 +555,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         }
 
         if (!hasChanges) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "DoUpdateTenant no hasChanges"
                            << ", pathId: " << pathId
                            << ", tenantLink: " << tenantLink
@@ -753,6 +777,85 @@ void TSideEffects::DoReleasePathState(TSchemeShard *ss, const TActorContext &) {
 void TSideEffects::DoPersistDeleteShards(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &) {
     NIceDb::TNiceDb db(txc.DB);
     ss->PersistShardsToDelete(db, ToDeleteShards);
+}
+
+void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext &ctx) {
+    for (auto& [ownerActorId, tempDirs]: TempDirsToMakeState) {
+
+        auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
+        auto& nodeStates = ss->TempDirsState.NodeStates;
+
+        const auto it = TempDirsByOwner.find(ownerActorId);
+
+        const auto nodeId = ownerActorId.NodeId();
+
+        const auto itNodeStates = nodeStates.find(nodeId);
+        if (itNodeStates == nodeStates.end()) {
+            auto& nodeState = nodeStates[nodeId];
+            nodeState.Owners.insert(ownerActorId);
+            nodeState.RetryState.CurrentDelay =
+                TDuration::MilliSeconds(ss->BackgroundCleaningRetrySettings.GetStartDelayMs());
+        } else {
+            itNodeStates->second.Owners.insert(ownerActorId);
+        }
+
+        if (it == TempDirsByOwner.end()) {
+            ctx.Send(new IEventHandle(ownerActorId, ss->SelfId(),
+                new TEvSchemeShard::TEvOwnerActorAck(),
+                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
+
+            auto& currentDirsTables = TempDirsByOwner[ownerActorId];
+
+            for (auto& pathId : tempDirs) {
+                currentDirsTables.insert(std::move(pathId));
+            }
+            continue;
+        }
+
+        for (auto& pathId : tempDirs) {
+            it->second.insert(std::move(pathId));
+        }
+    }
+}
+
+void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext& ctx) {
+    for (auto& [ownerActorId, tempDirs]: TempDirsToRemoveState) {
+        auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
+        const auto it = TempDirsByOwner.find(ownerActorId);
+        if (it == TempDirsByOwner.end()) {
+            continue;
+        }
+
+        for (auto& pathId : tempDirs) {
+            const auto tempDirIt = it->second.find(pathId);
+            if (tempDirIt == it->second.end()) {
+                continue;
+            }
+
+            it->second.erase(tempDirIt);
+            ss->RemoveBackgroundCleaning(pathId);
+        }
+
+        if (it->second.empty()) {
+            TempDirsByOwner.erase(it);
+
+            auto& nodeStates = ss->TempDirsState.NodeStates;
+
+            const auto nodeId = ownerActorId.NodeId();
+            auto itStates = nodeStates.find(nodeId);
+            if (itStates != nodeStates.end()) {
+                const auto itOwner = itStates->second.Owners.find(ownerActorId);
+                if (itOwner != itStates->second.Owners.end()) {
+                    itStates->second.Owners.erase(itOwner);
+                }
+                if (itStates->second.Owners.empty()) {
+                    nodeStates.erase(itStates);
+                    ctx.Send(new IEventHandle(TActivationContext::InterconnectProxy(nodeId), ss->SelfId(),
+                        new TEvents::TEvUnsubscribe, 0));
+                }
+            }
+        }
+    }
 }
 
 void TSideEffects::ResumeLongOps(TSchemeShard *ss, const TActorContext &ctx) {

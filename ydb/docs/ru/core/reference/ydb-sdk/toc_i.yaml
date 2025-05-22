@@ -9,17 +9,22 @@ items:
     href: parameterized_queries.md
   - name: Работа с топиками
     href: topic.md
-  - name: Тестовое приложение
-    include: { mode: link, path: example/toc_p.yaml }
+  - name: Работа с узлами координации
+    href: coordination.md
   - name: Обработка ошибок в API
     href: error_handling.md
+    items:
+    - name: Статусы завершения сервера YDB
+      href: ydb-status-codes.md
+    - name: Статусы завершения gRPC
+      href: grpc-status-codes.md
   - name: gRPC API
     items:
     - name: Обзор
       href: overview-grpc-api.md
+    - name: Заголовки gRPC
+      href: grpc-headers.md
     - name: Health Check API
       href: health-check-api.md
-  - name: Рецепты кода
-    include: { mode: link, path: recipes/toc_p.yaml }
   - name: Сравнение возможностей SDK
     href: feature-parity.md

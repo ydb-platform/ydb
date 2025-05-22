@@ -24,6 +24,7 @@
 #include <linux/fs.h>
 
 #include "liburing.h"
+#include "helpers.h"
 #include "../src/syscall.h"
 
 static int __io_uring_register_files(int ring_fd, int fd1, int fd2)
@@ -49,7 +50,7 @@ static int get_ring_fd(void)
 	return fd;
 }
 
-static void send_fd(int socket, int fd)
+static int send_fd(int socket, int fd)
 {
 	char buf[CMSG_SPACE(sizeof(fd))];
 	struct cmsghdr *cmsg;
@@ -70,8 +71,14 @@ static void send_fd(int socket, int fd)
 
 	msg.msg_controllen = CMSG_SPACE(sizeof(fd));
 
-	if (sendmsg(socket, &msg, 0) < 0)
+	if (sendmsg(socket, &msg, 0) < 0) {
+		if (errno == EINVAL)
+			return T_EXIT_SKIP;
 		perror("sendmsg");
+		return T_EXIT_FAIL;
+	}
+
+	return T_EXIT_PASS;
 }
 
 static int test_iowq_request_cancel(void)
@@ -167,7 +174,9 @@ static int test_scm_cycles(bool update)
 		perror("pipe");
 		return -1;
 	}
-	send_fd(sp[0], ring.ring_fd);
+	ret = send_fd(sp[0], ring.ring_fd);
+	if (ret != T_EXIT_PASS)
+		return ret;
 
 	/* register an empty set for updates */
 	if (update) {
@@ -237,6 +246,8 @@ int main(int argc, char *argv[])
 		bool update = !!(i & 1);
 
 		ret = test_scm_cycles(update);
+		if (ret == T_EXIT_SKIP)
+			return T_EXIT_SKIP;
 		if (ret) {
 			fprintf(stderr, "test_scm_cycles() failed %i\n",
 				update);
@@ -260,8 +271,11 @@ int main(int argc, char *argv[])
 	}
 
 	pid = fork();
-	if (pid)
-		send_fd(sp[0], ring_fd);
+	if (pid) {
+		ret = send_fd(sp[0], ring_fd);
+		if (ret != T_EXIT_PASS)
+			return ret;
+	}
 
 	close(ring_fd);
 	close(sp[0]);

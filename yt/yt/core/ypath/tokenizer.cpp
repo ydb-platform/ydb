@@ -148,7 +148,7 @@ int TTokenizer::ParseHexDigit(char ch, TStringBuf context)
     YT_ABORT();
 }
 
-void TTokenizer::Expect(ETokenType expectedType)
+void TTokenizer::Expect(ETokenType expectedType) const
 {
     if (expectedType != Type_) {
         if (Type_ == ETokenType::EndOfStream) {
@@ -169,7 +169,7 @@ void TTokenizer::Expect(ETokenType expectedType)
     }
 }
 
-void TTokenizer::ExpectListIndex()
+void TTokenizer::ExpectListIndex() const
 {
     Expect(NYPath::ETokenType::Literal);
     i64 index;
@@ -190,7 +190,7 @@ bool TTokenizer::Skip(ETokenType expectedType)
     return false;
 }
 
-void TTokenizer::ThrowUnexpected()
+void TTokenizer::ThrowUnexpected() const
 {
     if (Type_ == ETokenType::EndOfStream) {
         if (PreviousType_ == ETokenType::Slash) {
@@ -209,6 +209,11 @@ void TTokenizer::ThrowUnexpected()
 ETokenType TTokenizer::GetType() const
 {
     return Type_;
+}
+
+ETokenType TTokenizer::GetPreviousType() const
+{
+    return PreviousType_;
 }
 
 TStringBuf TTokenizer::GetToken() const
@@ -248,7 +253,28 @@ const TString& TTokenizer::GetLiteralValue() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool HasPrefix(const TYPath& fullPath, const TYPath& prefixPath)
+TTokenizer::TCheckpoint::TCheckpoint(TTokenizer& tokenizer)
+    : Tokenizer_(tokenizer)
+    , Path_(tokenizer.Path_)
+    , Type_(tokenizer.Type_)
+    , PreviousType_(tokenizer.PreviousType_)
+    , Token_(tokenizer.Token_)
+    , Input_(tokenizer.Input_)
+{ }
+
+TTokenizer::TCheckpoint::~TCheckpoint()
+{
+    Tokenizer_.Path_ = Path_;
+    Tokenizer_.Type_ = Type_;
+    Tokenizer_.PreviousType_ = PreviousType_;
+    Tokenizer_.Token_ = Token_;
+    Tokenizer_.Input_ = Input_;
+    Tokenizer_.LiteralValue_.clear();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool HasPrefix(TYPathBuf fullPath, TYPathBuf prefixPath)
 {
     TTokenizer fullTokenizer(fullPath);
     TTokenizer prefixTokenizer(prefixPath);

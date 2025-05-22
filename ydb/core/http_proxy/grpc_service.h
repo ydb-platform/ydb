@@ -20,10 +20,6 @@ public:
                  TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
-
-    bool IncRequest();
-    void DecRequest();
 
 private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
@@ -33,7 +29,6 @@ private:
 
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider_;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
-    NYdbGrpc::TGlobalLimiter* Limiter_;
 };
 
 } // namespace NKikimr

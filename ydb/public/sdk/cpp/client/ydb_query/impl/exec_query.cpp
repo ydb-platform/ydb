@@ -1,20 +1,24 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "exec_query.h"
+#include "client_session.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/kqp_session_common/kqp_session_common.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/session_pool/session_pool.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-namespace NYdb::NQuery {
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+
+namespace NYdb::inline V2::NQuery {
 
 using namespace NThreading;
 
 static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::TransactionSettings* proto) {
-    switch (txSettings.Mode_) {
+    switch (txSettings.GetMode()) {
         case TTxSettings::TS_SERIALIZABLE_RW:
             proto->mutable_serializable_read_write();
             break;
@@ -27,6 +31,9 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
             break;
         case TTxSettings::TS_SNAPSHOT_RO:
             proto->mutable_snapshot_read_only();
+            break;
+        case TTxSettings::TS_SNAPSHOT_RW:
+            proto->mutable_snapshot_read_write();
             break;
         default:
             throw TContractViolation("Unexpected transaction mode.");
@@ -57,7 +64,7 @@ public:
         return Finished_;
     }
 
-    TAsyncExecuteQueryPart ReadNext(std::shared_ptr<TSelf> self) {
+    TAsyncExecuteQueryPart DoReadNext(std::shared_ptr<TSelf> self) {
         auto promise = NThreading::NewPromise<TExecuteQueryPart>();
         // Capture self - guarantee no dtor call during the read
         auto readCb = [self, promise](TGRpcStatus&& grpcStatus) mutable {
@@ -77,7 +84,7 @@ public:
                     stats = TExecStats(std::move(*self->Response_.mutable_exec_stats()));
                 }
 
-                if (self->Response_.has_tx_meta() && self->Session_.Defined()) {
+                if (self->Response_.has_tx_meta() && self->Response_.tx_meta().id() && self->Session_.Defined()) {
                     tx = TTransaction(self->Session_.GetRef(), self->Response_.tx_meta().id());
                 }
 
@@ -98,6 +105,18 @@ public:
         StreamProcessor_->Read(&Response_, readCb);
         return promise.GetFuture();
     }
+
+    TAsyncExecuteQueryPart ReadNext(std::shared_ptr<TSelf> self) {
+        if (!Session_)
+            return DoReadNext(std::move(self));
+
+        return NSessionPool::InjectSessionStatusInterception(
+            Session_->SessionImpl_,
+            DoReadNext(std::move(self)),
+            false, // no need to ping stream session
+            TDuration::Zero());
+     }
+
 private:
     TStreamProcessorPtr StreamProcessor_;
     TResponse Response_;
@@ -136,16 +155,21 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
         Iterator_.ReadNext().Subscribe([self](TAsyncExecuteQueryPart partFuture) mutable {
             auto part = partFuture.ExtractValue();
 
+            if (const auto& st = part.GetStats()) {
+                self->Stats_ = st;
+            }
+
             if (!part.IsSuccess()) {
+                TMaybe<TExecStats> stats;
+                std::swap(self->Stats_, stats);
+
                 if (part.EOS()) {
                     TVector<NYql::TIssue> issues;
                     TVector<Ydb::ResultSet> resultProtos;
-                    TMaybe<TExecStats> stats;
                     TMaybe<TTransaction> tx;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
-                    std::swap(self->Stats_, stats);
                     std::swap(self->Tx_, tx);
 
                     TVector<TResultSet> resultSets;
@@ -160,7 +184,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                         std::move(tx)
                     ));
                 } else {
-                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, {}, {}));
+                    self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}));
                 }
 
                 return;
@@ -185,10 +209,6 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 resultSet.mutable_rows()->Add(inRsProto.rows().begin(), inRsProto.rows().end());
             }
 
-            if (const auto& st = part.GetStats()) {
-                self->Stats_ = st;
-            }
-
             if (const auto& tx = part.GetTransaction()) {
                 self->Tx_ = tx;
             }
@@ -206,6 +226,7 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
     auto request = MakeRequest<Ydb::Query::ExecuteQueryRequest>();
     request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
     request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
+    request.set_pool_id(settings.ResourcePool_);
     request.mutable_query_content()->set_text(query);
     request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
     if (session.Defined()) {
@@ -216,6 +237,10 @@ TFuture<std::pair<TPlainStatus, TExecuteQueryProcessorPtr>> StreamExecuteQueryIm
 
     if (settings.ConcurrentResultSets_) {
         request.set_concurrent_result_sets(*settings.ConcurrentResultSets_);
+    }
+
+    if (settings.OutputChunkMaxSize_) {
+        request.set_response_part_limit_bytes(*settings.OutputChunkMaxSize_);
     }
 
     if (txControl.HasTx()) {

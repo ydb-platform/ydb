@@ -357,20 +357,6 @@ TString GetDataCenterName(ui64 dataCenterId) {
     }
 }
 
-TString LongToShortTabletName(const TString& longTabletName) {
-    TString shortName;
-
-    for (char c : longTabletName) {
-        if (c >= 'A' && c <= 'Z') {
-            shortName += c;
-        }
-    }
-    if (shortName.empty()) {
-        shortName = longTabletName;
-    }
-    return shortName;
-}
-
 TString GetLocationString(const NActors::TNodeLocation& location) {
     NActorsInterconnect::TNodeLocation proto;
     location.Serialize(&proto, false);
@@ -438,5 +424,46 @@ bool IsAliveState(TTabletInfo::EVolatileState state) {
     }
 }
 
+TString GetTabletTypeShortName(TTabletTypes::EType type) {
+    auto it = TABLET_TYPE_SHORT_NAMES.find(type);
+    if (it == TABLET_TYPE_SHORT_NAMES.end()) {
+        return TStringBuilder() << (ui32)type;
+    } else {
+        return it->second;
+    }
+}
+
+TTabletTypes::EType GetTabletTypeByShortName(const TString& name) {
+    auto it = TABLET_TYPE_BY_SHORT_NAME.find(name);
+    if (it == TABLET_TYPE_BY_SHORT_NAME.end()) {
+        return TTabletTypes::TypeInvalid;
+    } else {
+        return it->second;
+    }
+}
+
+TString GetTypesHtml(const std::set<TTabletTypes::EType>& typesToShow, const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& tabletLimits) {
+    TStringBuilder str;
+    for (auto type : typesToShow) {
+        if (!str.empty()) {
+            str << " ";
+        }
+        auto it = tabletLimits.find(type);
+        auto shortTypeName = GetTabletTypeShortName(type);
+        auto longTypeName = TTabletTypes::TypeToStr(type);
+        if (it == tabletLimits.end() || it->second.GetMaxCount() > 0) {
+            str << "<span class='box' title='" << longTypeName
+                << "' onclick='changeDefaultTabletLimit(this, \"" << shortTypeName
+                << ":0\", \"" << longTypeName << "\")'>";
+        } else {
+            str << "<span class='box box-disabled' title='" << longTypeName
+                << "' onclick='changeDefaultTabletLimit(this, \"" << shortTypeName
+                << ":" << TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE << "\", \"" << longTypeName << "\")'>";
+        }
+        str << shortTypeName;
+        str << "</span>";
+    }
+    return str;
+}
 } // NHive
 } // NKikimr

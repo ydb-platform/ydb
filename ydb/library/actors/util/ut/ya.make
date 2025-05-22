@@ -1,7 +1,6 @@
 UNITTEST_FOR(ydb/library/actors/util)
 
-IF (WITH_VALGRIND)
-    TIMEOUT(600)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(MEDIUM)
 ENDIF()
 
@@ -14,6 +13,7 @@ SRCS(
     shared_data_ut.cpp
     shared_data_rope_backend_ut.cpp
     shared_data_native_rope_backend_ut.cpp
+    spinparkpad_ut.cpp
     unordered_cache_ut.cpp
 )
 

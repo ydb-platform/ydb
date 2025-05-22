@@ -18,6 +18,9 @@ struct TLookupRequestOptions
     bool EnablePartialResult = false;
     std::optional<bool> UseLookupCache;
     TDetailedProfilingInfoPtr DetailedProfilingInfo;
+    //! Add |$timestamp:columnName| to result if readMode is latest_timestamp.
+    NTableClient::TVersionedReadOptions VersionedReadOptions;
+    std::optional<std::string> ExecutionPool;
 };
 
 struct TLookupRowsOptionsBase
@@ -69,6 +72,16 @@ template <class IRowset>
 struct TLookupRowsResult
 {
     TIntrusivePtr<IRowset> Rowset;
+
+    //! If TLookupRequestOptions::EnablePartialResult is set, this vector contains
+    //! indexes of keys that were not available (due to timeout or other failure).
+    //! If TLookupRequestOptions::KeepMissingRows is false then the corresponding rows are just
+    //! omitted from #Rowset. Otherwise these rows are present (to ensure 1-1 mapping
+    //! between the keys and the returned rows) but are null.
+    //! In the latter case, this vector helps distinguishing between missing and
+    //! unavailable keys.
+    //! Indexes are guaranteed to be unique and increasing.
+    std::vector<int> UnavailableKeyIndexes;
 };
 
 using TUnversionedLookupRowsResult = TLookupRowsResult<IUnversionedRowset>;
@@ -95,11 +108,11 @@ struct IDynamicTableClientBase
         const TMultiLookupOptions& options = {}) = 0;
 
     virtual TFuture<TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options = {}) = 0;
 
     virtual TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options = {}) = 0;
 };
 

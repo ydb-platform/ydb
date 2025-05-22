@@ -2,8 +2,6 @@
 
 #include "log.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/tracing/public.h>
 
 #include <yt/yt/core/ytree/public.h>
@@ -34,6 +32,7 @@ public:
     static TLogManager* Get();
 
     void Configure(TLogManagerConfigPtr config, bool sync = true);
+    bool IsDefaultConfigured();
 
     void ConfigureFromEnv();
     bool IsConfiguredFromEnv();
@@ -69,8 +68,6 @@ private:
     TLogManager();
 
     DECLARE_LEAKY_SINGLETON_FRIEND()
-
-    void Initialize();
 
     class TImpl;
     const TIntrusivePtr<TImpl> Impl_;

@@ -31,10 +31,17 @@ def fix_path(p):
     return p
 
 
+def drop_stl(s):
+    if s.startswith('-I') and 'contrib/libs/cxxsupp/libcxx/include' in s:
+        return None
+
+    return s
+
+
 if __name__ == '__main__':
     is_on_win = sys.argv[1] == 'yes'
     path = sys.argv[2]
-    args = filter(None, [fix(s) for s in sys.argv[3:]])
+    args = list(filter(None, [fix(s) for s in sys.argv[3:]]))
     if is_on_win:
         path = fix_path(path)
         try:
@@ -43,6 +50,12 @@ if __name__ == '__main__':
         except ValueError:
             pass
         args.append('-fms-compatibility-version=19')
+
+    for i in range(len(args) - 1):
+        if args[i] == '-target' and args[i + 1] == 'bpf':
+            # bpf should not be able to include stl headers
+            args = list(filter(None, [drop_stl(s) for s in args]))
+            break
 
     cmd = [path] + args
 

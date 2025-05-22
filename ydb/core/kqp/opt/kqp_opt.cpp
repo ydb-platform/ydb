@@ -82,6 +82,42 @@ bool IsKqpEffectsStage(const TDqStageBase& stage) {
     return stage.Program().Body().Maybe<TKqpEffects>().IsValid();
 }
 
+bool NeedSinks(const TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
+    return (kqpCtx.IsGenericQuery()
+            || (kqpCtx.IsDataQuery() && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->AllowOlapDataQuery)))
+        && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->EnableOlapSink)
+        && (table.Metadata->Kind != EKikimrTableKind::Datashard || kqpCtx.Config->EnableOltpSink);
+}
+
+bool CanEnableStreamWrite(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
+    return table.Metadata->Kind == EKikimrTableKind::Olap
+            || (table.Metadata->Kind == EKikimrTableKind::Datashard && kqpCtx.Config->EnableStreamWrite);
+}
+
+bool HasReadTable(const TStringBuf table, const TExprNode::TPtr& root) {
+    bool result = false;
+    VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+        if (NYql::NNodes::TKqpCnStreamLookup::Match(node.Get())) {
+            const auto& streamLookup = TExprBase(node).Cast<NYql::NNodes::TKqpCnStreamLookup>();
+            const TStringBuf tablePathId = streamLookup.Table().PathId().Value();
+            if (table == tablePathId) {
+                result = true;
+            }
+        } else if (NYql::NNodes::TDqSource::Match(node.Get())) {
+            const auto& source = TExprBase(node).Cast<NYql::NNodes::TDqSource>();
+            const auto sourceSettings = source.Settings().Maybe<TKqpReadRangesSourceSettings>();
+            if (sourceSettings) {
+                const TStringBuf tablePathId = sourceSettings.Cast().Table().PathId().Value();
+                if (table == tablePathId) {
+                    result = true;
+                }
+            }
+        }
+        return !result;
+    });
+    return result;
+}
+
 TExprBase ProjectColumns(const TExprBase& input, const TVector<TString>& columnNames, TExprContext& ctx) {
     return ProjectColumnsInternal(input, columnNames, ctx);
 }
@@ -102,6 +138,49 @@ TKqpTable BuildTableMeta(const TKikimrTableMetadata& meta, const TPositionHandle
 TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositionHandle& pos, TExprContext& ctx) {
     YQL_ENSURE(tableDesc.Metadata);
     return BuildTableMeta(*tableDesc.Metadata, pos, ctx);
+}
+
+bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields)
+{
+    auto checkKey = [keySelector, &tableDesc, &passthroughFields] (NYql::NNodes::TExprBase key, ui32 index) {
+        if (!key.Maybe<TCoMember>()) {
+            return false;
+        }
+
+        auto member = key.Cast<TCoMember>();
+        if (member.Struct().Raw() != keySelector.Args().Arg(0).Raw()) {
+            return false;
+        }
+
+        auto column = TString(member.Name().Value());
+        auto columnIndex = tableDesc.GetKeyColumnIndex(column);
+        if (!columnIndex || *columnIndex != index) {
+            return false;
+        }
+
+        if (passthroughFields && !passthroughFields->contains(column)) {
+            return false;
+        }
+
+        return true;
+    };
+
+    auto lambdaBody = keySelector.Body();
+    if (auto maybeTuple = lambdaBody.Maybe<TExprList>()) {
+        auto tuple = maybeTuple.Cast();
+        for (size_t i = 0; i < tuple.Size(); ++i) {
+            if (!checkKey(tuple.Item(i), i)) {
+                return false;
+            }
+        }
+    } else {
+        if (!checkKey(lambdaBody, 0)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool IsBuiltEffect(const TExprBase& effect) {

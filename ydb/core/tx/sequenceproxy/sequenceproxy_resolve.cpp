@@ -3,7 +3,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <util/string/builder.h>

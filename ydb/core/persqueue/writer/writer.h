@@ -6,14 +6,14 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/write_id.h>
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
 #include <variant>
 
 #include "partition_chooser.h"
 
 namespace NKikimr::NPQ {
-
-constexpr ui64 INVALID_WRITE_ID = Max<ui64>();
 
 struct TEvPartitionWriter {
     enum EEv {
@@ -36,7 +36,7 @@ struct TEvPartitionWriter {
         struct TSuccess {
             TString OwnerCookie;
             TSourceIdInfo SourceIdInfo;
-            ui64 WriteId = INVALID_WRITE_ID;
+            TMaybe<TWriteId> WriteId;
 
             TString ToString() const;
         };
@@ -53,7 +53,7 @@ struct TEvPartitionWriter {
         std::variant<TSuccess, TError> Result;
 
         TEvInitResult(const TString& sessionId, const TString& txId,
-                      const TString& ownerCookie, const TSourceIdInfo& sourceIdInfo, ui64 writeId)
+                      const TString& ownerCookie, const TSourceIdInfo& sourceIdInfo, const TMaybe<TWriteId>& writeId)
             : SessionId(sessionId)
             , TxId(txId)
             , Result(TSuccess{ownerCookie, sourceIdInfo, writeId})
@@ -151,6 +151,11 @@ struct TEvPartitionWriter {
     };
 
     struct TEvDisconnected: public TEventLocal<TEvDisconnected, EvDisconnected> {
+        TEvDisconnected(TEvWriteResponse::EErrorCode errorCode)
+            : ErrorCode(errorCode) {
+        }
+
+        const TEvWriteResponse::EErrorCode ErrorCode;
     };
 
     struct TEvTxWriteRequest : public TEventLocal<TEvTxWriteRequest, EvTxWriteRequest> {
@@ -176,12 +181,17 @@ struct TPartitionWriterOpts {
 
     TString SourceId;
     std::optional<ui32> ExpectedGeneration;
+    std::optional<ui64> InitialSeqNo;
 
     TString Database;
     TString TopicPath;
     TString Token;
     TString SessionId;
     TString TxId;
+    // Used for deduplication in kafka idempotent producer (both in the transaction and out of the transaction)
+    std::optional<NKafka::TProducerInstanceId> KafkaProducerInstanceId;
+    // Indicates that this writer will write records in transactions
+    std::optional<TString> KafkaTransactionalId;
     TString TraceId;
     TString RequestType;
 
@@ -204,6 +214,9 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithTxId(const TString& value) { TxId = value; return *this; }
     TPartitionWriterOpts& WithTraceId(const TString& value) { TraceId = value; return *this; }
     TPartitionWriterOpts& WithRequestType(const TString& value) { RequestType = value; return *this; }
+    TPartitionWriterOpts& WithInitialSeqNo(const std::optional<ui64> value) { InitialSeqNo = value; return *this; }
+    TPartitionWriterOpts& WithKafkaProducerInstanceId(const std::optional<NKafka::TProducerInstanceId>& value) { KafkaProducerInstanceId = value; return *this; }
+    TPartitionWriterOpts& WithKafkaTransactionalId(const std::optional<TString>& value) { KafkaTransactionalId = value; return *this; }
 };
 
 IActor* CreatePartitionWriter(const TActorId& client,

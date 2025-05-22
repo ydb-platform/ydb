@@ -15,20 +15,29 @@
 #include "y_absl/strings/substitute.h"
 
 #include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <util/generic/string.h>
 
+#include "y_absl/base/config.h"
 #include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/escaping.h"
 #include "y_absl/strings/internal/resize_uninitialized.h"
+#include "y_absl/strings/numbers.h"
+#include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
 namespace substitute_internal {
 
-void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
-                              const y_absl::string_view* args_array,
-                              size_t num_args) {
+void SubstituteAndAppendArray(
+    y_absl::Nonnull<TString*> output, y_absl::string_view format,
+    y_absl::Nullable<const y_absl::string_view*> args_array, size_t num_args) {
   // Determine total size needed.
   size_t size = 0;
   for (size_t i = 0; i < format.size(); i++) {
@@ -76,6 +85,9 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
 
   // Build the string.
   size_t original_size = output->size();
+  Y_ABSL_INTERNAL_CHECK(
+      size <= std::numeric_limits<size_t>::max() - original_size,
+      "size_t overflow");
   strings_internal::STLStringResizeUninitializedAmortized(output,
                                                           original_size + size);
   char* target = &(*output)[original_size];
@@ -97,7 +109,7 @@ void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
   assert(target == output->data() + output->size());
 }
 
-Arg::Arg(const void* value) {
+Arg::Arg(y_absl::Nullable<const void*> value) {
   static_assert(sizeof(scratch_) >= sizeof(value) * 2 + 2,
                 "fix sizeof(scratch_)");
   if (value == nullptr) {

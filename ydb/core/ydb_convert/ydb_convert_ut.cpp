@@ -1210,4 +1210,435 @@ Y_UNIT_TEST(TestEqualGranularAndDeprecatedAcl) {
 
 } // ConvertYdbPermissionNameToACLAttrs
 
+
+Y_UNIT_TEST_SUITE(CellsFromTupleTest) {
+
+    TString DoTestCellsFromTuple(
+        const TConstArrayRef<TConversionTypeInfo>& types,
+        TString paramsProto,
+        bool allowCastFromString,
+        bool checkNullability)
+    {
+        Ydb::TypedValue typedValue;
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(paramsProto, &typedValue);
+        UNIT_ASSERT_C(parseOk, paramsProto);
+
+        TVector<TCell> cells;
+        TMemoryPool memoryOwner(256);
+        TString errStr;
+        bool res = CellsFromTuple(&typedValue.Gettype(), typedValue.Getvalue(), types,
+            allowCastFromString, checkNullability, cells, errStr, memoryOwner);
+        UNIT_ASSERT_VALUES_EQUAL_C(res, errStr.empty(), paramsProto);
+
+        return errStr;
+    }
+
+    Y_UNIT_TEST(CellsFromTupleSuccess) {
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: INT32 } } }
+                }
+            }
+            value {
+                items { nested_value { int32_value: -42 } }
+            }
+            )",
+            true,
+            true)
+        );
+
+        // unwrap nested_value in value
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: INT32 } } }
+                }
+            }
+            value {
+                items { int32_value: -42 }
+            }
+            )",
+            true,
+            true)
+        );
+
+        // parse from string
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: UTF8 } } }
+                }
+            }
+            value {
+                items { nested_value { text_value: '-42' } }
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::String), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: UTF8 } } }
+                }
+            }
+            value {
+                items { nested_value { text_value: 'AAAA' } }
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: INT32 } } }
+                    elements { optional_type { item { type_id: UTF8 } } }
+                }
+            }
+            value {
+                items { nested_value { int32_value: -42 } }
+                items { nested_value { text_value: '-42' } }
+            }
+            )",
+            true,
+            true)
+        );
+
+        // not nullable
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", true},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { type_id: INT32 }
+                }
+            }
+            value {
+                items { int32_value: -42 }
+            }
+            )",
+            true,
+            true)
+        );
+
+        // allow cast from not nullble to nullable
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { type_id: INT32 }
+                }
+            }
+            value {
+                items { int32_value: -42 }
+            }
+            )",
+            true,
+            false)
+        );
+    }
+
+    Y_UNIT_TEST(CellsFromTupleSuccessPg) {
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { pg_type: { type_name: 'pgint4' } }
+                }
+            }
+            value {
+                items { text_value: '-42' }
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgtext")), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { pg_type: { type_name: 'pgtext' } }
+                }
+            }
+            value {
+                items { text_value: 'AAAA' }
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "", false},
+                {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgtext")), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { pg_type: { type_name: 'pgint4' } }
+                    elements { pg_type: { type_name: 'pgtext' } }
+                }
+            }
+            value {
+                items { text_value: '-42' }
+                items { text_value: '-42' }
+            }
+            )",
+            true,
+            true)
+        );
+
+        // not nullable pg
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "", true},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { pg_type: { type_name: 'pgint4' } }
+                }
+            }
+            value {
+                items { text_value: '-42' }
+            }
+            )",
+            true,
+            true)
+        );
+    }
+
+    Y_UNIT_TEST(CellsFromTupleFails) {
+        UNIT_ASSERT_VALUES_EQUAL("Value of type Int32 expected in tuple at position 0", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: INT32 } } }
+                }
+            }
+            value {
+                items { nested_value { int64_value: -42 } }
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("Cannot parse value of type Uint32 from text '-42' in tuple at position 0", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: UTF8 } } }
+                }
+            }
+            value {
+                items { nested_value { text_value: '-42' } }
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("Tuple value length 0 doesn't match the length in type 1", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: UTF8 } } }
+                }
+            }
+            value {
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("Value of type Int32 expected in tuple at position 0", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: INT32 } } }
+                }
+            }
+            value {
+                items { nested_value { } }
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("Tuple value length 0 doesn't match the length in type 1", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: UTF8 } } }
+                }
+            }
+            value {
+            }
+            )",
+            true,
+            true)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL("Tuple size 2 is greater that expected size 1", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: INT32 } } }
+                    elements { optional_type { item { type_id: UTF8 } } }
+                }
+            }
+            value {
+                items { nested_value { int32_value: -42 } }
+                items { nested_value { text_value: '-42' } }
+            }
+            )",
+            true,
+            true)
+        );
+
+        // don't allow parse from string
+        UNIT_ASSERT_VALUES_EQUAL("Element at index 0 has type UTF8 but expected type is 1", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { optional_type { item { type_id: UTF8 } } }
+                }
+            }
+            value {
+                items { nested_value { text_value: '-42' } }
+            }
+            )",
+            false,
+            true)
+        );
+
+        // don't allow cast from not nullble to nullable
+        UNIT_ASSERT_VALUES_EQUAL("Element at index 0 in not an Optional", DoTestCellsFromTuple(
+            {
+                {NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "", false},
+            },
+            R"(
+            type {
+                tuple_type {
+                    elements { type_id: INT32 }
+                }
+            }
+            value {
+                items { int32_value: -42 }
+            }
+            )",
+            true,
+            true)
+        );
+    }
+
+    Y_UNIT_TEST(CellsFromTupleFailsPg) {
+        {
+            auto err = DoTestCellsFromTuple(
+                {
+                    {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "", false},
+                },
+                R"(
+                type {
+                    tuple_type {
+                        elements { pg_type: { type_name: 'pgint4' } }
+                    }
+                }
+                value {
+                    items { text_value: 'AAA' }
+                }
+                )",
+                true,
+                true);
+            UNIT_ASSERT_STRING_CONTAINS(err, "Invalid text value for pgint4: Error while converting text to binary:");
+            UNIT_ASSERT_STRING_CONTAINS(err, "invalid input syntax for type integer: \"AAA\"\n in tuple at position 0");
+        }
+
+        {
+            auto err = DoTestCellsFromTuple(
+                {
+                    {NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint2")), "", false},
+                },
+                R"(
+                type {
+                    tuple_type {
+                        elements { pg_type: { type_name: 'pgint2' } }
+                    }
+                }
+                value {
+                    items { text_value: '-420000000' }
+                }
+                )",
+                true,
+                true);
+            UNIT_ASSERT_STRING_CONTAINS(err, "Invalid text value for pgint2: Error while converting text to binary:");
+            UNIT_ASSERT_STRING_CONTAINS(err, "value \"-420000000\" is out of range for type smallint\n in tuple at position 0");
+        }
+    }
+
+} // CellsFromTupleTest
+
 } // namespace NKikimr

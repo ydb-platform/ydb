@@ -20,11 +20,11 @@ struct TPausePipelineOptions
     : public TTimeoutOptions
 { };
 
-struct TGetPipelineStatusOptions
+struct TGetPipelineStateOptions
     : public TTimeoutOptions
 { };
 
-struct TPipelineStatus
+struct TPipelineState
 {
     NFlow::EPipelineState State;
 };
@@ -73,6 +73,26 @@ struct TSetPipelineDynamicSpecResult
     NFlow::TVersion Version;
 };
 
+struct TGetFlowViewOptions
+    : public TTimeoutOptions
+{
+    bool Cache = true;
+};
+
+struct TGetFlowViewResult
+{
+    NYson::TYsonString FlowViewPart;
+};
+
+struct TFlowExecuteOptions
+    : public TTimeoutOptions
+{ };
+
+struct TFlowExecuteResult
+{
+    NYson::TYsonString Result;
+};
+
 struct IFlowClient
 {
     ~IFlowClient() = default;
@@ -107,9 +127,20 @@ struct IFlowClient
         const NYPath::TYPath& pipelinePath,
         const TPausePipelineOptions& options = {}) = 0;
 
-    virtual TFuture<TPipelineStatus> GetPipelineStatus(
+    virtual TFuture<TPipelineState> GetPipelineState(
         const NYPath::TYPath& pipelinePath,
-        const TGetPipelineStatusOptions& options = {}) = 0;
+        const TGetPipelineStateOptions& options = {}) = 0;
+
+    virtual TFuture<TGetFlowViewResult> GetFlowView(
+        const NYPath::TYPath& pipelinePath,
+        const NYPath::TYPath& viewPath,
+        const TGetFlowViewOptions& options = {}) = 0;
+
+    virtual TFuture<TFlowExecuteResult> FlowExecute(
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

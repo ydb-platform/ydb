@@ -2,17 +2,14 @@
 
 #include "composite_compare.h"
 #include "helpers.h"
+#include "name_table.h"
+#include "row_buffer.h"
+#include "schema.h"
 #include "serialize.h"
 #include "unversioned_value.h"
 #include "validate_logical_type.h"
 
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/row_buffer.h>
-#include <yt/yt/client/table_client/schema.h>
-
 #include <yt/yt/library/decimal/decimal.h>
-
-#include <yt/yt/core/misc/range.h>
 
 #include <yt/yt/core/yson/consumer.h>
 
@@ -22,13 +19,19 @@
 
 #include <library/cpp/yt/misc/hash.h>
 
+#include <library/cpp/yt/memory/range.h>
+#include <library/cpp/yt/memory/tls_scratch.h>
+
 #include <library/cpp/yt/farmhash/farm_hash.h>
 
 #include <library/cpp/yt/coding/varint.h>
 
+#include <library/cpp/yt/misc/compare.h>
+
 #include <util/generic/ymath.h>
 
 #include <util/charset/utf8.h>
+
 #include <util/stream/str.h>
 
 #include <cmath>
@@ -105,8 +108,8 @@ size_t WriteRowValue(char* output, const TUnversionedValue& value, bool isInline
             break;
 
         case EValueType::Double:
-            ::memcpy(current, &value.Data.Double, sizeof (double));
-            current += sizeof (double);
+            ::memcpy(current, &value.Data.Double, sizeof(double));
+            current += sizeof(double);
             break;
 
         case EValueType::Boolean:
@@ -166,8 +169,8 @@ size_t ReadRowValue(const char* input, TUnversionedValue* value)
 
         case EValueType::Double: {
             double data;
-            ::memcpy(&data, current, sizeof (double));
-            current += sizeof (double);
+            ::memcpy(&data, current, sizeof(double));
+            current += sizeof(double);
             *value = MakeUnversionedDoubleValue(data, id);
             break;
         }
@@ -201,19 +204,19 @@ void Save(TStreamSaveContext& context, const TUnversionedValue& value)
 {
     auto* output = context.GetOutput();
     if (IsStringLikeType(value.Type)) {
-        output->Write(&value, sizeof (ui16) + sizeof (ui16) + sizeof (ui32)); // Id, Type, Length
+        output->Write(&value, sizeof(ui16) + sizeof(ui16) + sizeof(ui32)); // Id, Type, Length
         if (value.Length != 0) {
             output->Write(value.Data.String, value.Length);
         }
     } else {
-        output->Write(&value, sizeof (TUnversionedValue));
+        output->Write(&value, sizeof(TUnversionedValue));
     }
 }
 
 void Load(TStreamLoadContext& context, TUnversionedValue& value, TChunkedMemoryPool* pool)
 {
     auto* input = context.GetInput();
-    const size_t fixedSize = sizeof (ui16) + sizeof (ui16) + sizeof (ui32); // Id, Type, Length
+    const size_t fixedSize = sizeof(ui16) + sizeof(ui16) + sizeof(ui32); // Id, Type, Length
     YT_VERIFY(input->Load(&value, fixedSize) == fixedSize);
     if (IsStringLikeType(value.Type)) {
         if (value.Length != 0) {
@@ -223,7 +226,7 @@ void Load(TStreamLoadContext& context, TUnversionedValue& value, TChunkedMemoryP
             value.Data.String = nullptr;
         }
     } else {
-        YT_VERIFY(input->Load(&value.Data, sizeof (value.Data)) == sizeof (value.Data));
+        YT_VERIFY(input->Load(&value.Data, sizeof(value.Data)) == sizeof(value.Data));
     }
 }
 
@@ -244,7 +247,7 @@ size_t GetYsonSize(const TUnversionedValue& value)
             return 1 + MaxVarInt64Size;
 
         case EValueType::Double:
-            // Type marker + sizeof double.
+            // Type marker + sizeofdouble.
             return 1 + 8;
 
         case EValueType::String:
@@ -320,9 +323,23 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
     // TODO(babenko): check flags; forbid comparing hunks and aggregates.
 
     if (lhs.Type == EValueType::Any || rhs.Type == EValueType::Any) {
-        if (!IsSentinel(lhs.Type) && !IsSentinel(rhs.Type)) {
-            // Never compare composite values with non-sentinels.
-            ThrowIncomparableTypes(lhs, rhs);
+        if (lhs.Type != rhs.Type) {
+            if (lhs.Type == EValueType::Composite || rhs.Type == EValueType::Composite) {
+                ThrowIncomparableTypes(lhs, rhs);
+            }
+            return TernaryCompare(lhs.Type, rhs.Type);
+        }
+        try {
+            auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
+            auto rhsData = TYsonStringBuf(rhs.AsStringBuf());
+            return CompareYsonValues(lhsData, rhsData);
+        } catch (const std::exception& ex) {
+            THROW_ERROR_EXCEPTION(
+                NTableClient::EErrorCode::IncomparableComplexValues,
+                "Cannot compare complex values")
+                << TErrorAttribute("lhs_value", lhs)
+                << TErrorAttribute("rhs_value", rhs)
+                << ex;
         }
     }
 
@@ -333,12 +350,12 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
             {
                 ThrowIncomparableTypes(lhs, rhs);
             }
-            return static_cast<int>(lhs.Type) - static_cast<int>(rhs.Type);
+            return TernaryCompare(lhs.Type, rhs.Type);
         }
         try {
             auto lhsData = TYsonStringBuf(lhs.AsStringBuf());
             auto rhsData = TYsonStringBuf(rhs.AsStringBuf());
-            return CompareCompositeValues(lhsData, rhsData);
+            return CompareYsonValues(lhsData, rhsData);
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::IncomparableComplexValues,
@@ -350,83 +367,24 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
     }
 
     if (Y_UNLIKELY(lhs.Type != rhs.Type)) {
-        return static_cast<int>(lhs.Type) - static_cast<int>(rhs.Type);
+        return TernaryCompare(lhs.Type, rhs.Type);
     }
 
     switch (lhs.Type) {
-        case EValueType::Int64: {
-            auto lhsValue = lhs.Data.Int64;
-            auto rhsValue = rhs.Data.Int64;
-            if (lhsValue < rhsValue) {
-                return -1;
-            } else if (lhsValue > rhsValue) {
-                return +1;
-            } else {
-                return 0;
-            }
-        }
+        case EValueType::Int64:
+            return TernaryCompare(lhs.Data.Int64, rhs.Data.Int64);
 
-        case EValueType::Uint64: {
-            auto lhsValue = lhs.Data.Uint64;
-            auto rhsValue = rhs.Data.Uint64;
-            if (lhsValue < rhsValue) {
-                return -1;
-            } else if (lhsValue > rhsValue) {
-                return +1;
-            } else {
-                return 0;
-            }
-        }
+        case EValueType::Uint64:
+            return TernaryCompare(lhs.Data.Uint64, rhs.Data.Uint64);
 
-        case EValueType::Double: {
-            double lhsValue = lhs.Data.Double;
-            double rhsValue = rhs.Data.Double;
-            if (lhsValue < rhsValue) {
-                return -1;
-            } else if (lhsValue > rhsValue) {
-                return +1;
-            } else if (std::isnan(lhsValue)) {
-                if (std::isnan(rhsValue)) {
-                    return 0;
-                } else {
-                    return 1;
-                }
-            } else if (std::isnan(rhsValue)) {
-                return -1;
-            } else {
-                return 0;
-            }
-        }
+        case EValueType::Double:
+            return NaNSafeTernaryCompare(lhs.Data.Double, rhs.Data.Double);
 
-        case EValueType::Boolean: {
-            bool lhsValue = lhs.Data.Boolean;
-            bool rhsValue = rhs.Data.Boolean;
-            if (lhsValue < rhsValue) {
-                return -1;
-            } else if (lhsValue > rhsValue) {
-                return +1;
-            } else {
-                return 0;
-            }
-        }
+        case EValueType::Boolean:
+            return TernaryCompare(lhs.Data.Boolean, rhs.Data.Boolean);
 
-        case EValueType::String: {
-            size_t lhsLength = lhs.Length;
-            size_t rhsLength = rhs.Length;
-            size_t minLength = std::min(lhsLength, rhsLength);
-            int result = ::memcmp(lhs.Data.String, rhs.Data.String, minLength);
-            if (result == 0) {
-                if (lhsLength < rhsLength) {
-                    return -1;
-                } else if (lhsLength > rhsLength) {
-                    return +1;
-                } else {
-                    return 0;
-                }
-            } else {
-                return result;
-            }
-        }
+        case EValueType::String:
+            return TernaryCompare(lhs.AsStringBuf(), rhs.AsStringBuf());
 
         // All sentinel types are equal.
         default:
@@ -437,11 +395,6 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 bool operator == (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) == 0;
-}
-
-bool operator != (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
-{
-    return CompareRowValues(lhs, rhs) != 0;
 }
 
 bool operator <= (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
@@ -503,11 +456,6 @@ bool operator == (TUnversionedRow lhs, TUnversionedRow rhs)
     return CompareRows(lhs, rhs) == 0;
 }
 
-bool operator != (TUnversionedRow lhs, TUnversionedRow rhs)
-{
-    return CompareRows(lhs, rhs) != 0;
-}
-
 bool operator <= (TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) <= 0;
@@ -533,11 +481,6 @@ bool operator > (TUnversionedRow lhs, TUnversionedRow rhs)
 bool operator == (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) == 0;
-}
-
-bool operator != (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
-{
-    return CompareRows(lhs, rhs) != 0;
 }
 
 bool operator <= (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
@@ -664,6 +607,7 @@ public:
     void OnBeginMap() override
     {
         ++Depth_;
+        MapFound_ = true;
     }
 
     void OnKeyedItem(TStringBuf /*key*/) override
@@ -679,6 +623,7 @@ public:
         if (Depth_ == 0) {
             THROW_ERROR_EXCEPTION("Table values cannot have top-level attributes");
         }
+        AttributesFound_ = true;
     }
 
     void OnEndAttributes() override
@@ -687,14 +632,29 @@ public:
     void OnRaw(TStringBuf /*yson*/, EYsonType /*type*/) override
     { }
 
+    bool CanBeSorted() const
+    {
+        return !MapFound_ && !AttributesFound_;
+    }
+
 private:
     int Depth_ = 0;
+    bool MapFound_ = false;
+    bool AttributesFound_ = false;
 };
 
 void ValidateAnyValue(TStringBuf yson)
 {
     TYsonAnyValidator validator;
     ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
+}
+
+bool CheckSortedAnyValue(TStringBuf yson)
+{
+    TYsonAnyValidator validator;
+    ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
+
+    return validator.CanBeSorted();
 }
 
 void ValidateDynamicValue(const TUnversionedValue& value, bool isKey)
@@ -726,7 +686,7 @@ void ValidateDynamicValue(const TUnversionedValue& value, bool isKey)
         case EValueType::Double:
             if (isKey && std::isnan(value.Data.Double)) {
                 THROW_ERROR_EXCEPTION(
-                    NTableClient::EErrorCode::KeyCannotBeNan,
+                    NTableClient::EErrorCode::KeyCannotBeNaN,
                     "Key of type \"double\" cannot be NaN");
             }
             break;
@@ -769,7 +729,7 @@ void ValidateClientRow(
         }
 
         const auto& column = schema.Columns()[mappedId];
-        ValidateValueType(value, schema, mappedId, /*typeAnyAcceptsAllValues*/false);
+        ValidateValueType(value, schema, mappedId, /*typeAnyAcceptsAllValues*/ false);
 
         if (Any(value.Flags & EValueFlags::Aggregate) && !column.Aggregate()) {
             THROW_ERROR_EXCEPTION(
@@ -1051,8 +1011,18 @@ void ValidateValueType(
                             "Cannot write value of type %Qlv into type any column",
                             value.Type);
                     }
-                    if (IsAnyOrComposite(value.Type) && validateAnyIsValidYson) {
-                        ValidateAnyValue(value.AsStringBuf());
+                    if (IsAnyOrComposite(value.Type)) {
+                        if (columnSchema.SortOrder()) {
+                            bool canBeSorted = CheckSortedAnyValue(value.AsStringBuf());
+                            if (!canBeSorted) {
+                                THROW_ERROR_EXCEPTION(
+                                    NTableClient::EErrorCode::SchemaViolation,
+                                    "Cannot write value of type %Qlv, which contains a YSON map, into sorted column of type any",
+                                    value.Type);
+                            }
+                        } else if (validateAnyIsValidYson) {
+                            ValidateAnyValue(value.AsStringBuf());
+                        }
                     }
                 } else {
                     ValidateColumnType(EValueType::Composite, value);
@@ -1099,6 +1069,11 @@ void ValidateValueType(
             CASE(ESimpleLogicalValueType::Interval)
             CASE(ESimpleLogicalValueType::Json)
             CASE(ESimpleLogicalValueType::Uuid)
+
+            CASE(ESimpleLogicalValueType::Date32)
+            CASE(ESimpleLogicalValueType::Datetime64)
+            CASE(ESimpleLogicalValueType::Timestamp64)
+            CASE(ESimpleLogicalValueType::Interval64)
 #undef CASE
         }
         YT_ABORT();
@@ -1204,13 +1179,9 @@ void ValidateClientDataRow(
 void ValidateDuplicateAndRequiredValueColumns(
     TUnversionedRow row,
     const TTableSchema& schema,
-    const TNameTableToSchemaIdMapping& idMapping,
-    std::vector<bool>* columnPresenceBuffer)
+    const TNameTableToSchemaIdMapping& idMapping)
 {
-    auto& columnSeen = *columnPresenceBuffer;
-    YT_VERIFY(std::ssize(columnSeen) >= schema.GetColumnCount());
-    std::fill(columnSeen.begin(), columnSeen.end(), 0);
-
+    auto columnSeenFlags = GetTlsScratchBuffer<bool>(schema.GetColumnCount());
     for (const auto& value : row) {
         int mappedId = ApplyIdMapping(value, &idMapping);
         if (mappedId < 0) {
@@ -1218,17 +1189,17 @@ void ValidateDuplicateAndRequiredValueColumns(
         }
         const auto& column = schema.Columns()[mappedId];
 
-        if (columnSeen[mappedId]) {
+        if (columnSeenFlags[mappedId]) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::DuplicateColumnInSchema,
                 "Duplicate column %v in table schema",
                 column.GetDiagnosticNameString());
         }
-        columnSeen[mappedId] = true;
+        columnSeenFlags[mappedId] = true;
     }
 
     for (int index = schema.GetKeyColumnCount(); index < schema.GetColumnCount(); ++index) {
-        if (!columnSeen[index] && schema.Columns()[index].Required()) {
+        if (!columnSeenFlags[index] && schema.Columns()[index].Required()) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::MissingRequiredColumnInSchema,
                 "Missing required column %v in table schema",
@@ -1243,15 +1214,14 @@ bool ValidateNonKeyColumnsAgainstLock(
     const TTableSchema& schema,
     const TNameTableToSchemaIdMapping& idMapping,
     const TNameTablePtr& nameTable,
-    const std::vector<int>& columnIndexToLockIndex,
-    bool allowSharedWriteLocks)
+    const std::vector<int>& columnIndexToLockIndex)
 {
     bool hasNonKeyColumns = false;
     for (const auto& value : row) {
         int mappedId = ApplyIdMapping(value, &idMapping);
         if (mappedId < 0 || mappedId >= std::ssize(schema.Columns())) {
             int size = nameTable->GetSize();
-            if (value.Id < 0 || value.Id >= size) {
+            if (value.Id >= size) {
                 THROW_ERROR_EXCEPTION("Expected value id in range [0:%v] but got %v",
                     size - 1,
                     value.Id);
@@ -1267,10 +1237,6 @@ bool ValidateNonKeyColumnsAgainstLock(
         }
 
         auto lockType = locks.Get(lockIndex);
-
-        if (lockType == ELockType::SharedWrite && !allowSharedWriteLocks) {
-            THROW_ERROR_EXCEPTION("Shared write locks are not allowed for the table");
-        }
 
         if (mappedId >= schema.GetKeyColumnCount()) {
             hasNonKeyColumns = true;
@@ -1307,7 +1273,9 @@ void ValidateReadTimestamp(TTimestamp timestamp)
         timestamp != AsyncLastCommittedTimestamp &&
         (timestamp < MinTimestamp || timestamp > MaxTimestamp))
     {
-        THROW_ERROR_EXCEPTION("Invalid read timestamp %x", timestamp);
+        THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::TimestampOutOfRange,
+            "Invalid read timestamp %x",
+            timestamp);
     }
 }
 
@@ -1478,34 +1446,34 @@ const TLegacyOwningKey& ChooseMaxKey(const TLegacyOwningKey& a, const TLegacyOwn
     return result >= 0 ? a : b;
 }
 
-void ToProto(TProtoStringType* protoRow, TUnversionedRow row)
+void ToProto(TProtobufString* protoRow, TUnversionedRow row)
 {
     *protoRow = SerializeToString(row);
 }
 
-void ToProto(TProtoStringType* protoRow, const TUnversionedOwningRow& row)
+void ToProto(TProtobufString* protoRow, const TUnversionedOwningRow& row)
 {
     ToProto(protoRow, row.Get());
 }
 
-void ToProto(TProtoStringType* protoRow, TUnversionedValueRange range)
+void ToProto(TProtobufString* protoRow, TUnversionedValueRange range)
 {
     *protoRow = SerializeToString(range);
 }
 
-void ToProto(TProtoStringType* protoRow, const TRange<TUnversionedOwningValue>& values)
+void ToProto(TProtobufString* protoRow, const TRange<TUnversionedOwningValue>& values)
 {
     std::vector<TUnversionedValue> notOwningValues(values.size());
     std::copy(values.begin(), values.end(), notOwningValues.begin());
     ToProto(protoRow, notOwningValues);
 }
 
-void FromProto(TUnversionedOwningRow* row, const TProtoStringType& protoRow, std::optional<int> nullPaddingWidth)
+void FromProto(TUnversionedOwningRow* row, const TProtobufString& protoRow, std::optional<int> nullPaddingWidth)
 {
     *row = DeserializeFromString(TString{protoRow}, nullPaddingWidth);
 }
 
-void FromProto(TUnversionedRow* row, const TProtoStringType& protoRow, const TRowBufferPtr& rowBuffer)
+void FromProto(TUnversionedRow* row, const TProtobufString& protoRow, const TRowBufferPtr& rowBuffer)
 {
     if (protoRow == SerializedNullRow) {
         *row = TUnversionedRow();
@@ -1531,7 +1499,7 @@ void FromProto(TUnversionedRow* row, const TProtoStringType& protoRow, const TRo
     }
 }
 
-void FromProto(std::vector<TUnversionedOwningValue>* values, const TProtoStringType& protoRow)
+void FromProto(std::vector<TUnversionedOwningValue>* values, const TProtobufString& protoRow)
 {
     TUnversionedOwningRow row;
     FromProto(&row, protoRow);
@@ -1578,7 +1546,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
     TRefCountedTypeCookie tagCookie)
 {
     size_t bufferSize = 0;
-    bufferSize += sizeof (TUnversionedRow) * rows.Size();
+    bufferSize += sizeof(TUnversionedRow) * rows.Size();
     for (auto row : rows) {
         bufferSize += GetUnversionedRowByteSize(row.GetCount());
         for (const auto& value : row) {
@@ -1602,7 +1570,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
         return unalignedPtr;
     };
 
-    auto* capturedRows = reinterpret_cast<TUnversionedRow*>(allocateAligned(sizeof (TUnversionedRow) * rows.Size()));
+    auto* capturedRows = reinterpret_cast<TUnversionedRow*>(allocateAligned(sizeof(TUnversionedRow) * rows.Size()));
     for (size_t index = 0; index < rows.Size(); ++index) {
         auto row = rows[index];
         int valueCount = row.GetCount();
@@ -1611,7 +1579,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
         capturedHeader->Count = valueCount;
         auto capturedRow = TMutableUnversionedRow(capturedHeader);
         capturedRows[index] = capturedRow;
-        ::memcpy(capturedRow.Begin(), row.Begin(), sizeof (TUnversionedValue) * row.GetCount());
+        ::memcpy(capturedRow.Begin(), row.Begin(), sizeof(TUnversionedValue) * row.GetCount());
         for (auto& capturedValue : capturedRow) {
             if (IsStringLikeType(capturedValue.Type)) {
                 auto* capturedString = allocateUnaligned(capturedValue.Length);
@@ -1625,7 +1593,7 @@ std::pair<TSharedRange<TUnversionedRow>, i64> CaptureRowsImpl(
 
     return {
         MakeSharedRange(
-            MakeRange(capturedRows, rows.Size()),
+            TRange(capturedRows, rows.Size()),
             std::move(buffer.ReleaseHolder())),
         bufferSize
     };
@@ -1760,6 +1728,31 @@ void Deserialize(TLegacyOwningKey& key, INodePtr node)
                             valueType);
                     }
                     builder.AddValue(MakeUnversionedSentinelValue(valueType, id));
+                    break;
+                }
+
+                case ENodeType::List: {
+                    auto valueType = item->Attributes().Get<EValueType>("type", EValueType::Any);
+                    if (valueType != EValueType::Any && valueType != EValueType::Composite) {
+                        THROW_ERROR_EXCEPTION(
+                            "Unexpected type %Qlv of composite key", valueType);
+                    }
+
+                    TStringStream str;
+                    {
+                        // We want to skip top level attributes of the key,
+                        // so we traverse value manualy.
+                        TBufferedBinaryYsonWriter writer(&str);
+                        writer.OnBeginList();
+                        for (const auto& child : item->AsList()->GetChildren()) {
+                            writer.OnListItem();
+                            Serialize(child, &writer);
+                        }
+                        writer.OnEndList();
+                        writer.Flush();
+                    }
+
+                    builder.AddValue(MakeUnversionedStringLikeValue(valueType, str.Str(), id));
                     break;
                 }
 
@@ -2044,9 +2037,15 @@ TLegacyKey WidenKeyPrefix(TLegacyKey key, ui32 prefixLength, ui32 keyColumnCount
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSharedRange<TRowRange> MakeSingletonRowRange(TLegacyKey lowerBound, TLegacyKey upperBound)
+TSharedRange<TRowRange> MakeSingletonRowRange(
+    TLegacyKey lowerBound,
+    TLegacyKey upperBound,
+    TRowBufferPtr rowBuffer)
 {
-    auto rowBuffer = New<TRowBuffer>();
+    if (!rowBuffer) {
+        rowBuffer = New<TRowBuffer>();
+    }
+
     TCompactVector<TRowRange, 1> ranges(1, TRowRange(
         rowBuffer->CaptureRow(lowerBound),
         rowBuffer->CaptureRow(upperBound)));
@@ -2069,18 +2068,23 @@ TUnversionedValueRange ToKeyRef(TUnversionedRow row, int prefixLength)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FormatValue(TStringBuilderBase* builder, TUnversionedValueRange values, TStringBuf format)
+{
+    builder->AppendChar('[');
+    JoinToString(
+        builder,
+        values.Begin(),
+        values.End(),
+        [&] (TStringBuilderBase* builder, const TUnversionedValue& value) {
+            FormatValue(builder, value, format);
+        });
+    builder->AppendChar(']');
+}
+
 void FormatValue(TStringBuilderBase* builder, TUnversionedRow row, TStringBuf format)
 {
     if (row) {
-        builder->AppendChar('[');
-        JoinToString(
-            builder,
-            row.Begin(),
-            row.End(),
-            [&] (TStringBuilderBase* builder, const TUnversionedValue& value) {
-                FormatValue(builder, value, format);
-            });
-        builder->AppendChar(']');
+        FormatValue(builder, row.Elements(), format);
     } else {
         builder->AppendString("<null>");
     }
@@ -2167,6 +2171,24 @@ bool TBitwiseUnversionedValueRangeEqual::operator()(TUnversionedValueRange lhs, 
     return true;
 }
 
+void TBitwiseUnversionedValueRangeEqual::FormatDiff(TStringBuilderBase* builder, TUnversionedValueRange lhs, TUnversionedValueRange rhs)
+{
+    if (lhs.size() != rhs.size()) {
+        builder->AppendFormat("Value count mismatch: %v vs %v\n",
+            lhs.size(),
+            rhs.size());
+        return;
+    }
+    for (size_t index = 0; index < lhs.size(); ++index) {
+        if (!TBitwiseUnversionedValueEqual()(lhs[index], rhs[index])) {
+            builder->AppendFormat("Value mismatch at index %v\n",
+                index);
+            TBitwiseUnversionedValueEqual::FormatDiff(builder, lhs[index], rhs[index]);
+            break;
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 size_t TBitwiseUnversionedRowHash::operator()(TUnversionedRow row) const
@@ -2177,6 +2199,11 @@ size_t TBitwiseUnversionedRowHash::operator()(TUnversionedRow row) const
 bool TBitwiseUnversionedRowEqual::operator()(TUnversionedRow lhs, TUnversionedRow rhs) const
 {
     return TBitwiseUnversionedValueRangeEqual()(lhs.Elements(), rhs.Elements());
+}
+
+void TBitwiseUnversionedRowEqual::FormatDiff(TStringBuilderBase* builder, TUnversionedRow lhs, TUnversionedRow rhs)
+{
+    TBitwiseUnversionedValueRangeEqual::FormatDiff(builder, lhs.Elements(), rhs.Elements());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

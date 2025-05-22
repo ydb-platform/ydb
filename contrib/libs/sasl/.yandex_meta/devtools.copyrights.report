@@ -1,0 +1,138 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 52d04947d1b5663f48469dd954686f7f
+BELONGS ya.make
+    License text:
+        Copyright 1999-2003 The OpenLDAP Foundation, Redwood City, California, USA.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.ldapdb [51:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9161e97d5add9083712294701e6b1211
+BELONGS ya.make
+    License text:
+        /* Copyright (C) 1991-2, RSA Data Security, Inc. Created 1991. All
+        rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/md5.h [4:5]
+        include/sasl/md5.h [4:5]
+        lib/md5.c [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d779b0d83ae00030ec57f9afde03f57
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1987, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/exits.h [2:3]
+        include/sasl/exits.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a05bb59861d3c05c4fec35e3e964a01e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2003 Carnegie Mellon University.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        COPYING [7:7]
+        config-linux.h [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b6aaae5427712dbad66652531f77b46a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009-2016 Carnegie Mellon University.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        plugins/scram.c [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b94460a9beb5e88e9a5f1981ada195e2
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2016 Carnegie Mellon University.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        common/plugin_common.c [5:5]
+        common/plugin_common.h [6:6]
+        include/gai.h [8:8]
+        include/sasl/gai.h [8:8]
+        lib/auxprop.c [5:5]
+        lib/canonusr.c [5:5]
+        lib/checkpw.c [6:6]
+        lib/client.c [6:6]
+        lib/common.c [6:6]
+        lib/config.c [6:6]
+        lib/dlopen.c [6:6]
+        lib/external.c [6:6]
+        lib/saslint.h [6:6]
+        lib/saslutil.c [6:6]
+        lib/server.c [6:6]
+        lib/seterror.c [9:9]
+        lib/staticopen.h [6:6]
+        plugins/anonymous.c [6:6]
+        plugins/cram.c [6:6]
+        plugins/digestmd5.c [8:8]
+        plugins/otp.c [5:5]
+        plugins/otp.h [5:5]
+        plugins/plain.c [6:6]
+        plugins/sasldb.c [6:6]
+        sasldb/db_none.c [6:6]
+        sasldb/sasldb.h [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cc6d4f50a75c7857e89fa85aafd00b4d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1998-2004 Carnegie Mellon University.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        config-win.h [5:5]

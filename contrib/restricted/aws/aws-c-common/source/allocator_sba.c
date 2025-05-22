@@ -6,6 +6,7 @@
 #include <aws/common/allocator.h>
 #include <aws/common/array_list.h>
 #include <aws/common/assert.h>
+#include <aws/common/macros.h>
 #include <aws/common/mutex.h>
 
 /*
@@ -43,7 +44,7 @@
 #define AWS_SBA_TAG_VALUE 0x736f6d6570736575ULL
 
 /* list of sizes of bins, must be powers of 2, and less than AWS_SBA_PAGE_SIZE * 0.5 */
-#define AWS_SBA_BIN_COUNT 5
+enum { AWS_SBA_BIN_COUNT = 5 };
 static const size_t s_bin_sizes[AWS_SBA_BIN_COUNT] = {32, 64, 128, 256, 512};
 static const size_t s_max_bin_size = 512;
 
@@ -347,7 +348,7 @@ static void s_sba_free_to_bin(struct sba_bin *bin, void *addr) {
         uint8_t *page_start = (uint8_t *)page + sizeof(struct page_header);
         uint8_t *page_end = page_start + AWS_SBA_PAGE_SIZE;
         /* Remove all chunks in the page from the free list */
-        intptr_t chunk_idx = bin->free_chunks.length;
+        intptr_t chunk_idx = (intptr_t)bin->free_chunks.length;
         for (; chunk_idx >= 0; --chunk_idx) {
             uint8_t *chunk = NULL;
             aws_array_list_get_at(&bin->free_chunks, &chunk, chunk_idx);
@@ -405,7 +406,7 @@ static void *s_sba_alloc(struct small_block_allocator *sba, size_t size) {
     return aws_mem_acquire(sba->allocator, size);
 }
 
-static void s_sba_free(struct small_block_allocator *sba, void *addr) {
+AWS_SUPPRESS_ASAN AWS_SUPPRESS_TSAN static void s_sba_free(struct small_block_allocator *sba, void *addr) {
     if (!addr) {
         return;
     }

@@ -9,6 +9,7 @@
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/cms/console/validators/registry.h>
+#include <ydb/core/protos/netclassifier.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -23,8 +24,6 @@ void TConsole::DefaultSignalTabletActive(const TActorContext &)
 void TConsole::OnActivateExecutor(const TActorContext &ctx)
 {
     auto domains = AppData(ctx)->DomainsInfo;
-    auto domainId = domains->GetDomainUidByTabletId(TabletID());
-    Y_ABORT_UNLESS(domainId != TDomainsInfo::BadDomainId);
 
     auto tabletsCounters = GetServiceCounters(AppData(ctx)->Counters, "tablets");
     tabletsCounters->RemoveSubgroup("type", "CONSOLE");
@@ -32,10 +31,10 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
 
     TValidatorsRegistry::Instance()->LockValidators();
 
-    ConfigsManager = new TConfigsManager(*this);
+    ConfigsManager = new TConfigsManager(*this, Counters);
     ctx.RegisterWithSameMailbox(ConfigsManager);
 
-    TenantsManager = new TTenantsManager(*this, domains->Domains.at(domainId),
+    TenantsManager = new TTenantsManager(*this, domains->Domain,
                                          Counters,
                                          AppData()->FeatureFlags);
     ctx.RegisterWithSameMailbox(TenantsManager);
@@ -77,7 +76,7 @@ bool TConsole::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActo
         return true;
 
     auto domains = AppData(ctx)->DomainsInfo;
-    auto domain = domains->Domains.at(domains->GetDomainUidByTabletId(TabletID()));
+    auto domain = domains->Domain;
 
     TStringStream str;
     HTML(str) {
@@ -144,7 +143,7 @@ void TConsole::ProcessEnqueuedEvents(const TActorContext &ctx)
         LOG_DEBUG(ctx, NKikimrServices::CMS,
                   "TConsole::Dequeue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
                   TabletID(), ev->GetTypeRewrite(), ev->ToString().data());
-        ctx.ExecutorThread.Send(ev.Release());
+        ctx.Send(ev.Release());
         InitQueue.pop_front();
     }
 }
@@ -160,6 +159,11 @@ void TConsole::ClearState()
     }
 
     Counters->ResetCounters();
+}
+
+void TConsole::ForwardFromPipe(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) {
+    ev->Rewrite(ev->GetTypeRewrite(), ConfigsManager->SelfId());
+    ctx.Send(ev.Release());
 }
 
 void TConsole::ForwardToConfigsManager(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx)
@@ -180,6 +184,24 @@ void TConsole::Handle(TEvConsole::TEvGetConfigRequest::TPtr &ev, const TActorCon
 void TConsole::Handle(TEvConsole::TEvSetConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     TxProcessor->ProcessTx(CreateTxSetConfig(ev), ctx);
+}
+
+bool TConsole::HasTenant(const TString& path) const
+{
+    if (!TenantsManager) {
+        return false;
+    }
+
+    return TenantsManager->HasTenant(path);
+}
+
+TString TConsole::GetDomainName() const
+{
+    if (!TenantsManager) {
+        return {};
+    }
+
+    return TenantsManager->GetDomainName();
 }
 
 IActor *CreateConsole(const TActorId &tablet, TTabletStorageInfo *info)

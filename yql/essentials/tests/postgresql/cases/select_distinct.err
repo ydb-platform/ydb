@@ -1,0 +1,386 @@
+Registering pre-existing tables
+	tenk1
+	tmp
+	emp
+	student
+	stud_emp
+<sql-statement>
+--
+-- SELECT_DISTINCT
+--
+--
+-- awk '{print $3;}' onek.data | sort -n | uniq
+--
+SELECT DISTINCT two FROM tmp ORDER BY 1;
+</sql-statement>
+<sql-statement>
+--
+-- awk '{print $5;}' onek.data | sort -n | uniq
+--
+SELECT DISTINCT ten FROM tmp ORDER BY 1;
+</sql-statement>
+<sql-statement>
+--
+-- awk '{print $16;}' onek.data | sort -d | uniq
+--
+SELECT DISTINCT string4 FROM tmp ORDER BY 1;
+</sql-statement>
+<sql-statement>
+--
+-- awk '{print $3,$16,$5;}' onek.data | sort -d | uniq |
+-- sort +0n -1 +1d -2 +2n -3
+--
+SELECT DISTINCT two, string4, ten
+   FROM tmp
+   ORDER BY two using <, string4 using <, ten using <;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:7:23: Error: sortby_dir unsupported value: 3
+    	   ORDER BY two using <, string4 using <, ten using <;
+	                      ^
+<sql-statement>
+--
+-- awk '{print $2;}' person.data |
+-- awk '{if(NF!=1){print $2;}else{print;}}' - emp.data |
+-- awk '{if(NF!=1){print $2;}else{print;}}' - student.data |
+-- awk 'BEGIN{FS="      ";}{if(NF!=1){print $5;}else{print;}}' - stud_emp.data |
+-- sort -n -r | uniq
+--
+SELECT DISTINCT p.age FROM person* p ORDER BY age using >;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:8:57: Error: sortby_dir unsupported value: 3
+    	SELECT DISTINCT p.age FROM person* p ORDER BY age using >;
+	                                                        ^
+<sql-statement>
+--
+-- Check mentioning same column more than once
+--
+EXPLAIN (VERBOSE, COSTS OFF)
+SELECT count(*) FROM
+  (SELECT DISTINCT two, four, two FROM tenk1) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+SELECT count(*) FROM
+  (SELECT DISTINCT two, four, two FROM tenk1) ss;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgSelect, At function: PgSetItem
+    	SELECT count(*) FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: two
+        	SELECT count(*) FROM
+	^
+<sql-statement>
+--
+-- Compare results between plans using sorting and plans using hash
+-- aggregation. Force spilling in both cases by setting work_mem low.
+--
+SET work_mem='64kB';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: work_mem
+    	--
+	^
+<sql-statement>
+-- Produce results with sorting.
+SET enable_hashagg=FALSE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	-- Produce results with sorting.
+	^
+<sql-statement>
+SET jit_above_cost=0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: jit_above_cost
+    	SET jit_above_cost=0;
+	^
+<sql-statement>
+EXPLAIN (costs off)
+SELECT DISTINCT g%1000 FROM generate_series(0,9999) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (costs off)
+	^
+<sql-statement>
+CREATE TABLE distinct_group_1 AS
+SELECT DISTINCT g%1000 FROM generate_series(0,9999) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE distinct_group_1 AS
+	^
+<sql-statement>
+SET jit_above_cost TO DEFAULT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 1
+    	SET jit_above_cost TO DEFAULT;
+	^
+<sql-statement>
+CREATE TABLE distinct_group_2 AS
+SELECT DISTINCT (g%1000)::text FROM generate_series(0,9999) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE distinct_group_2 AS
+	^
+<sql-statement>
+SET enable_hashagg=TRUE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	SET enable_hashagg=TRUE;
+	^
+<sql-statement>
+-- Produce results with hash aggregation.
+SET enable_sort=FALSE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_sort
+    	-- Produce results with hash aggregation.
+	^
+<sql-statement>
+SET jit_above_cost=0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: jit_above_cost
+    	SET jit_above_cost=0;
+	^
+<sql-statement>
+EXPLAIN (costs off)
+SELECT DISTINCT g%1000 FROM generate_series(0,9999) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (costs off)
+	^
+<sql-statement>
+CREATE TABLE distinct_hash_1 AS
+SELECT DISTINCT g%1000 FROM generate_series(0,9999) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE distinct_hash_1 AS
+	^
+<sql-statement>
+SET jit_above_cost TO DEFAULT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 1
+    	SET jit_above_cost TO DEFAULT;
+	^
+<sql-statement>
+CREATE TABLE distinct_hash_2 AS
+SELECT DISTINCT (g%1000)::text FROM generate_series(0,9999) g;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	CREATE TABLE distinct_hash_2 AS
+	^
+<sql-statement>
+SET enable_sort=TRUE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_sort
+    	SET enable_sort=TRUE;
+	^
+<sql-statement>
+SET work_mem TO DEFAULT;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 1
+    	SET work_mem TO DEFAULT;
+	^
+<sql-statement>
+-- Compare results
+(SELECT * FROM distinct_hash_1 EXCEPT SELECT * FROM distinct_group_1)
+  UNION ALL
+(SELECT * FROM distinct_group_1 EXCEPT SELECT * FROM distinct_hash_1);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.distinct_group_1
+    
+<sql-statement>
+(SELECT * FROM distinct_hash_1 EXCEPT SELECT * FROM distinct_group_1)
+  UNION ALL
+(SELECT * FROM distinct_group_1 EXCEPT SELECT * FROM distinct_hash_1);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.distinct_group_1
+    
+<sql-statement>
+DROP TABLE distinct_hash_1;
+</sql-statement>
+<sql-statement>
+DROP TABLE distinct_hash_2;
+</sql-statement>
+<sql-statement>
+DROP TABLE distinct_group_1;
+</sql-statement>
+<sql-statement>
+DROP TABLE distinct_group_2;
+</sql-statement>
+<sql-statement>
+--
+-- Also, some tests of IS DISTINCT FROM, which doesn't quite deserve its
+-- very own regression file.
+--
+CREATE TEMP TABLE disttable (f1 integer);
+</sql-statement>
+<sql-statement>
+INSERT INTO DISTTABLE VALUES(1);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.DISTTABLE
+    
+<sql-statement>
+INSERT INTO DISTTABLE VALUES(2);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.DISTTABLE
+    
+<sql-statement>
+INSERT INTO DISTTABLE VALUES(3);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.DISTTABLE
+    
+<sql-statement>
+INSERT INTO DISTTABLE VALUES(NULL);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.DISTTABLE
+    
+<sql-statement>
+-- basic cases
+SELECT f1, f1 IS DISTINCT FROM 2 as "not 2" FROM disttable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:15: Error: A_Expr_Kind unsupported value: 3
+    	SELECT f1, f1 IS DISTINCT FROM 2 as "not 2" FROM disttable;
+	              ^
+<sql-statement>
+SELECT f1, f1 IS DISTINCT FROM NULL as "not null" FROM disttable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:15: Error: A_Expr_Kind unsupported value: 3
+    	SELECT f1, f1 IS DISTINCT FROM NULL as "not null" FROM disttable;
+	              ^
+<sql-statement>
+SELECT f1, f1 IS DISTINCT FROM f1 as "false" FROM disttable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:15: Error: A_Expr_Kind unsupported value: 3
+    	SELECT f1, f1 IS DISTINCT FROM f1 as "false" FROM disttable;
+	              ^
+<sql-statement>
+SELECT f1, f1 IS DISTINCT FROM f1+1 as "not null" FROM disttable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:15: Error: A_Expr_Kind unsupported value: 3
+    	SELECT f1, f1 IS DISTINCT FROM f1+1 as "not null" FROM disttable;
+	              ^
+<sql-statement>
+-- check that optimizer constant-folds it properly
+SELECT 1 IS DISTINCT FROM 2 as "yes";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:10: Error: A_Expr_Kind unsupported value: 3
+    	SELECT 1 IS DISTINCT FROM 2 as "yes";
+	         ^
+<sql-statement>
+SELECT 2 IS DISTINCT FROM 2 as "no";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:10: Error: A_Expr_Kind unsupported value: 3
+    	SELECT 2 IS DISTINCT FROM 2 as "no";
+	         ^
+<sql-statement>
+SELECT 2 IS DISTINCT FROM null as "yes";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:10: Error: A_Expr_Kind unsupported value: 3
+    	SELECT 2 IS DISTINCT FROM null as "yes";
+	         ^
+<sql-statement>
+SELECT null IS DISTINCT FROM null as "no";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:13: Error: A_Expr_Kind unsupported value: 3
+    	SELECT null IS DISTINCT FROM null as "no";
+	            ^
+<sql-statement>
+-- negated form
+SELECT 1 IS NOT DISTINCT FROM 2 as "no";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:10: Error: A_Expr_Kind unsupported value: 4
+    	SELECT 1 IS NOT DISTINCT FROM 2 as "no";
+	         ^
+<sql-statement>
+SELECT 2 IS NOT DISTINCT FROM 2 as "yes";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:10: Error: A_Expr_Kind unsupported value: 4
+    	SELECT 2 IS NOT DISTINCT FROM 2 as "yes";
+	         ^
+<sql-statement>
+SELECT 2 IS NOT DISTINCT FROM null as "no";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:10: Error: A_Expr_Kind unsupported value: 4
+    	SELECT 2 IS NOT DISTINCT FROM null as "no";
+	         ^
+<sql-statement>
+SELECT null IS NOT DISTINCT FROM null as "yes";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:13: Error: A_Expr_Kind unsupported value: 4
+    	SELECT null IS NOT DISTINCT FROM null as "yes";
+	            ^

@@ -1,7 +1,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2022 The OpenLDAP Foundation.
+ * Copyright 1998-2024 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,12 +43,15 @@ void (lutil_debug)( int debug, int level, const char *fmt, ... )
 {
 	char buffer[4096];
 	va_list vl;
+	int len;
 
 	if ( !(level & debug ) ) return;
 
 	va_start( vl, fmt );
-	vsnprintf( buffer, sizeof(buffer), fmt, vl );
+	len = vsnprintf( buffer, sizeof(buffer), fmt, vl );
 	va_end( vl );
+	if ( len >= sizeof(buffer)-2 )
+		buffer[sizeof(buffer)-2] = '\n';
 	ber_pvt_log_print( buffer );
 }
 

@@ -2,11 +2,14 @@
 #include "defs.h"
 
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
-#include <ydb/core/control/immediate_control_board_wrapper.h>
-#include <ydb/core/protos/blobstorage.pb.h>
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
+#include <ydb/core/protos/blobstorage_disk_color.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/file_params.h>
@@ -27,6 +30,11 @@ struct TPDiskSchedulerConfig {
     ui64 LoadWeight = LoadWeightDefault;
     ui64 LowReadWeight = LowWeightDefault;
 
+    size_t MaxChunkReadsPerCycle = 16;
+    double MaxChunkReadsDurationPerCycleMs = 0.25;
+    size_t MaxChunkWritesPerCycle = 8;
+    double MaxChunkWritesDurationPerCycleMs = 1;
+
     TString ToString(bool isMultiline) const {
         const char *x = isMultiline ? "\n" : "";
         TStringStream str;
@@ -41,6 +49,10 @@ struct TPDiskSchedulerConfig {
         str << " OtherReadWeight# " << OtherReadWeight << x;
         str << " LoadWeight# " << LoadWeight << x;
         str << " LowReadWeight# " << LowReadWeight << x;
+        str << " MaxChunkReadsPerCycle# " << MaxChunkReadsPerCycle << x;
+        str << " MaxChunkReadsDurationPerCycleMs# " << MaxChunkReadsDurationPerCycleMs << x;
+        str << " MaxChunkWritesPerCycle# " << MaxChunkWritesPerCycle << x;
+        str << " MaxChunkWritesDurationPerCycleMs# " << MaxChunkWritesDurationPerCycleMs << x;
         str << "}" << x;
         return str.Str();
     }
@@ -119,16 +131,19 @@ struct TPDiskConfig : public TThrRefBase {
     ui64 CostLimitNs;
 
     // AsyncBlockDevice settings
-    ui32 BufferPoolBufferSizeBytes = 512 << 10;
-    ui32 BufferPoolBufferCount = 256;
-    ui32 MaxQueuedCompletionActions = 128; // BufferPoolBufferCount / 2;
+    ui32 BufferPoolBufferSizeBytes;
+    ui32 BufferPoolBufferCount;
+    ui32 MaxQueuedCompletionActions;
     bool UseSpdkNvmeDriver;
-    TControlWrapper UseT1ha0HashInFooter;
 
     ui64 ExpectedSlotCount = 0;
 
+    // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    ui32 ChunkBaseLimit = 130;
+
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
+    TControlWrapper MaxCommonLogChunks = 200;
     ui64 MinLogChunksTotal = 4ull; // for tiny disks
 
     // Common multiplier and divisor
@@ -145,7 +160,18 @@ struct TPDiskConfig : public TThrRefBase {
     ui64 WarningLogChunksMultiplier = 4;
     ui64 YellowLogChunksMultiplier = 4;
 
+    ui32 MaxMetadataMegabytes = 32; // maximum size of raw metadata (in megabytes)
+
     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+
+    ui32 CompletionThreadsCount = 1;
+    bool UseNoopScheduler = false;
+
+    bool PlainDataChunks = false;
+
+    bool MetadataOnly = false;
+
+    bool ReadOnly = false;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
@@ -156,7 +182,6 @@ struct TPDiskConfig : public TThrRefBase {
         , PDiskGuid(pDiskGuid)
         , PDiskId(pdiskId)
         , PDiskCategory(pDiskCategory)
-        , UseT1ha0HashInFooter(KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING, 0, 1)
     {
         Initialize();
     }
@@ -201,9 +226,13 @@ struct TPDiskConfig : public TThrRefBase {
         DeviceInFlight = choose(128, 4, hddInFlight);
         CostLimitNs = choose(500'000ull, 20'000'000ull, 50'000'000ull);
 
+        BufferPoolBufferSizeBytes = choose(128 << 10, 256 << 10, 512 << 10);
+        BufferPoolBufferCount = choose(1024, 512, 256);
+        MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
+
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
-        Y_ABORT_UNLESS(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
-                "SPDK NVMe driver can be used only with NVMe devices!");
+        Y_VERIFY_S(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
+                "PDiskId# " << PDiskId << " SPDK NVMe driver can be used only with NVMe devices!");
     }
 
     TString GetDevicePath() {
@@ -252,6 +281,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " PDiskGuid# " << PDiskGuid << x;
         str << " PDiskId# " << PDiskId << x;
         str << " PDiskCategory# " << PDiskCategory.ToString() << x;
+        str << " MetadataOnly# " << MetadataOnly << x;
         for (ui32 i = 0; i < HashedMainKey.size(); ++i) {
             str << " HashedMainKey[" << i << "]# " << HashedMainKey[i] << x;
         }
@@ -293,6 +323,11 @@ struct TPDiskConfig : public TThrRefBase {
         str << " OrangeLogChunksMultiplier# " << OrangeLogChunksMultiplier << x;
         str << " WarningLogChunksMultiplier# " << WarningLogChunksMultiplier << x;
         str << " YellowLogChunksMultiplier# " << YellowLogChunksMultiplier << x;
+        str << " MaxMetadataMegabytes# " << MaxMetadataMegabytes << x;
+        str << " SpaceColorBorder# " << SpaceColorBorder << x;
+        str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
+        str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
+        str << " PlainDataChunks# " << PlainDataChunks << x;
         str << "}";
         return str.Str();
     }
@@ -370,8 +405,25 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasExpectedSlotCount()) {
             ExpectedSlotCount = cfg->GetExpectedSlotCount();
         }
+
+        if (cfg->HasChunkBaseLimit()) {
+            ui32 limit = cfg->GetChunkBaseLimit();
+            limit = Min<ui32>(130, limit);
+            limit = Max<ui32>(13, limit);
+            ChunkBaseLimit = limit;
+        }
+
+        if (cfg->HasCompletionThreadsCount()) {
+            CompletionThreadsCount = cfg->GetCompletionThreadsCount();
+        }
+
+        if (cfg->HasUseNoopScheduler()) {
+            UseNoopScheduler = cfg->GetUseNoopScheduler();
+        }
+        if (cfg->HasPlainDataChunks()) {
+            PlainDataChunks = cfg->GetPlainDataChunks();
+        }
     }
 };
 
 } // NKikimr
-

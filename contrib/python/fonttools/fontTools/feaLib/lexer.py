@@ -111,10 +111,6 @@ class Lexer(object):
             glyphclass = text[start + 1 : self.pos_]
             if len(glyphclass) < 1:
                 raise FeatureLibError("Expected glyph class name", location)
-            if len(glyphclass) > 63:
-                raise FeatureLibError(
-                    "Glyph class names must not be longer than 63 characters", location
-                )
             if not Lexer.RE_GLYPHCLASS.match(glyphclass):
                 raise FeatureLibError(
                     "Glyph class names must consist of letters, digits, "
@@ -273,7 +269,7 @@ class IncludingLexer(object):
             fileobj, closing = file_or_path, False
         else:
             filename, closing = file_or_path, True
-            fileobj = open(filename, "r", encoding="utf-8")
+            fileobj = open(filename, "r", encoding="utf-8-sig")
         data = fileobj.read()
         filename = getattr(fileobj, "name", None)
         if closing:

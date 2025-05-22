@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -31,7 +32,7 @@ namespace NKikimr {
         costSettings.SetWriteSpeedBps(Max<ui64>());
         costSettings.SetReadBlockSize(Max<ui64>());
         costSettings.SetWriteBlockSize(Max<ui64>());
-        costSettings.SetMinREALHugeBlobInBytes(Max<ui32>());
+        costSettings.SetMinHugeBlobInBytes(Max<ui32>());
         return costSettings;
     }
 

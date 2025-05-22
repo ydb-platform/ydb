@@ -10,6 +10,8 @@
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/config/init/mock.h>
+#include <ydb/core/base/counters.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -17,6 +19,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <ydb/core/config/init/init.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
@@ -34,6 +37,8 @@
 #define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
 
 namespace NKikimr::NConsole {
+
+using namespace NConfig;
 
 const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem,
@@ -57,6 +62,13 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::TenantPoolConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TenantSlotBrokerConfigItem,
     (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem,
+    (ui32)NKikimrConsole::TConfigItem::BackgroundCleaningConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::TracingConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::BlobStorageConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::MetadataCacheConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::MemoryControllerConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::HealthCheckConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -132,12 +144,7 @@ public:
         return NKikimrServices::TActivity::CONFIGS_DISPATCHER_ACTOR;
     }
 
-    TConfigsDispatcher(
-        const NKikimrConfig::TAppConfig &config,
-        const TMap<TString, TString> &labels,
-        const NKikimrConfig::TAppConfig &initialCmsConfig,
-        const NKikimrConfig::TAppConfig &initialCmsYamlConfig,
-        const THashMap<ui32, TConfigItemInfo> &configInitInfo);
+    TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInfo);
 
     void Bootstrap();
 
@@ -161,7 +168,11 @@ public:
     TCheckKindsResult CheckKinds(const TVector<ui32>& kinds, const char* errorContext) const;
 
     NKikimrConfig::TAppConfig ParseYamlProtoConfig();
-        
+
+    TDynBitMap FilterKinds(const TDynBitMap& in);
+
+    void UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
+
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
@@ -172,6 +183,7 @@ public:
     void Handle(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest::TPtr &ev);
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
     void Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev);
+    void Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &ev);
 
     void ReplyMonJson(TActorId mailbox);
 
@@ -190,6 +202,7 @@ public:
             hFuncTraced(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle);
             // Resolve
             hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
+            hFunc(TEvConsole::TEvFetchStartupConfigRequest, Handle);
         default:
             EnqueueEvent(ev);
             break;
@@ -214,7 +227,7 @@ public:
             IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             // Resolve
             hFunc(TEvConsole::TEvGetNodeLabelsRequest, Handle);
-
+            hFunc(TEvConsole::TEvFetchStartupConfigRequest, Handle);
             // Ignore these console requests until we get rid of persistent subscriptions-related code
             IgnoreFunc(TEvConsole::TEvAddConfigSubscriptionResponse);
             IgnoreFunc(TEvConsole::TEvGetNodeConfigResponse);
@@ -229,12 +242,21 @@ public:
 
 
 private:
-    TMap<TString, TString> Labels;
-    const NKikimrConfig::TAppConfig InitialConfig;
+    const TMap<TString, TString> Labels;
+    const std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
+    const NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
-    const NKikimrConfig::TAppConfig InitialCmsConfig;
-    const NKikimrConfig::TAppConfig InitialCmsYamlConfig;
-    const THashMap<ui32, TConfigItemInfo> ConfigInitInfo;
+    const TString StartupConfigYaml;
+    NKikimrConfig::TAppConfig CandidateStartupConfig;
+    bool StartupConfigProcessError = false;
+    bool StartupConfigProcessDiff = false;
+    TString StartupConfigInfo;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StartupConfigChanged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV1;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV2;
+    const std::optional<TDebugInfo> DebugInfo;
+    std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
+    std::vector<TString> Args;
     ui64 NextRequestCookie;
     TVector<TActorId> HttpRequests;
     TActorId CommonSubscriptionClient;
@@ -244,9 +266,10 @@ private:
     THashMap<TDynBitMap, TSubscription::TPtr> SubscriptionsByKinds;
     THashMap<TActorId, TSubscriber::TPtr> Subscribers;
 
-    TString YamlConfig;
+    TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
     TMap<ui64, size_t> VolatileYamlConfigHashes;
+    std::optional<TString> DatabaseYamlConfig;
     TString ResolvedYamlConfig;
     TString ResolvedJsonConfig;
     NKikimrConfig::TAppConfig YamlProtoConfig;
@@ -254,21 +277,18 @@ private:
 
 };
 
-TConfigsDispatcher::TConfigsDispatcher(
-    const NKikimrConfig::TAppConfig &config,
-    const TMap<TString, TString> &labels,
-    const NKikimrConfig::TAppConfig &initialCmsConfig,
-    const NKikimrConfig::TAppConfig &initialCmsYamlConfig,
-    const THashMap<ui32, TConfigItemInfo> &configInitInfo)
-        : Labels(labels)
-        , InitialConfig(config)
-        , CurrentConfig(config)
-        , InitialCmsConfig(initialCmsConfig)
-        , InitialCmsYamlConfig(initialCmsYamlConfig)
-        , ConfigInitInfo(configInitInfo)
+TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInfo)
+        : Labels(initInfo.Labels)
+        , ItemsServeRules(initInfo.ItemsServeRules)
+        , BaseConfig(initInfo.InitialConfig)
+        , CurrentConfig(initInfo.InitialConfig)
+        , StartupConfigYaml(initInfo.StartupConfigYaml)
+        , CandidateStartupConfig(initInfo.InitialConfig)
+        , DebugInfo(initInfo.DebugInfo)
+        , RecordedInitialConfiguratorDeps(std::move(initInfo.RecordedInitialConfiguratorDeps))
+        , Args(initInfo.Args)
         , NextRequestCookie(Now().GetValue())
-{
-}
+{}
 
 void TConfigsDispatcher::Bootstrap()
 {
@@ -277,7 +297,21 @@ void TConfigsDispatcher::Bootstrap()
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(actorsMonPage, "configs_dispatcher", "Configs Dispatcher", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+        mon->RegisterActorPage(actorsMonPage, "configs_dispatcher", "Configs Dispatcher", false, TActivationContext::ActorSystem(), SelfId());
+    }
+    TIntrusivePtr<NMonitoring::TDynamicCounters> rootCounters = AppData()->Counters;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> authCounters = GetServiceCounters(rootCounters, "config");
+    NMonitoring::TDynamicCounterPtr counters = authCounters->GetSubgroup("subsystem", "configs_dispatcher");
+    StartupConfigChanged = counters->GetCounter("StartupConfigChanged", true);
+    ConfigurationV1 = counters->GetCounter("ConfigurationV1", true);
+    ConfigurationV2 = counters->GetCounter("ConfigurationV2", false);
+
+    if (Labels.contains("configuration_version")) {
+        if (Labels.at("configuration_version") == "v1") {
+            *ConfigurationV1 = 1;
+        } else {
+            *ConfigurationV2 = 1;
+        }
     }
 
     auto commonClient = CreateConfigsSubscriber(
@@ -286,7 +320,13 @@ void TConfigsDispatcher::Bootstrap()
         CurrentConfig,
         0,
         true,
-        1);
+        1,
+        {},
+        {},
+        TNodeInfo{
+            .Tenant = Labels.contains("tenant") ? Labels.at("tenant") : TString(""),
+            .NodeType = Labels.contains("node_type") ? Labels.at("node_type") : TString(""),
+        });
     CommonSubscriptionClient = RegisterWithSameMailbox(commonClient);
 
     Become(&TThis::StateInit);
@@ -353,10 +393,11 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
 
     try {
         NYamlConfig::ResolveAndParseYamlConfig(
-            YamlConfig,
+            MainYamlConfig,
             VolatileYamlConfigs,
             Labels,
             newYamlProtoConfig,
+            DatabaseYamlConfig,
             &ResolvedYamlConfig,
             &ResolvedJsonConfig);
     } catch (const yexception& ex) {
@@ -396,12 +437,20 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
         labels.AppendValue(std::move(label));
     }
 
-    response.InsertValue("yaml_config", YamlConfig);
+    response.InsertValue("yaml_config", MainYamlConfig);
     response.InsertValue("resolved_json_config", NJson::ReadJsonFastTree(ResolvedJsonConfig, true));
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
-    response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(InitialConfig, NYamlConfig::GetProto2JsonConfig()), true));
-    response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(InitialCmsConfig, NYamlConfig::GetProto2JsonConfig()), true));
-    response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(InitialCmsYamlConfig, NYamlConfig::GetProto2JsonConfig()), true));
+
+    if (DebugInfo) {
+        // TODO: write custom json serializer for security fields
+        // for now json info not documented and used only for some very specifigc
+        // debug purproses, so we can disable it for now without any risks
+        // and postpone implementation
+        //
+        // response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->StaticConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->OldDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->NewDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
+    }
 
     NJson::WriteJson(&str, &response, {});
 
@@ -416,6 +465,29 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &
     BLOG_TRACE("Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString());
 
     Send(ev->Sender, resp.Release(), 0, ev->Cookie);
+}
+
+
+TDynBitMap TConfigsDispatcher::FilterKinds(const TDynBitMap& in) {
+    TDynBitMap out;
+
+    if (const auto* denyList = std::get_if<TDenyList>(&ItemsServeRules)) {
+        Y_FOR_EACH_BIT(kind, in) {
+            if (!denyList->Items.contains(kind)) {
+                out.Set(kind);
+            }
+        }
+    } else if (const auto* allowList = std::get_if<TAllowList>(&ItemsServeRules)) {
+        Y_FOR_EACH_BIT(kind, in) {
+            if (allowList->Items.contains(kind)) {
+                out.Set(kind);
+            }
+        }
+    } else {
+        out = in;
+    }
+
+    return out;
 }
 
 void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
@@ -463,6 +535,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
 
         DIV_CLASS("container") {
             DIV_CLASS("navbar navbar-expand-lg navbar-light bg-light") {
+                str << "<style>.navbar { z-index: 1030; position: relative; }</style>" << Endl;
                 DIV_CLASS("navbar-collapse") {
                     UL_CLASS("navbar-nav mr-auto") {
                         LI_CLASS("nav-item") {
@@ -475,6 +548,17 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                     }
                 }
             }
+
+            DIV_CLASS("alert alert-info") {
+                str << "<style>.alert-info { position: relative; z-index: 1020; }</style>" << Endl;
+                str << "<strong>Configuration version: </strong>";
+                if (Labels.contains("configuration_version")) {
+                    str << Labels.at("configuration_version");
+                } else {
+                    str << "unknown";
+                }
+            }
+
             DIV_CLASS("tab-left") {
                 COLLAPSED_REF_CONTENT("node-labels", "Node labels") {
                     PRE() {
@@ -493,14 +577,14 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                     str << "Coloring: \"<font color=\"red\">config not set</font>\","
                         << " \"<font color=\"green\">config set in dynamic config</font>\", \"<font color=\"#007bff\">config set in static config</font>\"" << Endl;
                     str << "</div>" << Endl;
-                    NHttp::OutputRichConfigHTML(str, InitialConfig, YamlProtoConfig, CurrentConfig, DYNAMIC_KINDS, NON_YAML_KINDS, YamlConfigEnabled);
+                    NHttp::OutputRichConfigHTML(str, BaseConfig, YamlProtoConfig, CurrentConfig, DYNAMIC_KINDS, NON_YAML_KINDS, YamlConfigEnabled);
                 }
                 str << "<br />" << Endl;
                 COLLAPSED_REF_CONTENT("effective-startup-config", "Effective startup config") {
                     str << "<div class=\"alert alert-primary tab-left\" role=\"alert\">" << Endl;
                     str << "Some of these configs may be overwritten by dynamic ones." << Endl;
                     str << "</div>" << Endl;
-                    NHttp::OutputConfigHTML(str, InitialConfig);
+                    NHttp::OutputConfigHTML(str, BaseConfig);
                 }
                 str << "<br />" << Endl;
                 COLLAPSED_REF_CONTENT("effective-dynamic-config", "Effective dynamic config") {
@@ -509,18 +593,53 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                     str << "</div>" << Endl;
                     NKikimrConfig::TAppConfig trunc;
                     if (YamlConfigEnabled) {
-                        ReplaceConfigItems(YamlProtoConfig, trunc, KindsToBitMap(DYNAMIC_KINDS), InitialConfig);
-                        ReplaceConfigItems(CurrentConfig, trunc, KindsToBitMap(NON_YAML_KINDS), trunc, false);
+                        ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(KindsToBitMap(DYNAMIC_KINDS)), BaseConfig);
+                        ReplaceConfigItems(CurrentConfig, trunc, FilterKinds(KindsToBitMap(NON_YAML_KINDS)), trunc, false);
                     } else {
-                        ReplaceConfigItems(CurrentConfig, trunc, KindsToBitMap(DYNAMIC_KINDS), InitialConfig);
+                        ReplaceConfigItems(CurrentConfig, trunc, FilterKinds(KindsToBitMap(DYNAMIC_KINDS)), BaseConfig);
                     }
                     NHttp::OutputConfigHTML(str, trunc);
                 }
                 str << "<br />" << Endl;
                 COLLAPSED_REF_CONTENT("debug-info", "Debug info") {
                     DIV_CLASS("tab-left") {
+                        COLLAPSED_REF_CONTENT("args", "Startup process args") {
+                            PRE() {
+                                for (auto& arg : Args) {
+                                    str << "\"" << arg << "\" ";
+                                }
+                            }
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("candidate-startup-config", "Candidate startup config") {
+                            str << "<div class=\"alert alert-primary tab-left\" role=\"alert\">" << Endl;
+                            if (StartupConfigProcessError) {
+                                str << "<b>Error: </b>" << Endl;
+                                PRE() {
+                                    str << StartupConfigInfo;
+                                }
+                            } else if (StartupConfigProcessDiff) {
+                                str << "<b>Configs are different: </b>" << Endl;
+                                PRE() {
+                                    str << StartupConfigInfo;
+                                }
+                            } else {
+                                str << "<b>Configs are same.</b>" << Endl;
+                            }
+                            str << "</div>" << Endl;
+                            NHttp::OutputConfigHTML(str, CandidateStartupConfig);
+                        }
+                        str << "<br />" << Endl;
                         COLLAPSED_REF_CONTENT("effective-config-debug-info", "Effective config debug info") {
-                            NHttp::OutputConfigDebugInfoHTML(str, InitialConfig, YamlProtoConfig, CurrentConfig, ConfigInitInfo, DYNAMIC_KINDS, NON_YAML_KINDS, YamlConfigEnabled);
+                            NHttp::OutputConfigDebugInfoHTML(
+                                str,
+                                BaseConfig,
+                                YamlProtoConfig,
+                                CurrentConfig,
+                                {DebugInfo ? DebugInfo->InitInfo : THashMap<ui32, TConfigItemInfo>{}},
+                                DYNAMIC_KINDS,
+                                NON_YAML_KINDS,
+                                YamlConfigEnabled);
                         }
                         str << "<br />" << Endl;
                         COLLAPSED_REF_CONTENT("state", "State") {
@@ -590,7 +709,27 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                         DIV_CLASS("yaml-sticky-btn") { }
                                     }
                                     TAG_ATTRS(TDiv, {{"id", "yaml-config-item"}, {"name", "yaml-config-itemm"}}) {
-                                        str << YamlConfig;
+                                        str << MainYamlConfig;
+                                    }
+                                }
+                                str << "<hr/>" << Endl;
+                                TAG(TH5) {
+                                    str << "Database Config" << Endl;
+                                }
+                                TAG_CLASS_STYLE(TDiv, "configs-dispatcher", "padding: 0 12px;") {
+                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap fold-yaml-config yaml-btn-3"}, {"title", "fold"}}) {
+                                        DIV_CLASS("yaml-sticky-btn") { }
+                                    }
+                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap unfold-yaml-config yaml-btn-2"}, {"title", "unfold"}}) {
+                                        DIV_CLASS("yaml-sticky-btn") { }
+                                    }
+                                    TAG_ATTRS(TDiv, {{"class", "yaml-sticky-btn-wrap copy-yaml-config yaml-btn-1"}, {"title", "copy"}}) {
+                                        DIV_CLASS("yaml-sticky-btn") { }
+                                    }
+                                    DIV_CLASS("yaml-config-item") {
+                                        if (DatabaseYamlConfig) {
+                                            str << *DatabaseYamlConfig;
+                                        }
                                     }
                                 }
                                 str << "<hr/>" << Endl;
@@ -650,15 +789,17 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                         }
                         str << "<br />" << Endl;
                         COLLAPSED_REF_CONTENT("initial-config", "Initial config") {
-                            NHttp::OutputConfigHTML(str, InitialConfig);
+                            NHttp::OutputConfigHTML(str, BaseConfig);
                         }
-                        str << "<br />" << Endl;
-                        COLLAPSED_REF_CONTENT("initial-cms-config", "Initial CMS config") {
-                            NHttp::OutputConfigHTML(str, InitialCmsConfig);
-                        }
-                        str << "<br />" << Endl;
-                        COLLAPSED_REF_CONTENT("initial-cms-yaml-config", "Initial CMS YAML config") {
-                            NHttp::OutputConfigHTML(str, InitialCmsYamlConfig);
+                        if  (DebugInfo) {
+                            str << "<br />" << Endl;
+                            COLLAPSED_REF_CONTENT("initial-cms-config", "Initial CMS config") {
+                                NHttp::OutputConfigHTML(str, DebugInfo->OldDynConfig);
+                            }
+                            str << "<br />" << Endl;
+                            COLLAPSED_REF_CONTENT("initial-cms-yaml-config", "Initial CMS YAML config") {
+                                NHttp::OutputConfigHTML(str, DebugInfo->NewDynConfig);
+                            }
                         }
                     }
                 }
@@ -673,15 +814,134 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
     HttpRequests.clear();
 }
 
+class TConfigurationResult
+    : public IConfigurationResult
+{
+public:
+    // TODO make ref
+    const NKikimrConfig::TAppConfig& GetConfig() const override {
+        return Config;
+    }
+
+    bool HasMainYamlConfig() const override {
+        return !MainYamlConfig.empty();
+    }
+
+    const TString& GetMainYamlConfig() const override {
+        return MainYamlConfig;
+    }
+
+    TMap<ui64, TString> GetVolatileYamlConfigs() const override {
+        return VolatileYamlConfigs;
+    }
+
+    bool HasDatabaseYamlConfig() const override {
+        return !DatabaseYamlConfig.empty();
+    }
+
+    const TString& GetDatabaseYamlConfig() const override {
+        return DatabaseYamlConfig;
+    }
+
+    NKikimrConfig::TAppConfig Config;
+    TString MainYamlConfig;
+    TMap<ui64, TString> VolatileYamlConfigs;
+    TString DatabaseYamlConfig;
+};
+
+void TConfigsDispatcher::UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
+try {
+    if (!RecordedInitialConfiguratorDeps) {
+        CandidateStartupConfig = {};
+        StartupConfigProcessError = true;
+        StartupConfigProcessDiff = false;
+        StartupConfigInfo = "Startup params not recorded. Corresponding functionality won't work.";
+        *StartupConfigChanged = 0;
+        return;
+    }
+
+    auto &rec = ev->Get()->Record;
+
+    auto dcClient = std::make_unique<TDynConfigClientMock>();
+    auto configs = std::make_shared<TConfigurationResult>();
+    dcClient->SavedResult = configs;
+    configs->Config = rec.GetRawConsoleConfig();
+    configs->MainYamlConfig = rec.GetMainYamlConfig();
+    if (rec.HasDatabaseYamlConfig()) {
+        configs->DatabaseYamlConfig = rec.GetDatabaseYamlConfig();
+    }
+    // TODO volatile
+    RecordedInitialConfiguratorDeps->DynConfigClient = std::move(dcClient);
+    auto deps = RecordedInitialConfiguratorDeps->GetDeps();
+    NConfig::TInitialConfigurator initCfg(deps);
+
+    std::vector<const char*> argv;
+
+    for (const auto& arg : Args) {
+        argv.push_back(arg.data());
+    }
+
+    NLastGetopt::TOpts opts;
+    initCfg.RegisterCliOptions(opts);
+    deps.ProtoConfigFileProvider.RegisterCliOptions(opts);
+
+    NLastGetopt::TOptsParseResultException parseResult(&opts, argv.size(), argv.data());
+
+    initCfg.ValidateOptions(opts, parseResult);
+    initCfg.Parse(parseResult.GetFreeArgs(), nullptr);
+
+    NKikimrConfig::TAppConfig appConfig;
+    ui32 nodeId;
+    TKikimrScopeId scopeId;
+    TString tenantName;
+    TBasicKikimrServicesMask servicesMask;
+    TString clusterName;
+    NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
+
+    initCfg.Apply(
+        appConfig,
+        nodeId,
+        scopeId,
+        tenantName,
+        servicesMask,
+        clusterName,
+        configsDispatcherInitInfo);
+
+    CandidateStartupConfig = appConfig;
+    StartupConfigProcessError = false;
+    StartupConfigProcessDiff = false;
+    StartupConfigInfo.clear();
+    google::protobuf::util::MessageDifferencer md;
+    auto fieldComparator = google::protobuf::util::DefaultFieldComparator();
+    md.set_field_comparator(&fieldComparator);
+    md.ReportDifferencesToString(&StartupConfigInfo);
+    StartupConfigProcessDiff = !md.Compare(BaseConfig, CandidateStartupConfig);
+    *StartupConfigChanged = StartupConfigProcessDiff ? 1 : 0;
+}
+catch (...) {
+    CandidateStartupConfig = {};
+    StartupConfigProcessError = true;
+    StartupConfigProcessDiff = false;
+    StartupConfigInfo = "Got exception while processing candidate config.";
+    *StartupConfigChanged = 1;
+}
+
 void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
 {
     auto &rec = ev->Get()->Record;
 
+    UpdateCandidateStartupConfig(ev);
+
     CurrentConfig = rec.GetConfig();
 
-    const auto& newYamlConfig = rec.GetYamlConfig();
+    auto newYamlConfig = rec.GetMainYamlConfig();
 
-    bool isYamlChanged = newYamlConfig != YamlConfig;
+    bool isYamlChanged = newYamlConfig != MainYamlConfig;
+
+    if (rec.HasDatabaseYamlConfig() && rec.GetDatabaseYamlConfig() != DatabaseYamlConfig.value_or("")) {
+        DatabaseYamlConfig = rec.GetDatabaseYamlConfig();
+        isYamlChanged = true;
+    }
 
     if (rec.VolatileConfigsSize() != VolatileYamlConfigs.size()) {
         isYamlChanged = true;
@@ -695,7 +955,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
     }
 
     if (isYamlChanged) {
-        YamlConfig = newYamlConfig;
+        MainYamlConfig = newYamlConfig;
         VolatileYamlConfigs.clear();
         VolatileYamlConfigHashes.clear();
         for (auto &volatileConfig : rec.GetVolatileConfigs()) {
@@ -708,12 +968,12 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
     bool yamlConfigTurnedOff = false;
 
-    if (!YamlConfig.empty() && isYamlChanged) {
+    if (!MainYamlConfig.empty() && isYamlChanged) {
         newYamlProtoConfig = ParseYamlProtoConfig();
         bool wasYamlConfigEnabled = YamlConfigEnabled;
         YamlConfigEnabled = newYamlProtoConfig.HasYamlConfigEnabled() && newYamlProtoConfig.GetYamlConfigEnabled();
         yamlConfigTurnedOff = wasYamlConfigEnabled && !YamlConfigEnabled;
-    } else if (YamlConfig.empty()) {
+    } else if (MainYamlConfig.empty()) {
         bool wasYamlConfigEnabled = YamlConfigEnabled;
         YamlConfigEnabled = false;
         yamlConfigTurnedOff = wasYamlConfigEnabled && !YamlConfigEnabled;
@@ -741,9 +1001,9 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         bool hasAffectedKinds = false;
 
         if (subscription->Yaml && YamlConfigEnabled) {
-            ReplaceConfigItems(YamlProtoConfig, trunc, subscription->Kinds, InitialConfig);
+            ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(subscription->Kinds), BaseConfig);
         } else {
-            Y_FOR_EACH_BIT(kind, kinds) {
+            Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 if (affectedKinds.contains(kind)) {
                     hasAffectedKinds = true;
                 }
@@ -754,18 +1014,18 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
                 continue;
             }
 
-            ReplaceConfigItems(ev->Get()->Record.GetConfig(), trunc, kinds, InitialConfig);
+            ReplaceConfigItems(ev->Get()->Record.GetConfig(), trunc, FilterKinds(kinds), BaseConfig);
         }
 
-        if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc) || CurrentStateFunc() == &TThis::StateInit) {
+        if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc, FilterKinds(kinds)) || CurrentStateFunc() == &TThis::StateInit) {
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
             subscription->UpdateInProcess->Record.SetLocal(true);
-            Y_FOR_EACH_BIT(kind, kinds) {
+            Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
-            subscription->UpdateInProcessConfigVersion = FilterVersion(ev->Get()->Record.GetConfig().GetVersion(), kinds);
+            subscription->UpdateInProcessConfigVersion = FilterVersion(ev->Get()->Record.GetConfig().GetVersion(), FilterKinds(kinds));
 
             if (YamlConfigEnabled) {
                 UpdateYamlVersion(subscription);
@@ -783,7 +1043,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             subscription->YamlVersion = std::nullopt;
         }
     }
-    
+
     if (CurrentStateFunc() == &TThis::StateInit) {
         Become(&TThis::StateWork);
         ProcessEnqueuedEvents();
@@ -793,7 +1053,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 void TConfigsDispatcher::UpdateYamlVersion(const TSubscription::TPtr &subscription) const
 {
     TYamlVersion yamlVersion;
-    yamlVersion.Version = NYamlConfig::GetVersion(YamlConfig);
+    yamlVersion.Version = NYamlConfig::GetVersion(MainYamlConfig);
     for (auto &[id, hash] : VolatileYamlConfigHashes) {
         yamlVersion.VolatileVersions[id] = hash;
     }
@@ -819,9 +1079,9 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
     auto trunc = std::make_shared<NKikimrConfig::TAppConfig>();
     auto kinds = KindsToBitMap(ev->Get()->ConfigItemKinds);
     if (YamlConfigEnabled && yamlKinds) {
-        ReplaceConfigItems(YamlProtoConfig, *trunc, kinds, InitialConfig);
+        ReplaceConfigItems(YamlProtoConfig, *trunc, FilterKinds(kinds), BaseConfig);
     } else {
-        ReplaceConfigItems(CurrentConfig, *trunc, kinds, InitialConfig);
+        ReplaceConfigItems(CurrentConfig, *trunc, FilterKinds(kinds), BaseConfig);
     }
     resp->Config = trunc;
 
@@ -862,6 +1122,12 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
         "SetConfigSubscriptionRequest handler");
     Y_UNUSED(nonYamlKinds);
     auto kinds = KindsToBitMap(ev->Get()->ConfigItemKinds);
+
+    auto truncKinds = FilterKinds(kinds);
+    if (truncKinds.Empty() && !kinds.Empty()) {
+        return;
+    }
+
     auto subscriberActor = ev->Get()->Subscriber ? ev->Get()->Subscriber : ev->Sender;
 
     auto subscription = FindSubscription(kinds);
@@ -892,9 +1158,9 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
             NKikimrConfig::TAppConfig trunc;
             if (YamlConfigEnabled) {
-                ReplaceConfigItems(YamlProtoConfig, trunc, kinds, InitialConfig);
+                ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(kinds), BaseConfig);
             } else {
-                ReplaceConfigItems(CurrentConfig, trunc, kinds, InitialConfig);
+                ReplaceConfigItems(CurrentConfig, trunc, FilterKinds(kinds), BaseConfig);
             }
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
             Y_FOR_EACH_BIT(kind, kinds) {
@@ -995,15 +1261,18 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev) {
 
     Send(ev->Sender, Response.Release());
 }
-    
-IActor *CreateConfigsDispatcher(
-    const NKikimrConfig::TAppConfig &config,
-    const TMap<TString, TString> &labels,
-    const NKikimrConfig::TAppConfig &initialCmsConfig,
-    const NKikimrConfig::TAppConfig &initialCmsYamlConfig,
-    const THashMap<ui32, TConfigItemInfo> &configInitInfo)
-{
-    return new TConfigsDispatcher(config, labels, initialCmsConfig, initialCmsYamlConfig, configInitInfo);
+
+void TConfigsDispatcher::Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &ev) {
+    auto Response = MakeHolder<TEvConsole::TEvFetchStartupConfigResponse>();
+
+    auto* resp = Response->Record.MutableResponse();
+    resp->set_config(StartupConfigYaml);
+
+    Send(ev->Sender, Response.Release());
+}
+
+IActor *CreateConfigsDispatcher(const TConfigsDispatcherInitInfo& initInfo) {
+    return new TConfigsDispatcher(initInfo);
 }
 
 } // namespace NKikimr::NConsole

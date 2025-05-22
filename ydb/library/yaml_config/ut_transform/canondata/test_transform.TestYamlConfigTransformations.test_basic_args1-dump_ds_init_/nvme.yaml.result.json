@@ -1,0 +1,1 @@
+{"error": true, "stderr": "Terminating due to uncaught exception REDACTED    what() -> \"ydb/library/yaml_config/deprecated/yaml_config_parser.cpp:855: Specify host_configs to use blobstorage init command\"\n of type TWithBackTrace<yexception>\n"}

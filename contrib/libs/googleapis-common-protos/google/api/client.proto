@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2024 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -98,6 +98,22 @@ extend google.protobuf.ServiceOptions {
   //     ...
   //   }
   string oauth_scopes = 1050;
+
+  // The API version of this service, which should be sent by version-aware
+  // clients to the service. This allows services to abide by the schema and
+  // behavior of the service at the time this API version was deployed.
+  // The format of the API version must be treated as opaque by clients.
+  // Services may use a format with an apparent structure, but clients must
+  // not rely on this to determine components within an API version, or attempt
+  // to construct other valid API versions. Note that this is for upcoming
+  // functionality and may not be implemented for all services.
+  //
+  // Example:
+  //
+  //   service Foo {
+  //     option (google.api.api_version) = "v1_20230821_preview";
+  //   }
+  string api_version = 525000001;
 }
 
 // Required information for every language.
@@ -108,6 +124,9 @@ message CommonLanguageSettings {
 
   // The destination where API teams want this client library to be published.
   repeated ClientLibraryDestination destinations = 2;
+
+  // Configuration for which RPCs should be generated in the GAPIC client.
+  SelectiveGapicGeneration selective_gapic_generation = 3;
 }
 
 // Details about how and where to publish client libraries.
@@ -192,6 +211,10 @@ message Publishing {
   // Optional link to proto reference documentation.  Example:
   // https://cloud.google.com/pubsub/lite/docs/reference/rpc
   string proto_reference_documentation_uri = 110;
+
+  // Optional link to REST reference documentation.  Example:
+  // https://cloud.google.com/pubsub/lite/docs/reference/rest
+  string rest_reference_documentation_uri = 111;
 }
 
 // Settings for Java client libraries.
@@ -243,8 +266,28 @@ message PhpSettings {
 
 // Settings for Python client libraries.
 message PythonSettings {
+  // Experimental features to be included during client library generation.
+  // These fields will be deprecated once the feature graduates and is enabled
+  // by default.
+  message ExperimentalFeatures {
+    // Enables generation of asynchronous REST clients if `rest` transport is
+    // enabled. By default, asynchronous REST clients will not be generated.
+    // This feature will be enabled by default 1 month after launching the
+    // feature in preview packages.
+    bool rest_async_io_enabled = 1;
+
+    // Enables generation of protobuf code using new types that are more
+    // Pythonic which are included in `protobuf>=5.29.x`. This feature will be
+    // enabled by default 1 month after launching the feature in preview
+    // packages.
+    bool protobuf_pythonic_types_enabled = 2;
+  }
+
   // Some settings.
   CommonLanguageSettings common = 1;
+
+  // Experimental features to be included during client library generation.
+  ExperimentalFeatures experimental_features = 2;
 }
 
 // Settings for Node client libraries.
@@ -329,6 +372,13 @@ message MethodSettings {
 
   // The fully qualified name of the method, for which the options below apply.
   // This is used to find the method to apply the options.
+  //
+  // Example:
+  //
+  //    publishing:
+  //      method_settings:
+  //      - selector: google.storage.control.v2.StorageControl.CreateFolder
+  //        # method settings for CreateFolder...
   string selector = 1;
 
   // Describes settings to use for long-running operations when generating
@@ -337,17 +387,14 @@ message MethodSettings {
   //
   // Example of a YAML configuration::
   //
-  //  publishing:
-  //    method_settings:
+  //    publishing:
+  //      method_settings:
   //      - selector: google.cloud.speech.v2.Speech.BatchRecognize
   //        long_running:
-  //          initial_poll_delay:
-  //            seconds: 60 # 1 minute
+  //          initial_poll_delay: 60s # 1 minute
   //          poll_delay_multiplier: 1.5
-  //          max_poll_delay:
-  //            seconds: 360 # 6 minutes
-  //          total_poll_timeout:
-  //             seconds: 54000 # 90 minutes
+  //          max_poll_delay: 360s # 6 minutes
+  //          total_poll_timeout: 54000s # 90 minutes
   LongRunning long_running = 2;
 
   // List of top-level fields of the request message, that should be
@@ -356,8 +403,8 @@ message MethodSettings {
   //
   // Example of a YAML configuration:
   //
-  //  publishing:
-  //    method_settings:
+  //    publishing:
+  //      method_settings:
   //      - selector: google.example.v1.ExampleService.CreateExample
   //        auto_populated_fields:
   //        - request_id
@@ -404,4 +451,12 @@ enum ClientLibraryDestination {
 
   // Publish the library to package managers like nuget.org and npmjs.com.
   PACKAGE_MANAGER = 20;
+}
+
+// This message is used to configure the generation of a subset of the RPCs in
+// a service for client libraries.
+message SelectiveGapicGeneration {
+  // An allowlist of the fully qualified names of RPCs that should be included
+  // on public client surfaces.
+  repeated string methods = 1;
 }

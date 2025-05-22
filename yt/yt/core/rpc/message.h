@@ -73,19 +73,19 @@ void FromProto(
 
 EMessageType GetMessageType(const TSharedRefArray& message);
 
-bool ParseRequestHeader(
+[[nodiscard]] bool TryParseRequestHeader(
     const TSharedRefArray& message,
     NProto::TRequestHeader* header);
 
-TSharedRefArray SetRequestHeader(
+[[nodiscard]] TSharedRefArray SetRequestHeader(
     const TSharedRefArray& message,
     const NProto::TRequestHeader& header);
 
-bool TryParseResponseHeader(
+[[nodiscard]] bool TryParseResponseHeader(
     const TSharedRefArray& message,
     NProto::TResponseHeader* header);
 
-TSharedRefArray SetResponseHeader(
+[[nodiscard]] TSharedRefArray SetResponseHeader(
     const TSharedRefArray& message,
     const NProto::TResponseHeader& header);
 
@@ -93,18 +93,19 @@ void MergeRequestHeaderExtensions(
     NProto::TRequestHeader* to,
     const NProto::TRequestHeader& from);
 
-bool ParseRequestCancelationHeader(
+[[nodiscard]] bool TryParseRequestCancelationHeader(
     const TSharedRefArray& message,
     NProto::TRequestCancelationHeader* header);
 
-bool ParseStreamingPayloadHeader(
+[[nodiscard]] bool TryParseStreamingPayloadHeader(
     const TSharedRefArray& message,
     NProto::TStreamingPayloadHeader * header);
 
-bool ParseStreamingFeedbackHeader(
+[[nodiscard]] bool TryParseStreamingFeedbackHeader(
     const TSharedRefArray& message,
     NProto::TStreamingFeedbackHeader* header);
 
+i64 GetMessageHeaderSize(const TSharedRefArray& message);
 i64 GetMessageBodySize(const TSharedRefArray& message);
 int GetMessageAttachmentCount(const TSharedRefArray& message);
 i64 GetTotalMessageAttachmentSize(const TSharedRefArray& message);

@@ -33,7 +33,6 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
         }
     };
 
-    TMutex Mtx;
     TIntrusivePtr<TControlBoard> Board;
     TVector<TLogRecord> HistoryLog;
 
@@ -60,7 +59,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "icb", "Immediate Control Board", false,
-                    ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                    ctx.ActorSystem(), ctx.SelfID);
         }
         Become(&TThis::StateFunc);
     }

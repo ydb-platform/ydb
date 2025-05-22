@@ -1,10 +1,14 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
-namespace NYdb::NFederatedTopic {
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
+
+#include <unordered_set>
+
+namespace NYdb::inline V2::NFederatedTopic {
 
 using NTopic::TPrintable;
 using TDbInfo = Ydb::FederationDiscovery::DatabaseInfo;
@@ -16,10 +20,17 @@ struct TFederatedPartitionSession : public TThrRefBase, public TPrintable<TFeder
     using TPtr = TIntrusivePtr<TFederatedPartitionSession>;
 
 public:
-    TFederatedPartitionSession(const NTopic::TPartitionSession::TPtr& partitionSession, std::shared_ptr<TDbInfo> db)
+    TFederatedPartitionSession(const NTopic::TPartitionSession::TPtr& partitionSession,
+                               std::shared_ptr<TDbInfo> db,
+                               std::shared_ptr<TDbInfo> originDb = nullptr,
+                               TString originPath = "")
         : PartitionSession(partitionSession)
-        , Db(std::move(db))
-        {}
+        , ReadSourceDatabase(std::move(db))
+        , TopicOriginDatabase(originDb ? std::move(originDb) : ReadSourceDatabase)
+        , TopicOriginPath(originPath ? std::move(originPath) : PartitionSession->GetTopicPath())
+        {
+            Y_ABORT_UNLESS(ReadSourceDatabase);
+        }
 
     //! Request partition session status.
     //! Result will come to TPartitionSessionStatusEvent.
@@ -39,7 +50,7 @@ public:
 
     //! Topic path.
     const TString& GetTopicPath() const {
-        return PartitionSession->GetTopicPath();
+        return TopicOriginPath;
     }
 
     //! Partition id.
@@ -48,32 +59,54 @@ public:
     }
 
     const TString& GetDatabaseName() const {
-        return Db->name();
+        return GetTopicOriginDatabaseName();
     }
 
     const TString& GetDatabasePath() const {
-        return Db->path();
+        return GetTopicOriginDatabasePath();
     }
 
     const TString& GetDatabaseId() const {
-        return Db->id();
+        return GetTopicOriginDatabaseId();
+    }
+
+    const TString& GetReadSourceDatabaseName() const {
+        return ReadSourceDatabase->name();
+    }
+
+    const TString& GetReadSourceDatabasePath() const {
+        return ReadSourceDatabase->path();
+    }
+
+    const TString& GetReadSourceDatabaseId() const {
+        return ReadSourceDatabase->id();
+    }
+
+    const TString& GetTopicOriginDatabaseName() const {
+        return TopicOriginDatabase->name();
+    }
+
+    const TString& GetTopicOriginDatabasePath() const {
+        return TopicOriginDatabase->path();
+    }
+
+    const TString& GetTopicOriginDatabaseId() const {
+        return TopicOriginDatabase->id();
     }
 
 private:
     NTopic::TPartitionSession::TPtr PartitionSession;
-    std::shared_ptr<TDbInfo> Db;
+    std::shared_ptr<TDbInfo> ReadSourceDatabase;
+    std::shared_ptr<TDbInfo> TopicOriginDatabase;
+    TString TopicOriginPath;
 };
 
 //! Events for read session.
 struct TReadSessionEvent {
     class TFederatedPartitionSessionAccessor {
     public:
-        TFederatedPartitionSessionAccessor(TFederatedPartitionSession::TPtr partitionSession)
+        explicit TFederatedPartitionSessionAccessor(TFederatedPartitionSession::TPtr partitionSession)
             : FederatedPartitionSession(std::move(partitionSession))
-            {}
-
-        TFederatedPartitionSessionAccessor(NTopic::TPartitionSession::TPtr partitionSession, std::shared_ptr<TDbInfo> db)
-            : FederatedPartitionSession(MakeIntrusive<TFederatedPartitionSession>(partitionSession, std::move(db)))
             {}
 
         inline const TFederatedPartitionSession::TPtr GetFederatedPartitionSession() const {
@@ -88,8 +121,8 @@ struct TReadSessionEvent {
     struct TFederated : public TFederatedPartitionSessionAccessor, public TEvent, public TPrintable<TFederated<TEvent>> {
         using TPrintable<TFederated<TEvent>>::DebugString;
 
-        TFederated(TEvent event, std::shared_ptr<TDbInfo> db)
-            : TFederatedPartitionSessionAccessor(event.GetPartitionSession(), db)
+        TFederated(TEvent event, TFederatedPartitionSession::TPtr federatedPartitionSession)
+            : TFederatedPartitionSessionAccessor(std::move(federatedPartitionSession))
             , TEvent(std::move(event))
             {}
 
@@ -101,6 +134,7 @@ struct TReadSessionEvent {
     using TCommitOffsetAcknowledgementEvent = TFederated<NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>;
     using TStartPartitionSessionEvent = TFederated<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>;
     using TStopPartitionSessionEvent = TFederated<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>;
+    using TEndPartitionSessionEvent = TFederated<NTopic::TReadSessionEvent::TEndPartitionSessionEvent>;
     using TPartitionSessionStatusEvent = TFederated<NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>;
     using TPartitionSessionClosedEvent = TFederated<NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>;
 
@@ -109,10 +143,7 @@ struct TReadSessionEvent {
         using TCompressedMessage = TFederated<NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>;
 
     public:
-        TDataReceivedEvent(NTopic::TReadSessionEvent::TDataReceivedEvent event, std::shared_ptr<TDbInfo> db);
-
-        TDataReceivedEvent(TVector<TMessage> messages, TVector<TCompressedMessage> compressedMessages,
-                           NTopic::TPartitionSession::TPtr partitionSession, std::shared_ptr<TDbInfo> db);
+        TDataReceivedEvent(NTopic::TReadSessionEvent::TDataReceivedEvent event, TFederatedPartitionSession::TPtr federatedPartitionSession);
 
         const NTopic::TPartitionSession::TPtr& GetPartitionSession() const override {
             ythrow yexception() << "GetPartitionSession method unavailable for federated objects, use GetFederatedPartitionSession instead";
@@ -172,19 +203,11 @@ struct TReadSessionEvent {
                                 TCommitOffsetAcknowledgementEvent,
                                 TStartPartitionSessionEvent,
                                 TStopPartitionSessionEvent,
+                                TEndPartitionSessionEvent,
                                 TPartitionSessionStatusEvent,
                                 TPartitionSessionClosedEvent,
                                 TSessionClosedEvent>;
 };
-
-template <typename TEvent>
-TReadSessionEvent::TFederated<TEvent> Federate(TEvent event, std::shared_ptr<TDbInfo> db) {
-    return {std::move(event), std::move(db)};
-}
-
-TReadSessionEvent::TDataReceivedEvent Federate(NTopic::TReadSessionEvent::TDataReceivedEvent event, std::shared_ptr<TDbInfo> db);
-
-TReadSessionEvent::TEvent Federate(NTopic::TReadSessionEvent::TEvent event, std::shared_ptr<TDbInfo> db);
 
 //! Set of offsets to commit.
 //! Class that could store offsets in order to commit them later.
@@ -229,11 +252,11 @@ struct TFederatedWriteSessionSettings : public NTopic::TWriteSessionSettings {
 
     //! Preferred database
     //! If specified database is unavailable, session will write to other database.
-    FLUENT_SETTING_OPTIONAL(TString, PreferredDatabase);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, PreferredDatabase);
 
     //! Write to other databases if there are problems with connection
     //! to the preferred one.
-    FLUENT_SETTING_DEFAULT(bool, AllowFallback, true);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, AllowFallback, true);
 
     TFederatedWriteSessionSettings() = default;
     TFederatedWriteSessionSettings(const TFederatedWriteSessionSettings&) = default;
@@ -273,7 +296,6 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
             bool GracefulStopAfterCommit;
         };
 
-
         //! Set simple handler with data processing and also
         //! set other handlers with default behaviour.
         //! They automatically commit data after processing
@@ -290,7 +312,6 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
         //! commitDataAfterProcessing: automatically commit data after calling of dataHandler.
         //! gracefulReleaseAfterCommit: wait for commit acknowledgements for all inflight data before confirming
         //! partition session destroy.
-
         TSimpleDataHandlers SimpleDataHandlers_;
 
         TSelf& SimpleDataHandlers(std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler,
@@ -303,83 +324,119 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
 
         //! Data size limit for the DataReceivedHandler handler.
         //! The data size may exceed this limit.
-        FLUENT_SETTING_DEFAULT(size_t, MaxMessagesBytes, Max<size_t>());
+        FLUENT_SETTING_DEFAULT_DEPRECATED(size_t, MaxMessagesBytes, Max<size_t>());
 
         //! Function to handle data events.
         //! If this handler is set, data events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TDataReceivedEvent&)>, DataReceivedHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TDataReceivedEvent&)>, DataReceivedHandler);
 
         //! Function to handle commit ack events.
         //! If this handler is set, commit ack events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TCommitOffsetAcknowledgementEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TCommitOffsetAcknowledgementEvent&)>,
                        CommitOffsetAcknowledgementHandler);
 
         //! Function to handle start partition session events.
         //! If this handler is set, create partition session events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TStartPartitionSessionEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TStartPartitionSessionEvent&)>,
                        StartPartitionSessionHandler);
 
         //! Function to handle stop partition session events.
         //! If this handler is set, destroy partition session events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TStopPartitionSessionEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TStopPartitionSessionEvent&)>,
                        StopPartitionSessionHandler);
+
+        //! Function to handle end partition session events.
+        //! If this handler is set, end partition session events will be handled by handler,
+        //! otherwise sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TEndPartitionSessionEvent&)>,
+                       EndPartitionSessionHandler);
 
         //! Function to handle partition session status events.
         //! If this handler is set, partition session status events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TPartitionSessionStatusEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TPartitionSessionStatusEvent&)>,
                        PartitionSessionStatusHandler);
 
         //! Function to handle partition session closed events.
         //! If this handler is set, partition session closed events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TPartitionSessionClosedEvent&)>,
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TPartitionSessionClosedEvent&)>,
                        PartitionSessionClosedHandler);
 
         //! Function to handle session closed events.
         //! If this handler is set, close session events will be handled by handler
         //! and then sent to TReadSession::GetEvent().
         //! Default value is empty function (not set).
-        FLUENT_SETTING(NTopic::TSessionClosedHandler, SessionClosedHandler);
+        FLUENT_SETTING_DEPRECATED(NTopic::TSessionClosedHandler, SessionClosedHandler);
 
         //! Function to handle all event types.
         //! If event with current type has no handler for this type of event,
         //! this handler (if specified) will be used.
         //! If this handler is not specified, event can be received with TReadSession::GetEvent() method.
-        FLUENT_SETTING(std::function<void(TReadSessionEvent::TEvent&)>, CommonHandler);
+        FLUENT_SETTING_DEPRECATED(std::function<void(TReadSessionEvent::TEvent&)>, CommonHandler);
 
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.
         //! Shared between subsessions
-        FLUENT_SETTING(NTopic::IExecutor::TPtr, HandlersExecutor);
+        FLUENT_SETTING_DEPRECATED(NTopic::IExecutor::TPtr, HandlersExecutor);
     };
 
     //! Federated event handlers.
     //! See description in TFederatedEventHandlers class.
-    FLUENT_SETTING(TFederatedEventHandlers, FederatedEventHandlers);
+    FLUENT_SETTING_DEPRECATED(TFederatedEventHandlers, FederatedEventHandlers);
 
-    enum class EReadPolicy {
-        READ_ALL = 0,
-        READ_ORIGINAL,
-        READ_MIRRORED
+
+    //! Read policy settings
+
+    //! Databases to read from.
+    //! Default (empty) value means reading from all available databases.
+    //! Adding duplicates or unavailable databases is okay, they will be ignored.
+    struct TReadOriginalSettings {
+        //! Add reading from specified database if it's available.
+        TReadOriginalSettings& AddDatabase(TString database);
+
+        //! Add reading from several specified databases, if available.
+        TReadOriginalSettings& AddDatabases(std::vector<TString> databases);
+
+        //! Add reading from database(s) with the same location as client.
+        TReadOriginalSettings& AddLocal();
+
+        std::unordered_set<TString> Databases;
     };
 
-    //! Policy for federated reading.
-    //!
-    //! READ_ALL: read will be done from all topic instances from all databases.
-    //! READ_ORIGINAL:
-    //! READ_MIRRORED:
-    FLUENT_SETTING_DEFAULT(EReadPolicy, ReadPolicy, EReadPolicy::READ_ALL);
+    //! Default variant.
+    //! Read original topics specified in NTopic::TReadSessionSettings::Topics from databases, specified in settings.
+    //! Discards previously set ReadOriginal and ReadMirrored settings.
+    TSelf& ReadOriginal(TReadOriginalSettings settings);
+
+    //! Read original and mirrored topics specified in NTopic::TReadSessionSettings::Topics
+    //! from one specified database.
+    //! Discards previously set ReadOriginal and ReadMirrored settings.
+    TSelf& ReadMirrored(TString database);
+
+    bool IsReadMirroredEnabled() {
+        return ReadMirroredEnabled;
+    }
+
+    auto GetDatabasesToReadFrom() {
+        return DatabasesToReadFrom;
+    }
+
+private:
+    // Read policy settings, set via helpers above
+    bool ReadMirroredEnabled = false;
+    std::unordered_set<TString> DatabasesToReadFrom;
 };
 
 
@@ -429,16 +486,16 @@ struct TFederatedTopicClientSettings : public TCommonClientSettingsBase<TFederat
     using TSelf = TFederatedTopicClientSettings;
 
     //! Default executor for compression tasks.
-    FLUENT_SETTING_DEFAULT(NTopic::IExecutor::TPtr, DefaultCompressionExecutor, NTopic::CreateThreadPoolExecutor(2));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(NTopic::IExecutor::TPtr, DefaultCompressionExecutor, NTopic::CreateThreadPoolExecutor(2));
 
     //! Default executor for callbacks.
-    FLUENT_SETTING_DEFAULT(NTopic::IExecutor::TPtr, DefaultHandlersExecutor, NTopic::CreateThreadPoolExecutor(1));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(NTopic::IExecutor::TPtr, DefaultHandlersExecutor, NTopic::CreateThreadPoolExecutor(1));
 
     //! Connection timeoout for federation discovery.
-    FLUENT_SETTING_DEFAULT(TDuration, ConnectionTimeout, TDuration::Seconds(30));
+    FLUENT_SETTING_DEFAULT_DEPRECATED(TDuration, ConnectionTimeout, TDuration::Seconds(30));
 
     //! Retry policy enables automatic retries for non-fatal errors.
-    FLUENT_SETTING_DEFAULT(NTopic::IRetryPolicy::TPtr, RetryPolicy, NTopic::IRetryPolicy::GetDefaultPolicy());
+    FLUENT_SETTING_DEFAULT_DEPRECATED(NTopic::IRetryPolicy::TPtr, RetryPolicy, NTopic::IRetryPolicy::GetDefaultPolicy());
 };
 
 class TFederatedTopicClient {
@@ -448,12 +505,17 @@ public:
     // executors from settings are passed to subclients
     TFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings = {});
 
+    void ProvideCodec(NTopic::ECodec codecId, THolder<NTopic::ICodec>&& codecImpl);
+
     //! Create read session.
     std::shared_ptr<IFederatedReadSession> CreateReadSession(const TFederatedReadSessionSettings& settings);
 
     //! Create write session.
     // std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
+
+protected:
+    void OverrideCodec(NTopic::ECodec codecId, THolder<NTopic::ICodec>&& codecImpl);
 
 private:
     std::shared_ptr<TImpl> Impl_;
@@ -479,6 +541,8 @@ template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TStartPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TStopPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
+template<>
+void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TEndPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TPartitionSessionStatusEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>

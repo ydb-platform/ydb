@@ -1,14 +1,15 @@
 #include "scrub_actor_impl.h"
 #include "restore_corrupted_blob_actor.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 
 namespace NKikimr {
 
     void TScrubCoroImpl::DropGarbageBlob(const TLogoBlobID& fullId) {
-        Y_ABORT_UNLESS(!fullId.PartId());
+        Y_VERIFY_S(!fullId.PartId(), LogPrefix);
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
             STLOGX(GetActorContext(), PRI_NOTICE, BS_VDISK_SCRUB, VDS39, VDISKP(LogPrefix,
                 "dropped garbage unreadable blob"), (BlobId, it->first), (UnreadableParts, it->second.UnreadableParts));
-            *UnreadableBlobsFound -= it->second.UnreadableParts.CountBits();
+            MonGroup.UnreadableBlobsFound() -= it->second.UnreadableParts.CountBits();
             UnreadableBlobs.erase(it);
         }
     }
@@ -21,7 +22,7 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::UpdateUnreadableParts(const TLogoBlobID& fullId, NMatrix::TVectorType corrupted, TDiskPart corruptedPart) {
-        Y_ABORT_UNLESS(!fullId.PartId());
+        Y_VERIFY_S(!fullId.PartId(), LogPrefix);
         const auto it = UnreadableBlobs.find(fullId);
 
         const NMatrix::TVectorType prevCorrupted = it != UnreadableBlobs.end()
@@ -50,17 +51,17 @@ namespace NKikimr {
                 UnreadableBlobs.try_emplace(fullId, corrupted, corruptedPart);
             }
 
-            *UnreadableBlobsFound += corrupted.CountBits() - prevCorrupted.CountBits();
+            MonGroup.UnreadableBlobsFound() += corrupted.CountBits() - prevCorrupted.CountBits();
         }
     }
 
     void TScrubCoroImpl::UpdateReadableParts(const TLogoBlobID& fullId, NMatrix::TVectorType readable) {
-        Y_ABORT_UNLESS(!fullId.PartId());
+        Y_VERIFY_S(!fullId.PartId(), LogPrefix);
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
             STLOGX(GetActorContext(), PRI_NOTICE, BS_VDISK_SCRUB, VDS42, VDISKP(LogPrefix,
                 "read parts of previously unreadable blob"), (BlobId, it->first),
                 (UnreadablePartsBefore, it->second.UnreadableParts), (ReadableParts, readable));
-            *UnreadableBlobsFound -= (it->second.UnreadableParts & readable).CountBits();
+            MonGroup.UnreadableBlobsFound() -= (it->second.UnreadableParts & readable).CountBits();
             if ((it->second.UnreadableParts &= ~readable).Empty()) {
                 UnreadableBlobs.erase(it);
             }
@@ -112,12 +113,12 @@ namespace NKikimr {
                         "recovered parts of previously unreadable blob"), (BlobId, it->first),
                         (UnreadablePartsBefore, data.UnreadableParts), (RecoveredParts, item.Needed));
 
-                    *UnreadableBlobsFound -= (data.UnreadableParts & item.Needed).CountBits();
+                    MonGroup.UnreadableBlobsFound() -= (data.UnreadableParts & item.Needed).CountBits();
                     if ((data.UnreadableParts &= ~item.Needed).Empty()) {
                         UnreadableBlobs.erase(it);
                     }
-
-                    ++*BlobsFixed;
+                    ++MonGroup.BlobsFixed();
+                    
                 } else {
                     STLOG(PRI_WARN, BS_VDISK_SCRUB, VDS07, VDISKP(LogPrefix, "failed to restore corrupted blob"),
                         (BlobId, item.BlobId), (Status, item.Status));
@@ -152,7 +153,7 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::Handle(TEvTakeHullSnapshotResult::TPtr ev) {
-        Y_ABORT_UNLESS(GenerateRestoreCorruptedBlobQueryScheduled);
+        Y_VERIFY_S(GenerateRestoreCorruptedBlobQueryScheduled, LogPrefix);
         GenerateRestoreCorruptedBlobQueryScheduled = false;
 
         auto& snap = ev->Get()->Snap;
@@ -174,7 +175,7 @@ namespace NKikimr {
             if (iter.Seek(id); iter.Valid() && iter.GetCurKey().LogoBlobID() == id) {
                 iter.PutToMerger(&merger);
                 merger.Finish();
-                keepData = barriers.Keep(id, merger.GetMemRec(), merger.GetMemRecsMerged(), snap.HullCtx->AllowKeepFlags,
+                keepData = barriers.Keep(id, merger.GetMemRec(), {}, snap.HullCtx->AllowKeepFlags,
                     true /*allowGarbageCollection*/).KeepData;
                 merger.Clear();
             }

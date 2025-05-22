@@ -1,0 +1,23 @@
+diff --git a/include/__locale b/include/__locale
+index 9675e4b..323ed3e 100644
+--- a/include/__locale
++++ b/include/__locale
+@@ -204,8 +204,7 @@ private:
+ 
+ class _LIBCPP_TYPE_VIS locale::id
+ {
+-    once_flag      __flag_;
+-    int32_t        __id_;
++    std::atomic<int32_t>        __id_;
+ 
+     static int32_t __next_id;
+ public:
+@@ -213,8 +212,6 @@ public:
+     void operator=(const id&) = delete;
+     id(const id&) = delete;
+ 
+-private:
+-    void __init();
+ public:  // only needed for tests
+     long __get();
+ 

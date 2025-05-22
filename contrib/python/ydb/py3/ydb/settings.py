@@ -39,7 +39,7 @@ class BaseRequestSettings(object):
             .with_need_rpc_auth(self.need_rpc_auth)
         )
 
-    def with_compression(self, compression):
+    def with_compression(self, compression) -> "BaseRequestSettings":
         """
         Enables compression for the specific RPC
         :param compression: An RPCCompression enum value.
@@ -48,11 +48,11 @@ class BaseRequestSettings(object):
         self.compression = compression
         return self
 
-    def with_need_rpc_auth(self, need_rpc_auth):
+    def with_need_rpc_auth(self, need_rpc_auth) -> "BaseRequestSettings":
         self.need_rpc_auth = need_rpc_auth
         return self
 
-    def with_header(self, key, value):
+    def with_header(self, key, value) -> "BaseRequestSettings":
         """
         Adds a key-value pair to the request headers.
         :param key: A string with a header key.
@@ -62,7 +62,7 @@ class BaseRequestSettings(object):
         self.headers.append((key, value))
         return self
 
-    def with_trace_id(self, trace_id):
+    def with_trace_id(self, trace_id) -> "BaseRequestSettings":
         """
         Includes trace id for RPC headers
         :param trace_id: A trace id string
@@ -71,7 +71,7 @@ class BaseRequestSettings(object):
         self.trace_id = trace_id
         return self
 
-    def with_request_type(self, request_type):
+    def with_request_type(self, request_type) -> "BaseRequestSettings":
         """
         Includes request type for RPC headers
         :param request_type: A request type string
@@ -80,7 +80,7 @@ class BaseRequestSettings(object):
         self.request_type = request_type
         return self
 
-    def with_operation_timeout(self, timeout):
+    def with_operation_timeout(self, timeout) -> "BaseRequestSettings":
         """
         Indicates that client is no longer interested in the result of operation after the specified duration
         starting from the time operation arrives at the server.
@@ -89,12 +89,12 @@ class BaseRequestSettings(object):
         Timeout of operation does not tell anything about its result, it might be completed successfully
         or cancelled on server.
         :param timeout:
-        :return:
+        :return: The self instance
         """
         self.operation_timeout = timeout
         return self
 
-    def with_cancel_after(self, timeout):
+    def with_cancel_after(self, timeout) -> "BaseRequestSettings":
         """
         Server will try to cancel the operation after the specified duration starting from the time
         the operation arrives at server.
@@ -102,12 +102,12 @@ class BaseRequestSettings(object):
         sent back to client if it was waiting for the operation result.
         In case when cancellation isn't possible, no action will be performed.
         :param timeout:
-        :return:
+        :return: The self instance
         """
         self.cancel_after = timeout
         return self
 
-    def with_timeout(self, timeout):
+    def with_timeout(self, timeout) -> "BaseRequestSettings":
         """
         Client-side timeout to complete request.
         Since YDB doesn't support request cancellation at this moment, this feature should be

@@ -38,7 +38,7 @@ public:
         auto& record = ev->Get()->Record;
         if (const auto& vdisk = VDisk.lock()) {
             auto response = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::ERROR, vdisk->GetVDiskId(),
-                false, false, 0);
+                false, false, false, 0);
             auto& r = response->Record;
             if (VDiskIDFromVDiskID(record.GetVDiskID()) != vdisk->GetVDiskId()) { // RACE
                 r.SetStatus(NKikimrProto::RACE);

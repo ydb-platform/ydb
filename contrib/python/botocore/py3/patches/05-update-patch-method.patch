@@ -1,0 +1,42 @@
+--- contrib/python/botocore/py3/botocore/data/s3/2006-03-01/service-2.json	(rev 12849850)
++++ contrib/python/botocore/py3/botocore/data/s3/2006-03-01/service-2.json	(working copy)
+@@ -9120,14 +9120,20 @@
+       },
+       "payload":"Body"
+     },
+-    "PatchObjectOutput":{
++    "PatchAppendPartSize":{"type": "integer"},
++    "PatchedObjectInfo":{
+       "type":"structure",
+       "members":{
+         "ETag":{"shape":"ETag"},
+         "LastModified":{"shape":"LastModified"}
+       }
+     },
+-    "PatchAppendPartSize":{"type": "integer"},
++    "PatchObjectOutput":{
++      "type":"structure",
++      "members":{
++        "Object":{"shape":"PatchedObjectInfo"}
++      }
++    },
+     "PatchObjectRequest":{
+       "type":"structure",
+       "required":[
+@@ -9166,16 +9172,6 @@
+           "location":"header",
+           "locationName":"If-Match"
+         },
+-        "IfModifiedSince":{
+-          "shape":"IfModifiedSince",
+-          "location":"header",
+-          "locationName":"If-Modified-Since"
+-        },
+-        "IfNoneMatch":{
+-          "shape":"IfNoneMatch",
+-          "location":"header",
+-          "locationName":"If-None-Match"
+-        },
+         "IfUnmodifiedSince":{
+           "shape":"IfUnmodifiedSince",
+           "location":"header",

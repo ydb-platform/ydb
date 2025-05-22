@@ -11,17 +11,17 @@ namespace NFake {
     struct TStarter {
         using TMake = TTabletSetupInfo::TTabletCreationFunc;
 
-        IActor* Do(TActorId user, ui32 retry, ui32 tablet, TMake make, ui32 followerId = 0) noexcept
+        IActor* Do(TActorId user, ui32 retry, ui32 tablet, TMake make, ui32 channelsCount, ui32 followerId = 0)
         {
             const auto simple = TMailboxType::Simple;
 
-            auto *info = MakeTabletInfo(tablet);
+            auto *info = MakeTabletInfo(tablet, channelsCount);
             auto *setup = new TTabletSetupInfo(make, simple, 0, simple, 0);
 
             return new NFake::TOwner(user, retry, info, setup, followerId);
         }
 
-        static TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept
+        virtual TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount)
         {
             const auto none = TErasureType::ErasureNone;
 
@@ -29,7 +29,7 @@ namespace NFake {
 
             info->TabletID = tablet;
             info->TabletType = TTabletTypes::Dummy;
-            info->Channels.resize(4);
+            info->Channels.resize(channelsCount);
 
             for (auto num: xrange(info->Channels.size())) {
                 info->Channels[num].Channel = num;

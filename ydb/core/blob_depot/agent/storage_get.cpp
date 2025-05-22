@@ -1,11 +1,11 @@
 #include "agent_impl.h"
 #include "blob_mapping_cache.h"
-#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvGet>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvGet>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TGetQuery : public TBlobStorageQuery<TEvBlobStorage::TEvGet> {
             std::unique_ptr<TEvBlobStorage::TEvGetResult> Response;
             ui32 AnswersRemain;
@@ -22,6 +22,24 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
+                if (const auto& blk = Request.ReaderTabletData) {
+                    if (CheckBlockForTablet(blk->Id, blk->Generation) != NKikimrProto::OK) {
+                        return;
+                    }
+                }
+
+                if (const auto& blk = Request.ForceBlockTabletData; blk && blk->Generation) {
+                    ui32 blockedGeneration;
+                    if (CheckBlockForTablet(blk->Id, std::nullopt, &blockedGeneration) != NKikimrProto::OK) {
+                        return;
+                    }
+                    if (blockedGeneration != blk->Generation) {
+                        // this can happen only in distributed storage, but not possible in BlobDepot
+                        return EndWithError(NKikimrProto::ERROR, "incorrect blocked generation provided for"
+                            " ForceBlockTabletData in TEvGet query to BlobDepot");
+                    }
+                }
+
                 if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (ui32 i = 0; i < Request.QuerySize; ++i) {
                         const auto& q = Request.Queries[i];
@@ -31,16 +49,8 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 Response = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, Request.QuerySize,
-                    Agent.VirtualGroupId);
+                    TGroupId::FromValue(Agent.VirtualGroupId));
                 AnswersRemain = Request.QuerySize;
-
-                if (Request.ReaderTabletData) {
-                    auto status = Agent.BlocksManager.CheckBlockForTablet(Request.ReaderTabletData->Id, Request.ReaderTabletData->Generation, this, nullptr);
-                    if (status == NKikimrProto::BLOCKED) {
-                        EndWithError(status, "Fail TEvGet due to BLOCKED tablet generation");
-                        return;
-                    }
-                }
 
                 for (ui32 i = 0; i < Request.QuerySize; ++i) {
                     auto& query = Request.Queries[i];
@@ -63,6 +73,10 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 CheckAndFinish();
+            }
+
+            void OnUpdateBlock() override {
+                Initiate();
             }
 
             bool ProcessSingleResult(ui32 queryIdx, const TKeyResolved& result) {
@@ -200,7 +214,7 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        return new TGetQuery(*this, std::move(ev));
+        return new TGetQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

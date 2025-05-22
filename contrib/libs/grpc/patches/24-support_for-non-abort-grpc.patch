@@ -1,0 +1,49 @@
+--- a/src/core/lib/gprpp/crash.cc	(index)
++++ b/src/core/lib/gprpp/crash.cc	(working tree)
+@@ -23,12 +23,24 @@
+ 
+ #include <grpc/support/log.h>
+ 
++namespace {
++    grpc_core::CustomCrashFunction custom_crash;
++}
++
+ namespace grpc_core {
+ 
++void SetCustomCrashFunction(CustomCrashFunction fn) {
++    custom_crash = fn;
++}
++
+ void Crash(y_absl::string_view message, SourceLocation location) {
+   gpr_log(location.file(), location.line(), GPR_LOG_SEVERITY_ERROR, "%s",
+           TString(message).c_str());
+-  abort();
++  if (custom_crash) {
++      custom_crash(location.file(), location.line(), TString(message).c_str());
++  } else {
++      abort();
++  }
+ }
+ 
+ }  // namespace grpc_core
+--- a/src/core/lib/gprpp/crash.h	(index)
++++ b/grpc/src/core/lib/gprpp/crash.h	(working tree)
+@@ -15,6 +15,8 @@
+ #ifndef GRPC_SRC_CORE_LIB_GPRPP_CRASH_H
+ #define GRPC_SRC_CORE_LIB_GPRPP_CRASH_H
+ 
++#include <functional>
++
+ #include <grpc/support/port_platform.h>
+ 
+ #include "y_absl/strings/string_view.h"
+@@ -23,6 +25,9 @@
+ 
+ namespace grpc_core {
+ 
++typedef std::function<void(const char*, int, const char*)> CustomCrashFunction;
++void SetCustomCrashFunction(CustomCrashFunction fn);
++
+ // Crash the program after printing `message`.
+ // ::grpc_core:: prefix to SourceLocation is required to work around a symbol
+ // mismatch bug on MSVC.

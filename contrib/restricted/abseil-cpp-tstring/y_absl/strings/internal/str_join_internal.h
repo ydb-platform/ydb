@@ -31,16 +31,23 @@
 #ifndef Y_ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_
 #define Y_ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_
 
+#include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <util/generic/string.h>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
+#include "y_absl/base/config.h"
+#include "y_absl/base/internal/raw_logging.h"
 #include "y_absl/strings/internal/ostringstream.h"
 #include "y_absl/strings/internal/resize_uninitialized.h"
 #include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/string_view.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
@@ -230,14 +237,19 @@ TString JoinAlgorithm(Iterator start, Iterator end, y_absl::string_view s,
   if (start != end) {
     // Sums size
     auto&& start_value = *start;
-    size_t result_size = start_value.size();
+    // Use uint64_t to prevent size_t overflow. We assume it is not possible for
+    // in memory strings to overflow a uint64_t.
+    uint64_t result_size = start_value.size();
     for (Iterator it = start; ++it != end;) {
       result_size += s.size();
       result_size += (*it).size();
     }
 
     if (result_size > 0) {
-      STLStringResizeUninitialized(&result, result_size);
+      constexpr uint64_t kMaxSize =
+          uint64_t{(std::numeric_limits<size_t>::max)()};
+      Y_ABSL_INTERNAL_CHECK(result_size <= kMaxSize, "size_t overflow");
+      STLStringResizeUninitialized(&result, static_cast<size_t>(result_size));
 
       // Joins strings
       char* result_buf = &*result.begin();
@@ -308,6 +320,15 @@ TString JoinRange(const Range& range, y_absl::string_view separator) {
   using std::begin;
   using std::end;
   return JoinRange(begin(range), end(range), separator);
+}
+
+template <typename Tuple, std::size_t... I>
+TString JoinTuple(const Tuple& value, y_absl::string_view separator,
+                      std::index_sequence<I...>) {
+  return JoinRange(
+      std::initializer_list<y_absl::string_view>{
+          static_cast<const AlphaNum&>(std::get<I>(value)).Piece()...},
+      separator);
 }
 
 }  // namespace strings_internal

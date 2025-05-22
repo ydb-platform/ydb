@@ -1,83 +1,79 @@
 import gc
 import sys
-from typing import Type
+from typing import Callable, Type
 
 import pytest
 
-from multidict._compat import USE_EXTENSIONS
-from multidict._multidict_py import istr as _istr  # noqa: E402
-
-if USE_EXTENSIONS:
-    from multidict._multidict import istr  # type: ignore
-else:
-    from multidict import istr
-
-
 IMPLEMENTATION = getattr(sys, "implementation")  # to suppress mypy error
+GIL_ENABLED = getattr(sys, "_is_gil_enabled", lambda: True)()
 
 
-class IStrMixin:
-
-    cls = Type[istr]
-
-    def test_ctor(self):
-        s = self.cls()
-        assert "" == s
-
-    def test_ctor_str(self):
-        s = self.cls("aBcD")
-        assert "aBcD" == s
-
-    def test_ctor_istr(self):
-        s = self.cls("A")
-        s2 = self.cls(s)
-        assert "A" == s
-        assert s == s2
-
-    def test_ctor_buffer(self):
-        s = self.cls(b"aBc")
-        assert "b'aBc'" == s
-
-    def test_ctor_repr(self):
-        s = self.cls(None)
-        assert "None" == s
-
-    def test_str(self):
-        s = self.cls("aBcD")
-        s1 = str(s)
-        assert s1 == "aBcD"
-        assert type(s1) is str
-
-    def test_eq(self):
-        s1 = "Abc"
-        s2 = self.cls(s1)
-        assert s1 == s2
+def test_ctor(case_insensitive_str_class: Type[str]) -> None:
+    s = case_insensitive_str_class()
+    assert "" == s
 
 
-class TestPyIStr(IStrMixin):
-    cls = _istr
-
-    @staticmethod
-    def _create_strs():
-        _istr("foobarbaz")
-        istr2 = _istr()
-        _istr(istr2)
-
-    @pytest.mark.skipif(
-        IMPLEMENTATION.name != "cpython", reason="PyPy has different GC implementation"
-    )
-    def test_leak(self):
-        gc.collect()
-        cnt = len(gc.get_objects())
-        for _ in range(10000):
-            self._create_strs()
-
-        gc.collect()
-        cnt2 = len(gc.get_objects())
-        assert abs(cnt - cnt2) < 10  # on PyPy these numbers are not equal
+def test_ctor_str(case_insensitive_str_class: Type[str]) -> None:
+    s = case_insensitive_str_class("aBcD")
+    assert "aBcD" == s
 
 
-if USE_EXTENSIONS:
+def test_ctor_istr(case_insensitive_str_class: Type[str]) -> None:
+    s = case_insensitive_str_class("A")
+    s2 = case_insensitive_str_class(s)
+    assert "A" == s
+    assert s == s2
 
-    class TestIStr(IStrMixin):
-        cls = istr
+
+def test_ctor_buffer(case_insensitive_str_class: Type[str]) -> None:
+    s = case_insensitive_str_class(b"aBc")
+    assert "b'aBc'" == s
+
+
+def test_ctor_repr(case_insensitive_str_class: Type[str]) -> None:
+    s = case_insensitive_str_class(None)
+    assert "None" == s
+
+
+def test_str(case_insensitive_str_class: Type[str]) -> None:
+    s = case_insensitive_str_class("aBcD")
+    s1 = str(s)
+    assert s1 == "aBcD"
+    assert type(s1) is str
+
+
+def test_eq(case_insensitive_str_class: Type[str]) -> None:
+    s1 = "Abc"
+    s2 = case_insensitive_str_class(s1)
+    assert s1 == s2
+
+
+@pytest.fixture
+def create_istrs(case_insensitive_str_class: Type[str]) -> Callable[[], None]:
+    """Make a callable populating memory with a few ``istr`` objects."""
+
+    def _create_strs() -> None:
+        case_insensitive_str_class("foobarbaz")
+        istr2 = case_insensitive_str_class()
+        case_insensitive_str_class(istr2)
+
+    return _create_strs
+
+
+@pytest.mark.skipif(
+    IMPLEMENTATION.name != "cpython",
+    reason="PyPy has different GC implementation",
+)
+@pytest.mark.skipif(
+    not GIL_ENABLED,
+    reason="free threading has different GC implementation",
+)
+def test_leak(create_istrs: Callable[[], None]) -> None:
+    gc.collect()
+    cnt = len(gc.get_objects())
+    for _ in range(10000):
+        create_istrs()
+
+    gc.collect()
+    cnt2 = len(gc.get_objects())
+    assert abs(cnt - cnt2) < 10  # on other GC impls these numbers are not equal

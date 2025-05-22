@@ -23,7 +23,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -66,7 +65,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -116,7 +114,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -168,7 +165,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -250,7 +246,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -303,7 +298,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -395,7 +389,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -466,7 +459,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -585,7 +577,6 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -607,7 +598,41 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
 
         UNIT_ASSERT(table1state.IsError);
         UNIT_ASSERT_VALUES_EQUAL(table1state.LastResult, "ERROR: ExecError\n");
-    }    
+    }
+
+    Y_UNIT_TEST(ReadTableUUID) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Columns({
+                {"key", "Uuid", true, false},
+                {"value", "Uuid", false, false}
+            }));
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES "
+            "(Uuid('5e32442b-4613-40b7-8506-b14d86b74ef1'), Uuid('65d4d0aa-1612-4887-86dd-834e4cfc3df5')), "
+            "(Uuid('bbf1d45a-af5f-4939-b58a-2be39fd2f06e'), Uuid('710c9ea5-9fa2-4606-a35f-608d0556eb6f')), "
+            "(Uuid('303f21b5-3805-4133-b706-bfc0e071c528'), Uuid('522e048c-9b4b-4d38-8c89-3996cdaa1c8d'));");
+
+        auto table1 = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
+        UNIT_ASSERT_VALUES_EQUAL(table1,
+            "key = 5e32442b-4613-40b7-8506-b14d86b74ef1, value = 65d4d0aa-1612-4887-86dd-834e4cfc3df5\n"
+            "key = bbf1d45a-af5f-4939-b58a-2be39fd2f06e, value = 710c9ea5-9fa2-4606-a35f-608d0556eb6f\n"
+            "key = 303f21b5-3805-4133-b706-bfc0e071c528, value = 522e048c-9b4b-4d38-8c89-3996cdaa1c8d\n");
+    }
 
 } // Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots)
 

@@ -51,7 +51,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "lease", "Dynamic node lease status",
-                                   false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+                                   false, ctx.ActorSystem(), ctx.SelfID);
         }
 
         Become(&TThis::StatePing);
@@ -140,13 +140,9 @@ private:
 
     void Connect(const TActorContext &ctx)
     {
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        auto &domain = dinfo->GetDomain(NodeIdToDomain(ctx.SelfID.NodeId(), *dinfo));
-        ui32 group = domain.DefaultStateStorageGroup;
-
         NTabletPipe::TClientConfig config;
         config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(group), config);
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(), config);
         NodeBrokerPipe = ctx.Register(pipe);
     }
 

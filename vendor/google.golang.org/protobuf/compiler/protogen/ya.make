@@ -2,10 +2,12 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-SRCS(protogen.go)
+VERSION(v1.36.5)
 
-GO_TEST_SRCS(protogen_test.go)
+SRCS(
+    protogen.go
+    protogen_apilevel.go
+    protogen_opaque.go
+)
 
 END()
-
-RECURSE(gotest)

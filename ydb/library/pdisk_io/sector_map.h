@@ -114,7 +114,7 @@ public:
 
         Y_ABORT_UNLESS((ui32)diskMode < DM_COUNT);
         EDeviceType deviceType = DiskModeToDeviceType(diskMode);
-        DiskModeParams.SeekSleepMicroSeconds = DevicePerformance.at(deviceType).SeekTimeNs;
+        DiskModeParams.SeekSleepMicroSeconds = (DevicePerformance.at(deviceType).SeekTimeNs + 1000) / 1000 - 1;
         DiskModeParams.FirstSectorReadRate = DevicePerformance.at(deviceType).FirstSectorReadBytesPerSec;
         DiskModeParams.LastSectorReadRate = DevicePerformance.at(deviceType).LastSectorReadBytesPerSec;
         DiskModeParams.FirstSectorWriteRate = DevicePerformance.at(deviceType).FirstSectorWriteBytesPerSec;
@@ -145,7 +145,7 @@ private:
         if (size == 0) {
             return;
         }
-        
+
         ui64 beginSector = offset / NSectorMap::SECTOR_SIZE;
         ui64 endSector = (offset + size + NSectorMap::SECTOR_SIZE - 1) / NSectorMap::SECTOR_SIZE;
         ui64 midSector = (beginSector + endSector) / 2;
@@ -191,16 +191,23 @@ public:
     TTicketLock MapLock;
     std::atomic<bool> IsLocked;
     std::optional<std::pair<TDuration, TDuration>> ImitateRandomWait;
-    std::atomic<double> ImitateIoErrorProbability;
-    std::atomic<double> ImitateReadIoErrorProbability;
+    std::atomic<ui64> IoErrorEveryNthRequests;
+    std::atomic<ui64> ReadIoErrorEveryNthRequests;
 
     std::atomic<ui64> AllocatedBytes;
 
+private:
+    THashMap<ui64, TString> Map;
+    NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
+    THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
+    std::function<void()> ReadCallback = nullptr;
+
+public:
     TSectorMap(ui64 deviceSize = 0, NSectorMap::EDiskMode diskMode = NSectorMap::DM_NONE)
       : DeviceSize(deviceSize)
       , IsLocked(false)
-      , ImitateIoErrorProbability(0.0)
-      , ImitateReadIoErrorProbability(0.0)
+      , IoErrorEveryNthRequests(0)
+      , ReadIoErrorEveryNthRequests(0)
       , AllocatedBytes(0)
       , DiskMode(diskMode)
     {
@@ -216,12 +223,13 @@ public:
     }
 
     void ForceSize(ui64 size) {
-        DeviceSize = size;
-        if (DeviceSize < size) {
+        if (size < DeviceSize) {
             for (const auto& [offset, data] : Map) {
                 Y_VERIFY_S(offset + 4096 <= DeviceSize, "It is not possible to shrink TSectorMap with data");
             }
         }
+        
+        DeviceSize = size;
 
         InitSectorOperationThrottler();
     }
@@ -262,9 +270,13 @@ public:
             offset += NSectorMap::SECTOR_SIZE;
             data += NSectorMap::SECTOR_SIZE;
         }
-        
+
         if (SectorOperationThrottler.Get() != nullptr) {
             SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
+        }
+
+        if (ReadCallback) {
+            ReadCallback();
         }
     }
 
@@ -295,9 +307,9 @@ public:
                 data += NSectorMap::SECTOR_SIZE;
             }
         }
-        
+
         if (SectorOperationThrottler.Get() != nullptr) {
-            SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
+            SectorOperationThrottler->ThrottleWrite(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
         }
     }
 
@@ -318,6 +330,11 @@ public:
         return Map.size() * NSectorMap::SECTOR_SIZE;
     }
 
+    void SetReadCallback(std::function<void()> callback) {
+        TGuard<TTicketLock> guard(MapLock);
+        ReadCallback = callback;
+    }
+
     TString ToString() const {
         TStringStream str;
         str << "Serial# " << Serial.Quote() << "\n";
@@ -327,8 +344,8 @@ public:
             str << "ImitateRandomWait# [" << ImitateRandomWait->first << ", "
                 << ImitateRandomWait->first + ImitateRandomWait->second << ")" << "\n";
         }
-        str << "ImitateReadIoErrorProbability# " << ImitateReadIoErrorProbability.load() << "\n";
-        str << "ImitateIoErrorProbability# " << ImitateIoErrorProbability.load() << "\n";
+        str << "ReadIoErrorEveryNthRequests# " << ReadIoErrorEveryNthRequests.load() << "\n";
+        str << "IoErrorEveryNthRequests# " << IoErrorEveryNthRequests.load() << "\n";
         str << "AllocatedBytes (approx.)# " << HumanReadableSize(AllocatedBytes.load(), SF_QUANTITY)  << "\n";
         str << "DataBytes# " << HumanReadableSize(DataBytes(), SF_QUANTITY)  << "\n";
         str << "DiskMode# " << DiskModeToString(DiskMode) << "\n";
@@ -339,17 +356,16 @@ public:
     void LoadFromFile(const TString& path);
     void StoreToFile(const TString& path);
 
+    ui64 GetDeviceSize() const {
+        return DeviceSize;
+    }
+
     NSectorMap::TSectorOperationThrottler::TDiskModeParams* GetDiskModeParams() {
         if (SectorOperationThrottler) {
             return SectorOperationThrottler->GetDiskModeParams();
         }
         return nullptr;
     }
-
-private:
-    THashMap<ui64, TString> Map;
-    NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
-    THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
 };
 
 } // NPDisk

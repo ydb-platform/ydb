@@ -84,7 +84,7 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
 
     void OnActivateExecutor(const TActorContext &ctx) override {
         Become(&TThis::StateWork);
-        if (Executor()->GetStats().IsFollower)
+        if (Executor()->GetStats().IsFollower())
             SignalTabletActive(ctx);
         else
             Execute(new TTxSchemeInit(this), ctx);

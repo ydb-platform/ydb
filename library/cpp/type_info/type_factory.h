@@ -439,7 +439,7 @@ namespace NTi {
 
         /// Reclaim a chunk of memory memory that was allocated via the `AllocateString` function.
         virtual void FreeString(TStringBuf str) noexcept {
-            Free(const_cast<char*>(str.Data()));
+            Free(const_cast<char*>(str.data()));
         }
 
         /// Like `AllocateString`, but works with `TMaybe<TStringBuf>`.
@@ -626,6 +626,18 @@ namespace NTi {
         /// Create a new `Uuid` type. See `NTi::TUuidType` for more info.
         TUuidTypePtr Uuid();
 
+        /// Create a new `Date32` type. See `NTi::TDate32Type` for more info.
+        TDate32TypePtr Date32();
+
+        /// Create a new `Datetime64` type. See `NTi::TDatetime64Type` for more info.
+        TDatetime64TypePtr Datetime64();
+
+        /// Create a new `Timestamp64` type. See `NTi::TTimestamp64Type` for more info.
+        TTimestamp64TypePtr Timestamp64();
+
+        /// Create a new `Interval64` type. See `NTi::TInterval64Type` for more info.
+        TInterval64TypePtr Interval64();
+
         /// Create a new `Optional` type. See `NTi::TOptionalType` for more info.
         /// If `item` is managed by some other factory, it will be deep-copied into this factory.
         TOptionalTypePtr Optional(TTypePtr item);
@@ -811,6 +823,22 @@ namespace NTi {
         /// Create a new `Uuid` type. See `NTi::TUuidType` for more info.
         /// The returned object will live for as long as this factory lives.
         const TUuidType* UuidRaw();
+
+        /// Create a new `Date32` type. See `NTi::TDate32Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TDate32Type* Date32Raw();
+
+        /// Create a new `Datetime64` type. See `NTi::TDatetime64Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TDatetime64Type* Datetime64Raw();
+
+        /// Create a new `Timestamp64` type. See `NTi::TTimestamp64Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TTimestamp64Type* Timestamp64Raw();
+
+        /// Create a new `Interval64` type. See `NTi::TInterval64Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TInterval64Type* Interval64Raw();
 
         /// Create a new `Optional` type. See `NTi::TOptionalType` for more info.
         /// The returned object will live for as long as this factory lives.

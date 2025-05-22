@@ -1,0 +1,12 @@
+--- a/snappy-stubs-public.h	(index)
++++ b/snappy-stubs-public.h	(working tree)
+@@ -38,1 +38,2 @@
+-#include <cstddef>
++#include <cstddef>
++#include "config.h"
+@@ -40,1 +40,1 @@
+-#if 1  // HAVE_SYS_UIO_H
++#if defined(HAVE_SYS_UIO_H)
+@@ -50,1 +50,1 @@ using uint32 = std::uint32_t;
+-#if !1  // !HAVE_SYS_UIO_H
++#if !defined(HAVE_SYS_UIO_H)

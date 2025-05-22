@@ -24,8 +24,6 @@ DEFINE_REFCOUNTED_TYPE(ICallbackProvider)
 struct IQuantizedExecutor
     : public TRefCounted
 {
-    virtual void Initialize(TCallback<void()> workerInitializer = {}) = 0;
-
     //! Starts new quantum of time, returns a future that becomes set
     //! when quantum ends.
     /*!
@@ -38,18 +36,24 @@ struct IQuantizedExecutor
      */
     virtual TFuture<void> Run(TDuration timeout) = 0;
 
-    //! Updates number of workers.
-    virtual void Reconfigure(int workerCount) = 0;
+    //! Updates the number of threads.
+    virtual void SetThreadCount(int threadCount) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IQuantizedExecutor)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TQuantizedExecutorOptions
+{
+    int ThreadCount = 1;
+    std::function<void()> ThreadInitializer;
+};
+
 IQuantizedExecutorPtr CreateQuantizedExecutor(
     TString name,
     ICallbackProviderPtr callbackProvider,
-    int workerCount);
+    TQuantizedExecutorOptions options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

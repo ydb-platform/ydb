@@ -1,6 +1,4 @@
 items:
-- name: Обзор
-  href: index.md
 - name: Общие вопросы
   href: common.md
 - name: SDK
@@ -10,6 +8,8 @@ items:
   href: errors.md
 - name: YQL
   href: yql.md
+- name: Аналитика
+  href: analytics.md
 - name: Все вопросы на одной странице
   href: all.md
 # Essintial for build with contributors, as it fails without that

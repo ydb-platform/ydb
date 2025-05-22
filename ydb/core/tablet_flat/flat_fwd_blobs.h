@@ -3,9 +3,9 @@
 #include "flat_fwd_iface.h"
 #include "flat_fwd_page.h"
 #include "flat_fwd_misc.h"
-#include "flat_page_blobs.h"
 #include "flat_part_screen.h"
 #include "flat_part_slice.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -25,17 +25,16 @@ namespace NFwd {
         {
             Tags.resize(Frames->Stats().Tags.size(), 0);
 
-            Y_ABORT_UNLESS(Edge.size() == Tags.size(), "Invalid edges vector");
+            Y_ENSURE(Edge.size() == Tags.size(), "Invalid edges vector");
         }
 
         ~TBlobs()
         {
-            for (auto &it: Pages) it.Release();
         }
 
-        TResult Handle(IPageLoadingQueue *head, ui32 ref, ui64 lower) noexcept override
+        TResult Get(IPageLoadingQueue *head, ui32 ref, EPage, ui64 lower) override
         {
-            Y_ABORT_UNLESS(ref >= Lower, "Cannot handle backward blob reads");
+            Y_ENSURE(ref >= Lower, "Cannot handle backward blob reads");
 
             auto again = (std::exchange(Tags.at(FrameTo(ref)), 1) == 0);
 
@@ -50,49 +49,47 @@ namespace NFwd {
             return { page.Touch(ref, Stat), more, page.Size < Edge[page.Tag] };
         }
 
-        void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
+        void Forward(IPageLoadingQueue *head, ui64 upper) override
         {
             Preload(head, upper);
         }
 
-        void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept override
+        void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage) override
         {
-            for (auto &one: loaded) {
-                if (!Pages || one.PageId < Pages.front().PageId) {
-                    Y_ABORT("Blobs fwd cache got page below queue");
-                } else if (one.PageId > Pages.back().PageId) {
-                    Y_ABORT("Blobs fwd cache got page above queue");
-                } else if (one.Data.size() > OnFetch) {
-                    Y_ABORT("Blobs fwd cache ahead counters is out of sync");
-                }
-
-                Stat.Saved += one.Data.size();
-                OnFetch -= one.Data.size();
-                OnHold += Lookup(one.PageId).Settle(one);
+            if (!Pages || page.PageId < Pages.front().PageId) {
+                Y_TABLET_ERROR("Blobs fwd cache got page below queue");
+            } else if (page.PageId > Pages.back().PageId) {
+                Y_TABLET_ERROR("Blobs fwd cache got page above queue");
+            } else if (page.Data.size() > OnFetch) {
+                Y_TABLET_ERROR("Blobs fwd cache ahead counters is out of sync");
             }
+
+            Stat.Saved += page.Data.size();
+            OnFetch -= page.Data.size();
+            OnHold += Lookup(page.PageId).Settle(page, std::move(sharedPageRef));
 
             Shrink(false /* do not drop loading pages */);
         }
 
-        TDeque<TScreen::THole> Traced() noexcept
+        TDeque<TScreen::THole> Traced()
         {
             Rewind(Max<TPageId>()).Shrink(true /* complete trace */);
 
             return Trace ? Trace->Unwrap() : TDeque<TScreen::THole>{ };
         }
 
-        TIntrusiveConstPtr<NPage::TFrames> GetFrames() const noexcept
+        TIntrusiveConstPtr<NPage::TFrames> GetFrames() const
         {
             return Frames;
         }
 
-        TIntrusiveConstPtr<TSlices> GetSlices() const noexcept
+        TIntrusiveConstPtr<TSlices> GetSlices() const
         {
             return Filter.GetSlices();
         }
 
     private:
-        TPage& Lookup(ui32 ref) noexcept
+        TPage& Lookup(ui32 ref)
         {
             const auto end = Pages.begin() + Offset;
 
@@ -101,13 +98,13 @@ namespace NFwd {
             } else {
                 auto it = std::lower_bound(Pages.begin(), end, ref);
 
-                Y_ABORT_UNLESS(it != end && it->PageId == ref);
+                Y_ENSURE(it != end && it->PageId == ref);
 
                 return *it;
             }
         }
 
-        ui32 FrameTo(TPageId ref) noexcept
+        ui32 FrameTo(TPageId ref)
         {
             if (ref >= Lower && ref < Upper) {
                 return Lookup(ref).Tag;
@@ -115,7 +112,7 @@ namespace NFwd {
                 return FrameTo(ref, Frames->Relation(ref));
             } else {
                 const auto &page = Lookup(ref);
-                Y_ABORT_UNLESS(page.Size < Max<ui32>(), "Unexpected huge page");
+                Y_ENSURE(page.Size < Max<ui32>(), "Unexpected huge page");
 
                 i16 refer = ref - page.Refer; /* back to relative refer */
 
@@ -123,7 +120,7 @@ namespace NFwd {
             }
         }
 
-        ui32 FrameTo(TPageId ref, NPage::TFrames::TEntry rel) noexcept
+        ui32 FrameTo(TPageId ref, NPage::TFrames::TEntry rel)
         {
             Lower = Min(ref, rel.AbsRef(ref));
             Upper = ref + 1; /* will be extended eventually */
@@ -131,14 +128,14 @@ namespace NFwd {
             return rel.Tag;
         }
 
-        TBlobs& Preload(IPageLoadingQueue *head, ui64 upper) noexcept
+        TBlobs& Preload(IPageLoadingQueue *head, ui64 upper)
         {
             auto until = [this, upper]() { return OnHold + OnFetch < upper; };
 
             while (Grow != Max<TPageId>() && (Grow < Upper || until())) {
                 const auto next = Propagate(Grow);
 
-                Y_ABORT_UNLESS(Grow < next, "Unexpected frame upper boundary");
+                Y_ENSURE(Grow < next, "Unexpected frame upper boundary");
 
                 Grow = (next < Max<TPageId>() ? Grow : next);
 
@@ -151,7 +148,7 @@ namespace NFwd {
                     } else if (page.Fetch == EFetch::None) {
                         auto size = head->AddToQueue(Grow, EPage::Opaque);
 
-                        Y_ABORT_UNLESS(size == page.Size, "Inconsistent page sizez");
+                        Y_ENSURE(size == page.Size, "Inconsistent page sizes");
 
                         page.Fetch = EFetch::Wait;
                         Stat.Fetch += page.Size;
@@ -163,12 +160,12 @@ namespace NFwd {
             return *this;
         }
 
-        TPageId Propagate(const TPageId base) noexcept
+        TPageId Propagate(const TPageId base)
         {
             if (Pages && base <= Pages.back().PageId) {
                 return Lookup(base).Refer;
             } else if (Pages && base != Lower && base - Pages.back().PageId != 1) {
-                Y_ABORT("Cannot do so long jumps around of frames");
+                Y_TABLET_ERROR("Cannot do so long jumps around of frames");
             } else {
                 const auto end = Frames->Relation(base).AbsRef(base);
 
@@ -185,7 +182,7 @@ namespace NFwd {
             }
         }
 
-        TBlobs& Rewind(TPageId until) noexcept
+        TBlobs& Rewind(TPageId until)
         {
             for (; Offset < Pages.size(); Offset++) {
                 auto &page = Pages.at(Offset);
@@ -193,7 +190,7 @@ namespace NFwd {
                 if (page.PageId >= until) {
                     break;
                 } else if (page.Size == 0) {
-                    Y_ABORT("Dropping page that hasn't been propagated");
+                    Y_TABLET_ERROR("Dropping page that hasn't been propagated");
                 } else if (auto size = page.Release().size()) {
                     OnHold -= size;
 
@@ -205,7 +202,7 @@ namespace NFwd {
             return *this;
         }
 
-        TBlobs& Shrink(bool force = false) noexcept
+        TBlobs& Shrink(bool force = false)
         {
             for (; Offset && (Pages[0].Ready() || force); Offset--) {
 
@@ -219,6 +216,7 @@ namespace NFwd {
                     Trace->Pass(Pages.front().PageId);
                 }
 
+                Y_ENSURE(Pages.front().Released(), "Forward cache page still holds data");
                 Pages.pop_front();
             }
 

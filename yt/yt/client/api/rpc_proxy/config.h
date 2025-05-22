@@ -19,22 +19,21 @@ namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TConnectionConfig
+struct TConnectionConfig
     : public NApi::TConnectionConfig
 {
-public:
     static TConnectionConfigPtr CreateFromClusterUrl(
-        TString clusterUrl,
-        std::optional<TString> proxyRole = {});
+        const std::string& clusterUrl,
+        const std::optional<std::string>& proxyRole = {});
 
-    std::optional<TString> ClusterUrl;
+    std::optional<std::string> ClusterUrl;
     std::optional<TClusterTag> ClusterTag;
-    std::optional<TString> ProxyRole;
+    std::optional<std::string> ProxyRole;
     std::optional<EAddressType> ProxyAddressType;
-    std::optional<TString> ProxyNetworkName;
-    std::optional<std::vector<TString>> ProxyAddresses;
+    std::optional<std::string> ProxyNetworkName;
+    std::optional<std::vector<std::string>> ProxyAddresses;
     NRpc::TServiceDiscoveryEndpointsConfigPtr ProxyEndpoints;
-    std::optional<TString> ProxyUnixDomainSocket;
+    std::optional<std::string> ProxyUnixDomainSocket;
     bool EnableProxyDiscovery;
 
     NRpc::TDynamicChannelPoolConfigPtr DynamicChannelPool;
@@ -87,6 +86,10 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(TConnectionConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ValidateConnectionConfig(const TConnectionConfigPtr& config);
 
 ////////////////////////////////////////////////////////////////////////////////
 

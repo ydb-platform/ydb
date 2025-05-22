@@ -8,10 +8,12 @@
 namespace NKikimr {
 
     TVDiskCompactionState::TVDiskCompactionState(
+            const TString& logPrefix,
             TActorId logoBlobsActorId,
             TActorId blocksActorId,
             TActorId barriersActorId)
-        : LogoBlobsActorId(logoBlobsActorId)
+        : VDiskLogPrefix(logPrefix)
+        , LogoBlobsActorId(logoBlobsActorId)
         , BlocksActorId(blocksActorId)
         , BarriersActorId(barriersActorId)
     {}
@@ -20,43 +22,36 @@ namespace NKikimr {
         ui64 requestId = ++RequestIdCounter;
         const auto mode = cReq.Mode;
         auto insRes = Requests.insert({requestId, std::move(cReq)});
-        Y_ABORT_UNLESS(insRes.second);
+        Y_VERIFY_S(insRes.second, VDiskLogPrefix);
         auto &req = insRes.first->second;
 
         if (req.CompactLogoBlobs) {
-            ctx.Send(LogoBlobsActorId, new TEvHullCompact(EHullDbType::LogoBlobs, requestId, mode));
+            ctx.Send(LogoBlobsActorId, new TEvHullCompact(EHullDbType::LogoBlobs, requestId, mode, req.TablesToCompact));
         }
         if (req.CompactBlocks) {
-            ctx.Send(BlocksActorId, new TEvHullCompact(EHullDbType::Blocks, requestId, mode));
+            ctx.Send(BlocksActorId, new TEvHullCompact(EHullDbType::Blocks, requestId, mode, req.TablesToCompact));
         }
         if (req.CompactBarriers) {
-            ctx.Send(BarriersActorId, new TEvHullCompact(EHullDbType::Barriers, requestId, mode));
+            ctx.Send(BarriersActorId, new TEvHullCompact(EHullDbType::Barriers, requestId, mode, req.TablesToCompact));
         }
     }
 
     void TVDiskCompactionState::Setup(const TActorContext &ctx, std::optional<ui64> lsn, TCompactionReq cReq) {
-        Y_ABORT_UNLESS(!cReq.AllDone());
-        if (lsn) {
-            Triggered = true;
-            LsnToCommit = *lsn;
-            WaitQueue.push_back(std::move(cReq));
+        Y_VERIFY_S(!cReq.AllDone(), VDiskLogPrefix);
+        if (!lsn && WaitQueue.empty()) {
+            SendLocalCompactCmd(ctx, std::move(cReq));
         } else {
-            if (Triggered) {
-                // wait until commit
-                WaitQueue.push_back(std::move(cReq));
-            } else {
-                // just single request and no need to wait commit to recovery log
-                SendLocalCompactCmd(ctx, std::move(cReq));
-            }
+            WaitQueue.emplace_back(lsn.value_or(0), std::move(cReq));
         }
     }
 
     void TVDiskCompactionState::Compacted(
             const TActorContext &ctx,
             i64 reqId,
-            EHullDbType dbType) {
+            EHullDbType dbType,
+            const TIntrusivePtr<TVDiskContext>& vCtx) {
         auto it = Requests.find(reqId);
-        Y_ABORT_UNLESS(it != Requests.end());
+        Y_VERIFY_S(it != Requests.end(), VDiskLogPrefix);
         auto &req = it->second;
 
         switch (dbType) {
@@ -67,7 +62,7 @@ namespace NKikimr {
         }
 
         if (req.AllDone()) {
-            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie);
+            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie, vCtx, {});
             // delete req from Request, we handled it
             Requests.erase(it);
         }
@@ -90,11 +85,11 @@ namespace NKikimr {
             }
         };
 
-        auto traverse = [&] (const std::function<bool(const TCompactionReq &)> &extract) {
-            for (const auto &pair : Requests) {
+        auto traverse = [&](const auto& extract) {
+            for (const auto& pair : Requests) {
                 increment(extract(pair.second), false);
             }
-            for (const auto &req : WaitQueue) {
+            for (const auto& [waitingLsn, req] : WaitQueue) {
                 increment(extract(req), true);
             }
         };

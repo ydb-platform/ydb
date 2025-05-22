@@ -4,7 +4,7 @@ Sometimes you may need to free up a block store volume to replace equipment. Or 
 
 ## Move a VDisk from a block store volume {#moving_vdisk}
 
-Get a list of VDisk IDs using [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
+Get a list of VDisk IDs using [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
 
 ```bash
 ydb-dstool -e <bs_endpoint> vdisk list --format tsv --columns VDiskId --no-header
@@ -28,8 +28,8 @@ ydbd admin bs config invoke --proto 'Command { ReassignGroupDisk { GroupId: <Sto
 
 If SelfHeal is disabled or fails to move VDisks automatically, you'll have to run this operation manually:
 
-1. Go to [monitoring](../../maintenance/embedded_monitoring/ydb_monitoring.md) and make sure that the VDisk has actually failed.
-1. Get the appropriate `[NodeId:PDiskId]` using [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
+1. Go to [monitoring](../../reference/embedded-ui/ydb-monitoring.md) and make sure that the VDisk has actually failed.
+1. Get the appropriate `[NodeId:PDiskId]` using [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
 
    ```bash
    ydb-dstool -e <bs_endpoint> vdisk list | fgrep VDISK_ID
@@ -45,8 +45,8 @@ If SelfHeal is disabled or fails to move VDisks automatically, you'll have to ru
 
 To enable the VDisk back after reassignment:
 
-1. Go to [monitoring](../../maintenance/embedded_monitoring/ydb_monitoring.md) and make sure that the VDisk is actually operable.
-1. Get the appropriate `[NodeId:PDiskId]` using [{{ ydb-short-name }} DSTool](../../administration/ydb-dstool-overview.md):
+1. Go to [monitoring](../../reference/embedded-ui/ydb-monitoring.md) and make sure that the VDisk is actually operable.
+1. Get the appropriate `[NodeId:PDiskId]` using [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md):
 
    ```bash
    ydb-dstool -e <bs_endpoint> pdisk list

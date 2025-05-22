@@ -1,12 +1,12 @@
 #pragma once
 #include <ydb/library/ycloud/api/access_service.h>
-#include "grpc_service_settings.h"
+#include <ydb/library/grpc/actor_client/grpc_service_settings.h>
 
 namespace NCloud {
 
 using namespace NKikimr;
 
-struct TAccessServiceSettings : TGrpcClientSettings {};
+struct TAccessServiceSettings : NGrpcActorClient::TGrpcClientSettings {};
 
 IActor* CreateAccessServiceV1(const TAccessServiceSettings& settings);
 IActor* CreateAccessServiceV2(const TAccessServiceSettings& settings);

@@ -6,8 +6,6 @@
 
 #include <library/cpp/yt/string/guid.h>
 
-#include <library/cpp/yt/memory/chunked_memory_allocator.h>
-
 namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -17,7 +15,6 @@ constexpr ui32 NullPacketPartSize = 0xffffffff;
 
 constexpr int TypicalPacketPartCount = 16;
 constexpr int TypicalVariableHeaderSize = TypicalPacketPartCount * (sizeof(ui32) + sizeof(ui64));
-constexpr i64 PacketDecoderChunkSize = 16_KB;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -85,8 +82,6 @@ protected:
 
     TCompactVector<char, TypicalVariableHeaderSize> VariableHeader_;
     size_t VariableHeaderSize_;
-    ui32* PartSizes_;
-    ui64* PartChecksums_;
 
     int PartIndex_ = -1;
     TSharedRefArray Message_;
@@ -151,6 +146,32 @@ protected:
     {
         return static_cast<TDerived*>(this);
     }
+
+
+    ui32 GetPartSize(int index) const
+    {
+        return ReadUnaligned<ui32>(PartSizes_ + index);
+    }
+
+    void SetPartSize(int index, ui32 size)
+    {
+        WriteUnaligned<ui32>(PartSizes_ + index, size);
+    }
+
+
+    ui64 GetPartChecksum(int index) const
+    {
+        return ReadUnaligned<ui64>(PartChecksums_ + index);
+    }
+
+    void SetPartChecksum(int index, ui64 checksum)
+    {
+        WriteUnaligned<ui64>(PartChecksums_ + index, checksum);
+    }
+
+private:
+    ui32* PartSizes_;
+    ui64* PartChecksums_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -160,12 +181,10 @@ class TPacketDecoder
     , public TPacketTranscoderBase<TPacketDecoder>
 {
 public:
-    TPacketDecoder(const NLogging::TLogger& logger, bool verifyChecksum)
+    TPacketDecoder(
+        const NLogging::TLogger& logger,
+        bool verifyChecksum)
         : TPacketTranscoderBase(logger)
-        , Allocator_(
-            PacketDecoderChunkSize,
-            TChunkedMemoryAllocator::DefaultMaxSmallBlockSizeRatio,
-            GetRefCountedTypeCookie<TPacketDecoderTag>())
         , VerifyChecksum_(verifyChecksum)
     {
         Restart();
@@ -240,8 +259,6 @@ public:
 private:
     friend class TPacketTranscoderBase<TPacketDecoder>;
 
-    TChunkedMemoryAllocator Allocator_;
-
     std::vector<TSharedRef> Parts_;
 
     size_t PacketSize_ = 0;
@@ -290,7 +307,7 @@ private:
     bool EndVariableHeaderPhase()
     {
         if (VerifyChecksum_) {
-            auto expectedChecksum = PartChecksums_[FixedHeader_.PartCount];
+            auto expectedChecksum = GetPartChecksum(FixedHeader_.PartCount);
             if (expectedChecksum != NullChecksum) {
                 auto actualChecksum = GetVariableChecksum();
                 if (expectedChecksum != actualChecksum) {
@@ -302,7 +319,7 @@ private:
         }
 
         for (int index = 0; index < static_cast<int>(FixedHeader_.PartCount); ++index) {
-            ui32 partSize = PartSizes_[index];
+            ui32 partSize = GetPartSize(index);
             if (partSize != NullPacketPartSize && partSize > MaxMessagePartSize) {
                 YT_LOG_ERROR("Invalid packet part size (PacketId: %v, PartIndex: %v, PartSize: %v)",
                     FixedHeader_.PacketId,
@@ -319,7 +336,7 @@ private:
     bool EndMessagePartPhase()
     {
         if (VerifyChecksum_) {
-            auto expectedChecksum = PartChecksums_[PartIndex_];
+            auto expectedChecksum = GetPartChecksum(PartIndex_);
             if (expectedChecksum != NullChecksum) {
                 auto actualChecksum = GetChecksum(Parts_[PartIndex_]);
                 if (expectedChecksum != actualChecksum) {
@@ -344,13 +361,13 @@ private:
                 break;
             }
 
-            ui32 partSize = PartSizes_[PartIndex_];
+            ui32 partSize = GetPartSize(PartIndex_);
             if (partSize == NullPacketPartSize) {
                 Parts_.push_back(TSharedRef());
             } else if (partSize == 0) {
                 Parts_.push_back(TSharedRef::MakeEmpty());
             } else {
-                auto part = Allocator_.AllocateAligned(partSize);
+                auto part = TSharedMutableRef::Allocate<TPacketDecoderTag>(partSize);
                 BeginPhase(EPacketPhase::MessagePart, part.Begin(), part.Size());
                 Parts_.push_back(std::move(part));
                 break;
@@ -417,23 +434,22 @@ public:
         if (IsVariablePacket()) {
             AllocateVariableHeader();
 
-            for (int index = 0; index < static_cast<int>(Message_.Size()); ++index) {
-                const auto& part = Message_[index];
-                if (part) {
-                    PartSizes_[index] = part.Size();
-                    PartChecksums_[index] = generateChecksums && index < checksummedPartCount
-                        ? GetChecksum(part)
-                        : NullChecksum;
+            for (int index = 0; index < std::ssize(Message_); ++index) {
+                if (const auto& part = Message_[index]) {
+                    SetPartSize(index, part.Size());
+                    SetPartChecksum(
+                        index,
+                        generateChecksums && index < checksummedPartCount ? GetChecksum(part) : NullChecksum);
                 } else {
-                    PartSizes_[index] = NullPacketPartSize;
-                    PartChecksums_[index] = NullChecksum;
+                    SetPartSize(index, NullPacketPartSize);
+                    SetPartChecksum(index, NullChecksum);
                 }
             }
 
-            PartChecksums_[Message_.Size()] = generateChecksums ? GetVariableChecksum() : NullChecksum;
+            SetPartChecksum(Message_.Size(),  generateChecksums ? GetVariableChecksum() : NullChecksum);
         }
 
-        BeginPhase(EPacketPhase::FixedHeader, &FixedHeader_, sizeof (TPacketHeader));
+        BeginPhase(EPacketPhase::FixedHeader, &FixedHeader_, sizeof(TPacketHeader));
         return true;
     }
 
@@ -494,9 +510,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TPacketTranscoderFactory
+class TPacketTranscoderFactory
     : public IPacketTranscoderFactory
 {
+public:
     std::unique_ptr<IPacketDecoder> CreateDecoder(
         const NLogging::TLogger& logger,
         bool verifyChecksum) const override

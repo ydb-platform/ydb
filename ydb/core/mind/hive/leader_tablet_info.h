@@ -4,6 +4,7 @@
 #include "tablet_info.h"
 #include "follower_tablet_info.h"
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/protos/blobstorage.pb.h>
 
 namespace NKikimr {
 namespace NHive {
@@ -22,10 +23,9 @@ struct TTabletCategoryInfo {
 struct TStoragePoolInfo;
 
 struct TLeaderTabletInfo : TTabletInfo {
-protected:
+public:
     static TString DEFAULT_STORAGE_POOL_NAME;
 
-public:
     struct TChannel {
         TTabletId TabletId;
         ui32 ChannelId;
@@ -49,16 +49,30 @@ public:
         }
     };
 
+    struct TChannelHistoryEntry {
+        ui32 Channel;
+        TTabletChannelInfo::THistoryEntry Entry;
+        ui32 DeletedAtGeneration;
+
+        TChannelHistoryEntry(ui32 channel, const TTabletChannelInfo::THistoryEntry& entry, ui32 deletedAtGeneration)
+            : Channel(channel)
+            , Entry(entry)
+            , DeletedAtGeneration(deletedAtGeneration)
+        {
+        }
+    };
+
     TTabletId Id;
     ETabletState State;
     TTabletTypes::EType Type;
     TFullObjectId ObjectId;
     TSubDomainKey ObjectDomain;
-    TNodeFilter NodeFilter;
     NKikimrHive::TDataCentersPreference DataCentersPreference;
     TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
     TChannelsBindings BoundChannels;
     std::bitset<MAX_TABLET_CHANNELS> ChannelProfileNewGroup;
+    std::queue<TChannelHistoryEntry> DeletedHistory;
+    bool WasAliveSinceCutHistory = true;
     NKikimrHive::TEvReassignTablet::EHiveReassignReason ChannelProfileReassignReason;
     ui32 KnownGeneration;
     TTabletCategoryInfo* Category;
@@ -70,6 +84,7 @@ public:
     TActorId LockedToActor;
     TDuration LockedReconnectTimeout;
     ui64 PendingUnlockSeqNo;
+    bool StoppedByTenant = false;
 
     bool SeizedByChild = false; // transient state for migration - need to delete it later
     bool NeedToReleaseFromParent = false; // transient state for migration - need to delete it later
@@ -80,7 +95,6 @@ public:
         , State(ETabletState::Unknown)
         , Type(TTabletTypes::TypeInvalid)
         , ObjectId(0, 0)
-        , NodeFilter(hive)
         , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO)
         , KnownGeneration(0)
         , Category(nullptr)
@@ -334,10 +348,13 @@ public:
     bool AcquireAllocationUnit(ui32 channelId);
     bool ReleaseAllocationUnit(ui32 channelId);
     const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* FindFreeAllocationUnit(ui32 channelId);
-    TString GetChannelStoragePoolName(const TTabletChannelInfo& channel);
-    TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel);
-    TString GetChannelStoragePoolName(ui32 channelId);
-    TStoragePoolInfo& GetStoragePool(ui32 channelId);
+    TString GetChannelStoragePoolName(const TTabletChannelInfo& channel) const;
+    TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) const;
+    TString GetChannelStoragePoolName(ui32 channelId) const;
+    TStoragePoolInfo& GetStoragePool(ui32 channelId) const;
+    void RestoreDeletedHistory(TTransactionContext& txc);
+
+    void SetType(TTabletTypes::EType type);
 };
 
 } // NHive

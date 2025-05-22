@@ -1,5 +1,7 @@
 #include "kqp_timeouts.h"
 
+#include <ydb/core/protos/table_service_config.pb.h>
+
 namespace NKikimr::NKqp {
 
 
@@ -17,9 +19,10 @@ ui64 GetDefaultQueryTimeoutMs(NKikimrKqp::EQueryType queryType,
         case NKikimrKqp::QUERY_TYPE_SQL_DML:
         case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
         case NKikimrKqp::QUERY_TYPE_AST_DML:
+            return queryLimits.GetDataQueryTimeoutMs();
         case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
         case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
-            return queryLimits.GetDataQueryTimeoutMs();
+            return queryServiceConfig.GetQueryTimeoutDefaultSeconds() * 1000;
 
         case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
             return queryServiceConfig.GetScriptOperationTimeoutDefaultSeconds() 

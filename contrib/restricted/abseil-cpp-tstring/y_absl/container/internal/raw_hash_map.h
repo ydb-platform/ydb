@@ -19,6 +19,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "y_absl/base/attributes.h"
+#include "y_absl/base/config.h"
 #include "y_absl/base/internal/throw_delegate.h"
 #include "y_absl/container/internal/container_memory.h"
 #include "y_absl/container/internal/raw_hash_set.h"  // IWYU pragma: export
@@ -175,13 +177,20 @@ class raw_hash_map : public raw_hash_set<Policy, Hash, Eq, Alloc> {
   template <class K = key_type, class P = Policy, K* = nullptr>
   MappedReference<P> operator[](key_arg<K>&& key)
       Y_ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return Policy::value(&*try_emplace(std::forward<K>(key)).first);
+    // It is safe to use unchecked_deref here because try_emplace
+    // will always return an iterator pointing to a valid item in the table,
+    // since it inserts if nothing is found for the given key.
+    return Policy::value(
+        &this->unchecked_deref(try_emplace(std::forward<K>(key)).first));
   }
 
   template <class K = key_type, class P = Policy>
   MappedReference<P> operator[](const key_arg<K>& key)
       Y_ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return Policy::value(&*try_emplace(key).first);
+    // It is safe to use unchecked_deref here because try_emplace
+    // will always return an iterator pointing to a valid item in the table,
+    // since it inserts if nothing is found for the given key.
+    return Policy::value(&this->unchecked_deref(try_emplace(key).first));
   }
 
  private:
@@ -189,22 +198,24 @@ class raw_hash_map : public raw_hash_set<Policy, Hash, Eq, Alloc> {
   std::pair<iterator, bool> insert_or_assign_impl(K&& k, V&& v)
       Y_ABSL_ATTRIBUTE_LIFETIME_BOUND {
     auto res = this->find_or_prepare_insert(k);
-    if (res.second)
+    if (res.second) {
       this->emplace_at(res.first, std::forward<K>(k), std::forward<V>(v));
-    else
-      Policy::value(&*this->iterator_at(res.first)) = std::forward<V>(v);
-    return {this->iterator_at(res.first), res.second};
+    } else {
+      Policy::value(&*res.first) = std::forward<V>(v);
+    }
+    return res;
   }
 
   template <class K = key_type, class... Args>
   std::pair<iterator, bool> try_emplace_impl(K&& k, Args&&... args)
       Y_ABSL_ATTRIBUTE_LIFETIME_BOUND {
     auto res = this->find_or_prepare_insert(k);
-    if (res.second)
+    if (res.second) {
       this->emplace_at(res.first, std::piecewise_construct,
                        std::forward_as_tuple(std::forward<K>(k)),
                        std::forward_as_tuple(std::forward<Args>(args)...));
-    return {this->iterator_at(res.first), res.second};
+    }
+    return res;
   }
 };
 

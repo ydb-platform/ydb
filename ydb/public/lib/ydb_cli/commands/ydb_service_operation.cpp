@@ -1,8 +1,9 @@
 #include "ydb_service_operation.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_export/export.h>
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 
 #include <util/string/builder.h>
@@ -15,25 +16,24 @@ using namespace NKikimr::NOperationId;
 namespace {
 
     template <typename T>
-    int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EOutputFormat format) {
+    int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EDataFormat format) {
         T operation = client.Get<T>(id).GetValueSync();
+        PrintOperation(operation, format);
+        if (!operation.Ready()) {
+            return EXIT_SUCCESS;
+        }
         switch (operation.Status().GetStatus()) {
         case EStatus::SUCCESS:
-            PrintOperation(operation, format);
             return EXIT_SUCCESS;
-        case EStatus::CANCELLED:
-            PrintOperation(operation, format);
-            return EXIT_FAILURE;
         default:
-            ThrowOnError(operation);
             return EXIT_FAILURE;
         }
     }
 
     template <typename T>
-    void ListOperations(NOperation::TOperationClient& client, ui64 pageSize, const TString& pageToken, EOutputFormat format) {
+    void ListOperations(NOperation::TOperationClient& client, ui64 pageSize, const TString& pageToken, EDataFormat format) {
         NOperation::TOperationsList<T> operations = client.List<T>(pageSize, pageToken).GetValueSync();
-        ThrowOnError(operations);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(operations);
         PrintOperationsList(operations, format);
     }
 
@@ -73,33 +73,35 @@ TCommandGetOperation::TCommandGetOperation()
 void TCommandGetOperation::Config(TConfig& config) {
     TCommandWithOperationId::Config(config);
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandGetOperation::Parse(TConfig& config) {
     TCommandWithOperationId::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 }
 
 int TCommandGetOperation::Run(TConfig& config) {
     NOperation::TOperationClient client(CreateDriver(config));
 
     switch (OperationId.GetKind()) {
-    case Ydb::TOperationId::EXPORT:
+    case TOperationId::EXPORT:
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NExport::TExportToS3Response>(client, OperationId, OutputFormat);
         } else { // fallback to "yt"
             return GetOperation<NExport::TExportToYtResponse>(client, OperationId, OutputFormat);
         }
-    case Ydb::TOperationId::IMPORT:
+    case TOperationId::IMPORT:
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NImport::TImportFromS3Response>(client, OperationId, OutputFormat);
         } else {
             throw TMisuseException() << "Invalid operation ID (unexpected sub-kind of operation)";
         }
-    case Ydb::TOperationId::BUILD_INDEX:
+    case TOperationId::BUILD_INDEX:
         return GetOperation<NTable::TBuildIndexOperation>(client, OperationId, OutputFormat);
+    case TOperationId::SCRIPT_EXECUTION:
+        return GetOperation<NQuery::TScriptExecutionOperation>(client, OperationId, OutputFormat);
     default:
         throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }
@@ -114,7 +116,7 @@ TCommandCancelOperation::TCommandCancelOperation()
 
 int TCommandCancelOperation::Run(TConfig& config) {
     NOperation::TOperationClient client(CreateDriver(config));
-    ThrowOnError(client.Cancel(OperationId).GetValueSync());
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Cancel(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
 
@@ -125,7 +127,7 @@ TCommandForgetOperation::TCommandForgetOperation()
 
 int TCommandForgetOperation::Run(TConfig& config) {
     NOperation::TOperationClient client(CreateDriver(config));
-    ThrowOnError(client.Forget(OperationId).GetValueSync());
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(client.Forget(OperationId).GetValueSync());
     return EXIT_SUCCESS;
 }
 
@@ -134,9 +136,10 @@ void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
         {"export/s3", &ListOperations<NExport::TExportToS3Response>},
         {"import/s3", &ListOperations<NImport::TImportFromS3Response>},
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
+        {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
     };
     if (config.UseExportToYt) {
-        KindToHandler.emplace("export", &ListOperations<NExport::TExportToYtResponse>); // deprecated
+        KindToHandler.emplace("export", THandlerWrapper(&ListOperations<NExport::TExportToYtResponse>, true)); // deprecated
         KindToHandler.emplace("export/yt", &ListOperations<NExport::TExportToYtResponse>);
     }
 }
@@ -145,11 +148,14 @@ TString TCommandListOperations::KindChoices() {
     TStringBuilder help;
 
     bool first = true;
-    for (const auto& kv : KindToHandler) {
+    for (const auto& [kind, handler] : KindToHandler) {
+        if (handler.Hidden) {
+            continue;
+        }
         if (!first) {
             help << ", ";
         }
-        help << kv.first;
+        help << kind;
         first = false;
     }
 
@@ -171,7 +177,7 @@ void TCommandListOperations::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "page-token", "Page token")
         .RequiredArgument("STRING").StoreResult(&PageToken);
     AddDeprecatedJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
 
     config.SetFreeArgsNum(1);
@@ -180,7 +186,7 @@ void TCommandListOperations::Config(TConfig& config) {
 
 void TCommandListOperations::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-    ParseFormats();
+    ParseOutputFormats();
 
     Kind = config.ParseResult->GetFreeArgs()[0];
     if (!KindToHandler.contains(Kind)) {

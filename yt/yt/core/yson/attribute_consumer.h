@@ -3,6 +3,8 @@
 #include "public.h"
 #include "async_consumer.h"
 
+#include <yt/yt/core/ytree/attributes.h>
+
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -54,7 +56,7 @@ class TAttributeValueConsumer
 public:
     TAttributeValueConsumer(
         IAsyncYsonConsumer* underlyingConsumer,
-        TString key);
+        NYTree::IAttributeDictionary::TKey key);
 
     void OnStringScalar(TStringBuf value) override;
     void OnInt64Scalar(i64 value) override;
@@ -76,7 +78,7 @@ public:
 
 private:
     IAsyncYsonConsumer* const UnderlyingConsumer_;
-    const TString Key_;
+    const NYTree::IAttributeDictionary::TKey Key_;
     bool Empty_ = true;
 
     void ProduceKeyIfNeeded();

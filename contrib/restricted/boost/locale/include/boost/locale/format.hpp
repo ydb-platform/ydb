@@ -1,6 +1,6 @@
 //
 // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
-// Copyright (c) 2021-2023 Alexander Grund
+// Copyright (c) 2021-2024 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -295,6 +295,7 @@ namespace boost { namespace locale {
             for(size_t pos = 0; format[pos];) {
                 if(format[pos] != obrk) {
                     if(format[pos] == cbrk && format[pos + 1] == cbrk) {
+                        // Escaped closing brace
                         out << cbrk;
                         pos += 2;
                     } else {
@@ -305,7 +306,9 @@ namespace boost { namespace locale {
                 }
                 pos++;
                 if(format[pos] == obrk) {
+                    // Escaped opening brace
                     out << obrk;
+                    pos++;
                     continue;
                 }
 
@@ -415,6 +418,10 @@ namespace boost { namespace locale {
     typedef basic_format<char> format;
     /// Definition of wchar_t based format
     typedef basic_format<wchar_t> wformat;
+#ifdef __cpp_lib_char8_t
+    /// Definition of char8_t based format
+    typedef basic_format<char8_t> u8format;
+#endif
 
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     /// Definition of char16_t based format

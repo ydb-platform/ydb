@@ -1,0 +1,52 @@
+<sql-statement>
+CREATE TABLE delete_test (
+    id SERIAL PRIMARY KEY,
+    a INT,
+    b text
+);
+</sql-statement>
+<sql-statement>
+INSERT INTO delete_test (a) VALUES (10);
+</sql-statement>
+<sql-statement>
+INSERT INTO delete_test (a, b) VALUES (50, repeat('x', 10000));
+</sql-statement>
+<sql-statement>
+INSERT INTO delete_test (a) VALUES (100);
+</sql-statement>
+<sql-statement>
+-- allow an alias to be specified for DELETE's target table
+DELETE FROM delete_test AS dt WHERE dt.a > 75;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alias is not supported
+    	-- allow an alias to be specified for DELETE's target table
+	^
+<sql-statement>
+-- if an alias is specified, don't allow the original table name
+-- to be referenced
+DELETE FROM delete_test dt WHERE delete_test.a > 25;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alias is not supported
+    	-- if an alias is specified, don't allow the original table name
+	^
+<sql-statement>
+SELECT id, a, char_length(b) FROM delete_test;
+</sql-statement>
+<sql-statement>
+-- delete a row with a TOASTed value
+DELETE FROM delete_test WHERE a > 25;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+SELECT id, a, char_length(b) FROM delete_test;
+</sql-statement>
+<sql-statement>
+DROP TABLE delete_test;
+</sql-statement>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_errors.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/ast/yql_errors.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 namespace NYql {
 

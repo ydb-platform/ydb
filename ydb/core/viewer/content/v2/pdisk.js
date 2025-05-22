@@ -181,6 +181,7 @@ PDisk.prototype.updatePDiskInfo = function(update) {
     case 'OpenFileError':
     case 'ChunkQuotaError':
     case 'DeviceIoError':
+    case 'Stopped':
         pDisk.css('background-color', red);
         this.color = red;
         break;

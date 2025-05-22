@@ -294,6 +294,11 @@ public:
         return AccumulatorCount >= MaxCount / 2;
     }
 
+    void Clear() {
+        AccumulatorValue = ValueType();
+        AccumulatorCount = 0;
+    }
+
 protected:
     ValueType AccumulatorValue;
     size_t AccumulatorCount;
@@ -309,22 +314,25 @@ public:
         , AccumulatorCount()
     {}
 
-    void Push(ValueType value) {
+    bool Push(ValueType value) {
         if (IsValueReady()) {
             ValueType currentValue = GetValue();
             if (value > currentValue) {
                 ValueType newValue = (currentValue + value) / 2;
                 AccumulatorCount++;
                 AccumulatorValue = newValue * AccumulatorCount;
-                return;
+                return false;
             }
         }
+        bool shrink = false;
         if (AccumulatorCount >= MaxCount) {
             AccumulatorValue = AccumulatorValue / 2;
             AccumulatorCount /= 2;
+            shrink = true;
         }
         AccumulatorValue += value;
         AccumulatorCount++;
+        return shrink;
     }
 
     ValueType GetValue() const {
@@ -378,7 +386,7 @@ public:
         return MaximumValue;
     }
 
-    void InitiaizeFrom(const TProto& proto) {
+    void InitializeFrom(const TProto& proto) {
         TProto::CopyFrom(proto);
         if (TProto::ValuesSize() > 0) {
             MaximumValue = *std::max_element(TProto::GetValues().begin(), TProto::GetValues().end());
@@ -395,6 +403,9 @@ public:
     using TProto = NKikimrMetricsProto::TMaximumValueUI64;
 
     void SetValue(TType value, TInstant now = TInstant::Now()) {
+        if (TProto::GetAllTimeMaximum() > 0 || MaximumValue > 0) { // ignoring initial value
+            TProto::SetAllTimeMaximum(std::max(value, TProto::GetAllTimeMaximum()));
+        }
         TDuration elapsedCurrentBucket = now - TInstant::MilliSeconds(TProto::GetLastBucketStartTime());
         if (TProto::ValuesSize() == 0 || elapsedCurrentBucket >= BucketDuration) {
             size_t bucketsPassed = 0;
@@ -436,11 +447,20 @@ public:
         }
     }
 
+    void AdvanceTime(TInstant now) {
+        // Nothing changed, last value is still relevant
+        TType lastValue = {};
+        if (!TProto::GetValues().empty()) {
+            lastValue = *std::prev(TProto::MutableValues()->end());
+        }
+        SetValue(lastValue, now);
+    }
+
     TType GetValue() const {
         return MaximumValue;
     }
 
-    void InitiaizeFrom(const TProto& proto) {
+    void InitializeFrom(const TProto& proto) {
         TProto::CopyFrom(proto);
         if (TProto::ValuesSize() > 0) {
             MaximumValue = *std::max_element(TProto::GetValues().begin(), TProto::GetValues().end());

@@ -25,16 +25,27 @@ namespace NWilson {
         return NActors::TActorId(0, TStringBuf("WilsonUpload", 12));
     }
 
-    struct WilsonUploaderParams {
-        TString Host;
-        ui16 Port;
-        TString RootCA;
+    using TRegisterMonPageCallback = std::function<void(NActors::TActorSystem* actorSystem, const NActors::TActorId& actorId)>;
+
+    struct TWilsonUploaderParams {
+        TString CollectorUrl;
         TString ServiceName;
         std::unique_ptr<IGrpcSigner> GrpcSigner;
+        TMap<TString, TString> Headers;
+
+        ui64 MaxExportedSpansPerSecond = Max<ui64>();
+        ui64 MaxSpansInBatch = 150;
+        ui64 MaxBytesInBatch = 20'000'000;
+        ui64 MaxBatchAccumulationMilliseconds = 1'000;
+        ui32 SpanExportTimeoutSeconds = 60 * 60 * 24 * 365;
+        ui64 MaxExportRequestsInflight = 1;
+
+        TRegisterMonPageCallback RegisterMonPage;
+        NMonitoring::TDynamicCounterPtr Counters;
 
         NActors::IActor* CreateUploader() &&;
     };
 
-    NActors::IActor* CreateWilsonUploader(WilsonUploaderParams params);
+    NActors::IActor* CreateWilsonUploader(TWilsonUploaderParams params);
 
 } // NWilson

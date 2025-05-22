@@ -21,7 +21,7 @@ namespace NKikimr {
 
         // process on-disk data
         void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
-                ui64 /*circaLsn*/) {
+                ui64 /*circaLsn*/, const void* /*sst*/) {
             if (memRec.GetType() != TBlobType::DiskBlob) {
                 return;
             }
@@ -47,6 +47,7 @@ namespace NKikimr {
     };
 
     class TScrubCoroImpl::TSstBlobMerger : public TBlobLocationExtractorMerger {
+        const TString VDiskLogPrefix;
         TLevelIndexSnapshot::TForwardIterator Iter; // whole database iterator to merge records for GC checking
         TIndexRecordMerger Merger; // merger for these records
         TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> Essence;
@@ -54,8 +55,10 @@ namespace NKikimr {
         std::optional<bool> KeepData;
 
     public:
-        TSstBlobMerger(const THullDsSnap& snap, TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> essence)
+        TSstBlobMerger(const THullDsSnap& snap,
+                TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> essence)
             : TBlobLocationExtractorMerger(snap.HullCtx->VCtx->Top->GType)
+            , VDiskLogPrefix(snap.HullCtx->VCtx->VDiskLogPrefix)
             , Iter(snap.HullCtx, &snap.LogoBlobsSnap)
             , Merger(GType)
             , Essence(std::move(essence))
@@ -68,9 +71,9 @@ namespace NKikimr {
 
         // process on-disk data
         void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
-                ui64 circaLsn) {
+                ui64 circaLsn, const auto *sst) {
             if (memRec.GetType() == TBlobType::DiskBlob) {
-                TBlobLocationExtractorMerger::AddFromSegment(memRec, outbound, key, circaLsn);
+                TBlobLocationExtractorMerger::AddFromSegment(memRec, outbound, key, circaLsn, sst);
             }
         }
 
@@ -87,24 +90,23 @@ namespace NKikimr {
         bool Keep(const TLogoBlobID& id) {
             if (!KeepData) {
                 // seek to the desired key; the key MUST exist in the whole database
-                Y_ABORT_UNLESS(Iter.Valid());
-                Y_ABORT_UNLESS(Iter.GetCurKey() <= id);
+                Y_VERIFY_S(Iter.Valid(), VDiskLogPrefix);
+                Y_VERIFY_S(Iter.GetCurKey() <= id, VDiskLogPrefix);
                 if (Iter.GetCurKey() < id) {
                     Iter.Next();
-                    Y_ABORT_UNLESS(Iter.Valid());
+                    Y_VERIFY_S(Iter.Valid(), VDiskLogPrefix);
                     if (Iter.GetCurKey() < id) {
                         Iter.Seek(id);
                     }
                 }
-                Y_ABORT_UNLESS(Iter.Valid() && Iter.GetCurKey() == id);
+                Y_VERIFY_S(Iter.Valid() && Iter.GetCurKey() == id, VDiskLogPrefix);
 
                 // put iterator value to merger
                 Iter.PutToMerger(&Merger);
                 Merger.Finish();
 
                 // obtain keep status
-                NGc::TKeepStatus status = Essence->Keep(id, Merger.GetMemRec(), Merger.GetMemRecsMerged(), AllowKeepFlags,
-                    true /*allowGarbageCollection*/);
+                NGc::TKeepStatus status = Essence->Keep(id, Merger.GetMemRec(), {}, AllowKeepFlags, true /*allowGarbageCollection*/);
 
                 // clear merger for next operation
                 Merger.Clear();

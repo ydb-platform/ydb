@@ -1,8 +1,10 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include "topic_message.h"
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
@@ -32,7 +34,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(ModifyPermissions),
 
         EvTable = EvBegin + 1 * 100,
-        EV_REQUEST_RESPONSE(CreateSession),
+        EvCreateSessionResponse,
         EV_REQUEST_RESPONSE(CreateTable),
         EV_REQUEST_RESPONSE(DropTable),
         EV_REQUEST_RESPONSE(AlterTable),
@@ -48,8 +50,11 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(DescribeTopic),
         EV_REQUEST_RESPONSE(DescribeConsumer),
         EV_REQUEST_RESPONSE(CreateTopicReader),
+        EvTopicReaderGone,
         EV_REQUEST_RESPONSE(ReadTopic),
         EV_REQUEST_RESPONSE(CommitOffset),
+        EvEndTopicPartition,
+        EvStartTopicReadingSession,
 
         EvEnd,
     };
@@ -83,6 +88,18 @@ struct TEvYdbProxy {
         using TBase = TGenericRequest<TDerived, EventType, void>;
     };
 
+    template <typename T>
+    class THasOutFunc {
+        template <typename U>
+        static constexpr std::false_type Detect(...);
+
+        template <typename U, typename = decltype(std::declval<U>().Out(std::declval<IOutputStream&>()))>
+        static constexpr std::true_type Detect(int);
+
+    public:
+        static constexpr bool Value = decltype(Detect<T>(0))::value;
+    };
+
     template <typename TDerived, ui32 EventType, typename T>
     struct TGenericResponse: public TEventLocal<TDerived, EventType> {
         using TResult = T;
@@ -96,44 +113,64 @@ struct TEvYdbProxy {
         {
         }
 
+        TString ToString() const override {
+            auto ret = TStringBuilder() << this->ToStringHeader();
+            if constexpr (THasOutFunc<TResult>::Value) {
+                ret << " { Result: ";
+                Result.Out(ret.Out);
+                ret << " }";
+            }
+            return ret;
+        }
+
         using TBase = TGenericResponse<TDerived, EventType, T>;
     };
 
+    struct TEvTopicReaderGone: public TGenericResponse<TEvTopicReaderGone, EvTopicReaderGone, NYdb::TStatus> {
+        using TBase::TBase;
+    };
+
+    struct TTopicReaderSettings: private NYdb::NTopic::TReadSessionSettings {
+        using TSelf = TTopicReaderSettings;
+        using TBase = NYdb::NTopic::TReadSessionSettings;
+
+        TTopicReaderSettings()
+            : TBase()
+        {
+            AutoPartitioningSupport(true);
+        }
+
+        const TBase& GetBase() const {
+            return *this;
+        }
+
+        FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
+
+        #define PROXY_METHOD(name) \
+            template <typename... Args> \
+            TSelf& name(Args&&... args) { \
+                return static_cast<TSelf&>(TBase::name(std::forward<Args>(args)...)); \
+            } \
+            Y_SEMICOLON_GUARD
+
+        PROXY_METHOD(ConsumerName);
+        PROXY_METHOD(AppendTopics);
+        PROXY_METHOD(MaxMemoryUsageBytes);
+
+        #undef PROXY_METHOD
+    };
+
+    struct TReadTopicSettings {
+        using TSelf = TReadTopicSettings;
+
+        // This option allows you to postpone the auto-commit of read messages. All previously 
+        // read messages will be commited upon subsequent receipt of TEvPoll with SkipCommit set to false.
+        FLUENT_SETTING_DEFAULT(bool, SkipCommit, false);
+    };
+
     struct TReadTopicResult {
-        class TMessage {
-            using TDataEvent = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent;
-            using ECodec = NYdb::NTopic::ECodec;
-
-            explicit TMessage(const TDataEvent::TMessageBase& msg, ECodec codec)
-                : Offset(msg.GetOffset())
-                , Data(msg.GetData())
-                , Codec(codec)
-            {
-            }
-
-        public:
-            explicit TMessage(const TDataEvent::TMessage& msg)
-                : TMessage(msg, ECodec::RAW)
-            {
-            }
-
-            explicit TMessage(const TDataEvent::TCompressedMessage& msg)
-                : TMessage(msg, msg.GetCodec())
-            {
-            }
-
-            ui64 GetOffset() const { return Offset; }
-            const TString& GetData() const { return Data; }
-            TString& GetData() { return Data; }
-            ECodec GetCodec() const { return Codec; }
-
-        private:
-            ui64 Offset;
-            TString Data;
-            ECodec Codec;
-        };
-
         explicit TReadTopicResult(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+            PartitionId = event.GetPartitionSession()->GetPartitionId();
             Messages.reserve(event.GetMessagesCount());
             if (event.HasCompressedMessages()) {
                 for (const auto& msg : event.GetCompressedMessages()) {
@@ -146,7 +183,44 @@ struct TEvYdbProxy {
             }
         }
 
-        TVector<TMessage> Messages;
+        void Out(IOutputStream& out) const;
+
+        ui64 PartitionId;
+        TVector<TTopicMessage> Messages;
+    };
+
+    struct TEndTopicPartitionResult {
+        explicit TEndTopicPartitionResult(const NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event)
+            : PartitionId(event.GetPartitionSession()->GetPartitionId())
+            , AdjacentPartitionsIds(event.GetAdjacentPartitionIds().begin(), event.GetAdjacentPartitionIds().end())
+            , ChildPartitionsIds(event.GetChildPartitionIds().begin(), event.GetChildPartitionIds().end())
+        {
+        }
+
+        void Out(IOutputStream& out) const;
+
+        ui64 PartitionId;
+        TVector<ui64> AdjacentPartitionsIds;
+        TVector<ui64> ChildPartitionsIds;
+    };
+
+    struct TEvEndTopicPartition: public TGenericResponse<TEvEndTopicPartition, EvEndTopicPartition, TEndTopicPartitionResult> {
+        using TBase::TBase;
+    };
+
+    struct TStartTopicReadingSessionResult {
+        explicit TStartTopicReadingSessionResult(const NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event)
+            : ReadSessionId(event.GetPartitionSession()->GetReadSessionId())
+        {
+        }
+
+        void Out(IOutputStream& out) const;
+
+        TString ReadSessionId;
+    };
+
+    struct TEvStartTopicReadingSession: public TGenericResponse<TEvStartTopicReadingSession, EvStartTopicReadingSession, TStartTopicReadingSessionResult> {
+        using TBase::TBase;
     };
 
     #define DEFINE_GENERIC_REQUEST(name, ...) \
@@ -184,9 +258,9 @@ struct TEvYdbProxy {
     DEFINE_GENERIC_REQUEST_RESPONSE(DropTopic, NYdb::TStatus, TString, NYdb::NTopic::TDropTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeTopic, NYdb::NTopic::TDescribeTopicResult, TString, NYdb::NTopic::TDescribeTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeConsumer, NYdb::NTopic::TDescribeConsumerResult, TString, TString, NYdb::NTopic::TDescribeConsumerSettings);
-    DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopicReader, TActorId, NYdb::NTopic::TReadSessionSettings);
-    DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, TReadTopicResult, void);
-    DEFINE_GENERIC_REQUEST_RESPONSE(CommitOffset, NYdb::TStatus, TString, ui64, TString, ui64, NYdb::NTopic::TCommitOffsetSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopicReader, TActorId, TTopicReaderSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(ReadTopic, TReadTopicResult, TReadTopicSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(CommitOffset, NYdb::TStatus, std::string, ui64, std::string, ui64, NYdb::NTopic::TCommitOffsetSettings);
 
     #undef DEFINE_GENERIC_REQUEST_RESPONSE
     #undef DEFINE_GENERIC_RESPONSE
@@ -196,9 +270,9 @@ struct TEvYdbProxy {
 
 #pragma pop_macro("RemoveDirectory")
 
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database, const TString& token);
-IActor* CreateYdbProxy(const TString& endpoint, const TString& database,
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& token);
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl,
     const NKikimrReplication::TStaticCredentials& credentials);
 
 }

@@ -10,11 +10,14 @@ namespace NYT::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THttpIOConfig
+struct THttpIOConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     int ReadBufferSize;
+
+    int MaxRedirectCount;
+
+    bool IgnoreContinueResponses;
 
     TDuration ConnectionIdleTimeout;
 
@@ -32,10 +35,9 @@ DEFINE_REFCOUNTED_TYPE(THttpIOConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerConfig
+struct TServerConfig
     : public THttpIOConfig
 {
-public:
     //! If zero then the port is chosen automatically.
     int Port;
 
@@ -48,7 +50,7 @@ public:
 
     bool EnableKeepAlive;
 
-    bool CancelFiberOnConnectionClose;
+    std::optional<bool> CancelFiberOnConnectionClose;
 
     //! Disables Nagle's algorithm.
     bool NoDelay;
@@ -70,10 +72,9 @@ DEFINE_REFCOUNTED_TYPE(TServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TClientConfig
+struct TClientConfig
     : public THttpIOConfig
 {
-public:
     int MaxIdleConnections;
     NNet::TDialerConfigPtr Dialer;
     bool OmitQuestionMarkForEmptyQuery;
@@ -87,10 +88,9 @@ DEFINE_REFCOUNTED_TYPE(TClientConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRetryingClientConfig
+struct TRetryingClientConfig
     : public NYTree::TYsonStruct
 {
-public:
     TDuration RequestTimeout;
     TDuration AttemptTimeout;
     TDuration BackoffTimeout;
@@ -105,10 +105,9 @@ DEFINE_REFCOUNTED_TYPE(TRetryingClientConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TCorsConfig
+struct TCorsConfig
     : public NYTree::TYsonStruct
 {
-public:
     bool DisableCorsCheck;
     std::vector<TString> HostAllowList;
     std::vector<TString> HostSuffixAllowList;

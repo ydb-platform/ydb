@@ -1,11 +1,12 @@
 RECURSE(
     canondata_sync
     datastreams_helpers
-    docker_compose_helpers
     fq_runner
+    fqrun
     idx_test
     kqprun
     mdb_mock
+    nemesis
     pq_read
     s3_recipe
     token_accessor_mock

@@ -1,16 +1,16 @@
 #include "dqs_opt.h"
 
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/core/type_ann/type_ann_core.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/type_ann/type_ann_core.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
@@ -18,16 +18,16 @@
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_mem_info.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_mem_info.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -57,7 +57,8 @@ namespace NYql::NDqs {
                     TExprBase node{inputExpr};
                     PERFORM_RULE(DqPeepholeRewriteCrossJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteJoinDict, node, ctx);
-                    PERFORM_RULE(DqPeepholeRewriteMapJoin, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewriteMapJoinWithGraceCore, node, ctx);
+                    PERFORM_RULE(DqPeepholeRewriteMapJoinWithMapCore, node, ctx);
                     PERFORM_RULE(DqPeepholeRewritePureJoin, node, ctx);
                     PERFORM_RULE(DqPeepholeRewriteReplicate, node, ctx);
                     PERFORM_RULE(DqPeepholeDropUnusedInputs, node, ctx);
@@ -93,21 +94,21 @@ namespace NYql::NDqs {
                     }
 
                     YQL_CLOG(INFO, ProviderDq) << "DqsRewritePhyBlockReadOnDqIntegration";
-                    return Build<TCoWideFromBlocks>(ctx, node->Pos())
-                            .Input(Build<TCoToFlow>(ctx, node->Pos())
-                                .Input(Build<TDqReadBlockWideWrap>(ctx, node->Pos())
-                                        .Input(readWideWrap.Input())
-                                        .Flags(readWideWrap.Flags())
-                                        .Token(readWideWrap.Token())
-                                    .Done())
-                                .Done())
-                            .Done().Ptr();
+                    return Build<TCoToFlow>(ctx, node->Pos())
+                        .Input(Build<TCoWideFromBlocks>(ctx, node->Pos())
+                            .Input(Build<TDqReadBlockWideWrap>(ctx, node->Pos())
+                                .Input(readWideWrap.Input())
+                                .Flags(readWideWrap.Flags())
+                                .Token(readWideWrap.Token())
+                                .Done().Ptr())
+                            .Done())
+                        .Done().Ptr();
                 }, ctx, optSettings);
         });
     }
 
-    THolder<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext& typesCtx, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry) {
-        return CreateFunctorTransformer([&typesCtx, funcRegistry](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
+    THolder<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext& typesCtx) {
+        return CreateFunctorTransformer([&typesCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
             TOptimizeExprSettings settings(&typesCtx);
             settings.VisitChecker = [&](const TExprNode& node) {
                 return input.Get() == &node || (!TDqReadWrapBase::Match(&node) && !TDqPhyPrecompute::Match(&node));
@@ -116,7 +117,7 @@ namespace NYql::NDqs {
 
             NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
             NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
-            NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(env, *funcRegistry);
+            NKikimr::NMiniKQL::TTypeBuilder typeBuilder(env);
             NKikimr::NMiniKQL::TMemoryUsageInfo memInfo("Precompute");
             NKikimr::NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo);
 
@@ -134,7 +135,7 @@ namespace NYql::NDqs {
                             YQL_ENSURE(dataNode.IsList() && !dataNode.AsList().empty());
                             dataNode = dataNode[0];
                             TStringStream err;
-                            NKikimr::NMiniKQL::TType* mkqlType = NCommon::BuildType(*input.Ref().GetTypeAnn(), pgmBuilder, err);
+                            NKikimr::NMiniKQL::TType* mkqlType = NCommon::BuildType(*input.Ref().GetTypeAnn(), typeBuilder, err);
                             if (!mkqlType) {
                                 ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Failed to process " << TDqPhyPrecompute::CallableName() << " type: " << err.Str()));
                                 return nullptr;
@@ -188,7 +189,7 @@ namespace NYql::NDqs {
                     YQL_ENSURE(dataNode.IsList() && !dataNode.AsList().empty());
                     dataNode = dataNode[0];
                     TStringStream err;
-                    NKikimr::NMiniKQL::TType* mkqlType = NCommon::BuildType(*node->GetTypeAnn(), pgmBuilder, err);
+                    NKikimr::NMiniKQL::TType* mkqlType = NCommon::BuildType(*node->GetTypeAnn(), typeBuilder, err);
                     if (!mkqlType) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to process " << TDqPhyPrecompute::CallableName() << " type: " << err.Str()));
                         return TStatus::Error;

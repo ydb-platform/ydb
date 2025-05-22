@@ -1,0 +1,594 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0746e9cd4bc6ffb17540ab9638dfa1cb
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2002-2007 Niels Provos <provos@citi.umich.edu>
+         * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        buffer.c [2:3]
+        bufferevent.c [2:3]
+        http.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 082b1a41fffa5015f815756cc2f6b7b9
+BELONGS ya.make
+    License text:
+        /* Copyright 2006-2007 Niels Provos
+         * Copyright 2007-2012 Nick Mathewson and Niels Provos
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        evdns.c [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b90bbcf56f9e22951896b662d1340c1
+BELONGS ya.make
+    License text:
+           Copyright (c) 2003 Michael A. Davis <mike@datanerds.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [44:44]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e0c666533d8c10c166b89876ccce2a9
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        kqueue-internal.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0fadbeefe92a23384f4527ecc4101793
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        buffer_iocp.c [2:2]
+        bufferevent_async.c [2:2]
+        bufferevent_openssl.c [2:2]
+        changelist-internal.h [2:2]
+        defer-internal.h [2:2]
+        event_tagging.c [2:3]
+        include/event2/bufferevent_ssl.h [2:2]
+        iocp-internal.h [2:2]
+        ipv6-internal.h [2:2]
+        ratelim-internal.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 12c13673979d84c93fb3f9aed80709bd
+BELONGS ya.make
+    License text:
+           Copyright (c) 1998 Todd C. Miller <Todd.Miller@courtesan.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [41:41]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 13ce363ae6eb95e6da30562d6d8815cf
+BELONGS ya.make
+    License text:
+              Copyright (c) 2010 BitTorrent, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [81:81]
+        evutil_time.c [464:464]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 247b3276a119d8838067969cbabcc850
+BELONGS ya.make
+    License text:
+        /* Copyright 2002 Christopher Clark */
+        /* Copyright 2005-2012 Nick Mathewson */
+        /* Copyright 2009-2012 Niels Provos and Nick Mathewson */
+        /* See license at end. */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ht-internal.h [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 366255da81f164622082d6e6e857079b
+BELONGS ya.make
+    License text:
+         * Copyright 2000-2007 Niels Provos <provos@citi.umich.edu>
+         * Copyright 2007-2012 Niels Provos, Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        epoll.c [2:3]
+        evsignal-internal.h [2:3]
+        include/evhttp.h [2:3]
+        kqueue.c [4:5]
+        poll.c [4:5]
+        select.c [4:5]
+        signal.c [4:5]
+        win32select.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3da890df9fa10383f224d1c72d16c9c3
+BELONGS ya.make
+    License text:
+           Copyright (c) 2000 Dug Song <dugsong@monkey.org>
+           Copyright (c) 1993 The Regents of the University of California.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [37:38]
+        log.c [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 41f7c2c18ae9c0d7c90b8e57e386adfe
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008-2012 Niels Provos, Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        evthread-internal.h [2:2]
+        evthread.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 452658f99fe7971a64b571ccc6e61b06
+BELONGS ya.make
+    License text:
+         * Copyright 2000-2009 Niels Provos <provos@citi.umich.edu>
+         * Copyright 2009-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        devpoll.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49714afdc41a2a2583129057fbed3acd
+BELONGS ya.make
+    License text:
+        /* Copyright 2002 Christopher Clark */
+        /* Copyright 2005-2012 Nick Mathewson */
+        /* Copyright 2009-2012 Niels Provos and Nick Mathewson */
+        /* See license at end. */
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ht-internal.h [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4b7e3a37a14ebd0b46a20796adc38b79
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2006-2007 Niels Provos <provos@citi.umich.edu>
+         * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        evrpc-internal.h [2:3]
+        include/event2/dns.h [2:3]
+        include/event2/dns_compat.h [2:3]
+        include/event2/rpc.h [2:3]
+        include/event2/rpc_compat.h [2:3]
+        include/event2/rpc_struct.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4d7d4c20bd840002b4ae931bb775a39a
+BELONGS ya.make
+    License text:
+        /* Copyright 2006-2007 Niels Provos
+         * Copyright 2007-2012 Nick Mathewson and Niels Provos
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        evdns.c [1:2]
+        evport.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5890bfc11f1b786acdc4535bce0cc746
+BELONGS ya.make
+    License text:
+         * Copyright 2003-2009 Niels Provos <provos@citi.umich.edu>
+         * Copyright 2009-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        epoll_sub.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 64ad41a9da8360b4ae09a7f268770842
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996, David Mazieres <dm@uun.org>
+         * Copyright (c) 2008, Damien Miller <djm@openbsd.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [60:61]
+        arc4random.c [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 713db492a4ae2763feb87886d3630c50
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2007 Sun Microsystems. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [47:47]
+        evport.c [31:31]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7197a7d386bc3f4a432c41de2fb4c167
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2002-2007 Niels Provos <provos@citi.umich.edu>
+         * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5:6]
+        buffer.c [2:3]
+        bufferevent_filter.c [2:4]
+        bufferevent_ratelim.c [2:4]
+        bufferevent_sock.c [2:4]
+        epolltable-internal.h [2:3]
+        evbuffer-internal.h [2:3]
+        event-internal.h [2:3]
+        event.c [2:3]
+        evmap-internal.h [2:2]
+        evmap.c [2:2]
+        evrpc-internal.h [2:3]
+        evrpc.c [2:3]
+        evutil.c [2:2]
+        evutil_rand.c [2:2]
+        evutil_time.c [2:2]
+        http.c [2:3]
+        include/evdns.h [2:3]
+        include/event.h [2:3]
+        include/event2/buffer.h [2:2]
+        include/event2/buffer_compat.h [2:2]
+        include/event2/bufferevent.h [2:3]
+        include/event2/bufferevent_struct.h [2:3]
+        include/event2/dns.h [2:3]
+        include/event2/dns_compat.h [2:3]
+        include/event2/dns_struct.h [2:3]
+        include/event2/event.h [2:3]
+        include/event2/event_compat.h [2:3]
+        include/event2/event_struct.h [2:3]
+        include/event2/http.h [2:3]
+        include/event2/http_compat.h [2:3]
+        include/event2/http_struct.h [2:3]
+        include/event2/keyvalq_struct.h [2:3]
+        include/event2/listener.h [2:3]
+        include/event2/rpc.h [2:3]
+        include/event2/rpc_compat.h [2:3]
+        include/event2/rpc_struct.h [2:3]
+        include/event2/tag.h [2:3]
+        include/event2/tag_compat.h [2:3]
+        include/event2/util.h [2:2]
+        include/event2/visibility.h [3:3]
+        include/evrpc.h [2:3]
+        include/evutil.h [2:2]
+        log-internal.h [2:3]
+        minheap-internal.h [2:2]
+        mm-internal.h [2:2]
+        time-internal.h [2:3]
+        util-internal.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7a2a99a9f08ea1bf1640d0a02cea0402
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2003-2009 Niels Provos <provos@citi.umich.edu>
+         * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        event_tagging.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c2936cc0453639e0a55b4d9f729353c
+BELONGS ya.make
+    License text:
+           Copyright (c) 2000 Dug Song <dugsong@monkey.org>
+           Copyright (c) 1993 The Regents of the University of California.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [37:38]
+        log.c [12:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7fa4218389a7a2d24125e2c3b13b1a44
+BELONGS ya.make
+    License text:
+         * Copyright 2000-2007 Niels Provos <provos@citi.umich.edu>
+         * Copyright 2007-2012 Niels Provos, Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        epoll.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8c7cfe6ef6362b4f64ae0a58953fe2e8
+BELONGS ya.make
+    License text:
+         * Copyright 2006-2007 Niels Provos
+         * Copyright 2007-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        evport.c [4:5]
+        evsignal-internal.h [2:3]
+        include/evhttp.h [2:3]
+        kqueue.c [4:5]
+        poll.c [4:5]
+        select.c [4:5]
+        signal.c [4:5]
+        win32select.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f2dacf4d0ea861ef5e68ac0825102d5
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2009-2012 Niels Provos, Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        bufferevent_pair.c [2:2]
+        event_iocp.c [2:2]
+        listener.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a387dc4f3515be25ebc2c5b93bd3b7f6
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2002-2007 Niels Provos <provos@citi.umich.edu>
+         * Copyright (c) 2007-2012 Niels Provos, Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        bufferevent.c [2:3]
+        include/event2/bufferevent_compat.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a3b0f6940cc8b095be04e48d4272b8a3
+BELONGS ya.make
+    License text:
+           Copyright (c) 2002 Christopher Clark
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [50:50]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aff3dc90bd054108716ad9ad16452926
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996, David Mazieres <dm@uun.org>
+         * Copyright (c) 2008, Damien Miller <djm@openbsd.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [60:61]
+        arc4random.c [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b2fa82f331d4915d971d8941f3f6ad65
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>
+         * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [5:6]
+        epolltable-internal.h [2:3]
+        evbuffer-internal.h [2:3]
+        event-internal.h [2:3]
+        event.c [2:3]
+        evrpc.c [2:3]
+        include/evdns.h [2:3]
+        include/event.h [2:3]
+        include/event2/bufferevent.h [2:3]
+        include/event2/bufferevent_compat.h [2:4]
+        include/event2/bufferevent_struct.h [2:3]
+        include/event2/dns_struct.h [2:3]
+        include/event2/event.h [2:3]
+        include/event2/event_compat.h [2:3]
+        include/event2/event_struct.h [2:3]
+        include/event2/http.h [2:3]
+        include/event2/http_compat.h [2:3]
+        include/event2/http_struct.h [2:3]
+        include/event2/keyvalq_struct.h [2:3]
+        include/event2/listener.h [2:3]
+        include/event2/tag.h [2:3]
+        include/event2/tag_compat.h [2:3]
+        include/evrpc.h [2:3]
+        log-internal.h [2:3]
+        time-internal.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b9bfaef4277e2cce9fac4727bbeba2fd
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        arc4random.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc880feecda4f2f893732dcdc66e796a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2002, Christopher Clark
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ht-internal.h [454:455]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d30bd999d006f7ceb0313656233feb6c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2005-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        log.c [8:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d545942b97f4fbf6349b45d4d286e283
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ht-internal.h [449:452]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db1a948f7d71c9a52587d33ee11ee654
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        bufferevent-internal.h [2:2]
+        include/event2/thread.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ea86b16c35472acd430408ac1459f593
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
+         * Copyright (c) 2002-2006 Niels Provos <provos@citi.umich.edu>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        bufferevent_filter.c [2:4]
+        bufferevent_ratelim.c [2:4]
+        bufferevent_sock.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eaec484363c86db38a328cb8663c659a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        arc4random.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f0e6e66d876a25c8b8a649b895eaf7be
+BELONGS ya.make
+    License text:
+           Copyright (c) 2006 Maxim Yegorushkin <maxim.yegorushkin@gmail.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [53:53]
+        minheap-internal.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f1be63594dfb4ec92eb100d249db5724
+BELONGS ya.make
+    License text:
+         * Copyright 2000-2009 Niels Provos <provos@citi.umich.edu>
+         * Copyright 2009-2012 Niels Provos and Nick Mathewson
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        devpoll.c [2:3]
+        epoll_sub.c [2:3]
+        evthread_pthread.c [2:2]
+        evthread_win32.c [2:2]
+        ht-internal.h [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fce98e564d26e0f3db83f82df32d416c
+BELONGS ya.make
+    License text:
+         * Copyright 2007-2012 Niels Provos and Nick Mathewson
+         * Copyright 2000-2007 Niels Provos <provos@citi.umich.edu>
+         * Copyright 2003 Michael A. Davis <mike@datanerds.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        win32select.c [2:4]

@@ -1,7 +1,9 @@
 #include "zstd.h"
 
 #include <util/generic/size_literals.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/exceptions.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include "output_queue_impl.h"
 
 namespace NYql {
@@ -14,6 +16,7 @@ TReadBuffer::TReadBuffer(NDB::ReadBuffer& source)
     InBuffer.resize(8_KB);
     OutBuffer.resize(64_KB);
     Offset_ = InBuffer.size();
+    Size_ = InBuffer.size();
 }
 
 TReadBuffer::~TReadBuffer() {
@@ -21,24 +24,25 @@ TReadBuffer::~TReadBuffer() {
 }
 
 bool TReadBuffer::nextImpl() {
-    ::ZSTD_inBuffer zIn{InBuffer.data(), InBuffer.size(), Offset_};
+    ::ZSTD_inBuffer zIn{InBuffer.data(), Size_, Offset_};
     ::ZSTD_outBuffer zOut{OutBuffer.data(), OutBuffer.size(), 0ULL};
 
     size_t returnCode = 0ULL;
     if (!Finished_) do {
         if (zIn.pos == zIn.size) {
             zIn.size = Source_.read(InBuffer.data(), InBuffer.size());
+            Size_ = zIn.size;
 
             zIn.pos = Offset_ = 0;
             if (!zIn.size) {
                 // end of stream, need to check that there is no uncompleted blocks
-                YQL_ENSURE(!returnCode, "Incomplete block.");
+                YQL_ENSURE_CODELINE(!returnCode, NYql::NDqProto::StatusIds::BAD_REQUEST, "Incomplete block.");
                 Finished_ = true;
                 break;
             }
         }
         returnCode = ::ZSTD_decompressStream(ZCtx_, &zOut, &zIn);
-        YQL_ENSURE(!::ZSTD_isError(returnCode), "Decompress failed: " << ::ZSTD_getErrorName(returnCode));
+        YQL_ENSURE_CODELINE(!::ZSTD_isError(returnCode), NYql::NDqProto::StatusIds::BAD_REQUEST, "Decompress failed: " << ::ZSTD_getErrorName(returnCode));
         if (!returnCode) {
             // The frame is over, prepare to (maybe) start a new frame
             ::ZSTD_initDStream(ZCtx_);
@@ -63,7 +67,7 @@ public:
         : ZCtx_(::ZSTD_createCStream())
     {
         const auto ret = ::ZSTD_initCStream(ZCtx_, level);
-        YQL_ENSURE(!::ZSTD_isError(ret), "code: " << ret << ", error: " << ::ZSTD_getErrorName(ret));
+        YQL_ENSURE_CODELINE(!::ZSTD_isError(ret), NYql::NDqProto::StatusIds::BAD_REQUEST, "code: " << ret << ", error: " << ::ZSTD_getErrorName(ret));
     }
 
     ~TCompressor() {

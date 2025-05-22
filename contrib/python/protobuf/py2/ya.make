@@ -9,40 +9,21 @@ VERSION(3.17.3)
 ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.17.3.tar.gz)
 
 PEERDIR(
-    contrib/libs/protobuf
-    contrib/libs/protobuf/builtin_proto/protos_from_protobuf
-    contrib/libs/protobuf/builtin_proto/protos_from_protoc
+    contrib/libs/protobuf_old
+    contrib/libs/protobuf_old/builtin_proto/protos_from_protobuf
+    #contrib/libs/protobuf_old/builtin_proto/protos_from_protoc
     contrib/python/six
 )
 
 ADDINCL(
     contrib/python/protobuf/py2
+    contrib/libs/protobuf_old
+    contrib/libs/protobuf_old/src
 )
 
 NO_COMPILER_WARNINGS()
 
 NO_LINT()
-
-CFLAGS(
-    -DPYTHON_PROTO2_CPP_IMPL_V2
-)
-
-SRCS(
-    google/protobuf/internal/api_implementation.cc
-    google/protobuf/pyext/descriptor.cc
-    google/protobuf/pyext/descriptor_containers.cc
-    google/protobuf/pyext/descriptor_database.cc
-    google/protobuf/pyext/descriptor_pool.cc
-    google/protobuf/pyext/extension_dict.cc
-    google/protobuf/pyext/field.cc
-    google/protobuf/pyext/map_container.cc
-    google/protobuf/pyext/message.cc
-    google/protobuf/pyext/message_factory.cc
-    google/protobuf/pyext/message_module.cc
-    google/protobuf/pyext/repeated_composite_container.cc
-    google/protobuf/pyext/repeated_scalar_container.cc
-    google/protobuf/pyext/unknown_fields.cc
-)
 
 PY_REGISTER(
     google.protobuf.internal._api_implementation
@@ -83,6 +64,29 @@ PY_SRCS(
     google/protobuf/text_encoding.py
     google/protobuf/text_format.py
     google/protobuf/util/__init__.py
+)
+
+NO_LTO()
+
+CFLAGS(
+    -DPYTHON_PROTO2_CPP_IMPL_V2
+)
+
+SRCS(
+    google/protobuf/internal/api_implementation.cc
+    google/protobuf/pyext/descriptor.cc
+    google/protobuf/pyext/descriptor_containers.cc
+    google/protobuf/pyext/descriptor_database.cc
+    google/protobuf/pyext/descriptor_pool.cc
+    google/protobuf/pyext/extension_dict.cc
+    google/protobuf/pyext/field.cc
+    google/protobuf/pyext/map_container.cc
+    google/protobuf/pyext/message.cc
+    google/protobuf/pyext/message_factory.cc
+    google/protobuf/pyext/message_module.cc
+    google/protobuf/pyext/repeated_composite_container.cc
+    google/protobuf/pyext/repeated_scalar_container.cc
+    google/protobuf/pyext/unknown_fields.cc
 )
 
 END()

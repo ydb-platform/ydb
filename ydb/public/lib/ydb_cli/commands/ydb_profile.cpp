@@ -94,8 +94,8 @@ namespace {
 
     };
 
-    TString BlurSecret(const TString& in) {
-        TString out(in);
+    std::string BlurSecret(const std::string& in) {
+        std::string out(in);
         size_t clearSymbolsCount = Min(size_t(10), out.length() / 4);
         for (size_t i = clearSymbolsCount; i < out.length() - clearSymbolsCount; ++i) {
             out[i] = '*';
@@ -103,8 +103,8 @@ namespace {
         return out;
     }
 
-    TString ReplaceWithAsterisks(const TString& in) {
-        return TString(in.length(), '*');
+    std::string ReplaceWithAsterisks(const std::string& in) {
+        return std::string(in.length(), '*');
     }
 
     void SetupProfileName(TString& profileName, std::shared_ptr<IProfileManager> profileManager) {
@@ -197,8 +197,8 @@ namespace {
         }
     }
 
-    TString TryBlurValue(const TString& authMethod, const TString& value) {
-        if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file") {
+    std::string TryBlurValue(const TString& authMethod, const std::string& value) {
+        if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file" || authMethod == "oauth2-key-file") {
             return value;
         }
         if (authMethod == "password") {
@@ -218,7 +218,7 @@ namespace {
             auto authValue = profile->GetValue(AuthNode);
             TString authMethod = authValue["method"].as<TString>();
             Cout << "  " << authMethod;
-            if (authMethod == "ydb-token" ||authMethod == "iam-token"
+            if (authMethod == "ydb-token" || authMethod == "oauth2-key-file" || authMethod == "iam-token"
                 || authMethod == "yc-token" || authMethod == "sa-key-file"
                 || authMethod == "token-file" || authMethod == "yc-token-file") {
                 Cout << ": " << TryBlurValue(authMethod, authValue["data"].as<TString>());
@@ -243,6 +243,15 @@ namespace {
         }
         if (profile->Has("ca-file")) {
             Cout << "  ca-file: " << profile->GetValue("ca-file").as<TString>() << Endl;
+        }
+        if (profile->Has("client-cert-file")) {
+            Cout << "  client-cert-file: " << profile->GetValue("client-cert-file").as<TString>() << Endl;
+        }
+        if (profile->Has("client-cert-key-file")) {
+            Cout << "  client-cert-key-file: " << profile->GetValue("client-cert-key-file").as<TString>() << Endl;
+        }
+        if (profile->Has("client-cert-key-password-file")) {
+            Cout << "  client-cert-key-password-file: " << profile->GetValue("client-cert-key-password-file").as<TString>() << Endl;
         }
     }
 }
@@ -277,6 +286,11 @@ void TCommandConnectionInfo::PrintInfo(TConfig& config) {
     if (config.SecurityToken) {
         Cout << "token: " << TryBlurValue("token", config.SecurityToken) << Endl;
     }
+    if (config.UseOauth2TokenExchange) {
+        if (config.Oauth2KeyFile) {
+            Cout << "oauth2-key-file: " << config.Oauth2KeyFile << Endl;
+        }
+    }
     if (config.UseIamAuth) {
         if (config.YCToken) {
             Cout << "yc-token: " << TryBlurValue("yc-token", config.YCToken) << Endl;
@@ -292,15 +306,24 @@ void TCommandConnectionInfo::PrintInfo(TConfig& config) {
         }
     }
     if (config.UseStaticCredentials) {
-        if (config.StaticCredentials.User) {
+        if (!config.StaticCredentials.User.empty()) {
             Cout << "user: " << config.StaticCredentials.User << Endl;
         }
-        if (config.StaticCredentials.Password) {
+        if (!config.StaticCredentials.Password.empty()) {
             Cout << "password: " << TryBlurValue("password", config.StaticCredentials.Password) << Endl;
         }
     }
     if (config.CaCertsFile) {
         Cout << "ca-file: " << config.CaCertsFile << Endl;
+    }
+    if (config.ClientCertFile) {
+        Cout << "client-cert-file: " << config.ClientCertFile << Endl;
+    }
+    if (config.ClientCertPrivateKeyFile) {
+        Cout << "client-cert-key-file: " << config.ClientCertPrivateKeyFile << Endl;
+    }
+    if (config.ClientCertPrivateKeyPasswordFile) {
+        Cout << "client-cert-key-password-file: " << config.ClientCertPrivateKeyPasswordFile << Endl;
     }
 }
 
@@ -370,13 +393,17 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
     THashMap<TString, TString&> options {
         {"database", Database},
         {"token-file", TokenFile},
+        {"oauth2-key-file", Oauth2KeyFile},
         {"yc-token-file", YcTokenFile},
         {"iam-token-file", IamTokenFile},
         {"sa-key-file", SaKeyFile},
         {"user", User},
         {"password-file", PasswordFile},
         {"iam-endpoint", IamEndpoint},
-        {"ca-file", CaCertsFile}
+        {"ca-file", CaCertsFile},
+        {"client-cert-file", ClientCertFile},
+        {"client-cert-key-file", ClientCertPrivateKeyFile},
+        {"client-cert-key-password-file", ClientCertPrivateKeyPasswordFile},
     };
     while (Cin.ReadLine(line)) {
         Strip(line, trimmedLine);
@@ -425,6 +452,15 @@ void TCommandProfileCommon::ConfigureProfile(const TString& profileName, std::sh
     SetupProfileAuthentication(existingProfile, profileName, profile, config, interactive, cmdLine);
     if (cmdLine && CaCertsFile) {
         profile->SetValue("ca-file", CaCertsFile);
+    }
+    if (cmdLine && ClientCertFile) {
+        profile->SetValue("client-cert-file", ClientCertFile);
+    }
+    if (cmdLine && ClientCertPrivateKeyFile) {
+        profile->SetValue("client-cert-key-file", ClientCertPrivateKeyFile);
+    }
+    if (cmdLine && ClientCertPrivateKeyPasswordFile) {
+        profile->SetValue("client-cert-key-password-file", ClientCertPrivateKeyPasswordFile);
     }
 
     if (interactive) {
@@ -526,11 +562,17 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
                 }
         );
         picker.AddOption(
+                "Use OAuth 2.0 RFC8693 token exchange credentials parameters json file.",
+                [&profile, &profileName]() {
+                    SetAuthMethod("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file", profile, profileName);
+                }
+        );
+        picker.AddOption(
                 "Use metadata service on a virtual machine (use-metadata-credentials)"
                 " cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm",
                 [&profile, &profileName]() {
                     Cout << "Setting metadata service usage for profile \"" << profileName << "\"" << Endl;
-                    PutAuthMethodWithoutPars( profile, "use-metadata-credentials" );
+                    PutAuthMethodWithoutPars(profile, "use-metadata-credentials");
                 }
         );
         picker.AddOption(
@@ -541,11 +583,11 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
                 }
         );
     }
-    if (config.UseOAuthToken) {
+    if (config.UseAccessToken) {
         picker.AddOption(
-                "Set new OAuth token (ydb-token)",
+                "Set new access token (ydb-token)",
                 [&profile, &profileName]() {
-                    SetAuthMethod("ydb-token", "OAuth YDB token", profile, profileName);
+                    SetAuthMethod("ydb-token", "YDB token", profile, profileName);
                 }
         );
     }
@@ -570,7 +612,7 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
             description << "Use current settings with method \"" << method << "\"";
             if (method == "iam-token" || method == "yc-token" || method == "ydb-token") {
                 description << " and value \"" << BlurSecret(authValue["data"].as<TString>()) << "\"";
-            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file") {
+            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file" || method == "oauth2-key-file") {
                 description << " and value \"" << authValue["data"].as<TString>() << "\"";
             }
             picker.AddOption(
@@ -588,18 +630,20 @@ bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> pro
         profile->SetValue("iam-endpoint", IamEndpoint);
     }
     if (TokenFile) {
-        PutAuthMethod( profile, "token-file", TokenFile);
+        PutAuthMethod(profile, "token-file", TokenFile);
+    } else if (Oauth2KeyFile) {
+        PutAuthMethod(profile, "oauth2-key-file", Oauth2KeyFile);
     } else if (IamTokenFile) {
         // no error here, we take the iam-token-file option as just a token-file authentication
-        PutAuthMethod( profile, "token-file", IamTokenFile);
-    }else if (YcTokenFile) {
-        PutAuthMethod( profile, "yc-token-file", YcTokenFile);
+        PutAuthMethod(profile, "token-file", IamTokenFile);
+    } else if (YcTokenFile) {
+        PutAuthMethod(profile, "yc-token-file", YcTokenFile);
     } else if (UseMetadataCredentials) {
-        PutAuthMethodWithoutPars( profile, "use-metadata-credentials");
+        PutAuthMethodWithoutPars(profile, "use-metadata-credentials");
     } else if (SaKeyFile) {
-        PutAuthMethod( profile, "sa-key-file", SaKeyFile);
+        PutAuthMethod(profile, "sa-key-file", SaKeyFile);
     } else if (User) {
-        PutAuthStatic( profile, User, PasswordFile, true );
+        PutAuthStatic(profile, User, PasswordFile, true);
     } else if (AnonymousAuth) {
         PutAuthMethodWithoutPars(profile, "anonymous-auth");
     } else {
@@ -610,7 +654,8 @@ bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> pro
 
 void TCommandProfileCommon::ValidateAuth() {
     size_t authMethodCount =
-            (bool) (TokenFile) + (bool) (IamTokenFile) +
+            (bool) (TokenFile) + (bool) (Oauth2KeyFile) +
+            (bool) (IamTokenFile) +
             (bool) (YcTokenFile) + UseMetadataCredentials +
             (bool) (SaKeyFile) + AnonymousAuth +
             (User || PasswordFile);
@@ -624,6 +669,9 @@ void TCommandProfileCommon::ValidateAuth() {
         str << authMethodCount << " authentication methods were provided via options:";
         if (TokenFile) {
             str << " TokenFile (" << TokenFile << ")";
+        }
+        if (Oauth2KeyFile) {
+            str << " OAuth2KeyFile (" << Oauth2KeyFile << ")";
         }
         if (IamTokenFile) {
             str << " IamTokenFile (" << IamTokenFile << ")";
@@ -652,10 +700,11 @@ void TCommandProfileCommon::ValidateAuth() {
 }
 
 bool TCommandProfileCommon::AnyProfileOptionInCommandLine() {
-    return Endpoint || Database || TokenFile ||
+    return Endpoint || Database || TokenFile || Oauth2KeyFile ||
            IamTokenFile || YcTokenFile ||
            SaKeyFile || UseMetadataCredentials || User ||
-           PasswordFile || IamEndpoint || AnonymousAuth || CaCertsFile;
+           PasswordFile || IamEndpoint || AnonymousAuth || CaCertsFile ||
+           ClientCertFile || ClientCertPrivateKeyFile || ClientCertPrivateKeyPasswordFile;
 }
 
 TCommandCreateProfile::TCommandCreateProfile()
@@ -667,12 +716,15 @@ void TCommandProfileCommon::Config(TConfig& config) {
 
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<name>", "Profile name");
-    NLastGetopt::TOpts& opts = *config.Opts;
+    TClientCommandOptions& opts = *config.Opts;
 
     opts.AddLongOption('e', "endpoint", "Endpoint to save in the profile").RequiredArgument("STRING").StoreResult(&Endpoint);
     opts.AddLongOption('d', "database", "Database to save in the profile").RequiredArgument("PATH").StoreResult(&Database);
 
     opts.AddLongOption("token-file", "Access token file").RequiredArgument("PATH").StoreResult(&TokenFile);
+    if (config.UseOauth2TokenExchange) {
+        opts.AddLongOption("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file").RequiredArgument("PATH").StoreResult(&Oauth2KeyFile);
+    }
     opts.AddLongOption("iam-token-file", "Access token file").RequiredArgument("PATH").Hidden().StoreResult(&IamTokenFile);
     opts.AddLongOption("anonymous-auth", "Anonymous authentication").Optional().StoreTrue(&AnonymousAuth);
     if (config.UseIamAuth) {
@@ -690,8 +742,17 @@ void TCommandProfileCommon::Config(TConfig& config) {
         .RequiredArgument("STR").StoreResult(&IamEndpoint);
     }
     opts.AddLongOption("ca-file",
-        "Path to a file containing the PEM encoding of the server root certificates for tls connections.")
+        "File containing PEM encoded root certificates for SSL/TLS connections.")
         .RequiredArgument("PATH").StoreResult(&CaCertsFile);
+    opts.AddLongOption("client-cert-file",
+        "File containing client certificate for SSL/TLS connections (PKCS#12 or PEM-encoded).")
+        .RequiredArgument("PATH").StoreResult(&ClientCertFile);
+    opts.AddLongOption("client-cert-key-file",
+        "File containing PEM encoded client certificate private key for SSL/TLS connections.")
+        .RequiredArgument("PATH").StoreResult(&ClientCertPrivateKeyFile);
+    opts.AddLongOption("client-cert-key-password-file",
+        "File containing password for client certificate private key (if key is encrypted). If key file is encrypted, but this option is not set, password will be asked interactively.")
+        .RequiredArgument("PATH").StoreResult(&ClientCertPrivateKeyPasswordFile);
     if (!IsStdinInteractive()) {
         GetOptionsFromStdin();
     }
@@ -1035,7 +1096,7 @@ void TCommandUpdateProfile::Config(TConfig& config) {
     TCommandProfileCommon::Config(config);
 
     config.SetFreeArgsMin(1);
-    NLastGetopt::TOpts& opts = *config.Opts;
+    TClientCommandOptions& opts = *config.Opts;
     opts.AddLongOption("no-endpoint", "Delete endpoint from the profile").StoreTrue(&NoEndpoint);
     opts.AddLongOption("no-database", "Delete database from the profile").StoreTrue(&NoDatabase);
     opts.AddLongOption("no-auth", "Delete authentication data from the profile").StoreTrue(&NoAuth);
@@ -1043,13 +1104,20 @@ void TCommandUpdateProfile::Config(TConfig& config) {
     if (config.UseIamAuth) {
         opts.AddLongOption("no-iam-endpoint", "Delete endpoint of IAM service from the profile").StoreTrue(&NoIamEndpoint);
     }
-    opts.AddLongOption("no-ca-file", "Delete path to file containing the PEM encoding of the "
-        "server root certificates for tls connections from the profile").StoreTrue(&NoCaCertsFile);
+    opts.AddLongOption("no-ca-file", "Delete path to file containing the PEM encoded "
+        "root certificates for SSL/TLS connections from the profile").StoreTrue(&NoCaCertsFile);
+    opts.AddLongOption("no-client-cert-file", "Delete path to file containing client certificate "
+        "for SSL/TLS connections").StoreTrue(&NoClientCertFile);
+    opts.AddLongOption("no-client-cert-key-file", "Delete path to file containing PEM encoded client "
+        "certificate private key for SSL/TLS connections").StoreTrue(&NoClientCertPrivateKeyFile);
+    opts.AddLongOption("no-client-cert-key-password-file", "Delete path to file containing password for "
+        "client certificate private key (if key is encrypted)").StoreTrue(&NoClientCertPrivateKeyPasswordFile);
 }
 
 void TCommandUpdateProfile::ValidateNoOptions() {
     size_t authMethodCount =
-            (bool) (TokenFile) + (bool) (IamTokenFile) +
+            (bool) (TokenFile) + (bool) (Oauth2KeyFile) +
+            (bool) (IamTokenFile) +
             (bool) (YcTokenFile) + UseMetadataCredentials +
             (bool) (SaKeyFile) + AnonymousAuth +
             (User || PasswordFile);
@@ -1058,21 +1126,21 @@ void TCommandUpdateProfile::ValidateNoOptions() {
         throw TMisuseException() << "You cannot enter authentication options and the \"--no-auth\" option at the same time";
     }
     TStringBuilder str;
-    if (Endpoint && NoEndpoint) {
-        str << "\"--endpoint\" and \"--no-endpoint\"";
-    } else {
-        if (Database && NoDatabase) {
-            str << "\"--database and \"--no-database\"";
-        } else {
-            if (IamEndpoint && NoIamEndpoint) {
-                str << "\"--iam-endpoint\" and \"--no-iam-endpoint\"";
-            } else {
-                if (CaCertsFile && NoCaCertsFile) {
-                    str << "\"--ca-file\" and \"--no-ca-file\"";
-                }
+    auto addMutuallyExclusiveOptionError = [&](bool validationResult, TStringBuf optionName) {
+        if (validationResult) {
+            if (str) {
+                str << ", ";
             }
+            str << "\"--" << optionName << "\" and \"--no-" << optionName << "\"";
         }
-    }
+    };
+    addMutuallyExclusiveOptionError(Endpoint && NoEndpoint, "endpoint");
+    addMutuallyExclusiveOptionError(Database && NoDatabase, "database");
+    addMutuallyExclusiveOptionError(IamEndpoint && NoIamEndpoint, "iam-endpoint");
+    addMutuallyExclusiveOptionError(CaCertsFile && NoCaCertsFile, "ca-file");
+    addMutuallyExclusiveOptionError(ClientCertFile && NoClientCertFile, "client-cert-file");
+    addMutuallyExclusiveOptionError(ClientCertPrivateKeyFile && NoClientCertPrivateKeyFile, "client-cert-key-file");
+    addMutuallyExclusiveOptionError(NoClientCertPrivateKeyPasswordFile && NoClientCertPrivateKeyPasswordFile, "client-cert-key-password-file");
     if (!str.empty()) {
         throw TMisuseException() << "Options " << str << " are mutually exclusive";
     }
@@ -1093,6 +1161,15 @@ void TCommandUpdateProfile::DropNoOptions(std::shared_ptr<IProfile> profile) {
     }
     if (NoCaCertsFile) {
         profile->RemoveValue("ca-file");
+    }
+    if (NoClientCertFile) {
+        profile->RemoveValue("client-cert-file");
+    }
+    if (NoClientCertPrivateKeyFile) {
+        profile->RemoveValue("client-cert-key-file");
+    }
+    if (NoClientCertPrivateKeyPasswordFile) {
+        profile->RemoveValue("client-cert-key-password-file");
     }
 }
 

@@ -71,6 +71,76 @@ Y_UNIT_TEST_SUITE(SimpleHttp) {
         }
     };
 
+    class TScenario {
+    public:
+        struct TElem {
+            TString Url;
+            int Status = HTTP_OK;
+            TString Content{};
+        };
+
+        TScenario(const TVector<TElem>& seq, ui16 port = 80, TDuration sleep = TDuration())
+            : Seq_(seq)
+            , Sleep_(sleep)
+            , Port_(port)
+        {
+        }
+
+        bool DoReply(const TRequestReplier::TReplyParams& params, TRequestReplier* replier) {
+            const auto parsed = TParsedHttpFull(params.Input.FirstLine());
+            const auto url = parsed.Request;
+            params.Input.ReadAll();
+
+            UNIT_ASSERT(SeqIdx_ < Seq_.size());
+            auto& elem = Seq_[SeqIdx_++];
+
+            UNIT_ASSERT_VALUES_EQUAL(elem.Url, url);
+
+            Sleep(Sleep_);
+
+            if (elem.Status == -1) {
+                replier->ResetConnection(); // RST / ECONNRESET
+                return true;
+            }
+
+            THttpResponse resp((HttpCodes)elem.Status);
+
+            if (elem.Status >= 300 && elem.Status < 400) {
+                UNIT_ASSERT(SeqIdx_ < Seq_.size());
+                resp.AddHeader("Location", TStringBuilder() << "http://localhost:" << Port_ << Seq_[SeqIdx_].Url);
+            }
+
+            resp.SetContent(elem.Content);
+            resp.OutTo(params.Output);
+
+            return true;
+        }
+
+        void VerifyInvariants() {
+            UNIT_ASSERT_VALUES_EQUAL(SeqIdx_, Seq_.size());
+        }
+
+    private:
+        TVector<TElem> Seq_;
+        size_t SeqIdx_ = 0;
+        TDuration Sleep_;
+        ui16 Port_;
+    };
+
+    class TScenarioReplier: public TRequestReplier {
+        TScenario* Scenario_ = nullptr;
+
+    public:
+        TScenarioReplier(TScenario* scenario)
+            : Scenario_(scenario)
+        {
+        }
+
+        bool DoReply(const TReplyParams& params) override {
+            return Scenario_->DoReply(params, this);
+        }
+    };
+
     class TCodedPong: public TRequestReplier {
         HttpCodes Code_;
 
@@ -128,6 +198,32 @@ Y_UNIT_TEST_SUITE(SimpleHttp) {
             return true;
         }
     };
+
+    static void TestRedirectCountParam(int maxRedirectCount, int redirectCount) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(80);
+
+        TVector<TScenario::TElem> steps;
+        for (int i = 0; i < redirectCount; ++i) {
+            steps.push_back({"/any", 302});
+        }
+        steps.push_back({"/any", 200, "Hello"});
+        TScenario scenario(steps, port);
+
+        NMock::TMockServer server(createOptions(port, true), [&scenario]() { return new TScenarioReplier(&scenario); });
+
+        TRedirectableHttpClient cl(TSimpleHttpClientOptions().Host("localhost").Port(port).MaxRedirectCount(maxRedirectCount));
+        UNIT_ASSERT_VALUES_EQUAL(0, server.GetClientCount());
+
+        TStringStream s;
+        if (maxRedirectCount >= redirectCount) {
+            UNIT_ASSERT_NO_EXCEPTION(cl.DoGet("/any", &s));
+            UNIT_ASSERT_VALUES_EQUAL("Hello", s.Str());
+            scenario.VerifyInvariants();
+        } else {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(cl.DoGet("/any", &s), THttpRequestException, "");
+        }
+    }
 
     Y_UNIT_TEST(simpleSuccessful) {
         TPortManager pm;
@@ -274,6 +370,45 @@ Y_UNIT_TEST_SUITE(SimpleHttp) {
         }
     }
 
+    Y_UNIT_TEST(redirectCountDefault) {
+        TPortManager pm;
+        ui16 port = pm.GetPort(80);
+
+        TScenario scenario({
+            {"/any", 307},
+            {"/any?param=1", 302},
+            {"/any?param=1", 302},
+            {"/any?param=1", 302},
+            {"/any?param=1", 302},
+            {"/any?param=1", 302},
+            {"/any?param=1", 302},
+            {"/any?param=1", 302},
+            {"/any?param=1", 302},
+            {"/any?param=1", 302},
+            {"/any?param=2", 200, "Hello"}
+        }, port);
+
+        NMock::TMockServer server(createOptions(port, true), [&scenario]() { return new TScenarioReplier(&scenario); });
+
+        TRedirectableHttpClient cl("localhost", port);
+        UNIT_ASSERT_VALUES_EQUAL(0, server.GetClientCount());
+
+        TStringStream s;
+        UNIT_ASSERT_NO_EXCEPTION(cl.DoGet("/any", &s));
+        UNIT_ASSERT_VALUES_EQUAL("Hello", s.Str());
+
+        scenario.VerifyInvariants();
+    }
+
+    Y_UNIT_TEST(redirectCountN) {
+        TestRedirectCountParam(0, 0);
+        TestRedirectCountParam(0, 1);
+        TestRedirectCountParam(1, 1);
+        TestRedirectCountParam(3, 3);
+        TestRedirectCountParam(20, 20);
+        TestRedirectCountParam(20, 21);
+    }
+
     Y_UNIT_TEST(redirectable) {
         TPortManager pm;
         ui16 port = pm.GetPort(80);
@@ -405,7 +540,7 @@ Y_UNIT_TEST_SUITE(SimpleHttp) {
                       "Accept-Encoding: gzip, deflate\r\n"
                       "Content-Length: 9\r\n"
                       "Content-Type: application/x-www-form-urlencoded\r\n"
-                      "User-Agent: Python-urllib/2.6\r\n"
+                      "User-Agent: Arcadia-library/cpp/http\r\n"
                       "\r\n"
                       "some body";
 

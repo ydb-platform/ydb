@@ -19,11 +19,11 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-// This implementation of the proposed `any_invocable` uses an approach that  //
-// chooses between local storage and remote storage for the contained target  //
-// object based on the target object's size, alignment requirements, and      //
-// whether or not it has a nothrow move constructor. Additional optimizations //
-// are performed when the object is a trivially copyable type [basic.types].  //
+// This implementation chooses between local storage and remote storage for   //
+// the contained target object based on the target object's size, alignment   //
+// requirements, and whether or not it has a nothrow move constructor.        //
+// Additional optimizations are performed when the object is a trivially      //
+// copyable type [basic.types].                                               //
 //                                                                            //
 // There are three datamembers per `AnyInvocable` instance                    //
 //                                                                            //
@@ -39,7 +39,7 @@
 //    target object, directly returning the result.                           //
 //                                                                            //
 // When in the logically empty state, the manager function is an empty        //
-// function and the invoker function is one that would be undefined-behavior  //
+// function and the invoker function is one that would be undefined behavior  //
 // to call.                                                                   //
 //                                                                            //
 // An additional optimization is performed when converting from one           //
@@ -58,12 +58,12 @@
 #include <cstring>
 #include <exception>
 #include <functional>
-#include <initializer_list>
 #include <memory>
 #include <new>
 #include <type_traits>
 #include <utility>
 
+#include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 #include "y_absl/base/internal/invoke.h"
 #include "y_absl/base/macros.h"
@@ -215,8 +215,8 @@ T& ObjectInLocalStorage(TypeErasedState* const state) {
   // behavior, which works as intended on Abseil's officially supported
   // platforms as of Q2 2022.
 #if !defined(__clang__) && defined(__GNUC__)
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
 #endif
   return *reinterpret_cast<T*>(&state->storage);
 #if !defined(__clang__) && defined(__GNUC__)
@@ -526,10 +526,10 @@ class CoreImpl {
 // Since this is template-heavy code, we prefer to disable these warnings
 // locally instead of adding yet another overload of this function.
 #if !defined(__clang__) && defined(__GNUC__)
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic ignored "-Waddress"
 #pragma GCC diagnostic ignored "-Wnonnull-compare"
-#pragma GCC diagnostic push
 #endif
     if (static_cast<RemoveCVRef<QualDecayedTRef>>(f) == nullptr) {
 #if !defined(__clang__) && defined(__GNUC__)

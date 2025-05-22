@@ -6,4 +6,8 @@ SRCS(
     exception.cpp
 )
 
+PEERDIR(
+    library/cpp/yt/assert
+)
+
 END()

@@ -2,7 +2,7 @@ from sqlalchemy import Column
 from sqlalchemy.sql.compiler import DDLCompiler
 
 from clickhouse_connect.cc_sqlalchemy.sql import  format_table
-from clickhouse_connect.driver.query import quote_identifier
+from clickhouse_connect.driver.binding import quote_identifier
 
 
 class ChDDLCompiler(DDLCompiler):

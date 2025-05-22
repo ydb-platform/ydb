@@ -2,11 +2,23 @@ RECURSE(
     apps
     core
     library
+    mvp
     public
     services
-    tests
     tools
-    docs
-    docs/ru/core
-    docs/en/core
 )
+
+IF(NOT EXPORT_CMAKE)
+  RECURSE(
+    tests
+  )
+ENDIF()
+
+IF(NOT OPENSOURCE)
+  # YFM tool is not supported 
+  # for OSS ya make yet
+  RECURSE(
+    docs
+    yql_docs
+  )
+ENDIF()

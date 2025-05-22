@@ -57,8 +57,9 @@ private:
         if (indexId == -1) {
             meta = &mainTableMeta;
         } else {
-            YQL_ENSURE((size_t)indexId < mainTableMeta.SecondaryGlobalIndexMetadata.size());
-            meta = mainTableMeta.SecondaryGlobalIndexMetadata[indexId].Get();
+            YQL_ENSURE((size_t)indexId < mainTableMeta.ImplTables.size());
+            meta = mainTableMeta.ImplTables[indexId].Get();
+            YQL_ENSURE(!meta->Next);
         }
 
         auto inputs = Build<TDqPhyPrecompute>(ctx, pos)
@@ -138,8 +139,9 @@ private:
         if (indexId == -1) {
             meta = &mainTableMeta;
         } else {
-            YQL_ENSURE((size_t)indexId < mainTableMeta.SecondaryGlobalIndexMetadata.size());
-            meta = mainTableMeta.SecondaryGlobalIndexMetadata[indexId].Get();
+            YQL_ENSURE((size_t)indexId < mainTableMeta.ImplTables.size());
+            meta = mainTableMeta.ImplTables[indexId].Get();
+            YQL_ENSURE(!meta->Next);
         }
 
         TVector<TExprBase> inputs;

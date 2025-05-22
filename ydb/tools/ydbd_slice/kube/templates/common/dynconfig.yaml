@@ -1,0 +1,51 @@
+metadata:
+  kind: MainConfig
+  cluster: "{{ cluster_uuid }}" # empty by default
+  version: 0
+config:
+  yaml_config_enabled: true
+  table_profiles_config:
+    table_profiles:
+    - name: default
+      compaction_policy: default
+      execution_policy: default
+      partitioning_policy: default
+      storage_policy: default
+      replication_policy: default
+      caching_policy: default
+    compaction_policies:
+    - name: default
+    execution_policies:
+    - name: default
+    partitioning_policies:
+    - name: default
+      auto_split: true
+      auto_merge: false
+      size_to_split: 2147483648
+    storage_policies:
+    - name: default
+      column_families:
+      - storage_config:
+          sys_log:
+            preferred_pool_kind: "{{ preferred_pool_kind }}" # fix this manually and run kube-install or kube-update if you have different pool kind
+          log:
+            preferred_pool_kind: "{{ preferred_pool_kind }}" # fix this manually and run kube-install or kube-update if you have different pool kind
+          data:
+            preferred_pool_kind: "{{ preferred_pool_kind }}" # fix this manually and run kube-install or kube-update if you have different pool kind
+    replication_policies:
+    - name: default
+    caching_policies:
+    - name: default
+  log_config:
+    sys_log: false
+    uaclient_config:
+      uri: "[fd53::1]:16400"
+      grpc_max_message_size: 4194304
+allowed_labels:
+  node_id:
+    type: string
+  host:
+    type: string
+  tenant:
+    type: string
+selector_config: []

@@ -1,0 +1,57 @@
+import "google/protobuf/descriptor.proto";
+
+package NKikimrConfig.NMarkers;
+option java_package = "ru.yandex.kikimr.proto.markers";
+
+extend google.protobuf.MessageOptions {
+    optional bool Root = 81001;
+    optional bool CombinedType = 81002;
+    optional bool WithMapType = 81003;
+}
+
+message TAdvancedCopyTo {
+    /**
+     * Used to name generated methods e.g. CopyTo$Target$
+     */
+    optional string Target = 1;
+
+    /**
+     * Fields marked with keep won't replace destination
+     * field if it is already defined
+     */
+    optional bool Keep = 2;
+
+    /**
+     * If this field is defined it will be used as name for
+     * destination field
+     */
+    optional string Rename = 3;
+
+    /**
+     * If this field is defined, then instead of CopyFrom
+     * method CopyTo$Recurse$ will be used
+     */
+    optional string Recurse = 4;
+
+    /**
+     * If this field is defined, CopyTo calls
+     * `TOut Transform$SrcFieldName$To$Rename$For$Target$<TIn, TOut>(const TIn* in);``
+     * declared in source class to transform corresponding field
+     * **NOTICE** you MUST define all used instancse
+     *            of this template in your code
+     *            or you will get link-time error
+     * currently do not support message fields
+     * Keep and Recurse also not supported
+     */
+    optional bool Transform = 5;
+}
+
+extend google.protobuf.FieldOptions {
+    repeated string CopyTo = 82001;
+    repeated string AsMap = 82002;
+    repeated TAdvancedCopyTo AdvancedCopyTo = 82003;
+
+    // **Top-level** options marked with that label are allowed to be used in the database configuration.
+    optional bool AllowInDatabaseConfig = 82004;
+}
+

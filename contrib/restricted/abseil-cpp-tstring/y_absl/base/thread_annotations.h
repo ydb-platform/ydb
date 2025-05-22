@@ -36,8 +36,6 @@
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
-// TODO(mbonadei): Remove after the backward compatibility period.
-#include "y_absl/base/internal/thread_annotations.h"  // IWYU pragma: export
 
 // Y_ABSL_GUARDED_BY()
 //

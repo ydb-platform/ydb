@@ -1,7 +1,9 @@
 # testing.py
 
 from contextlib import contextmanager
+import re
 import typing
+
 
 from .core import (
     ParserElement,
@@ -49,23 +51,23 @@ class pyparsing_test:
             self._save_context["default_whitespace"] = ParserElement.DEFAULT_WHITE_CHARS
             self._save_context["default_keyword_chars"] = Keyword.DEFAULT_KEYWORD_CHARS
 
-            self._save_context[
-                "literal_string_class"
-            ] = ParserElement._literalStringClass
+            self._save_context["literal_string_class"] = (
+                ParserElement._literalStringClass
+            )
 
             self._save_context["verbose_stacktrace"] = ParserElement.verbose_stacktrace
 
             self._save_context["packrat_enabled"] = ParserElement._packratEnabled
             if ParserElement._packratEnabled:
-                self._save_context[
-                    "packrat_cache_size"
-                ] = ParserElement.packrat_cache.size
+                self._save_context["packrat_cache_size"] = (
+                    ParserElement.packrat_cache.size
+                )
             else:
                 self._save_context["packrat_cache_size"] = None
             self._save_context["packrat_parse"] = ParserElement._parse
-            self._save_context[
-                "recursion_enabled"
-            ] = ParserElement._left_recursion_enabled
+            self._save_context["recursion_enabled"] = (
+                ParserElement._left_recursion_enabled
+            )
 
             self._save_context["__diag__"] = {
                 name: getattr(__diag__, name) for name in __diag__._all_names
@@ -180,49 +182,52 @@ class pyparsing_test:
             """
             run_test_success, run_test_results = run_tests_report
 
-            if expected_parse_results is not None:
-                merged = [
-                    (*rpt, expected)
-                    for rpt, expected in zip(run_test_results, expected_parse_results)
-                ]
-                for test_string, result, expected in merged:
-                    # expected should be a tuple containing a list and/or a dict or an exception,
-                    # and optional failure message string
-                    # an empty tuple will skip any result validation
-                    fail_msg = next(
-                        (exp for exp in expected if isinstance(exp, str)), None
+            if expected_parse_results is None:
+                self.assertTrue(
+                    run_test_success, msg=msg if msg is not None else "failed runTests"
+                )
+                return
+
+            merged = [
+                (*rpt, expected)
+                for rpt, expected in zip(run_test_results, expected_parse_results)
+            ]
+            for test_string, result, expected in merged:
+                # expected should be a tuple containing a list and/or a dict or an exception,
+                # and optional failure message string
+                # an empty tuple will skip any result validation
+                fail_msg = next((exp for exp in expected if isinstance(exp, str)), None)
+                expected_exception = next(
+                    (
+                        exp
+                        for exp in expected
+                        if isinstance(exp, type) and issubclass(exp, Exception)
+                    ),
+                    None,
+                )
+                if expected_exception is not None:
+                    with self.assertRaises(
+                        expected_exception=expected_exception, msg=fail_msg or msg
+                    ):
+                        if isinstance(result, Exception):
+                            raise result
+                else:
+                    expected_list = next(
+                        (exp for exp in expected if isinstance(exp, list)), None
                     )
-                    expected_exception = next(
-                        (
-                            exp
-                            for exp in expected
-                            if isinstance(exp, type) and issubclass(exp, Exception)
-                        ),
-                        None,
+                    expected_dict = next(
+                        (exp for exp in expected if isinstance(exp, dict)), None
                     )
-                    if expected_exception is not None:
-                        with self.assertRaises(
-                            expected_exception=expected_exception, msg=fail_msg or msg
-                        ):
-                            if isinstance(result, Exception):
-                                raise result
+                    if (expected_list, expected_dict) != (None, None):
+                        self.assertParseResultsEquals(
+                            result,
+                            expected_list=expected_list,
+                            expected_dict=expected_dict,
+                            msg=fail_msg or msg,
+                        )
                     else:
-                        expected_list = next(
-                            (exp for exp in expected if isinstance(exp, list)), None
-                        )
-                        expected_dict = next(
-                            (exp for exp in expected if isinstance(exp, dict)), None
-                        )
-                        if (expected_list, expected_dict) != (None, None):
-                            self.assertParseResultsEquals(
-                                result,
-                                expected_list=expected_list,
-                                expected_dict=expected_dict,
-                                msg=fail_msg or msg,
-                            )
-                        else:
-                            # warning here maybe?
-                            print(f"no validation for {test_string!r}")
+                        # warning here maybe?
+                        print(f"no validation for {test_string!r}")
 
             # do this last, in case some specific test results can be reported instead
             self.assertTrue(
@@ -230,9 +235,18 @@ class pyparsing_test:
             )
 
         @contextmanager
-        def assertRaisesParseException(self, exc_type=ParseException, msg=None):
-            with self.assertRaises(exc_type, msg=msg):
-                yield
+        def assertRaisesParseException(
+            self, exc_type=ParseException, expected_msg=None, msg=None
+        ):
+            if expected_msg is not None:
+                if isinstance(expected_msg, str):
+                    expected_msg = re.escape(expected_msg)
+                with self.assertRaisesRegex(exc_type, expected_msg, msg=msg) as ctx:
+                    yield ctx
+
+            else:
+                with self.assertRaises(exc_type, msg=msg) as ctx:
+                    yield ctx
 
     @staticmethod
     def with_line_numbers(
@@ -243,10 +257,14 @@ class pyparsing_test:
         eol_mark: str = "|",
         mark_spaces: typing.Optional[str] = None,
         mark_control: typing.Optional[str] = None,
+        *,
+        indent: typing.Union[str, int] = "",
+        base_1: bool = True,
     ) -> str:
         """
         Helpful method for debugging a parser - prints a string with line and column numbers.
-        (Line and column numbers are 1-based.)
+        (Line and column numbers are 1-based by default - if debugging a parse action,
+        pass base_1=False, to correspond to the loc value passed to the parse action.)
 
         :param s: tuple(bool, str - string to be printed with line and column numbers
         :param start_line: int - (optional) starting line number in s to print (default=1)
@@ -259,11 +277,18 @@ class pyparsing_test:
                                  - "unicode" - replaces control chars with Unicode symbols, such as "␍" and "␊"
                                  - any single character string - replace control characters with given string
                                  - None (default) - string is displayed as-is
+        :param indent: str | int - (optional) string to indent with line and column numbers; if an int
+                                   is passed, converted to " " * indent
+        :param base_1: bool - (optional) whether to label string using base 1; if False, string will be
+                              labeled based at 0 (default=True)
 
         :return: str - input string with leading line numbers and column number headers
         """
         if expand_tabs:
             s = s.expandtabs()
+        if isinstance(indent, int):
+            indent = " " * indent
+        indent = indent.expandtabs()
         if mark_control is not None:
             mark_control = typing.cast(str, mark_control)
             if mark_control == "unicode":
@@ -286,46 +311,52 @@ class pyparsing_test:
             else:
                 s = s.replace(" ", mark_spaces)
         if start_line is None:
-            start_line = 1
+            start_line = 0
         if end_line is None:
             end_line = len(s)
         end_line = min(end_line, len(s))
-        start_line = min(max(1, start_line), end_line)
+        start_line = min(max(0, start_line), end_line)
 
         if mark_control != "unicode":
-            s_lines = s.splitlines()[start_line - 1 : end_line]
+            s_lines = s.splitlines()[start_line - base_1 : end_line]
         else:
-            s_lines = [line + "␊" for line in s.split("␊")[start_line - 1 : end_line]]
+            s_lines = [
+                line + "␊" for line in s.split("␊")[start_line - base_1 : end_line]
+            ]
         if not s_lines:
             return ""
 
         lineno_width = len(str(end_line))
         max_line_len = max(len(line) for line in s_lines)
-        lead = " " * (lineno_width + 1)
+        lead = indent + " " * (lineno_width + 1)
         if max_line_len >= 99:
             header0 = (
                 lead
+                + ("" if base_1 else " ")
                 + "".join(
                     f"{' ' * 99}{(i + 1) % 100}"
-                    for i in range(max(max_line_len // 100, 1))
+                    for i in range(1 if base_1 else 0, max(max_line_len // 100, 1))
                 )
                 + "\n"
             )
         else:
             header0 = ""
         header1 = (
-            header0
+            ("" if base_1 else " ")
             + lead
             + "".join(f"         {(i + 1) % 10}" for i in range(-(-max_line_len // 10)))
             + "\n"
         )
-        header2 = lead + "1234567890" * (-(-max_line_len // 10)) + "\n"
+        digits = "1234567890"
+        header2 = (
+            lead + ("" if base_1 else "0") + digits * (-(-max_line_len // 10)) + "\n"
+        )
         return (
             header1
             + header2
             + "\n".join(
-                f"{i:{lineno_width}d}:{line}{eol_mark}"
-                for i, line in enumerate(s_lines, start=start_line)
+                f"{indent}{i:{lineno_width}d}:{line}{eol_mark}"
+                for i, line in enumerate(s_lines, start=start_line + base_1)
             )
             + "\n"
         )

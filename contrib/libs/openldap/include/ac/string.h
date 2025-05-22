@@ -2,7 +2,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2022 The OpenLDAP Foundation.
+ * Copyright 1998-2024 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,7 +58,7 @@ LDAP_F(char *) ldap_pvt_strtok LDAP_P(( char *str,
 #elif !defined(_WIN32)
 	/* some systems fail to declare strdup */
 	/* Windows does not require this declaration */
-	LDAP_LIBC_F(char *) (strdup)();
+	LDAP_LIBC_F(char *) (strdup) LDAP_P((const char *s));
 #endif
 
 /*
@@ -68,8 +68,8 @@ LDAP_F(char *) ldap_pvt_strtok LDAP_P(( char *str,
 
 /* we don't want these declared for Windows or Mingw */
 #ifndef _WIN32
-int (strcasecmp)();
-int (strncasecmp)();
+LDAP_LIBC_F(int) (strcasecmp) LDAP_P((const char *s1, const char *s2));
+LDAP_LIBC_F(int) (strncasecmp) LDAP_P((const char *s1, const char *s2, size_t n));
 #endif
 
 #ifndef SAFEMEMCPY

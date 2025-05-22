@@ -25,13 +25,13 @@ namespace orc {
    * The potential result sets of logical operations.
    */
   enum class TruthValue {
-      YES,        // all rows satisfy the predicate
-      NO,         // all rows dissatisfy the predicate
-      IS_NULL,    // all rows are null value
-      YES_NULL,   // null values exist, not-null rows satisfy the predicate
-      NO_NULL,    // null values exist, not-null rows dissatisfy the predicate
-      YES_NO,     // some rows satisfy the predicate and the others not
-      YES_NO_NULL // null values exist, some rows satisfy predicate and some not
+    YES,         // all rows satisfy the predicate
+    NO,          // all rows dissatisfy the predicate
+    IS_NULL,     // all rows are null value
+    YES_NULL,    // null values exist, not-null rows satisfy the predicate
+    NO_NULL,     // null values exist, not-null rows dissatisfy the predicate
+    YES_NO,      // some rows satisfy the predicate and the others not
+    YES_NO_NULL  // null values exist, some rows satisfy predicate and some not
   };
 
   // Compute logical or between the two values.
@@ -46,6 +46,6 @@ namespace orc {
   // Do we need to read the data based on the TruthValue?
   bool isNeeded(TruthValue val);
 
-} // namespace orc
+}  // namespace orc
 
-#endif //ORC_TRUTHVALUE_HH
+#endif  // ORC_TRUTHVALUE_HH

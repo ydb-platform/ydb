@@ -1,5 +1,6 @@
 """Pen calculating area, center of mass, variance and standard-deviation,
 covariance and correlation, and slant, of glyph shapes."""
+
 from math import sqrt, degrees, atan
 from fontTools.pens.basePen import BasePen, OpenContourError
 from fontTools.pens.momentsPen import MomentsPen
@@ -52,7 +53,6 @@ class StatisticsBase:
 
 
 class StatisticsPen(StatisticsBase, MomentsPen):
-
     """Pen calculating area, center of mass, variance and
     standard-deviation, covariance and correlation, and slant,
     of glyph shapes.
@@ -91,7 +91,6 @@ class StatisticsPen(StatisticsBase, MomentsPen):
 
 
 class StatisticsControlPen(StatisticsBase, BasePen):
-
     """Pen calculating area, center of mass, variance and
     standard-deviation, covariance and correlation, and slant,
     of glyph shapes, using the control polygon only.
@@ -107,6 +106,7 @@ class StatisticsControlPen(StatisticsBase, BasePen):
 
     def _moveTo(self, pt):
         self._nodes.append(complex(*pt))
+        self._startPoint = pt
 
     def _lineTo(self, pt):
         self._nodes.append(complex(*pt))
@@ -120,12 +120,16 @@ class StatisticsControlPen(StatisticsBase, BasePen):
             self._nodes.append(complex(*pt))
 
     def _closePath(self):
+        p0 = self._getCurrentPoint()
+        if p0 != self._startPoint:
+            self._lineTo(self._startPoint)
         self._update()
 
     def _endPath(self):
         p0 = self._getCurrentPoint()
-        if p0 != self.__startPoint:
+        if p0 != self._startPoint:
             raise OpenContourError("Glyph statistics not defined on open contours.")
+        self._update()
 
     def _update(self):
         nodes = self._nodes

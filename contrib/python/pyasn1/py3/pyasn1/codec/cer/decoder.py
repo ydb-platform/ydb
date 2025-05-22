@@ -4,10 +4,11 @@
 # Copyright (c) 2005-2020, Ilya Etingof <etingof@gmail.com>
 # License: https://pyasn1.readthedocs.io/en/latest/license.html
 #
+import warnings
+
 from pyasn1 import error
 from pyasn1.codec.streaming import readFromStream
 from pyasn1.codec.ber import decoder
-from pyasn1.compat.octets import oct2int
 from pyasn1.type import univ
 
 __all__ = ['decode', 'StreamingDecoder']
@@ -30,7 +31,7 @@ class BooleanPayloadDecoder(decoder.AbstractSimplePayloadDecoder):
             if isinstance(chunk, SubstrateUnderrunError):
                 yield chunk
 
-        byte = oct2int(chunk[0])
+        byte = chunk[0]
 
         # CER/DER specifies encoding of TRUE as 0xFF and FALSE as 0x0, while
         # BER allows any non-zero value as TRUE; cf. sections 8.2.2. and 11.1 
@@ -61,10 +62,6 @@ TAG_MAP.update(
 )
 
 TYPE_MAP = decoder.TYPE_MAP.copy()
-
-# deprecated aliases, https://github.com/pyasn1/pyasn1/issues/9
-tagMap = TAG_MAP
-typeMap = TYPE_MAP
 
 # Put in non-ambiguous types for faster codec lookup
 for typeDecoder in TAG_MAP.values():
@@ -101,7 +98,7 @@ class Decoder(decoder.Decoder):
 #:
 #: Parameters
 #: ----------
-#: substrate: :py:class:`bytes` (Python 3) or :py:class:`str` (Python 2)
+#: substrate: :py:class:`bytes`
 #:     CER octet-stream
 #:
 #: Keyword Args
@@ -144,3 +141,9 @@ class Decoder(decoder.Decoder):
 #:     1 2 3
 #:
 decode = Decoder()
+
+def __getattr__(attr: str):
+    if newAttr := {"tagMap": "TAG_MAP", "typeMap": "TYPE_MAP"}.get(attr):
+        warnings.warn(f"{attr} is deprecated. Please use {newAttr} instead.", DeprecationWarning)
+        return globals()[newAttr]
+    raise AttributeError(attr)

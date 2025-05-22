@@ -2,11 +2,14 @@
 
 #include "defs.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/whiteboard_disk_states.pb.h>
 
 namespace NKikimr {
     namespace NMonGroup {
-
         class TBase {
         public:
             TBase(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
@@ -16,6 +19,11 @@ namespace NKikimr {
                 , GroupCounters(DerivedCounters->GetSubgroup(name, value))
             {}
 
+            TBase(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+                : DerivedCounters(counters)
+                , GroupCounters(DerivedCounters)
+            {}
+
             TIntrusivePtr<::NMonitoring::TDynamicCounters> GetGroup() const { return GroupCounters; }
 
         protected:
@@ -23,6 +31,7 @@ namespace NKikimr {
             TIntrusivePtr<::NMonitoring::TDynamicCounters> GroupCounters;
         };
 
+        bool IsExtendedVDiskCounters();
 
 #define COUNTER_DEF(name)                                                                   \
 protected:                                                                                  \
@@ -39,11 +48,22 @@ public:                                                                         
     name##_ = GroupCounters->GetCounter(#name, derivative,                                  \
         NMonitoring::TCountableBase::EVisibility::Private)
 
+#define COUNTER_INIT_IF_EXTENDED(name, derivative)                                          \
+    name##_ = GroupCounters->GetCounter(#name, derivative,                                  \
+        IsExtendedVDiskCounters() ? NMonitoring::TCountableBase::EVisibility::Public : NMonitoring::TCountableBase::EVisibility::Private)
+
 #define GROUP_CONSTRUCTOR(name)                                                             \
-    name(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,                      \
+    name(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,                    \
          const TString& name,                                                               \
          const TString& value)                                                              \
-    : TBase(counters, name, value)
+    : TBase(counters, name, value) {                                                        \
+        InitCounters();                                                                     \
+    }                                                                                       \
+    name(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)                    \
+    : TBase(counters) {                                                                     \
+        InitCounters();                                                                     \
+    }                                                                                       \
+    void InitCounters()
 
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -100,22 +120,40 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TSkeletonOverloadGroup)
             {
-                COUNTER_INIT(EmergencyMovedPatchQueueItems, false);
-                COUNTER_INIT(EmergencyPatchStartQueueItems, false);
-                COUNTER_INIT(EmergencyPutQueueItems, false);
-                COUNTER_INIT(EmergencyMultiPutQueueItems, false);
-                COUNTER_INIT(EmergencyLocalSyncDataQueueItems, false);
-                COUNTER_INIT(EmergencyAnubisOsirisPutQueueItems, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyMovedPatchQueueItems, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyPatchStartQueueItems, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyPutQueueItems, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyMultiPutQueueItems, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyLocalSyncDataQueueItems, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyAnubisOsirisPutQueueItems, false);
 
-                COUNTER_INIT(EmergencyMovedPatchQueueBytes, false);
-                COUNTER_INIT(EmergencyPatchStartQueueBytes, false);
-                COUNTER_INIT(EmergencyPutQueueBytes, false);
-                COUNTER_INIT(EmergencyMultiPutQueueBytes, false);
-                COUNTER_INIT(EmergencyLocalSyncDataQueueBytes, false);
-                COUNTER_INIT(EmergencyAnubisOsirisPutQueueBytes, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyMovedPatchQueueBytes, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyPatchStartQueueBytes, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyPutQueueBytes, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyMultiPutQueueBytes, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyLocalSyncDataQueueBytes, false);
+                COUNTER_INIT_IF_EXTENDED(EmergencyAnubisOsirisPutQueueBytes, false);
 
-                COUNTER_INIT(FreshSatisfactionRankPercent, false);
-                COUNTER_INIT(LevelSatisfactionRankPercent, false);
+                COUNTER_INIT_IF_EXTENDED(FreshSatisfactionRankPercent, false);
+                COUNTER_INIT_IF_EXTENDED(LevelSatisfactionRankPercent, false);
+
+                COUNTER_INIT_IF_EXTENDED(ThrottlingCurrentSpeedLimit, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingIsActive, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingDryRun, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLevel0SstCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingInplacedSize, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeHDD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeHDD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinInplacedSizeSSD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxInplacedSizeSSD, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxOccupancyPerMille, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingLogChunkCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMinLogChunkCount, false);
+                COUNTER_INIT_IF_EXTENDED(ThrottlingMaxLogChunkCount, false);
             }
 
             COUNTER_DEF(EmergencyMovedPatchQueueItems);
@@ -134,6 +172,24 @@ public:                                                                         
 
             COUNTER_DEF(FreshSatisfactionRankPercent);
             COUNTER_DEF(LevelSatisfactionRankPercent);
+
+            COUNTER_DEF(ThrottlingCurrentSpeedLimit);
+            COUNTER_DEF(ThrottlingIsActive);
+            COUNTER_DEF(ThrottlingDryRun);
+            COUNTER_DEF(ThrottlingLevel0SstCount);
+            COUNTER_DEF(ThrottlingMinLevel0SstCount);
+            COUNTER_DEF(ThrottlingMaxLevel0SstCount);
+            COUNTER_DEF(ThrottlingInplacedSize);
+            COUNTER_DEF(ThrottlingMinInplacedSizeHDD);
+            COUNTER_DEF(ThrottlingMaxInplacedSizeHDD);
+            COUNTER_DEF(ThrottlingMinInplacedSizeSSD);
+            COUNTER_DEF(ThrottlingMaxInplacedSizeSSD);
+            COUNTER_DEF(ThrottlingOccupancyPerMille);
+            COUNTER_DEF(ThrottlingMinOccupancyPerMille);
+            COUNTER_DEF(ThrottlingMaxOccupancyPerMille);
+            COUNTER_DEF(ThrottlingLogChunkCount);
+            COUNTER_DEF(ThrottlingMinLogChunkCount);
+            COUNTER_DEF(ThrottlingMaxLogChunkCount);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -148,8 +204,8 @@ public:                                                                         
                 COUNTER_INIT(DskFreeBytes, false);
                 COUNTER_INIT(DskUsedBytes, false);
                 COUNTER_INIT(HugeUsedChunks, false);
-                COUNTER_INIT(HugeCanBeFreedChunks, false);
-                COUNTER_INIT(HugeLockedChunks, false);
+                COUNTER_INIT_IF_EXTENDED(HugeCanBeFreedChunks, false);
+                COUNTER_INIT_IF_EXTENDED(HugeLockedChunks, false);
             }
 
             COUNTER_DEF(DskOutOfSpace);
@@ -169,12 +225,12 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TCostGroup)
             {
-                COUNTER_INIT(DiskTimeAvailableNs, false);
-                COUNTER_INIT(SkeletonFrontUserCostNs, true);
-                COUNTER_INIT(SkeletonFrontInternalCostNs, true);
-                COUNTER_INIT(DefragCostNs, true);
-                COUNTER_INIT(CompactionCostNs, true);
-                COUNTER_INIT(ScrubCostNs, true);
+                COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableNs, false);
+                COUNTER_INIT_IF_EXTENDED(SkeletonFrontUserCostNs, true);
+                COUNTER_INIT_IF_EXTENDED(SkeletonFrontInternalCostNs, true);
+                COUNTER_INIT_IF_EXTENDED(DefragCostNs, true);
+                COUNTER_INIT_IF_EXTENDED(CompactionCostNs, true);
+                COUNTER_INIT_IF_EXTENDED(ScrubCostNs, true);
             }
             COUNTER_DEF(DiskTimeAvailableNs);
             COUNTER_DEF(SkeletonFrontUserCostNs);
@@ -191,15 +247,15 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TSyncerGroup)
             {
-                COUNTER_INIT(SyncerVSyncMessagesSent, true);
-                COUNTER_INIT(SyncerVSyncBytesSent, true);
-                COUNTER_INIT(SyncerVSyncBytesReceived, true);
-                COUNTER_INIT(SyncerVSyncFullMessagesSent, true);
-                COUNTER_INIT(SyncerVSyncFullBytesSent, true);
-                COUNTER_INIT(SyncerVSyncFullBytesReceived, true);
-                COUNTER_INIT(SyncerUnsyncedDisks, false);
-                COUNTER_INIT(SyncerLoggerRecords, true);
-                COUNTER_INIT(SyncerLoggedBytes, true);
+                COUNTER_INIT_IF_EXTENDED(SyncerVSyncMessagesSent, true);
+                COUNTER_INIT_IF_EXTENDED(SyncerVSyncBytesSent, true);
+                COUNTER_INIT_IF_EXTENDED(SyncerVSyncBytesReceived, true);
+                COUNTER_INIT_IF_EXTENDED(SyncerVSyncFullMessagesSent, true);
+                COUNTER_INIT_IF_EXTENDED(SyncerVSyncFullBytesSent, true);
+                COUNTER_INIT_IF_EXTENDED(SyncerVSyncFullBytesReceived, true);
+                COUNTER_INIT_IF_EXTENDED(SyncerUnsyncedDisks, false);
+                COUNTER_INIT_IF_EXTENDED(SyncerLoggerRecords, true);
+                COUNTER_INIT_IF_EXTENDED(SyncerLoggedBytes, true);
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -220,27 +276,28 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TReplGroup)
             {
-                COUNTER_INIT(ReplRecoveryGroupTypeErrors, true);
-                COUNTER_INIT(ReplBlobsRecovered, true);
-                COUNTER_INIT(ReplBlobBytesRecovered, true);
-                COUNTER_INIT(ReplHugeBlobsRecovered, true);
-                COUNTER_INIT(ReplHugeBlobBytesRecovered, true);
-                COUNTER_INIT(ReplChunksWritten, true);
-                COUNTER_INIT(ReplUnreplicatedVDisks, false);
-                COUNTER_INIT(ReplVGetBytesReceived, true);
+                COUNTER_INIT_IF_EXTENDED(ReplRecoveryGroupTypeErrors, true);
+                COUNTER_INIT_IF_EXTENDED(ReplBlobsRecovered, true);
+                COUNTER_INIT_IF_EXTENDED(ReplBlobBytesRecovered, true);
+                COUNTER_INIT_IF_EXTENDED(ReplHugeBlobsRecovered, true);
+                COUNTER_INIT_IF_EXTENDED(ReplHugeBlobBytesRecovered, true);
+                COUNTER_INIT_IF_EXTENDED(ReplChunksWritten, true);
+                COUNTER_INIT_IF_EXTENDED(ReplUnreplicatedVDisks, false);
+                COUNTER_INIT_IF_EXTENDED(ReplVGetBytesReceived, true);
                 COUNTER_INIT(ReplPhantomLikeDiscovered, false);
                 COUNTER_INIT(ReplPhantomLikeRecovered, false);
                 COUNTER_INIT(ReplPhantomLikeUnrecovered, false);
-                COUNTER_INIT(ReplPhantomLikeDropped, false);
-                COUNTER_INIT(ReplWorkUnitsDone, false);
-                COUNTER_INIT(ReplWorkUnitsRemaining, false);
+                COUNTER_INIT_IF_EXTENDED(ReplPhantomLikeDropped, false);
+                COUNTER_INIT_IF_EXTENDED(ReplWorkUnitsDone, false);
+                COUNTER_INIT_IF_EXTENDED(ReplWorkUnitsRemaining, false);
                 COUNTER_INIT(ReplItemsDone, false);
                 COUNTER_INIT(ReplItemsRemaining, false);
                 COUNTER_INIT(ReplUnreplicatedPhantoms, false);
                 COUNTER_INIT(ReplUnreplicatedNonPhantoms, false);
-                COUNTER_INIT(ReplSecondsRemaining, false);
-                COUNTER_INIT(ReplTotalBlobsWithProblems, false);
-                COUNTER_INIT(ReplPhantomBlobsWithProblems, false);
+                COUNTER_INIT_IF_EXTENDED(ReplSecondsRemaining, false);
+                COUNTER_INIT_IF_EXTENDED(ReplTotalBlobsWithProblems, false);
+                COUNTER_INIT_IF_EXTENDED(ReplPhantomBlobsWithProblems, false);
+                COUNTER_INIT_IF_EXTENDED(ReplMadeNoProgress, false);
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -265,6 +322,7 @@ public:                                                                         
             COUNTER_DEF(ReplSecondsRemaining);
             COUNTER_DEF(ReplTotalBlobsWithProblems);
             COUNTER_DEF(ReplPhantomBlobsWithProblems);
+            COUNTER_DEF(ReplMadeNoProgress);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -277,11 +335,11 @@ public:                                                                         
                 COUNTER_INIT_PRIVATE(LogoBlobsDbEmpty, false);
                 COUNTER_INIT_PRIVATE(BlocksDbEmpty, false);
                 COUNTER_INIT_PRIVATE(BarriersDbEmpty, false);
-                COUNTER_INIT(LocalRecovRecsDispatched, true);
-                COUNTER_INIT(LocalRecovBytesDispatched, true);
-                COUNTER_INIT(LocalRecovRecsApplied, true);
-                COUNTER_INIT(LocalRecovBytesApplied, true);
-                COUNTER_INIT(BulkLogoBlobs, true);
+                COUNTER_INIT_IF_EXTENDED(LocalRecovRecsDispatched, true);
+                COUNTER_INIT_IF_EXTENDED(LocalRecovBytesDispatched, true);
+                COUNTER_INIT_IF_EXTENDED(LocalRecovRecsApplied, true);
+                COUNTER_INIT_IF_EXTENDED(LocalRecovBytesApplied, true);
+                COUNTER_INIT_IF_EXTENDED(BulkLogoBlobs, true);
             }
 
             COUNTER_DEF(LogoBlobsDbEmpty);
@@ -301,8 +359,8 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TInterfaceGroup)
             {
-                COUNTER_INIT(PutTotalBytes, true);
-                COUNTER_INIT(GetTotalBytes, true);
+                COUNTER_INIT_IF_EXTENDED(PutTotalBytes, true);
+                COUNTER_INIT_IF_EXTENDED(GetTotalBytes, true);
             }
 
             COUNTER_DEF(PutTotalBytes);
@@ -316,14 +374,14 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TSyncLogIFaceGroup)
             {
-                COUNTER_INIT(SyncPutMsgs, true);
-                COUNTER_INIT(SyncPutSstMsgs, true);
-                COUNTER_INIT(SyncReadMsgs, true);
-                COUNTER_INIT(SyncReadResMsgs, true);
-                COUNTER_INIT(LocalSyncMsgs, true);
-                COUNTER_INIT(LocalSyncResMsgs, true);
-                COUNTER_INIT(SyncLogGetSnapshot, true);
-                COUNTER_INIT(SyncLogLocalStatus, true);
+                COUNTER_INIT_IF_EXTENDED(SyncPutMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(SyncPutSstMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(SyncReadMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(SyncReadResMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(LocalSyncMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(LocalSyncResMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(SyncLogGetSnapshot, true);
+                COUNTER_INIT_IF_EXTENDED(SyncLogLocalStatus, true);
             }
 
             COUNTER_DEF(SyncPutMsgs);
@@ -343,14 +401,14 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TSyncLogCountersGroup)
             {
-                COUNTER_INIT(VDiskCheckFailed, true);
-                COUNTER_INIT(UnequalGuid, true);
-                COUNTER_INIT(DiskLocked, true);
-                COUNTER_INIT(ReplyError, true);
-                COUNTER_INIT(FullRecovery, true);
-                COUNTER_INIT(NormalSync, true);
-                COUNTER_INIT(ReadsFromDisk, true);
-                COUNTER_INIT(ReadsFromDiskBytes, true);
+                COUNTER_INIT_IF_EXTENDED(VDiskCheckFailed, true);
+                COUNTER_INIT_IF_EXTENDED(UnequalGuid, true);
+                COUNTER_INIT_IF_EXTENDED(DiskLocked, true);
+                COUNTER_INIT_IF_EXTENDED(ReplyError, true);
+                COUNTER_INIT_IF_EXTENDED(FullRecovery, true);
+                COUNTER_INIT_IF_EXTENDED(NormalSync, true);
+                COUNTER_INIT_IF_EXTENDED(ReadsFromDisk, true);
+                COUNTER_INIT_IF_EXTENDED(ReadsFromDiskBytes, true);
             }
 
             // status of read request:
@@ -383,7 +441,7 @@ public:                                                                         
                 for (size_t i = NKikimrWhiteboard::EVDiskState_MIN; i <= NKikimrWhiteboard::EVDiskState_MAX; ++i) {
                     VDiskStates[i] = GroupCounters->GetCounter(name + "_" + NKikimrWhiteboard::EVDiskState_Name(i), false);
                 }
-                COUNTER_INIT(VDiskLocalRecoveryState, false);
+                COUNTER_INIT_IF_EXTENDED(VDiskLocalRecoveryState, false);
             }
 
             void VDiskState(NKikimrWhiteboard::EVDiskState s) {
@@ -434,6 +492,7 @@ public:                                                                         
             TLsmLevelGroup Level9to16;
             TLsmLevelGroup Level17;
             TLsmLevelGroup Level18;
+            TLsmLevelGroup Level19;
 
             TLsmAllLevelsStat(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
                 : Group(counters->GetSubgroup("subsystem", "levels"))
@@ -442,6 +501,7 @@ public:                                                                         
                 , Level9to16(Group, "level", "9..16")
                 , Level17(Group, "level", "17")
                 , Level18(Group, "level", "18")
+                , Level19(Group, "level", "19")
             {}
         };
 
@@ -452,25 +512,25 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TVDiskIFaceGroup)
             {
-                COUNTER_INIT(MovedPatchMsgs, true);
-                COUNTER_INIT(PatchStartMsgs, true);
-                COUNTER_INIT(PatchDiffMsgs, true);
-                COUNTER_INIT(PatchXorDiffMsgs, true);
-                COUNTER_INIT(PutMsgs, true);
-                COUNTER_INIT(MultiPutMsgs, true);
-                COUNTER_INIT(GetMsgs, true);
-                COUNTER_INIT(BlockMsgs, true);
-                COUNTER_INIT(GetBlockMsgs, true);
-                COUNTER_INIT(BlockAndGetMsgs, true);
-                COUNTER_INIT(GCMsgs, true);
-                COUNTER_INIT(GetBarrierMsgs, true);
-                COUNTER_INIT(SyncMsgs, true);
-                COUNTER_INIT(SyncFullMsgs, true);
-                COUNTER_INIT(RecoveredHugeBlobMsgs, true);
-                COUNTER_INIT(StatusMsgs, true);
-                COUNTER_INIT(DbStatMsgs, true);
-                COUNTER_INIT(AnubisPutMsgs, true);
-                COUNTER_INIT(OsirisPutMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(MovedPatchMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(PatchStartMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(PatchDiffMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(PatchXorDiffMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(PutMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(MultiPutMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(GetMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(BlockMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(GetBlockMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(BlockAndGetMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(GCMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(GetBarrierMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(SyncMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(SyncFullMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(RecoveredHugeBlobMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(StatusMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(DbStatMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(AnubisPutMsgs, true);
+                COUNTER_INIT_IF_EXTENDED(OsirisPutMsgs, true);
 
                 COUNTER_INIT_PRIVATE(MovedPatchResMsgs, true);
                 COUNTER_INIT_PRIVATE(PatchFoundPartsMsgs, true);
@@ -491,8 +551,19 @@ public:                                                                         
                 COUNTER_INIT_PRIVATE(AnubisPutResMsgs, true);
                 COUNTER_INIT_PRIVATE(OsirisPutResMsgs, true);
 
-                COUNTER_INIT(PutTotalBytes, true);
-                COUNTER_INIT(GetTotalBytes, true);
+                COUNTER_INIT_IF_EXTENDED(PutTotalBytes, true);
+                COUNTER_INIT_IF_EXTENDED(GetTotalBytes, true);
+            }
+                
+            void MinHugeBlobInBytes(ui32 size) {
+                auto getCounter = [&](ui32 size) {
+                    return GroupCounters->GetSubgroup("MinHugeBlobInBytes", ToString(size))->GetCounter("count", 1);
+                };
+                if (PrevMinHugeBlobInBytes) {
+                    *getCounter(PrevMinHugeBlobInBytes) = 0;
+                }
+                *getCounter(size) = 1;
+                PrevMinHugeBlobInBytes = size;
             }
 
             COUNTER_DEF(MovedPatchMsgs);
@@ -536,6 +607,8 @@ public:                                                                         
 
             COUNTER_DEF(PutTotalBytes);
             COUNTER_DEF(GetTotalBytes);
+        private:
+            ui32 PrevMinHugeBlobInBytes = 0;
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -545,10 +618,12 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TDefragGroup)
             {
-                COUNTER_INIT(DefragBytesRewritten, true);
+                COUNTER_INIT_IF_EXTENDED(DefragBytesRewritten, true);
+                COUNTER_INIT_IF_EXTENDED(DefragThreshold, false);
             }
 
             COUNTER_DEF(DefragBytesRewritten);
+            COUNTER_DEF(DefragThreshold);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -558,9 +633,313 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TBalancingGroup)
             {
+                COUNTER_INIT(BalancingIterations, true);
+                COUNTER_INIT(EpochTimeouts, true);
+                COUNTER_INIT(ReplTokenAquired, true);
+                COUNTER_INIT(OnMainByIngressButNotRealy, true);
+
+                COUNTER_INIT(PlannedToSendOnMain, false);
+                COUNTER_INIT(CandidatesToDelete, false);
+
+                COUNTER_INIT(ReadFromHandoffBytes, true);
+                COUNTER_INIT(ReadFromHandoffResponseBytes, true);
+                COUNTER_INIT(ReadFromHandoffBatchTimeout, true);
+                COUNTER_INIT(SentOnMain, true);
+                COUNTER_INIT(SentOnMainBytes, true);
+                COUNTER_INIT(SentOnMainWithResponseBytes, true);
+                COUNTER_INIT(SendOnMainBatchTimeout, true);
+
+                COUNTER_INIT(CandidatesToDeleteAskedFromMain, true);
+                COUNTER_INIT(CandidatesToDeleteAskedFromMainResponse, true);
+                COUNTER_INIT(CandidatesToDeleteAskFromMainBatchTimeout, true);
+                COUNTER_INIT(MarkedReadyToDelete, true);
+                COUNTER_INIT(MarkedReadyToDeleteBytes, true);
+                COUNTER_INIT(MarkedReadyToDeleteResponse, true);
+                COUNTER_INIT(MarkedReadyToDeleteWithResponseBytes, true);
+                COUNTER_INIT(MarkReadyBatchTimeout, true);
             }
+
+            COUNTER_DEF(BalancingIterations);
+            COUNTER_DEF(EpochTimeouts);
+            COUNTER_DEF(ReplTokenAquired);
+            COUNTER_DEF(OnMainByIngressButNotRealy);
+
+            COUNTER_DEF(PlannedToSendOnMain);
+            COUNTER_DEF(ReadFromHandoffBytes);
+            COUNTER_DEF(ReadFromHandoffResponseBytes);
+            COUNTER_DEF(ReadFromHandoffBatchTimeout);
+            COUNTER_DEF(SentOnMain);
+            COUNTER_DEF(SentOnMainBytes);
+            COUNTER_DEF(SentOnMainWithResponseBytes);
+            COUNTER_DEF(SendOnMainBatchTimeout);
+            COUNTER_DEF(CandidatesToDelete);
+            COUNTER_DEF(CandidatesToDeleteAskedFromMain);
+            COUNTER_DEF(CandidatesToDeleteAskedFromMainResponse);
+            COUNTER_DEF(CandidatesToDeleteAskFromMainBatchTimeout);
+            COUNTER_DEF(MarkedReadyToDelete);
+            COUNTER_DEF(MarkedReadyToDeleteBytes);
+            COUNTER_DEF(MarkedReadyToDeleteResponse);
+            COUNTER_DEF(MarkedReadyToDeleteWithResponseBytes);
+            COUNTER_DEF(MarkReadyBatchTimeout);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TOutOfSpaceGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TOutOfSpaceGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TOutOfSpaceGroup)
+            {
+                COUNTER_INIT(ResponsesWithDiskSpaceRed, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceOrange, true);
+                COUNTER_INIT(ResponsesWithDiskSpacePreOrange, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceLightOrange, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceYellowStop, true);
+                COUNTER_INIT(ResponsesWithDiskSpaceLightYellowMove, true);
+            }
+
+            COUNTER_DEF(ResponsesWithDiskSpaceRed);
+            COUNTER_DEF(ResponsesWithDiskSpaceOrange);
+            COUNTER_DEF(ResponsesWithDiskSpacePreOrange);
+            COUNTER_DEF(ResponsesWithDiskSpaceLightOrange);
+            COUNTER_DEF(ResponsesWithDiskSpaceYellowStop);
+            COUNTER_DEF(ResponsesWithDiskSpaceLightYellowMove);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // THandleClassGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class THandleClassGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(THandleClassGroup)
+            {
+                COUNTER_INIT_IF_EXTENDED(Undefined, true);
+                COUNTER_INIT_IF_EXTENDED(GetDiscover, true);
+                COUNTER_INIT_IF_EXTENDED(GetFast, true);
+                COUNTER_INIT_IF_EXTENDED(GetAsync, true);
+                COUNTER_INIT_IF_EXTENDED(GetLow, true);
+                COUNTER_INIT_IF_EXTENDED(PutTabletLog, true);
+                COUNTER_INIT_IF_EXTENDED(PutUserData, true);
+                COUNTER_INIT_IF_EXTENDED(PutAsyncBlob, true);
+            }
+
+            COUNTER_DEF(Undefined);
+            COUNTER_DEF(GetDiscover);
+            COUNTER_DEF(GetFast);
+            COUNTER_DEF(GetAsync);
+            COUNTER_DEF(GetLow);
+            COUNTER_DEF(PutTabletLog);
+            COUNTER_DEF(PutUserData);
+            COUNTER_DEF(PutAsyncBlob);
+            
+            ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
+                if (!handleClass) {
+                    return Undefined();
+                }
+                switch (*handleClass) {
+                    case NKikimrBlobStorage::AsyncRead:
+                        return GetAsync();
+                    case NKikimrBlobStorage::FastRead:
+                        return GetFast();
+                    case NKikimrBlobStorage::Discover:
+                        return GetDiscover();
+                    case NKikimrBlobStorage::LowRead:
+                        return GetLow();
+                    default:
+                        return Undefined();
+                }
+            }
+            ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EPutHandleClass>& handleClass) {
+                if (!handleClass) {
+                    return Undefined();
+                }
+                switch (*handleClass) {
+                    case NKikimrBlobStorage::TabletLog:
+                        return PutTabletLog();
+                    case NKikimrBlobStorage::AsyncBlob:
+                        return PutAsyncBlob();
+                    case NKikimrBlobStorage::UserData:
+                        return PutUserData();
+                    default:
+                        return Undefined();
+                }
+            }
+
+            ::NMonitoring::TDeprecatedCounter &GetCounter() {
+                return Undefined();
+            }
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TResponseStatusGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TResponseStatusGroup {
+        public:
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> Group;
+
+            THandleClassGroup Undefined;
+            THandleClassGroup ResponsesWithStatusError;
+            THandleClassGroup ResponsesWithStatusRace;
+            THandleClassGroup ResponsesWithStatusBlocked;
+            THandleClassGroup ResponsesWithStatusOutOfSpace;
+            THandleClassGroup ResponsesWithStatusDeadline;
+            THandleClassGroup ResponsesWithStatusNotReady;
+            THandleClassGroup ResponsesWithStatusVdiskErrorState;
+
+            TResponseStatusGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+                : Group(counters->GetSubgroup("subsystem", "statuses"))
+                , Undefined(Group, "status", "UNDEFINED")
+                , ResponsesWithStatusError(Group, "status", "ERROR")
+                , ResponsesWithStatusRace(Group, "status", "RACE")
+                , ResponsesWithStatusBlocked(Group, "status", "BLOCKED")
+                , ResponsesWithStatusOutOfSpace(Group, "status", "OUT_OF_SPACE")
+                , ResponsesWithStatusDeadline(Group, "status", "DEADLINE")
+                , ResponsesWithStatusNotReady(Group, "status", "NOT_READY")
+                , ResponsesWithStatusVdiskErrorState(Group, "status", "VDISK_STATUS_ERROR")
+            {}
+
+            template <typename THandleClassType>
+            ::NMonitoring::TDeprecatedCounter &GetCounterByHandleClass(NKikimrProto::EReplyStatus status, const std::optional<THandleClassType>& handleClass = std::nullopt) {
+                switch (status) {
+                    case NKikimrProto::ERROR:
+                        return ResponsesWithStatusError.GetCounter(handleClass);
+                    case NKikimrProto::RACE:
+                        return ResponsesWithStatusRace.GetCounter(handleClass);
+                    case NKikimrProto::BLOCKED:
+                        return ResponsesWithStatusBlocked.GetCounter(handleClass);
+                    case NKikimrProto::OUT_OF_SPACE:
+                        return ResponsesWithStatusOutOfSpace.GetCounter(handleClass);
+                    case NKikimrProto::DEADLINE:
+                        return ResponsesWithStatusDeadline.GetCounter(handleClass);
+                    case NKikimrProto::NOTREADY:
+                        return ResponsesWithStatusNotReady.GetCounter(handleClass);
+                    case NKikimrProto::VDISK_ERROR_STATE:
+                        return ResponsesWithStatusVdiskErrorState.GetCounter(handleClass);
+                    default: return Undefined.GetCounter(handleClass);
+                }
+            }
+
+            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status) {
+                return GetCounterByHandleClass(status, std::optional<NKikimrBlobStorage::EPutHandleClass>{});
+            }
+            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status, const std::optional<NKikimrBlobStorage::EPutHandleClass>& handleClass) {
+                return GetCounterByHandleClass(status, handleClass);
+            }
+            ::NMonitoring::TDeprecatedCounter &GetCounter(NKikimrProto::EReplyStatus status, const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
+                return GetCounterByHandleClass(status, handleClass);
+            }
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TCostTrackerGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TCostTrackerGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TCostTrackerGroup)
+            {
+                COUNTER_INIT_IF_EXTENDED(UserDiskCost, true);
+                COUNTER_INIT_IF_EXTENDED(CompactionDiskCost, true);
+                COUNTER_INIT_IF_EXTENDED(ScrubDiskCost, true);
+                COUNTER_INIT_IF_EXTENDED(DefragDiskCost, true);
+                COUNTER_INIT_IF_EXTENDED(InternalDiskCost, true);
+                COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableCtr, false);
+            }
+
+            COUNTER_DEF(UserDiskCost);
+            COUNTER_DEF(CompactionDiskCost);
+            COUNTER_DEF(ScrubDiskCost);
+            COUNTER_DEF(DefragDiskCost);
+            COUNTER_DEF(InternalDiskCost);
+            COUNTER_DEF(DiskTimeAvailableCtr);
+        };
+
+        class TScrubGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TScrubGroup)
+            {
+                COUNTER_INIT(SstProcessed, true);
+                COUNTER_INIT(HugeBlobsRead, true);
+                COUNTER_INIT(HugeBlobBytesRead, true);
+                COUNTER_INIT(SmallBlobIntervalsRead, true);
+                COUNTER_INIT(SmallBlobIntervalBytesRead, true);
+                COUNTER_INIT(SmallBlobsRead, true);
+                COUNTER_INIT(SmallBlobBytesRead, true);
+                COUNTER_INIT(UnreadableBlobsFound, false);
+                COUNTER_INIT(BlobsFixed, false);
+            }
+
+            COUNTER_DEF(SstProcessed);
+            COUNTER_DEF(HugeBlobsRead);
+            COUNTER_DEF(HugeBlobBytesRead);
+            COUNTER_DEF(SmallBlobIntervalsRead);
+            COUNTER_DEF(SmallBlobIntervalBytesRead);
+            COUNTER_DEF(SmallBlobsRead);
+            COUNTER_DEF(SmallBlobBytesRead);
+            COUNTER_DEF(UnreadableBlobsFound);
+            COUNTER_DEF(BlobsFixed);
+        };
+
+        class TMalfunctionGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TMalfunctionGroup)
+            {
+                COUNTER_INIT(DroppingStuckInternalQueue, false);
+            }
+
+            COUNTER_DEF(DroppingStuckInternalQueue);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TTimerGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TTimerGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TTimerGroup)
+            {
+                COUNTER_INIT(SkeletonFrontUptimeSeconds, false);
+            }
+
+            COUNTER_DEF(SkeletonFrontUptimeSeconds);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TCompactionStrategyGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TCompactionStrategyGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TCompactionStrategyGroup)
+            {
+                COUNTER_INIT(BlobsDelSst, true);
+                COUNTER_INIT(BlobsPromoteSsts, true);
+                COUNTER_INIT(BlobsExplicit, true);
+                COUNTER_INIT(BlobsBalance, true);
+                COUNTER_INIT(BlobsFreeSpace, true);
+                COUNTER_INIT(BlobsSqueeze, true);
+
+                COUNTER_INIT(BlocksPromoteSsts, true);
+                COUNTER_INIT(BlocksExplicit, true);
+                COUNTER_INIT(BlocksBalance, true);
+
+                COUNTER_INIT(BarriersPromoteSsts, true);
+                COUNTER_INIT(BarriersExplicit, true);
+                COUNTER_INIT(BarriersBalance, true);
+            }
+
+            COUNTER_DEF(BlobsDelSst);
+            COUNTER_DEF(BlobsPromoteSsts);
+            COUNTER_DEF(BlobsExplicit);
+            COUNTER_DEF(BlobsBalance);
+            COUNTER_DEF(BlobsFreeSpace);
+            COUNTER_DEF(BlobsSqueeze);
+
+            COUNTER_DEF(BlocksPromoteSsts);
+            COUNTER_DEF(BlocksExplicit);
+            COUNTER_DEF(BlocksBalance);
+
+            COUNTER_DEF(BarriersPromoteSsts);
+            COUNTER_DEF(BarriersExplicit);
+            COUNTER_DEF(BarriersBalance);
         };
 
     } // NMonGroup
 } // NKikimr
-

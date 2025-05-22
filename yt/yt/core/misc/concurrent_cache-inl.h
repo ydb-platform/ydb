@@ -17,22 +17,25 @@ struct TConcurrentCache<T>::TLookupTable final
     static constexpr bool EnableHazard = true;
 
     const size_t Capacity;
+    const TMemoryUsageTrackerGuard MemoryUsageGuard;
     std::atomic<size_t> Size = 0;
     TAtomicPtr<TLookupTable> Next;
 
-    explicit TLookupTable(size_t capacity)
+    TLookupTable(size_t capacity, TMemoryUsageTrackerGuard memoryUsageGuard)
         : THashTable(capacity)
         , Capacity(capacity)
+        , MemoryUsageGuard(std::move(memoryUsageGuard))
     { }
 
-    bool Insert(TValuePtr item)
+    typename THashTable::TItemRef Insert(TValuePtr item)
     {
         auto fingerprint = THash<T>()(item.Get());
-        if (THashTable::Insert(fingerprint, std::move(item))) {
+        auto result = THashTable::Insert(fingerprint, std::move(item));
+
+        if (result) {
             ++Size;
-            return true;
         }
-        return false;
+        return result;
     }
 };
 
@@ -40,16 +43,20 @@ template <class T>
 TIntrusivePtr<typename TConcurrentCache<T>::TLookupTable>
 TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t capacity)
 {
-    if (head != Head_) {
+    if (head.Get() != Head_) {
         return Head_.Acquire();
     }
 
     // Rotate lookup table.
-    auto newHead = New<TLookupTable>(capacity);
+    auto memoryUsageGuard = TMemoryUsageTrackerGuard::TryAcquire(
+        MemoryUsageTracker_,
+        TLookupTable::GetByteSize(capacity))
+        .ValueOrThrow();
+    auto newHead = New<TLookupTable>(capacity, std::move(memoryUsageGuard));
     newHead->Next = head;
 
     if (Head_.SwapIfCompare(head, newHead)) {
-        static const auto& Logger = LockFreePtrLogger;
+        constexpr auto& Logger = LockFreeLogger;
         YT_LOG_DEBUG("Concurrent cache lookup table rotated (LoadFactor: %v)",
             head->Size.load());
 
@@ -62,9 +69,14 @@ TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t 
 }
 
 template <class T>
-TConcurrentCache<T>::TConcurrentCache(size_t capacity)
-    : Capacity_(capacity)
-    , Head_(New<TLookupTable>(capacity))
+TConcurrentCache<T>::TConcurrentCache(size_t capacity, IMemoryUsageTrackerPtr tracker)
+    : MemoryUsageTracker_(std::move(tracker))
+    , Capacity_(capacity)
+    , Head_(New<TLookupTable>(
+        capacity,
+        TMemoryUsageTrackerGuard::Acquire(
+            MemoryUsageTracker_,
+            TLookupTable::GetByteSize(capacity))))
 {
     YT_VERIFY(capacity > 0);
 }
@@ -74,7 +86,7 @@ TConcurrentCache<T>::~TConcurrentCache()
 {
     auto head = Head_.Acquire();
 
-    static const auto& Logger = LockFreePtrLogger;
+    constexpr auto& Logger = LockFreeLogger;
     YT_LOG_DEBUG("Concurrent cache head statistics (ElementCount: %v)",
         head->Size.load());
 }
@@ -207,6 +219,12 @@ void TConcurrentCache<T>::SetCapacity(size_t capacity)
     }
 }
 
-/////////////////////////////////////////////////////////////////////////////
+template <class T>
+bool TConcurrentCache<T>::IsHead(const TIntrusivePtr<TLookupTable>& head) const
+{
+    return Head_ == head.Get();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

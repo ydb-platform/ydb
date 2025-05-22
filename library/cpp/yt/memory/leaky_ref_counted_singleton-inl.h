@@ -30,9 +30,6 @@ TIntrusivePtr<T> LeakyRefCountedSingleton(TArgs&&... args)
         auto ptr = New<T>(std::forward<TArgs>(args)...);
         Ref(ptr.Get());
         Ptr.store(ptr.Get());
-#if defined(_asan_enabled_)
-        NSan::MarkAsIntentionallyLeaked(ptr.Get());
-#endif
     });
 
     return Ptr.load();

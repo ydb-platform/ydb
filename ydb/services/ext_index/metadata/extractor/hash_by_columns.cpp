@@ -1,9 +1,9 @@
 #include "hash_by_columns.h"
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/formats/arrow/hash/calcer.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/minikql/jsonpath/jsonpath.h>
-#include <ydb/library/yql/minikql/jsonpath/value.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/jsonpath/jsonpath.h>
+#include <yql/essentials/minikql/jsonpath/value.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <library/cpp/json/fast_sax/parser.h>

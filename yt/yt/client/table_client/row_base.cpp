@@ -2,7 +2,7 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 namespace NYT::NTableClient {
 
@@ -118,6 +118,7 @@ void ValidateKeyValueType(EValueType type)
         type != EValueType::Double &&
         type != EValueType::Boolean &&
         type != EValueType::String &&
+        type != EValueType::Any &&
         type != EValueType::Composite &&
         type != EValueType::Null &&
         type != EValueType::Min &&
@@ -167,12 +168,12 @@ void ValidateColumnFilter(const TColumnFilter& columnFilter, int schemaColumnCou
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TColumnFilter& columnFilter)
+void FormatValue(TStringBuilderBase* builder, const TColumnFilter& columnFilter, TStringBuf spec)
 {
     if (columnFilter.IsUniversal()) {
-        return TString("{All}");
+        FormatValue(builder, TStringBuf{"{All}"}, spec);
     } else {
-        return Format("{%v}", columnFilter.GetIndexes());
+        FormatValue(builder, Format("{%v}", columnFilter.GetIndexes()), spec);
     }
 }
 

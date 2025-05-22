@@ -15,6 +15,8 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(1.42)
+
 PEERDIR(
     contrib/libs/libiconv
 )

@@ -1,15 +1,15 @@
 #pragma once
 
-#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+#include "fwd.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_types/fluent_settings_helpers.h>
 
-namespace NYdb::NQuery {
+namespace NYdb::inline V2::NQuery {
 
 struct TTxOnlineSettings {
     using TSelf = TTxOnlineSettings;
 
-    FLUENT_SETTING_DEFAULT(bool, AllowInconsistentReads, false);
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, AllowInconsistentReads, false);
 
     TTxOnlineSettings() {}
 };
@@ -36,6 +36,10 @@ struct TTxSettings {
         return TTxSettings(TS_SNAPSHOT_RO);
     }
 
+    static TTxSettings SnapshotRW() {
+        return TTxSettings(TS_SNAPSHOT_RW);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -50,6 +54,9 @@ struct TTxSettings {
         case TS_SNAPSHOT_RO:
             out << "SnapshotRO";
             break;
+        case TS_SNAPSHOT_RW:
+            out << "SnapshotRW";
+            break;
         default:
             out << "Unknown";
             break;
@@ -60,15 +67,20 @@ struct TTxSettings {
         TS_SERIALIZABLE_RW,
         TS_ONLINE_RO,
         TS_STALE_RO,
-        TS_SNAPSHOT_RO
+        TS_SNAPSHOT_RO,
+        TS_SNAPSHOT_RW,
     };
 
-    const ETransactionMode Mode_;
-    FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
+    FLUENT_SETTING_DEPRECATED(TTxOnlineSettings, OnlineSettings);
 
+    ETransactionMode GetMode() const {
+        return Mode_;
+    }
 private:
     TTxSettings(ETransactionMode mode)
         : Mode_(mode) {}
+
+    ETransactionMode Mode_;
 };
 
 struct TTxControl {
@@ -88,7 +100,7 @@ struct TTxControl {
 
     const TMaybe<TString> TxId_;
     const TMaybe<TTxSettings> TxSettings_;
-    FLUENT_SETTING_FLAG(CommitTx);
+    FLUENT_SETTING_FLAG_DEPRECATED(CommitTx);
 
     bool HasTx() const { return TxId_.Defined() || TxSettings_.Defined(); }
 

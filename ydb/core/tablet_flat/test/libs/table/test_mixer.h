@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/utility.h>
 #include <util/random/mersenne.h>
 
 namespace NKikimr {
@@ -16,44 +17,46 @@ namespace NTest {
     };
 
     struct TMixerRnd {
-        TMixerRnd(ui32 num) : Num(num) { }
+        TMixerRnd(ui32 buckets) 
+            : Buckets(buckets) 
+        {
+        }
 
         ui32 operator()(const TRow&) noexcept
         {
-            return Random.Uniform(Num);
+            return Random.Uniform(Buckets);
         }
 
     private:
-        const ui32 Num = 1;
+        const ui32 Buckets = 1;
         TMersenne<ui64> Random;
     };
 
     struct TMixerSeq {
-        TMixerSeq(ui32 num, ui64 rows)
-            : Num(num)
-            , Base(rows / num)
-            , Skip(rows % num)
+        TMixerSeq(ui32 buckets, ui64 rows)
+            : Buckets(buckets)
+            , RowsPerBucket(rows / buckets)
+            , Skip(rows % buckets)
         {
-
         }
 
         ui32 operator()(const TRow&) noexcept
         {
-            if (Buck-- == 0) {
-                ui64 one = (Skip && Skip > Random.Uniform(Num) ? 1 : 0);
+            if (CurrentBucketRemainingRows-- == 0) { // start next bucket with CurrentBucketRemainingRows rows
+                ui64 one = (Skip && Skip > Random.Uniform(Buckets) ? 1 : 0);
 
-                Buck = Base + one, Skip -= one, Hash++;
+                CurrentBucketRemainingRows = RowsPerBucket + one - 1, Skip -= one, CurrentBucket++;
             }
 
-            return Min(Hash, Num - 1);
+            return Min(CurrentBucket, Buckets - 1);
         }
 
     private:
-        const ui32 Num = 1;
-        ui64 Base = Max<ui64>();
-        ui64 Skip = 0;
-        ui64 Buck = 0;
-        ui32 Hash = Max<ui32>();
+        const ui32 Buckets;
+        ui64 RowsPerBucket;
+        ui64 Skip;
+        ui64 CurrentBucketRemainingRows = 0;
+        ui32 CurrentBucket = Max<ui32>();
         TMersenne<ui64> Random;
     };
 }

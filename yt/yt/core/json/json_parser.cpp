@@ -6,7 +6,7 @@
 
 #include <array>
 
-#include <contrib/libs/yajl/api/yajl_parse.h>
+#include <contrib/libs/yajl/src/api/yajl_parse.h>
 
 namespace NYT::NJson {
 
@@ -194,7 +194,7 @@ private:
             1,
             reinterpret_cast<const unsigned char*>(data),
             len);
-        auto error = TError("Error parsing JSON") << TError((char*) errorMessage);
+        auto error = TError("Error parsing JSON") << TError(TRuntimeFormat((char*) errorMessage));
         yajl_free_error(YajlHandle_.get(), errorMessage);
         THROW_ERROR_EXCEPTION(error);
     }

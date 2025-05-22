@@ -20,7 +20,7 @@ TStringBuf TThreadName::ToStringBuf() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TThreadName::TThreadName(const TString& name)
+TThreadName::TThreadName(TStringBuf name)
 {
     Length = std::min<int>(TThreadName::BufferCapacity - 1, name.length());
     ::memcpy(Buffer.data(), name.data(), Length);
@@ -29,19 +29,18 @@ TThreadName::TThreadName(const TString& name)
 ////////////////////////////////////////////////////////////////////////////////
 
 // This function uses cached TThread::CurrentThreadName() result
-TThreadName GetCurrentThreadName()
+YT_PREVENT_TLS_CACHING TThreadName GetCurrentThreadName()
 {
-    static YT_THREAD_LOCAL(TThreadName) ThreadName;
-    auto& threadName = GetTlsRef(ThreadName);
+    static thread_local TThreadName ThreadName;
 
-    if (threadName.Length == 0) {
+    if (ThreadName.Length == 0) {
         if (auto name = TThread::CurrentThreadName()) {
             auto length = std::min<int>(TThreadName::BufferCapacity - 1, name.length());
-            threadName.Length = length;
-            ::memcpy(threadName.Buffer.data(), name.data(), length);
+            ThreadName.Length = length;
+            ::memcpy(ThreadName.Buffer.data(), name.data(), length);
         }
     }
-    return threadName;
+    return ThreadName;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

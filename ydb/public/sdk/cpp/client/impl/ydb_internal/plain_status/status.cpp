@@ -3,7 +3,7 @@
 
 #include <util/string/builder.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 using std::string;
 
@@ -17,7 +17,7 @@ TPlainStatus::TPlainStatus(
     TStringType msg;
     if (grpcStatus.InternalError) {
         Status = EStatus::CLIENT_INTERNAL_ERROR;
-        if (grpcStatus.Msg) {
+        if (!grpcStatus.Msg.empty()) {
             msg = TStringBuilder() << "Internal client error: " << grpcStatus.Msg;
         } else {
             msg = "Unknown internal client error";

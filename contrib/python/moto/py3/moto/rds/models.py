@@ -1,17 +1,16 @@
 import copy
 import datetime
 import os
-import random
 import string
 
 from collections import defaultdict
 from jinja2 import Template
 from re import compile as re_compile
 from collections import OrderedDict
-from moto.core import BaseBackend, BaseModel, CloudFormationModel, get_account_id
-
+from moto.core import BaseBackend, BaseModel, CloudFormationModel
 from moto.core.utils import iso_8601_datetime_with_milliseconds, BackendDict
 from moto.ec2.models import ec2_backends
+from moto.moto_api._internal import mock_random as random
 from .exceptions import (
     RDSClientError,
     DBClusterNotFoundError,
@@ -52,6 +51,7 @@ class Cluster:
         self.engine_mode = kwargs.get("engine_mode") or "provisioned"
         self.iops = kwargs.get("iops")
         self.status = "active"
+        self.account_id = kwargs.get("account_id")
         self.region_name = kwargs.get("region")
         self.cluster_create_time = iso_8601_datetime_with_milliseconds(
             datetime.datetime.now()
@@ -73,14 +73,7 @@ class Cluster:
                 "The parameter MasterUsername must be provided and must not be blank."
             )
         self.master_user_password = kwargs.get("master_user_password")
-        if not self.master_user_password:
-            raise InvalidParameterValue(
-                "The parameter MasterUserPassword must be provided and must not be blank."
-            )
-        if len(self.master_user_password) < 8:
-            raise InvalidParameterValue(
-                "The parameter MasterUserPassword is not a valid password because it is shorter than 8 characters."
-            )
+
         self.availability_zones = kwargs.get("availability_zones")
         if not self.availability_zones:
             self.availability_zones = [
@@ -113,12 +106,61 @@ class Cluster:
         self.enabled_cloudwatch_logs_exports = (
             kwargs.get("enable_cloudwatch_logs_exports") or []
         )
+        self.enable_http_endpoint = kwargs.get("enable_http_endpoint")
 
     @property
     def db_cluster_arn(self):
-        return "arn:aws:rds:{0}:{1}:cluster:{2}".format(
-            self.region_name, get_account_id(), self.db_cluster_identifier
-        )
+        return f"arn:aws:rds:{self.region_name}:{self.account_id}:cluster:{self.db_cluster_identifier}"
+
+    @property
+    def master_user_password(self):
+        return self._master_user_password
+
+    @master_user_password.setter
+    def master_user_password(self, val):
+        if not val:
+            raise InvalidParameterValue(
+                "The parameter MasterUserPassword must be provided and must not be blank."
+            )
+        if len(val) < 8:
+            raise InvalidParameterValue(
+                "The parameter MasterUserPassword is not a valid password because it is shorter than 8 characters."
+            )
+        self._master_user_password = val
+
+    @property
+    def enable_http_endpoint(self):
+        return self._enable_http_endpoint
+
+    @enable_http_endpoint.setter
+    def enable_http_endpoint(self, val):
+        # instead of raising an error on aws rds create-db-cluster commands with
+        # incompatible configurations with enable_http_endpoint
+        # (e.g. engine_mode is not set to "serverless"), the API
+        # automatically sets the enable_http_endpoint parameter to False
+        self._enable_http_endpoint = False
+        if val is not None:
+            if self.engine_mode == "serverless":
+                if self.engine == "aurora-mysql" and self.engine_version in [
+                    "5.6.10a",
+                    "5.6.1",
+                    "2.07.1",
+                    "5.7.2",
+                ]:
+                    self._enable_http_endpoint = val
+                elif self.engine == "aurora-postgresql" and self.engine_version in [
+                    "10.12",
+                    "10.14",
+                    "10.18",
+                    "11.13",
+                ]:
+                    self._enable_http_endpoint = val
+
+    def get_cfg(self):
+        cfg = self.__dict__
+        cfg["master_user_password"] = cfg.pop("_master_user_password")
+        cfg["enable_http_endpoint"] = cfg.pop("_enable_http_endpoint")
+        return cfg
 
     def to_xml(self):
         template = Template(
@@ -171,7 +213,7 @@ class Cluster:
               <IAMDatabaseAuthenticationEnabled>false</IAMDatabaseAuthenticationEnabled>
               <EngineMode>{{ cluster.engine_mode }}</EngineMode>
               <DeletionProtection>{{ 'true' if cluster.deletion_protection else 'false' }}</DeletionProtection>
-              <HttpEndpointEnabled>false</HttpEndpointEnabled>
+              <HttpEndpointEnabled>{{ cluster.enable_http_endpoint }}</HttpEndpointEnabled>
               <CopyTagsToSnapshot>{{ cluster.copy_tags_to_snapshot }}</CopyTagsToSnapshot>
               <CrossAccountClone>false</CrossAccountClone>
               <DomainMemberships></DomainMemberships>
@@ -261,13 +303,13 @@ class ClusterSnapshot(BaseModel):
         self.snapshot_id = snapshot_id
         self.tags = tags
         self.status = "available"
-        self.created_at = iso_8601_datetime_with_milliseconds(datetime.datetime.now())
+        self.created_at = iso_8601_datetime_with_milliseconds(
+            datetime.datetime.utcnow()
+        )
 
     @property
     def snapshot_arn(self):
-        return "arn:aws:rds:{0}:{1}:cluster-snapshot:{2}".format(
-            self.cluster.region_name, get_account_id(), self.snapshot_id
-        )
+        return f"arn:aws:rds:{self.cluster.region_name}:{self.cluster.account_id}:cluster-snapshot:{self.snapshot_id}"
 
     def to_xml(self):
         template = Template(
@@ -341,6 +383,7 @@ class Database(CloudFormationModel):
         self.status = "available"
         self.is_replica = False
         self.replicas = []
+        self.account_id = kwargs.get("account_id")
         self.region_name = kwargs.get("region")
         self.engine = kwargs.get("engine")
         self.engine_version = kwargs.get("engine_version", None)
@@ -387,10 +430,12 @@ class Database(CloudFormationModel):
         if self.backup_retention_period is None:
             self.backup_retention_period = 1
         self.availability_zone = kwargs.get("availability_zone")
+        if not self.availability_zone:
+            self.availability_zone = f"{self.region_name}a"
         self.multi_az = kwargs.get("multi_az")
         self.db_subnet_group_name = kwargs.get("db_subnet_group_name")
         if self.db_subnet_group_name:
-            self.db_subnet_group = rds_backends[
+            self.db_subnet_group = rds_backends[self.account_id][
                 self.region_name
             ].describe_subnet_groups(self.db_subnet_group_name)[0]
         else:
@@ -405,7 +450,7 @@ class Database(CloudFormationModel):
             self.db_parameter_group_name
             and not self.is_default_parameter_group(self.db_parameter_group_name)
             and self.db_parameter_group_name
-            not in rds_backends[self.region_name].db_parameter_groups
+            not in rds_backends[self.account_id][self.region_name].db_parameter_groups
         ):
             raise DBParameterGroupNotFoundError(self.db_parameter_group_name)
 
@@ -418,7 +463,7 @@ class Database(CloudFormationModel):
         if (
             self.option_group_name
             and self.option_group_name
-            not in rds_backends[self.region_name].option_groups
+            not in rds_backends[self.account_id][self.region_name].option_groups
         ):
             raise OptionGroupNotFoundFaultError(self.option_group_name)
         self.default_option_groups = {
@@ -441,9 +486,7 @@ class Database(CloudFormationModel):
 
     @property
     def db_instance_arn(self):
-        return "arn:aws:rds:{0}:{1}:db:{2}".format(
-            self.region_name, get_account_id(), self.db_instance_identifier
-        )
+        return f"arn:aws:rds:{self.region_name}:{self.account_id}:db:{self.db_instance_identifier}"
 
     @property
     def physical_resource_id(self):
@@ -460,6 +503,7 @@ class Database(CloudFormationModel):
             description = "Default parameter group for {0}".format(db_family)
             return [
                 DBParameterGroup(
+                    account_id=self.account_id,
                     name=db_parameter_group_name,
                     family=db_family,
                     description=description,
@@ -468,17 +512,11 @@ class Database(CloudFormationModel):
                 )
             ]
         else:
-            if (
-                self.db_parameter_group_name
-                not in rds_backends[self.region_name].db_parameter_groups
-            ):
+            backend = rds_backends[self.account_id][self.region_name]
+            if self.db_parameter_group_name not in backend.db_parameter_groups:
                 raise DBParameterGroupNotFoundError(self.db_parameter_group_name)
 
-            return [
-                rds_backends[self.region_name].db_parameter_groups[
-                    self.db_parameter_group_name
-                ]
-            ]
+            return [backend.db_parameter_groups[self.db_parameter_group_name]]
 
     def is_default_parameter_group(self, param_group_name):
         return param_group_name.startswith("default.%s" % self.engine.lower())
@@ -495,6 +533,7 @@ class Database(CloudFormationModel):
     def to_xml(self):
         template = Template(
             """<DBInstance>
+              <AvailabilityZone>{{ database.availability_zone }}</AvailabilityZone>
               <BackupRetentionPeriod>{{ database.backup_retention_period }}</BackupRetentionPeriod>
               <DBInstanceStatus>{{ database.status }}</DBInstanceStatus>
               {% if database.db_name %}<DBName>{{ database.db_name }}</DBName>{% endif %}
@@ -602,6 +641,7 @@ class Database(CloudFormationModel):
                 <Address>{{ database.address }}</Address>
                 <Port>{{ database.port }}</Port>
               </Endpoint>
+              <DbInstancePort>{{ database.port }}</DbInstancePort>
               <DBInstanceArn>{{ database.db_instance_arn }}</DBInstanceArn>
               <TagList>
               {%- for tag in database.tags -%}
@@ -623,7 +663,11 @@ class Database(CloudFormationModel):
         )
 
     def add_replica(self, replica):
-        self.replicas.append(replica.db_instance_identifier)
+        if self.region_name != replica.region_name:
+            # Cross Region replica
+            self.replicas.append(replica.db_instance_arn)
+        else:
+            self.replicas.append(replica.db_instance_identifier)
 
     def remove_replica(self, replica):
         self.replicas.remove(replica.db_instance_identifier)
@@ -654,6 +698,9 @@ class Database(CloudFormationModel):
     @staticmethod
     def default_port(engine):
         return {
+            "aurora": 3306,
+            "aurora-mysql": 3306,
+            "aurora-postgresql": 5432,
             "mysql": 3306,
             "mariadb": 3306,
             "postgres": 5432,
@@ -678,6 +725,8 @@ class Database(CloudFormationModel):
     def default_allocated_storage(engine, storage_type):
         return {
             "aurora": {"gp2": 0, "io1": 0, "standard": 0},
+            "aurora-mysql": {"gp2": 20, "io1": 100, "standard": 10},
+            "aurora-postgresql": {"gp2": 20, "io1": 100, "standard": 10},
             "mysql": {"gp2": 20, "io1": 100, "standard": 5},
             "mariadb": {"gp2": 20, "io1": 100, "standard": 5},
             "postgres": {"gp2": 20, "io1": 100, "standard": 5},
@@ -702,7 +751,7 @@ class Database(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
 
@@ -732,6 +781,7 @@ class Database(CloudFormationModel):
             "port": properties.get("Port", 3306),
             "publicly_accessible": properties.get("PubliclyAccessible"),
             "copy_tags_to_snapshot": properties.get("CopyTagsToSnapshot"),
+            "account_id": account_id,
             "region": region_name,
             "security_groups": security_groups,
             "storage_encrypted": properties.get("StorageEncrypted"),
@@ -740,12 +790,12 @@ class Database(CloudFormationModel):
             "vpc_security_group_ids": properties.get("VpcSecurityGroupIds", []),
         }
 
-        rds_backend = rds_backends[region_name]
+        rds_backend = rds_backends[account_id][region_name]
         source_db_identifier = properties.get("SourceDBInstanceIdentifier")
         if source_db_identifier:
             # Replica
             db_kwargs["source_db_identifier"] = source_db_identifier
-            database = rds_backend.create_database_replica(db_kwargs)
+            database = rds_backend.create_db_instance_read_replica(db_kwargs)
         else:
             database = rds_backend.create_db_instance(db_kwargs)
         return database
@@ -838,8 +888,8 @@ class Database(CloudFormationModel):
     def remove_tags(self, tag_keys):
         self.tags = [tag_set for tag_set in self.tags if tag_set["Key"] not in tag_keys]
 
-    def delete(self, region_name):
-        backend = rds_backends[region_name]
+    def delete(self, account_id, region_name):
+        backend = rds_backends[account_id][region_name]
         backend.delete_db_instance(self.db_instance_identifier)
 
 
@@ -865,9 +915,7 @@ class DatabaseSnapshot(BaseModel):
 
     @property
     def snapshot_arn(self):
-        return "arn:aws:rds:{0}:{1}:snapshot:{2}".format(
-            self.database.region_name, get_account_id(), self.snapshot_id
-        )
+        return f"arn:aws:rds:{self.database.region_name}:{self.database.account_id}:snapshot:{self.snapshot_id}"
 
     def to_xml(self):
         template = Template(
@@ -975,15 +1023,13 @@ class EventSubscription(BaseModel):
         self.tags = kwargs.get("tags", True)
 
         self.region_name = ""
-        self.customer_aws_id = copy.copy(get_account_id())
+        self.customer_aws_id = kwargs["account_id"]
         self.status = "active"
         self.created_at = iso_8601_datetime_with_milliseconds(datetime.datetime.now())
 
     @property
     def es_arn(self):
-        return "arn:aws:rds:{0}:{1}:es:{2}".format(
-            self.region_name, get_account_id(), self.subscription_name
-        )
+        return f"arn:aws:rds:{self.region_name}:{self.customer_aws_id}:es:{self.subscription_name}"
 
     def to_xml(self):
         template = Template(
@@ -1031,14 +1077,14 @@ class EventSubscription(BaseModel):
 
 
 class SecurityGroup(CloudFormationModel):
-    def __init__(self, group_name, description, tags):
+    def __init__(self, account_id, group_name, description, tags):
         self.group_name = group_name
         self.description = description
         self.status = "authorized"
         self.ip_ranges = []
         self.ec2_security_groups = []
         self.tags = tags
-        self.owner_id = get_account_id()
+        self.owner_id = account_id
         self.vpc_id = None
 
     def to_xml(self):
@@ -1104,7 +1150,7 @@ class SecurityGroup(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
         group_name = resource_name.lower()
@@ -1112,8 +1158,8 @@ class SecurityGroup(CloudFormationModel):
         security_group_ingress_rules = properties.get("DBSecurityGroupIngress", [])
         tags = properties.get("Tags")
 
-        ec2_backend = ec2_backends[region_name]
-        rds_backend = rds_backends[region_name]
+        ec2_backend = ec2_backends[account_id][region_name]
+        rds_backend = rds_backends[account_id][region_name]
         security_group = rds_backend.create_db_security_group(
             group_name, description, tags
         )
@@ -1141,19 +1187,25 @@ class SecurityGroup(CloudFormationModel):
     def remove_tags(self, tag_keys):
         self.tags = [tag_set for tag_set in self.tags if tag_set["Key"] not in tag_keys]
 
-    def delete(self, region_name):
-        backend = rds_backends[region_name]
+    def delete(self, account_id, region_name):
+        backend = rds_backends[account_id][region_name]
         backend.delete_security_group(self.group_name)
 
 
 class SubnetGroup(CloudFormationModel):
-    def __init__(self, subnet_name, description, subnets, tags):
+    def __init__(self, subnet_name, description, subnets, tags, region, account_id):
         self.subnet_name = subnet_name
         self.description = description
         self.subnets = subnets
         self.status = "Complete"
         self.tags = tags
         self.vpc_id = self.subnets[0].vpc_id
+        self.region = region
+        self.account_id = account_id
+
+    @property
+    def sg_arn(self):
+        return f"arn:aws:rds:{self.region}:{self.account_id}:subgrp:{self.subnet_name}"
 
     def to_xml(self):
         template = Template(
@@ -1162,6 +1214,7 @@ class SubnetGroup(CloudFormationModel):
               <SubnetGroupStatus>{{ subnet_group.status }}</SubnetGroupStatus>
               <DBSubnetGroupDescription>{{ subnet_group.description }}</DBSubnetGroupDescription>
               <DBSubnetGroupName>{{ subnet_group.subnet_name }}</DBSubnetGroupName>
+              <DBSubnetGroupArn>{{ subnet_group.sg_arn }}</DBSubnetGroupArn>
               <Subnets>
                 {% for subnet in subnet_group.subnets %}
                 <Subnet>
@@ -1212,7 +1265,7 @@ class SubnetGroup(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
 
@@ -1220,11 +1273,14 @@ class SubnetGroup(CloudFormationModel):
         subnet_ids = properties["SubnetIds"]
         tags = properties.get("Tags")
 
-        ec2_backend = ec2_backends[region_name]
+        ec2_backend = ec2_backends[account_id][region_name]
         subnets = [ec2_backend.get_subnet(subnet_id) for subnet_id in subnet_ids]
-        rds_backend = rds_backends[region_name]
+        rds_backend = rds_backends[account_id][region_name]
         subnet_group = rds_backend.create_subnet_group(
-            resource_name, description, subnets, tags
+            resource_name,
+            description,
+            subnets,
+            tags,
         )
         return subnet_group
 
@@ -1240,8 +1296,8 @@ class SubnetGroup(CloudFormationModel):
     def remove_tags(self, tag_keys):
         self.tags = [tag_set for tag_set in self.tags if tag_set["Key"] not in tag_keys]
 
-    def delete(self, region_name):
-        backend = rds_backends[region_name]
+    def delete(self, account_id, region_name):
+        backend = rds_backends[account_id][region_name]
         backend.delete_subnet_group(self.subnet_name)
 
 
@@ -1327,7 +1383,7 @@ class RDSBackend(BaseBackend):
 
         return self.database_snapshots.pop(db_snapshot_identifier)
 
-    def create_database_replica(self, db_kwargs):
+    def create_db_instance_read_replica(self, db_kwargs):
         database_id = db_kwargs["db_instance_identifier"]
         source_database_id = db_kwargs["source_db_identifier"]
         primary = self.find_db_from_id(source_database_id)
@@ -1337,6 +1393,7 @@ class RDSBackend(BaseBackend):
         # Shouldn't really copy here as the instance is duplicated. RDS replicas have different instances.
         replica = copy.copy(primary)
         replica.update(db_kwargs)
+        replica.region_name = self.region_name
         replica.set_as_replica()
         self.databases[database_id] = replica
         primary.add_replica(replica)
@@ -1432,7 +1489,7 @@ class RDSBackend(BaseBackend):
         if self.arn_regex.match(db_id):
             arn_breakdown = db_id.split(":")
             region = arn_breakdown[3]
-            backend = rds_backends[region]
+            backend = rds_backends[self.account_id][region]
             db_name = arn_breakdown[-1]
         else:
             backend = self
@@ -1458,7 +1515,7 @@ class RDSBackend(BaseBackend):
             raise DBInstanceNotFoundError(db_instance_identifier)
 
     def create_db_security_group(self, group_name, description, tags):
-        security_group = SecurityGroup(group_name, description, tags)
+        security_group = SecurityGroup(self.account_id, group_name, description, tags)
         self.security_groups[group_name] = security_group
         return security_group
 
@@ -1487,8 +1544,16 @@ class RDSBackend(BaseBackend):
         security_group.authorize_cidr(cidr_ip)
         return security_group
 
-    def create_subnet_group(self, subnet_name, description, subnets, tags):
-        subnet_group = SubnetGroup(subnet_name, description, subnets, tags)
+    def create_subnet_group(
+        self,
+        subnet_name,
+        description,
+        subnets,
+        tags,
+    ):
+        subnet_group = SubnetGroup(
+            subnet_name, description, subnets, tags, self.region_name, self.account_id
+        )
         self.subnet_groups[subnet_name] = subnet_group
         return subnet_group
 
@@ -1693,6 +1758,7 @@ class RDSBackend(BaseBackend):
                 "The parameter DBParameterGroupName must be provided and must not be blank.",
             )
         db_parameter_group_kwargs["region"] = self.region_name
+        db_parameter_group_kwargs["account_id"] = self.account_id
         db_parameter_group = DBParameterGroup(**db_parameter_group_kwargs)
         self.db_parameter_groups[db_parameter_group_id] = db_parameter_group
         return db_parameter_group
@@ -1740,8 +1806,27 @@ class RDSBackend(BaseBackend):
 
     def create_db_cluster(self, kwargs):
         cluster_id = kwargs["db_cluster_identifier"]
+        kwargs["account_id"] = self.account_id
         cluster = Cluster(**kwargs)
         self.clusters[cluster_id] = cluster
+        initial_state = copy.deepcopy(cluster)  # Return status=creating
+        cluster.status = "available"  # Already set the final status in the background
+        return initial_state
+
+    def modify_db_cluster(self, kwargs):
+        cluster_id = kwargs["db_cluster_identifier"]
+
+        cluster = self.clusters[cluster_id]
+        del self.clusters[cluster_id]
+
+        kwargs["db_cluster_identifier"] = kwargs.pop("new_db_cluster_identifier")
+        for k, v in kwargs.items():
+            if v is not None:
+                setattr(cluster, k, v)
+
+        cluster_id = kwargs.get("new_db_cluster_identifier", cluster_id)
+        self.clusters[cluster_id] = cluster
+
         initial_state = copy.deepcopy(cluster)  # Return status=creating
         cluster.status = "available"  # Already set the final status in the background
         return initial_state
@@ -1796,6 +1881,8 @@ class RDSBackend(BaseBackend):
 
     def describe_db_clusters(self, cluster_identifier):
         if cluster_identifier:
+            if cluster_identifier not in self.clusters:
+                raise DBClusterNotFoundError(cluster_identifier)
             return [self.clusters[cluster_identifier]]
         return self.clusters.values()
 
@@ -1844,7 +1931,7 @@ class RDSBackend(BaseBackend):
             db_cluster_identifier=None, db_snapshot_identifier=from_snapshot_id
         )[0]
         original_cluster = snapshot.cluster
-        new_cluster_props = copy.deepcopy(original_cluster.__dict__)
+        new_cluster_props = copy.deepcopy(original_cluster.get_cfg())
         for key, value in overrides.items():
             if value:
                 new_cluster_props[key] = value
@@ -1914,6 +2001,7 @@ class RDSBackend(BaseBackend):
         if subscription_name in self.event_subscriptions:
             raise SubscriptionAlreadyExistError(subscription_name)
 
+        kwargs["account_id"] = self.account_id
         subscription = EventSubscription(kwargs)
         self.event_subscriptions[subscription_name] = subscription
 
@@ -2133,18 +2221,14 @@ class OptionGroup(object):
         self.tags = [tag_set for tag_set in self.tags if tag_set["Key"] not in tag_keys]
 
 
-def make_rds_arn(region, name):
-    return "arn:aws:rds:{0}:{1}:pg:{2}".format(region, get_account_id(), name)
-
-
 class DBParameterGroup(CloudFormationModel):
-    def __init__(self, name, description, family, tags, region):
+    def __init__(self, account_id, name, description, family, tags, region):
         self.name = name
         self.description = description
         self.family = family
         self.tags = tags
         self.parameters = defaultdict(dict)
-        self.arn = make_rds_arn(region, name)
+        self.arn = f"arn:aws:rds:{region}:{account_id}:pg:{name}"
 
     def to_xml(self):
         template = Template(
@@ -2174,8 +2258,8 @@ class DBParameterGroup(CloudFormationModel):
             parameter = self.parameters[new_parameter["ParameterName"]]
             parameter.update(new_parameter)
 
-    def delete(self, region_name):
-        backend = rds_backends[region_name]
+    def delete(self, account_id, region_name):
+        backend = rds_backends[account_id][region_name]
         backend.delete_db_parameter_group(self.name)
 
     @staticmethod
@@ -2189,7 +2273,7 @@ class DBParameterGroup(CloudFormationModel):
 
     @classmethod
     def create_from_cloudformation_json(
-        cls, resource_name, cloudformation_json, region_name, **kwargs
+        cls, resource_name, cloudformation_json, account_id, region_name, **kwargs
     ):
         properties = cloudformation_json["Properties"]
 
@@ -2207,7 +2291,7 @@ class DBParameterGroup(CloudFormationModel):
                 {"ParameterName": db_parameter, "ParameterValue": db_parameter_value}
             )
 
-        rds_backend = rds_backends[region_name]
+        rds_backend = rds_backends[account_id][region_name]
         db_parameter_group = rds_backend.create_db_parameter_group(
             db_parameter_group_kwargs
         )

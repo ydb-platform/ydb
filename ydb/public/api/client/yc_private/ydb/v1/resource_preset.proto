@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+message ResourcePreset {
+  string id = 1;
+  int64 cores = 2;
+  int64 memory = 3;
+}

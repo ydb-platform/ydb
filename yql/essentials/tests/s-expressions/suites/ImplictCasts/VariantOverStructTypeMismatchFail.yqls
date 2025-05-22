@@ -1,0 +1,22 @@
+# /* custom error: Failed to convert type: Variant<'A':Int32,'B':Int32,'C':Float> to Variant<'A':Int32,'B':Int32,'C':Int32>*/
+(
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+
+(let origType (VariantType (StructType '('A (DataType 'Int32)) '('B (DataType 'Int32)) '('C (DataType 'Int32)))))
+(let orig (Variant (Int32 '0) 'B origType))
+
+(let testcase (AsList orig))
+
+(let testType (VariantType (StructType '('A (DataType 'Int32)) '('B (DataType 'Int32)) '('C (DataType 'Float)))))
+(let testCallableType (CallableType '() '(testType)))
+(let testBody (lambda '() (Variant (Int32 '0) 'B testType)))
+(let testCallable (Callable testCallableType testBody))
+(let test (Apply testCallable))
+
+(let testcase (Append testcase test))
+
+(let world (Write! world res_sink (Key) testcase '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

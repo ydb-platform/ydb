@@ -50,8 +50,7 @@ TEST(TVerifyDeathTest, DISABLED_CrashForFalseExpression)
 
     ASSERT_DEATH(
         { YT_VERIFY(callee.F(false, "Cheshire Cat")); },
-        ".*Cheshire Cat.*"
-    );
+        ".*Cheshire Cat.*");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

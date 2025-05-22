@@ -6,6 +6,7 @@
 #include "log.h"
 #include "random_access_gzip.h"
 #include "stream_output.h"
+#include "system_log_event_provider.h"
 #include "compression.h"
 #include "log_writer_factory.h"
 #include "zstd_compression.h"
@@ -21,8 +22,9 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const TLogger Logger(SystemLoggingCategoryName);
-static constexpr size_t BufferSize = 64_KB;
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+constexpr size_t BufferSize = 64_KB;
+const char* LogrotateTimestampSuffixFormat = ".%Y%m%d-%H%M%S";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -33,11 +35,16 @@ class TFileLogWriter
 public:
     TFileLogWriter(
         std::unique_ptr<ILogFormatter> formatter,
+        std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
         TString name,
-        TFileLogWriterConfigPtr config,
+        const TFileLogWriterConfigPtr& config,
         ILogWriterHost* host)
-        : TStreamLogWriterBase(std::move(formatter), std::move(name))
-        , Config_(std::move(config))
+        : TStreamLogWriterBase(
+            std::move(formatter),
+            std::move(systemEventProvider),
+            std::move(name),
+            config)
+        , Config_(config)
         , Host_(host)
         , DirectoryName_(NFS::GetDirectoryName(Config_->FileName))
         , FileNamePrefix_(NFS::GetFileName(Config_->FileName))
@@ -146,9 +153,26 @@ private:
 
             TFlags<EOpenModeFlag> openMode;
             if (Config_->EnableCompression) {
-                openMode = OpenAlways|RdWr|CloseOnExec;
+                switch (Config_->CompressionMethod) {
+                    case ECompressionMethod::Zstd:
+                        openMode = OpenAlways|RdWr|CloseOnExec;
+                        if (Config_->EnableNoReuse) {
+                            openMode = openMode|NoReuse;
+                        }
+                        break;
+
+                    case ECompressionMethod::Gzip:
+                        openMode = OpenAlways|RdWr|CloseOnExec;
+                        break;
+
+                    default:
+                        YT_ABORT();
+                }
             } else {
                 openMode = OpenAlways|ForAppend|WrOnly|Seq|CloseOnExec;
+                if (Config_->EnableNoReuse) {
+                    openMode = openMode|NoReuse;
+                }
             }
 
             // Generate filename.
@@ -189,9 +213,11 @@ private:
                 Formatter_->WriteLogReopenSeparator(GetOutputStream());
             }
 
-            Formatter_->WriteLogStartEvent(GetOutputStream());
+            if (auto logStartEvent = SystemEventProvider_->GetStartLogEvent()) {
+                Formatter_->WriteFormatted(GetOutputStream(), *logStartEvent);
+            }
 
-            ResetCurrentSegment(File_->GetLength());
+            ResetSegmentSize(File_->GetLength());
         } catch (const std::exception& ex) {
             Disabled_ = true;
             YT_LOG_ERROR(ex, "Failed to open log file (FileName: %v)",
@@ -245,16 +271,16 @@ private:
 
     std::vector<TString> ListFiles() const
     {
-        auto files = NFS::EnumerateFiles(DirectoryName_);
+        auto files = NFS::EnumerateFiles(DirectoryName_, /*depth*/ 1, /*sortByName*/ true);
         std::erase_if(files, [&] (const TString& s) {
             return !s.StartsWith(FileNamePrefix_);
         });
         if (Config_->UseTimestampSuffix) {
             // Rotated files are suffixed with the date, decreasing with the age of file.
-            std::sort(files.begin(), files.end(), std::greater<TString>());
-        } else {
-            // Rotated files are suffixed with the number, increasing with the age of file.
-            std::sort(files.begin(), files.end());
+            std::reverse(files.begin(), files.end());
+        } else if (Config_->UseLogrotateCompatibleTimestampSuffix) {
+            // Rotated files are suffixed with the date (excluding first), decreasing with the age of file.
+            std::reverse(files.begin() + 1, files.end());
         }
         return files;
     }
@@ -279,14 +305,21 @@ private:
 
     void RenameFiles(const std::vector<TString>& fileNames)
     {
-        if (Config_->UseTimestampSuffix) {
+        if (Config_->UseTimestampSuffix || fileNames.empty()) {
+            return;
+        }
+        if (Config_->UseLogrotateCompatibleTimestampSuffix) {
+            auto newFileName = FileNamePrefix_ + TInstant::Now().FormatLocalTime(LogrotateTimestampSuffixFormat);
+            auto oldPath = NFS::CombinePaths(DirectoryName_, fileNames[0]);
+            auto newPath = NFS::CombinePaths(DirectoryName_, newFileName);
+            NFS::Rename(oldPath, newPath);
             return;
         }
 
         int width = ToString(ssize(fileNames)).length();
         TString formatString = "%v.%0" + ToString(width) + "d";
         for (int index = ssize(fileNames); index > 0; --index) {
-            auto newFileName = Format(formatString, FileNamePrefix_, index);
+            auto newFileName = Format(TRuntimeFormat{formatString}, FileNamePrefix_, index);
             auto oldPath = NFS::CombinePaths(DirectoryName_, fileNames[index - 1]);
             auto newPath = NFS::CombinePaths(DirectoryName_, newFileName);
             YT_LOG_DEBUG("Rename log segment (OldFilePath: %v, NewFilePath: %v)", oldPath, newPath);
@@ -299,12 +332,14 @@ private:
 
 IFileLogWriterPtr CreateFileLogWriter(
     std::unique_ptr<ILogFormatter> formatter,
+    std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
     TString name,
     TFileLogWriterConfigPtr config,
     ILogWriterHost* host)
 {
     return New<TFileLogWriter>(
         std::move(formatter),
+        std::move(systemEventProvider),
         std::move(name),
         std::move(config),
         host);
@@ -328,17 +363,20 @@ public:
         const NYTree::IMapNodePtr& configNode,
         ILogWriterHost* host) noexcept override
     {
+        auto config = ParseConfig(configNode);
+        auto eventProvider = CreateDefaultSystemLogEventProvider(config);
         return CreateFileLogWriter(
             std::move(formatter),
+            std::move(eventProvider),
             std::move(name),
-            ParseConfig(configNode),
+            std::move(config),
             host);
     }
 
 private:
     static TFileLogWriterConfigPtr ParseConfig(const NYTree::IMapNodePtr& configNode)
     {
-        return ConvertTo<TFileLogWriterConfigPtr>(configNode);
+        return NYT::NYTree::ConvertTo<TFileLogWriterConfigPtr>(configNode);
     }
 };
 

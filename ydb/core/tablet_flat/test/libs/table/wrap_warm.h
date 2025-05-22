@@ -26,7 +26,7 @@ namespace NTest {
             return Iter && Iter->IsValid();
         }
 
-        TMemIt* Get() const noexcept
+        TMemIter* Get() const noexcept
         {
             return Iter.Get();
         }
@@ -36,21 +36,21 @@ namespace NTest {
             return Remap_;
         }
 
-        void Make(IPages *env) noexcept
+        void Make(IPages *env)
         {
             Iter = nullptr, Env = env; /* Have to make on each Seek(...) */
         }
 
-        EReady Seek(TRawVals key_, ESeek seek) noexcept
+        EReady Seek(TRawVals key_, ESeek seek)
         {
             const TCelled key(key_, *Scheme->Keys, false);
 
-            Iter = TMemIt::Make(*Table, Table->Immediate(), key, seek, Scheme->Keys, &Remap_, Env, Direction);
+            Iter = TMemIter::Make(*Table, Table->Immediate(), key, seek, Scheme->Keys, &Remap_, Env, Direction);
 
             return RollUp();
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             if constexpr (Direction == EDirection::Reverse) {
                 Iter->Prev();
@@ -61,9 +61,9 @@ namespace NTest {
             return RollUp();
         }
 
-        const TRowState& Apply() noexcept
+        const TRowState& Apply()
         {
-            Y_ABORT_UNLESS(*this, "Iterator isn't ready");
+            Y_ENSURE(*this, "Iterator isn't ready");
 
             return State;
         }
@@ -96,7 +96,7 @@ namespace NTest {
     private:
         IPages *Env = nullptr;
         TRowState State;
-        TAutoPtr<TMemIt> Iter;
+        TAutoPtr<TMemIter> Iter;
     };
 
     using TWrapMemtable = TWrapMemtableImpl<EDirection::Forward>;

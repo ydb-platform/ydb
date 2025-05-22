@@ -3,6 +3,9 @@
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
+#include <ut/olap/helpers/get_value.h>
+#include <ut/olap/helpers/query_executor.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -12,7 +15,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpOlapStats) {
     constexpr size_t inserted_rows = 1000;
     constexpr size_t tables_in_store = 1000;
-    constexpr size_t size_single_table = 13152;
+    constexpr size_t size_single_table = 12688;
 
     const TVector<TTestHelper::TColumnSchema> schema = {
         TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -21,10 +24,10 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
 
     class TOlapStatsController : public NYDBTest::NColumnShard::TController {
     public:
-        TDuration GetPeriodicWakeupActivationPeriod(const TDuration /*defaultValue*/) const override {
+        TDuration DoGetPeriodicWakeupActivationPeriod(const TDuration /*defaultValue*/) const override {
             return TDuration::MilliSeconds(10);
         }
-        TDuration GetStatsReportInterval(const TDuration /*defaultValue*/) const override {
+        TDuration DoGetStatsReportInterval(const TDuration /*defaultValue*/) const override {
             return TDuration::MilliSeconds(10);
         }
     };
@@ -196,6 +199,23 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         const auto& storeDescription = describeStoreResult.GetTableDescription();
 
         UNIT_ASSERT_VALUES_EQUAL(2000, storeDescription.GetTableRows());
+
+        {
+            auto selectQuery = TString(R"(
+                SELECT
+                    SUM(ColumnBlobBytes) AS BlobBytes,
+                    SUM(ColumnRawBytes) AS RawBytes,
+                    SUM(Rows) AS Rows,
+                    COUNT(*) AS Portions
+                FROM `/Root/TableStoreTest/.sys/store_primary_index_portion_stats`
+            )");
+
+            auto client = testHelper.GetKikimr().GetTableClient();
+            auto rows = ExecuteScanQuery(client, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows")), storeDescription.GetTableRows());
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("BlobBytes")), storeDescription.GetTableSize());
+        }
     }
 }
 

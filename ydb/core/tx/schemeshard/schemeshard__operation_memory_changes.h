@@ -30,11 +30,18 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TTableState = std::pair<TPathId, TTableInfo::TPtr>;
     TStack<TTableState> Tables;
 
+    using TSequenceState = std::pair<TPathId, TSequenceInfo::TPtr>;
+    TStack<TSequenceState> Sequences;
+
     using TShardState = std::pair<TShardIdx, THolder<TShardInfo>>;
     TStack<TShardState> Shards;
 
-    using TSubDomainState = std::pair<TPathId, TSubDomainInfo::TPtr>;
-    TStack<TSubDomainState> SubDomains;
+    // Actually, any single subdomain should not be grabbed at more than one version
+    // per transaction/operation.
+    // And transaction/operation could not work on more than one subdomain.
+    // But just to be on the safe side (migrated paths, anyone?) we allow several
+    // subdomains to be grabbed.
+    THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
 
     using TTxState = std::pair<TOperationId, THolder<TTxState>>;
     TStack<TTxState> TxStates;
@@ -47,6 +54,15 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
 
     using TViewState = std::pair<TPathId, TViewInfo::TPtr>;
     TStack<TViewState> Views;
+
+    using TResourcePoolState = std::pair<TPathId, TResourcePoolInfo::TPtr>;
+    TStack<TResourcePoolState> ResourcePools;
+
+    using TBackupCollectionState = std::pair<TPathId, TBackupCollectionInfo::TPtr>;
+    TStack<TBackupCollectionState> BackupCollections;
+
+    using TSysViewState = std::pair<TPathId, TSysViewInfo::TPtr>;
+    TStack<TSysViewState> SysViews;
 
 public:
     ~TMemoryChanges() = default;
@@ -67,6 +83,9 @@ public:
     void GrabNewIndex(TSchemeShard* ss, const TPathId& pathId);
     void GrabIndex(TSchemeShard* ss, const TPathId& pathId);
 
+    void GrabNewSequence(TSchemeShard* ss, const TPathId& pathId);
+    void GrabSequence(TSchemeShard* ss, const TPathId& pathId);
+
     void GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId);
     void GrabCdcStream(TSchemeShard* ss, const TPathId& pathId);
 
@@ -78,9 +97,16 @@ public:
     void GrabExternalTable(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabExternalDataSource(TSchemeShard* ss, const TPathId& pathId);
-    
+
     void GrabNewView(TSchemeShard* ss, const TPathId& pathId);
     void GrabView(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabNewSysView(TSchemeShard* ss, const TPathId& pathId);
+    void GrabSysView(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

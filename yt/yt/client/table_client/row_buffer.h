@@ -4,6 +4,8 @@
 #include "unversioned_row.h"
 #include "versioned_row.h"
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
+
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
 namespace NYT::NTableClient {
@@ -24,30 +26,39 @@ public:
     TRowBuffer(
         TRefCountedTypeCookie tagCookie,
         IMemoryChunkProviderPtr chunkProvider,
-        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize)
-        : Pool_(
-            tagCookie,
-            std::move(chunkProvider),
-            startChunkSize)
-    { }
+        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
+        IMemoryUsageTrackerPtr tracker = nullptr,
+        bool allowMemoryOvercommit = false);
 
     template <class TTag = TDefaultRowBufferPoolTag>
     explicit TRowBuffer(
-        TTag = TDefaultRowBufferPoolTag(),
-        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize)
-        : Pool_(
+        TTag /*tag*/ = TDefaultRowBufferPoolTag(),
+        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
+        IMemoryUsageTrackerPtr tracker = nullptr,
+        bool allowMemoryOvercommit = false)
+        : MemoryTracker_(std::move(tracker))
+        , AllowMemoryOvercommit_(allowMemoryOvercommit)
+        , Pool_(
             TTag(),
             startChunkSize)
-    { }
+    {
+        static_assert(IsEmptyClass<TTag>());
+    }
 
     template <class TTag>
     TRowBuffer(
-        TTag,
-        IMemoryChunkProviderPtr chunkProvider)
-        : Pool_(
+        TTag /*tag*/,
+        IMemoryChunkProviderPtr chunkProvider,
+        IMemoryUsageTrackerPtr tracker = nullptr,
+        bool allowMemoryOvercommit = false)
+        : MemoryTracker_(std::move(tracker))
+        , AllowMemoryOvercommit_(allowMemoryOvercommit)
+        , Pool_(
             GetRefCountedTypeCookie<TTag>(),
             std::move(chunkProvider))
-    { }
+    {
+        static_assert(IsEmptyClass<TTag>());
+    }
 
     TChunkedMemoryPool* GetPool();
 
@@ -81,8 +92,9 @@ public:
         const TTableSchema& tableSchema,
         int schemafulColumnCount,
         const TNameTableToSchemaIdMapping& idMapping,
-        std::vector<bool>* columnPresenceBuffer,
-        std::optional<TUnversionedValue> addend = std::nullopt);
+        bool validateDuplicateAndRequiredValueColumns,
+        bool preserveIds = false,
+        std::optional<TUnversionedValue> addend = {});
 
     //! Captures the row applying #idMapping to value ids.
     //! #idMapping must be identity for key columns.
@@ -91,7 +103,7 @@ public:
         TVersionedRow row,
         const TTableSchema& tableSchema,
         const TNameTableToSchemaIdMapping& idMapping,
-        std::vector<bool>* columnPresenceBuffer,
+        bool validateDuplicateAndRequiredValueColumns,
         bool allowMissingKeyColumns = false);
 
     i64 GetSize() const;
@@ -105,7 +117,13 @@ public:
     void Purge();
 
 private:
+    const IMemoryUsageTrackerPtr MemoryTracker_;
+    const bool AllowMemoryOvercommit_;
+
     TChunkedMemoryPool Pool_;
+    TMemoryUsageTrackerGuard MemoryGuard_;
+
+    void UpdateMemoryUsage();
 };
 
 DEFINE_REFCOUNTED_TYPE(TRowBuffer)

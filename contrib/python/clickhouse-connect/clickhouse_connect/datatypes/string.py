@@ -1,10 +1,10 @@
 from typing import Sequence, MutableSequence, Union, Collection
 
+from clickhouse_connect.driver.common import first_value
 from clickhouse_connect.driver.ctypes import data_conv
 
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
 from clickhouse_connect.driver.errors import handle_error
-from clickhouse_connect.driver.exceptions import DataError
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.query import QueryContext
 from clickhouse_connect.driver.types import ByteSource
@@ -45,9 +45,9 @@ class String(ClickHouseType):
 
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
         encoding = None
-        if not isinstance(self._first_value(column), bytes):
+        if not isinstance(first_value(column, self.nullable), bytes):
             encoding = ctx.encoding or self.encoding
-        handle_error(data_conv.write_str_col(column, self.nullable, encoding, dest))
+        handle_error(data_conv.write_str_col(column, self.nullable, encoding, dest), ctx)
 
     def _active_null(self, ctx):
         if ctx.use_none:
@@ -80,6 +80,11 @@ class FixedString(ClickHouseType):
             return source.read_fixed_str_col(self.byte_size, num_rows, ctx.encoding or self.encoding )
         return source.read_bytes_col(self.byte_size, num_rows)
 
+    def _finalize_column(self, column: Sequence, ctx: QueryContext) -> Sequence:
+        if ctx.use_extended_dtypes and self.read_format(ctx) == 'string':
+            return pd.array(column, dtype=pd.StringDtype())
+        return column
+
     # pylint: disable=too-many-branches,duplicate-code
     def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
         ext = dest.extend
@@ -87,7 +92,7 @@ class FixedString(ClickHouseType):
         empty = bytes((0,) * sz)
         str_enc = str.encode
         enc = ctx.encoding or self.encoding
-        first = self._first_value(column)
+        first = first_value(column, self.nullable)
         if isinstance(first, str) or self.write_format(ctx) == 'string':
             if self.nullable:
                 for x in column:
@@ -99,7 +104,7 @@ class FixedString(ClickHouseType):
                         except UnicodeEncodeError:
                             b = empty
                         if len(b) > sz:
-                            raise DataError(f'UTF-8 encoded FixedString value {b.hex(" ")} exceeds column size {sz}')
+                            raise ctx.data_error(f'UTF-8 encoded FixedString value {b.hex(" ")} exceeds column size {sz}')
                         ext(b)
                         ext(empty[:sz - len(b)])
             else:
@@ -109,7 +114,7 @@ class FixedString(ClickHouseType):
                     except UnicodeEncodeError:
                         b = empty
                     if len(b) > sz:
-                        raise DataError(f'UTF-8 encoded FixedString value {b.hex(" ")} exceeds column size {sz}')
+                        raise ctx.data_error(f'UTF-8 encoded FixedString value {b.hex(" ")} exceeds column size {sz}')
                     ext(b)
                     ext(empty[:sz - len(b)])
         elif self.nullable:
@@ -117,11 +122,11 @@ class FixedString(ClickHouseType):
                 if not b:
                     ext(empty)
                 elif len(b) != sz:
-                    raise DataError(f'Fixed String binary value {b.hex(" ")} does not match column size {sz}')
+                    raise ctx.data_error(f'Fixed String binary value {b.hex(" ")} does not match column size {sz}')
                 else:
                     ext(b)
         else:
             for b in column:
                 if len(b) != sz:
-                    raise DataError(f'Fixed String binary value {b.hex(" ")} does not match column size {sz}')
+                    raise ctx.data_error(f'Fixed String binary value {b.hex(" ")} does not match column size {sz}')
                 ext(b)

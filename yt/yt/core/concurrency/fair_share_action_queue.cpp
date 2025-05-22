@@ -4,6 +4,7 @@
 #include "profiling_helpers.h"
 #include "system_invokers.h"
 
+#include <yt/yt/core/actions/bind.h>
 #include <yt/yt/core/actions/invoker_util.h>
 #include <yt/yt/core/actions/invoker_detail.h>
 
@@ -19,6 +20,7 @@ namespace NYT::NConcurrency {
 using namespace NProfiling;
 using namespace NYPath;
 using namespace NYTree;
+using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,7 +31,9 @@ public:
     TFairShareActionQueue(
         const TString& threadName,
         const std::vector<TString>& queueNames,
-        const THashMap<TString, std::vector<TString>>& queueToBucket)
+        const THashMap<TString, std::vector<TString>>& bucketToQueues,
+        TThreadOptions threadOptions,
+        NProfiling::IRegistryPtr registry)
         : ShutdownCookie_(RegisterShutdownCallback(
             Format("FairShareActionQueue(%v)", threadName),
             BIND_NO_PROPAGATE(&TFairShareActionQueue::Shutdown, MakeWeak(this), /*graceful*/ false),
@@ -37,7 +41,7 @@ public:
     {
         THashMap<TString, int> queueNameToIndex;
         for (int queueIndex = 0; queueIndex < std::ssize(queueNames); ++queueIndex) {
-            YT_VERIFY(queueNameToIndex.emplace(queueNames[queueIndex], queueIndex).second);
+            EmplaceOrCrash(queueNameToIndex, queueNames[queueIndex], queueIndex);
         }
 
         QueueIndexToBucketIndex_.resize(queueNames.size(), -1);
@@ -47,18 +51,20 @@ public:
         std::vector<TBucketDescription> bucketDescriptions;
         THashSet<TString> createdQueues;
         int nextBucketIndex = 0;
-        for (const auto& [bucketName, bucketQueues] : queueToBucket) {
+        for (const auto& [bucketName, bucketQueues] : bucketToQueues) {
             int bucketIndex = nextBucketIndex++;
             auto& bucketDescription = bucketDescriptions.emplace_back();
-            bucketDescription.BucketTagSet = GetBucketTags(threadName, bucketName);
             for (int bucketQueueIndex = 0; bucketQueueIndex < std::ssize(bucketQueues); ++bucketQueueIndex) {
                 const auto& queueName = bucketQueues[bucketQueueIndex];
-                auto queueIndex = GetOrCrash(queueNameToIndex, queueName);
-                YT_VERIFY(createdQueues.insert(queueName).second);
-                QueueIndexToBucketIndex_[queueIndex] = bucketIndex;
-                QueueIndexToBucketQueueIndex_[queueIndex] = bucketQueueIndex;
-                bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, queueName));
+                bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, bucketName, queueName));
                 bucketDescription.QueueProfilerTags.push_back(New<NYTProf::TProfilerTag>("queue", queueName));
+
+                {
+                    int queueIndex = GetOrCrash(queueNameToIndex, queueName);
+                    InsertOrCrash(createdQueues, queueName);
+                    QueueIndexToBucketIndex_[queueIndex] = bucketIndex;
+                    QueueIndexToBucketQueueIndex_[queueIndex] = bucketQueueIndex;
+                }
             }
             BucketNames_.push_back(bucketName);
         }
@@ -70,13 +76,16 @@ public:
             }
 
             auto& bucketDescription = bucketDescriptions.emplace_back();
-            bucketDescription.BucketTagSet = GetBucketTags(threadName, queueName);
-            bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, queueName));
+            bucketDescription.QueueTagSets.push_back(GetQueueTags(threadName, queueName, queueName));
             bucketDescription.QueueProfilerTags.push_back(New<NYTProf::TProfilerTag>("queue", queueName));
-            auto queueIndex = GetOrCrash(queueNameToIndex, queueName);
-            QueueIndexToBucketIndex_[queueIndex] = nextBucketIndex++;
-            QueueIndexToBucketQueueIndex_[queueIndex] = 0;
-            YT_VERIFY(createdQueues.emplace(queueName).second);
+
+            {
+                auto queueIndex = GetOrCrash(queueNameToIndex, queueName);
+                QueueIndexToBucketIndex_[queueIndex] = nextBucketIndex++;
+                QueueIndexToBucketQueueIndex_[queueIndex] = 0;
+                InsertOrCrash(createdQueues, queueName);
+            }
+
             BucketNames_.push_back(queueName);
         }
 
@@ -88,8 +97,17 @@ public:
             YT_VERIFY(QueueIndexToBucketQueueIndex_[queueIndex] != -1);
         }
 
-        Queue_ = New<TFairShareInvokerQueue>(CallbackEventCount_, std::move(bucketDescriptions));
-        Thread_ = New<TFairShareQueueSchedulerThread>(Queue_, CallbackEventCount_, threadName, threadName);
+        Queue_ = New<TFairShareInvokerQueue>(
+            CallbackEventCount_,
+            std::move(bucketDescriptions),
+            std::move(registry));
+
+        Thread_ = New<TFairShareQueueSchedulerThread>(
+            Queue_,
+            CallbackEventCount_,
+            threadName,
+            threadName,
+            threadOptions);
     }
 
     ~TFairShareActionQueue()
@@ -99,16 +117,14 @@ public:
 
     void Shutdown(bool graceful)
     {
-        if (Stopped_.exchange(true)) {
+        // Synchronization done via Queue_->Shutdown().
+        if (Stopped_.exchange(true, std::memory_order::relaxed)) {
             return;
         }
 
-        Queue_->Shutdown();
-
-        ShutdownInvoker_->Invoke(BIND([graceful, thread = Thread_, queue = Queue_] {
-            thread->Stop(graceful);
-            queue->DrainConsumer();
-        }));
+        Queue_->Shutdown(graceful);
+        Thread_->Stop(graceful);
+        Queue_->OnConsumerFinished();
     }
 
     const IInvokerPtr& GetInvoker(int index) override
@@ -137,7 +153,7 @@ public:
     }
 
 private:
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
 
     const TShutdownCookie ShutdownCookie_;
     const IInvokerPtr ShutdownInvoker_ = GetShutdownInvoker();
@@ -150,18 +166,13 @@ private:
 
     std::vector<TString> BucketNames_;
 
-    std::atomic<bool> Started_ = false;
     std::atomic<bool> Stopped_ = false;
 
 
     void EnsuredStarted()
     {
-        if (Started_.load(std::memory_order::relaxed)) {
-            return;
-        }
-        if (Started_.exchange(true)) {
-            return;
-        }
+        // Thread::Start already has
+        // its own short-circ.
         Thread_->Start();
     }
 };
@@ -171,9 +182,16 @@ private:
 IFairShareActionQueuePtr CreateFairShareActionQueue(
     const TString& threadName,
     const std::vector<TString>& queueNames,
-    const THashMap<TString, std::vector<TString>>& queueToBucket)
+    const THashMap<TString, std::vector<TString>>& bucketToQueues,
+    TThreadOptions threadOptions,
+    NProfiling::IRegistryPtr registry)
 {
-    return New<TFairShareActionQueue>(threadName, queueNames, queueToBucket);
+    return New<TFairShareActionQueue>(
+        threadName,
+        queueNames,
+        bucketToQueues,
+        threadOptions,
+        std::move(registry));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

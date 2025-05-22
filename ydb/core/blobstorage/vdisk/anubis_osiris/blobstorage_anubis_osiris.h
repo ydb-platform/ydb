@@ -47,12 +47,6 @@ namespace NKikimr {
             return !IsAnubis();
         }
 
-        // prepared data to insert to Hull Database
-        struct THullDbInsert {
-            TLogoBlobID Id;
-            TIngress Ingress;
-        };
-
         // return data to insert to Hull Database, we create ingress according to whether this
         // blob is Anubis or Osiris record
         THullDbInsert PrepareInsert(const TBlobStorageGroupInfo::TTopology *top,

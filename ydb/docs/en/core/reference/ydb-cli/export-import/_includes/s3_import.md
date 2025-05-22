@@ -23,14 +23,17 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 ### List of imported objects {#items}
 
 `--item STRING`: Description of the item to import. You can specify the `--item` parameter multiple times if you need to import multiple items. `STRING` is set in `<property>=<value>,...` format with the following mandatory properties:
+
 - `source`, `src` or `s` is the path (key prefix) in S3 that hosts the imported directory or table
 - `destination`, `dst`, or `d` is the database path to host the imported directory or table. The destination of the path must not exist. All the directories along the path will be created if missing.
 
 ### Additional parameters {#aux}
 
-`--description STRING`: A text description of the operation saved in the operation history
+`--description STRING`: A text description of the operation saved in the operation history.
 `--retries NUM`: The number of import retries to be made by the server. The default value is 10.
+`--skip-checksum-validation`: Skip the validating imported objects' checksums step.
 `--format STRING`: The format of the results.
+
 - `pretty`: Human-readable format (default).
 - `proto-json-base64`: Protobuf in JSON format, binary strings are Base64-encoded.
 
@@ -42,19 +45,19 @@ If successful, the `import s3` command prints summary information about the enqu
 
 - In the default `pretty` mode, the operation ID is displayed in the id field with semigraphics formatting:
 
-   ```
+   ```text
    ┌───────────────────────────────────────────┬───────┬─────...
    | id                                        | ready | stat...
    ├───────────────────────────────────────────┼───────┼─────...
    | ydb://import/8?id=281474976788395&kind=s3 | true  | SUCC...
    ├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
    | Items:
-   ...                                                   
+   ...
    ```
 
 - In the proto-json-base64 mode, the operation ID is in the "id" attribute:
 
-   ```
+   ```json
    {"id":"ydb://export/8?id=281474976788395&kind=s3","ready":true, ... }
    ```
 
@@ -74,7 +77,7 @@ You can track the import by changes in the "progress" attribute:
 
 - In the default `pretty` mode, successfully completed export operations are displayed as "Done" in the `progress` field with semigraphics formatting:
 
-   ```
+   ```text
    ┌───── ... ──┬───────┬─────────┬──────────┬─...
    | id         | ready | status  | progress | ...
    ├──────... ──┼───────┼─────────┼──────────┼─...
@@ -85,7 +88,7 @@ You can track the import by changes in the "progress" attribute:
 
 - In the proto-json-base64 mode, the completed export operation is indicated with the `PROGRESS_DONE` value of the `progress` attribute:
 
-   ```
+   ```json
    {"id":"ydb://...", ...,"progress":"PROGRESS_DONE",... }
    ```
 
@@ -115,7 +118,7 @@ The `operation list` format is also set by the `--format` option.
 
 Importing to the database root the contents of the `export1` directory in the `mybucket` bucket using the S3 authentication parameters taken from the environment variables or the `~/.aws/credentials` file:
 
-```
+```bash
 ydb -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --item src=export1,dst=.
@@ -125,7 +128,7 @@ ydb -p quickstart import s3 \
 
 Importing items from the dir1 and dir2 directories in the `mybucket` S3 bucket to the same-name database directories using explicitly specified S3 authentication parameters:
 
-```
+```bash
 ydb -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
@@ -142,7 +145,7 @@ To get a list of import operation IDs in a bash-friendly format, use the [jq](ht
 
 You'll get a result where each new line shows an operation's ID. For example:
 
-```
+```text
 ydb://import/8?id=281474976789577&kind=s3
 ydb://import/8?id=281474976789526&kind=s3
 ydb://import/8?id=281474976788779&kind=s3

@@ -14,10 +14,10 @@ namespace NKikimr::NConveyor {
 class TWorkerTask {
 private:
     YDB_READONLY_DEF(ITask::TPtr, Task);
-    YDB_READONLY_DEF(NActors::TActorId, OwnerId);
     YDB_READONLY(TMonotonic, CreateInstant, TMonotonic::Now());
     YDB_READONLY_DEF(std::shared_ptr<TTaskSignals>, TaskSignals);
     std::optional<TMonotonic> StartInstant;
+    YDB_READONLY(ui64, ProcessId, 0);
 public:
     void OnBeforeStart() {
         StartInstant = TMonotonic::Now();
@@ -28,11 +28,10 @@ public:
         return *StartInstant;
     }
 
-    TWorkerTask(ITask::TPtr task, const NActors::TActorId& ownerId, std::shared_ptr<TTaskSignals> taskSignals)
+    TWorkerTask(const ITask::TPtr& task, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId)
         : Task(task)
-        , OwnerId(ownerId)
         , TaskSignals(taskSignals)
-    {
+        , ProcessId(processId) {
         Y_ABORT_UNLESS(task);
     }
 
@@ -52,38 +51,37 @@ struct TEvInternal {
 
     class TEvNewTask: public NActors::TEventLocal<TEvNewTask, EvNewTask> {
     private:
-        TWorkerTask Task;
+        std::vector<TWorkerTask> Tasks;
+        YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
     public:
         TEvNewTask() = default;
 
-        const TWorkerTask& GetTask() const {
-            return Task;
+        std::vector<TWorkerTask>&& ExtractTasks() {
+            return std::move(Tasks);
         }
 
-        explicit TEvNewTask(const TWorkerTask& task)
-            : Task(task) {
+        explicit TEvNewTask(std::vector<TWorkerTask>&& tasks)
+            : Tasks(std::move(tasks)) {
         }
     };
 
     class TEvTaskProcessedResult:
-        public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult>,
-        public TConclusion<ITask::TPtr> {
+        public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:
         using TBase = TConclusion<ITask::TPtr>;
-        YDB_READONLY_DEF(TMonotonic, StartInstant);
-        YDB_READONLY_DEF(NActors::TActorId, OwnerId);
+        YDB_READONLY_DEF(TDuration, ForwardSendDuration);
+        YDB_READONLY_DEF(std::vector<TMonotonic>, Instants);
+        YDB_READONLY_DEF(std::vector<ui64>, ProcessIds);
+        YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
+        YDB_READONLY(ui64, WorketIdx, 0);
     public:
-        TEvTaskProcessedResult(const TWorkerTask& originalTask, const TString& errorMessage)
-            : TBase(TConclusionStatus::Fail(errorMessage))
-            , StartInstant(originalTask.GetStartInstant())
-            , OwnerId(originalTask.GetOwnerId()) {
-
-        }
-        TEvTaskProcessedResult(const TWorkerTask& originalTask, ITask::TPtr result)
-            : TBase(result)
-            , StartInstant(originalTask.GetStartInstant())
-            , OwnerId(originalTask.GetOwnerId()) {
-
+        TEvTaskProcessedResult(std::vector<TMonotonic>&& instants, std::vector<ui64>&& processIds, const TDuration forwardSendDuration, const ui64 workerIdx)
+            : ForwardSendDuration(forwardSendDuration)
+            , Instants(std::move(instants))
+            , ProcessIds(std::move(processIds))
+            , WorketIdx(workerIdx) {
+            AFL_VERIFY(ProcessIds.size());
+            AFL_VERIFY(Instants.size() == ProcessIds.size() + 1);
         }
     };
 };
@@ -91,12 +89,28 @@ struct TEvInternal {
 class TWorker: public NActors::TActorBootstrapped<TWorker> {
 private:
     using TBase = NActors::TActorBootstrapped<TWorker>;
-public:
+    const double CPUHardLimit = 1;
+    YDB_READONLY(double, CPUSoftLimit, 1);
+    ui64 CPULimitGeneration = 0;
+    bool WaitWakeUp = false;
+    std::optional<TDuration> ForwardDuration;
+    const NActors::TActorId DistributorId;
+    const ui64 WorkerIdx;
+    std::vector<TMonotonic> Instants;
+    std::vector<ui64> ProcessIds;
+    const ::NMonitoring::THistogramPtr SendFwdHistogram;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr SendFwdDuration;
+    TDuration GetWakeupDuration() const;
+    void ExecuteTask(std::vector<TWorkerTask>&& workerTasks);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
+    void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
+    void OnWakeup();
+public:
 
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInternal::TEvNewTask, HandleMain);
+            hFunc(NActors::TEvents::TEvWakeup, HandleMain);
             default:
                 ALS_ERROR(NKikimrServices::TX_CONVEYOR) << "unexpected event for task executor: " << ev->GetTypeRewrite();
                 break;
@@ -107,11 +121,19 @@ public:
         Become(&TWorker::StateMain);
     }
 
-    TWorker(const TString& conveyorName)
+    TWorker(const TString& conveyorName, const double cpuHardLimit, const NActors::TActorId& distributorId, const ui64 workerIdx, const ::NMonitoring::THistogramPtr sendFwdHistogram, const ::NMonitoring::TDynamicCounters::TCounterPtr sendFwdDuration)
         : TBase("CONVEYOR::" + conveyorName + "::WORKER")
-    {
-
+        , CPUHardLimit(cpuHardLimit)
+        , CPUSoftLimit(cpuHardLimit)
+        , DistributorId(distributorId)
+        , WorkerIdx(workerIdx)
+        , SendFwdHistogram(sendFwdHistogram)
+        , SendFwdDuration(sendFwdDuration) {
+        AFL_VERIFY(0 < CPUHardLimit);
+        AFL_VERIFY(CPUHardLimit <= 1);
     }
+
+    void UpdateCPUSoftLimit(const double cpuSoftLimit);
 };
 
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <contrib/ydb/core/base/events.h>
+#include <ydb/core/base/events.h>
 
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/rpc_proxy/config.h>

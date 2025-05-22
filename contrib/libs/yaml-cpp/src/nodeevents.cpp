@@ -13,14 +13,14 @@ void NodeEvents::AliasManager::RegisterReference(const detail::node& node) {
 
 anchor_t NodeEvents::AliasManager::LookupAnchor(
     const detail::node& node) const {
-  AnchorByIdentity::const_iterator it = m_anchorByIdentity.find(node.ref());
+  auto it = m_anchorByIdentity.find(node.ref());
   if (it == m_anchorByIdentity.end())
     return 0;
   return it->second;
 }
 
 NodeEvents::NodeEvents(const Node& node)
-    : m_pMemory(node.m_pMemory), m_root(node.m_pNode) {
+    : m_pMemory(node.m_pMemory), m_root(node.m_pNode), m_refCount{} {
   if (m_root)
     Setup(*m_root);
 }
@@ -32,28 +32,27 @@ void NodeEvents::Setup(const detail::node& node) {
     return;
 
   if (node.type() == NodeType::Sequence) {
-    for (detail::const_node_iterator it = node.begin(); it != node.end(); ++it)
-      Setup(**it);
+    for (auto element : node)
+      Setup(*element);
   } else if (node.type() == NodeType::Map) {
-    for (detail::const_node_iterator it = node.begin(); it != node.end();
-         ++it) {
-      Setup(*it->first);
-      Setup(*it->second);
+    for (auto element : node) {
+      Setup(*element.first);
+      Setup(*element.second);
     }
   }
 }
 
-void NodeEvents::Emit(EventHandler& handler) {
+void NodeEvents::Emit(EventHandler& handler, bool preserveMarks) {
   AliasManager am;
 
   handler.OnDocumentStart(Mark());
   if (m_root)
-    Emit(*m_root, handler, am);
+    Emit(*m_root, handler, am, preserveMarks);
   handler.OnDocumentEnd();
 }
 
 void NodeEvents::Emit(const detail::node& node, EventHandler& handler,
-                      AliasManager& am) const {
+                      AliasManager& am, bool preserveMarks) const {
   anchor_t anchor = NullAnchor;
   if (IsAliased(node)) {
     anchor = am.LookupAnchor(node);
@@ -66,28 +65,30 @@ void NodeEvents::Emit(const detail::node& node, EventHandler& handler,
     anchor = am.LookupAnchor(node);
   }
 
+  auto getMark = [preserveMarks, &node]() {
+    return preserveMarks ? node.mark() : Mark();
+  };
+
   switch (node.type()) {
     case NodeType::Undefined:
       break;
     case NodeType::Null:
-      handler.OnNull(Mark(), anchor);
+      handler.OnNull(getMark(), anchor);
       break;
     case NodeType::Scalar:
-      handler.OnScalar(Mark(), node.tag(), anchor, node.scalar());
+      handler.OnScalar(getMark(), node.tag(), anchor, node.scalar());
       break;
     case NodeType::Sequence:
-      handler.OnSequenceStart(Mark(), node.tag(), anchor, node.style());
-      for (detail::const_node_iterator it = node.begin(); it != node.end();
-           ++it)
-        Emit(**it, handler, am);
+      handler.OnSequenceStart(getMark(), node.tag(), anchor, node.style());
+      for (auto element : node)
+        Emit(*element, handler, am, preserveMarks);
       handler.OnSequenceEnd();
       break;
     case NodeType::Map:
-      handler.OnMapStart(Mark(), node.tag(), anchor, node.style());
-      for (detail::const_node_iterator it = node.begin(); it != node.end();
-           ++it) {
-        Emit(*it->first, handler, am);
-        Emit(*it->second, handler, am);
+      handler.OnMapStart(getMark(), node.tag(), anchor, node.style());
+      for (auto element : node) {
+        Emit(*element.first, handler, am, preserveMarks);
+        Emit(*element.second, handler, am, preserveMarks);
       }
       handler.OnMapEnd();
       break;
@@ -95,7 +96,7 @@ void NodeEvents::Emit(const detail::node& node, EventHandler& handler,
 }
 
 bool NodeEvents::IsAliased(const detail::node& node) const {
-  RefCount::const_iterator it = m_refCount.find(node.ref());
+  auto it = m_refCount.find(node.ref());
   return it != m_refCount.end() && it->second > 1;
 }
-}
+}  // namespace YAML

@@ -11,6 +11,15 @@ SRCS(
     utils_ut.cpp
 )
 
+PEERDIR(
+    yql/essentials/public/udf/service/stub
+)
+
 YQL_LAST_ABI_VERSION()
+
+RESOURCE(
+    resources/plan.json      plan.json
+    resources/stat.json      stat.json
+)
 
 END()

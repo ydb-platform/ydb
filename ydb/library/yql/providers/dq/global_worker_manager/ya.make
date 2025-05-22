@@ -1,10 +1,10 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/utils/failure_injector
-    ydb/library/yql/providers/common/config
-    ydb/library/yql/providers/common/gateway
-    ydb/library/yql/providers/common/metrics
+    yql/essentials/utils/failure_injector
+    yql/essentials/providers/common/config
+    yql/essentials/providers/common/gateway
+    yql/essentials/providers/common/metrics
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/api/grpc
     ydb/library/yql/providers/dq/api/protos
@@ -49,6 +49,8 @@ SRCS(
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut
-)
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
+    RECURSE_FOR_TESTS(
+        ut
+    )
+ENDIF()

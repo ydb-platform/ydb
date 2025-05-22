@@ -37,6 +37,7 @@ namespace NBoot {
         THashMap<ui32, NTable::TRowVersionRanges> RemovedRowVersions;
 
         TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
+        bool ShouldSnapshotScheme = false;
     };
 }
 
@@ -91,8 +92,8 @@ private:
 
     EOpResult CheckCompletion();
 
-    void PrepareEnv(bool follower, ui32 generation, TExecutorCaches caches) noexcept;
-    void StartLeaseWaiter(TMonotonic bootTimestamp, const TEvTablet::TDependencyGraph& graph) noexcept;
+    void PrepareEnv(bool follower, ui32 generation, TExecutorCaches caches);
+    void StartLeaseWaiter(TMonotonic bootTimestamp, const TEvTablet::TDependencyGraph& graph);
     ui32 GetBSGroupFor(const TLogoBlobID &logo) const;
     ui32 GetBSGroupID(ui32 channel, ui32 generation);
     void LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs>);
@@ -107,7 +108,7 @@ public:
     TExecutorBootLogic(IOps*, const TActorId&, TTabletStorageInfo *info, ui64 maxBytesInFly);
     ~TExecutorBootLogic();
 
-    void Describe(IOutputStream&) const noexcept;
+    void Describe(IOutputStream&) const;
     EOpResult ReceiveBoot(TEvTablet::TEvBoot::TPtr &ev, TExecutorCaches &&caches);
     EOpResult ReceiveFollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, TExecutorCaches &&caches);
     EOpResult ReceiveRestored(TEvTablet::TEvRestored::TPtr &ev);
@@ -116,7 +117,7 @@ public:
     void FollowersSyncComplete();
     void Cancel();
 
-    TAutoPtr<NBoot::TResult> ExtractState() noexcept;
+    TAutoPtr<NBoot::TResult> ExtractState();
 
     TExecutorCaches DetachCaches();
 };

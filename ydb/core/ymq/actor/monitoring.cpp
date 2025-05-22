@@ -5,10 +5,10 @@
 
 
 namespace NKikimr::NSQS {
-    
+
     constexpr TDuration RETRY_PERIOD_MIN = TDuration::Seconds(30);
     constexpr TDuration RETRY_PERIOD_MAX = TDuration::Minutes(5);
-    
+
 
     TMonitoringActor::TMonitoringActor(TIntrusivePtr<TMonitoringCounters> counters)
         : Counters(counters)
@@ -33,13 +33,13 @@ namespace NKikimr::NSQS {
         LOG_ERROR_S(ctx, NKikimrServices::SQS, "[monitoring] Got an error : " << error);
         RequestMetrics(runAfter, ctx);
     }
-    
+
     void TMonitoringActor::RequestMetrics(TDuration runAfter, const TActorContext& ctx) {
         RunYqlQuery(RemovedQueuesQuery, std::nullopt, true, runAfter, Cfg().GetRoot(), ctx);
     }
-    
+
     void TMonitoringActor::HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             HandleError(record.DebugString(), ctx);
             return;
@@ -50,13 +50,13 @@ namespace NKikimr::NSQS {
         Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
         NYdb::TResultSetParser parser(response.GetYdbResults(0));
         TDuration removeQueuesDataLag;
-        
+
         if (parser.RowsCount()) {
             parser.TryNextRow();
             TInstant minRemoveQueueTimestamp = TInstant::MilliSeconds(*parser.ColumnParser(0).GetOptionalUint64());
             removeQueuesDataLag = ctx.Now() - minRemoveQueueTimestamp;
         }
-        
+
         LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[monitoring] Report deletion queue data lag: " << removeQueuesDataLag << ", count: " << parser.RowsCount());
         *Counters->CleanupRemovedQueuesLagSec = removeQueuesDataLag.Seconds();
         *Counters->CleanupRemovedQueuesLagCount = parser.RowsCount();

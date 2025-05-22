@@ -12,6 +12,7 @@ struct TTaskCounters : public TCounters {
 
     void AddAsyncStats(const NDqProto::TDqAsyncBufferStats stats, const std::map<TString, TString>& l, const TString& p) {
         if (auto v = stats.GetBytes();  v) SetCounter(GetCounterName("TaskRunner", l, p + "Bytes"), v);
+        if (auto v = stats.GetDecompressedBytes(); v) SetCounter(GetCounterName("TaskRunner", l, p + "DecompressedBytes"), v);
         if (auto v = stats.GetRows();   v) SetCounter(GetCounterName("TaskRunner", l, p + "Rows"), v);
         if (auto v = stats.GetChunks(); v) SetCounter(GetCounterName("TaskRunner", l, p + "Chunks"), v);
         if (auto v = stats.GetSplits(); v) SetCounter(GetCounterName("TaskRunner", l, p + "Splits"), v);
@@ -32,6 +33,10 @@ struct TTaskCounters : public TCounters {
                 (TInstant::MilliSeconds(lastMessageMs) - TInstant::MilliSeconds(firstMessageMs)).MicroSeconds()
             );
         }
+        if (auto v = stats.GetFilteredBytes();  v) SetCounter(GetCounterName("TaskRunner", l, p + "FilteredBytes"), v);
+        if (auto v = stats.GetFilteredRows();  v)  SetCounter(GetCounterName("TaskRunner", l, p + "FilteredRows"), v);
+        SetCounter(GetCounterName("TaskRunner", l, p + "QueuedBytes"), stats.GetQueuedBytes());
+        SetCounter(GetCounterName("TaskRunner", l, p + "QueuedRows"), stats.GetQueuedRows());
     }
 
     void AddAsyncStats(const NDq::TDqAsyncStats stats, const std::map<TString, TString>& l, const TString& p) {
@@ -52,6 +57,10 @@ struct TTaskCounters : public TCounters {
         if (activeTime) {
             SetCounter(GetCounterName("TaskRunner", l, p + "ActiveTimeUs"), activeTime.MicroSeconds());
         }
+        if (stats.FilteredBytes) SetCounter(GetCounterName("TaskRunner", l, p + "FilteredBytes"), stats.FilteredBytes);
+        if (stats.FilteredRows)  SetCounter(GetCounterName("TaskRunner", l, p + "FilteredRows"),  stats.FilteredRows);
+        SetCounter(GetCounterName("TaskRunner", l, p + "QueuedBytes"),   stats.QueuedBytes);
+        SetCounter(GetCounterName("TaskRunner", l, p + "QueuedRows"),    stats.QueuedRows);
     }
 
     void AddInputChannelStats(

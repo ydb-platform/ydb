@@ -62,7 +62,7 @@ class TExampleReplicaActor : public TActor<TExampleReplicaActor> {
             IndexKey.erase(entry.KeyIt);
 
         if (IsLastEntryOnNode(entry.OwnerIt))
-            Send(TlsActivationContext->ExecutorThread.ActorSystem->InterconnectProxy(entry.OwnerIt->first.NodeId()), new TEvents::TEvUnsubscribe());
+            Send(TActivationContext::ActorSystem()->InterconnectProxy(entry.OwnerIt->first.NodeId()), new TEvents::TEvUnsubscribe());
 
         IndexOwner.erase(entry.OwnerIt);
 

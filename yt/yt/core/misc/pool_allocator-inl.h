@@ -45,7 +45,7 @@ inline TPoolAllocator::TPoolAllocator(
 
 inline void* TPoolAllocator::Allocate() noexcept
 {
-    VERIFY_THREAD_AFFINITY(HomeThread);
+    YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
     if (Y_UNLIKELY(!FirstFree_)) {
         AllocateChunk();
@@ -67,23 +67,23 @@ inline void TPoolAllocator::Free(void* ptr) noexcept
 }
 
 template <std::derived_from<TPoolAllocator::TObjectBase> T, class... TArgs>
-std::unique_ptr<T> TPoolAllocator::New(TArgs&&... args)
+YT_PREVENT_TLS_CACHING std::unique_ptr<T> TPoolAllocator::New(TArgs&&... args)
 {
     struct TChunkTag
     { };
     constexpr auto ChunkSize = 64_KB;
-    YT_THREAD_LOCAL(TPoolAllocator) Allocator(
+    thread_local TPoolAllocator Allocator(
         sizeof(T),
         alignof(T),
         ChunkSize,
         GetRefCountedTypeCookie<TChunkTag>());
 
-    return std::unique_ptr<T>(new(&GetTlsRef(Allocator)) T(std::forward<TArgs>(args)...));
+    return std::unique_ptr<T>(new(&Allocator) T(std::forward<TArgs>(args)...));
 }
 
 inline void TPoolAllocator::DoFree(void* ptr)
 {
-    VERIFY_THREAD_AFFINITY(HomeThread);
+    YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
     auto* header = static_cast<TFreeBlockHeader*>(ptr) - 1;
     new(header) TFreeBlockHeader(FirstFree_);

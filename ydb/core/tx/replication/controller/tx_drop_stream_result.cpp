@@ -60,8 +60,14 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        target->SetStreamState(TReplication::EStreamState::Removed);
-        db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
+        if (target->GetDstState() == TReplication::EDstState::Removing) {
+            target->SetStreamState(TReplication::EStreamState::Removed);
+            db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
+        } else {
+            db.Table<Schema::Targets>().Key(rid, tid).Delete();
+            db.Table<Schema::SrcStreams>().Key(rid, tid).Delete();
+            Replication->RemoveTarget(tid);
+        }
 
         return true;
     }

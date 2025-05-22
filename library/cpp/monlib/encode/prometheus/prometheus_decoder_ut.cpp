@@ -36,11 +36,12 @@ using namespace NMonitoring;
 
 Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
 
-    NProto::TSingleSamplesList Decode(TStringBuf data) {
+    NProto::TSingleSamplesList Decode(TStringBuf data, const TPrometheusDecodeSettings& settings = TPrometheusDecodeSettings{}) {
         NProto::TSingleSamplesList samples;
+        ;
         {
             IMetricEncoderPtr e = EncoderProtobuf(&samples);
-            DecodePrometheus(data, e.Get());
+            DecodePrometheus(data, e.Get(), "sensor", settings);
         }
         return samples;
     }
@@ -67,12 +68,13 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
     Y_UNIT_TEST(Minimal) {
         auto samples = Decode(
                 "minimal_metric 1.234\n"
+                "big_num 1.04671344e+10\n"
                 "another_metric -3e3 103948\n"
                 "# Even that:\n"
                 "no_labels{} 3\n"
                 "# HELP line for non-existing metric will be ignored.\n");
 
-        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 3);
+        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 4);
         {
             auto& s = samples.GetSamples(0);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
@@ -83,12 +85,19 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
         {
             auto& s = samples.GetSamples(1);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
+            UNIT_ASSERT_EQUAL(1, s.LabelsSize());
+            ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "big_num");
+            ASSERT_DOUBLE_POINT(s, TInstant::Zero(), 1.04671344e+10);
+        }
+        {
+            auto& s = samples.GetSamples(2);
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
             UNIT_ASSERT_EQUAL(s.LabelsSize(), 1);
             ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "another_metric");
             ASSERT_DOUBLE_POINT(s, TInstant::MilliSeconds(103948), -3000.0);
         }
         {
-            auto& s = samples.GetSamples(2);
+            auto& s = samples.GetSamples(3);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
             UNIT_ASSERT_EQUAL(1, s.LabelsSize());
             ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "no_labels");
@@ -97,33 +106,61 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
     }
 
     Y_UNIT_TEST(Counter) {
-        auto samples = Decode(
-                "# A normal comment.\n"
-                "#\n"
-                "# TYPE name counter\n"
-                "name{labelname=\"val1\",basename=\"basevalue\"} NaN\n"
-                "name {labelname=\"val2\",basename=\"basevalue\"} 2.3 1234567890\n"
-                "# HELP name two-line\\n doc  str\\\\ing\n");
-
-        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 2);
+        constexpr auto inputMetrics =
+            "# A normal comment.\n"
+            "#\n"
+            "# TYPE name counter\n"
+            "name{labelname=\"val1\",basename=\"basevalue\"} NaN\n"
+            "name {labelname=\"val2\",basename=\"basevalue\"} 2.3 1234567890\n"
+            "# HELP name two-line\\n doc  str\\\\ing\n";
 
         {
-            auto& s = samples.GetSamples(0);
-            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::RATE);
-            UNIT_ASSERT_EQUAL(s.LabelsSize(), 3);
-            ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "name");
-            ASSERT_LABEL_EQUAL(s.GetLabels(1), "basename", "basevalue");
-            ASSERT_LABEL_EQUAL(s.GetLabels(2), "labelname", "val1");
-            ASSERT_UINT_POINT(s, TInstant::Zero(), ui64(0));
+            auto samples = Decode(inputMetrics);
+            UNIT_ASSERT_EQUAL(samples.SamplesSize(), 2);
+
+            {
+                auto& s = samples.GetSamples(0);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::RATE);
+                UNIT_ASSERT_EQUAL(s.LabelsSize(), 3);
+                ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "name");
+                ASSERT_LABEL_EQUAL(s.GetLabels(1), "basename", "basevalue");
+                ASSERT_LABEL_EQUAL(s.GetLabels(2), "labelname", "val1");
+                ASSERT_UINT_POINT(s, TInstant::Zero(), ui64(0));
+            }
+            {
+                auto& s = samples.GetSamples(1);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::RATE);
+                UNIT_ASSERT_EQUAL(s.LabelsSize(), 3);
+                ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "name");
+                ASSERT_LABEL_EQUAL(s.GetLabels(1), "basename", "basevalue");
+                ASSERT_LABEL_EQUAL(s.GetLabels(2), "labelname", "val2");
+                ASSERT_UINT_POINT(s, TInstant::MilliSeconds(1234567890), i64(2));
+            }
         }
         {
-            auto& s = samples.GetSamples(1);
-            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::RATE);
-            UNIT_ASSERT_EQUAL(s.LabelsSize(), 3);
-            ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "name");
-            ASSERT_LABEL_EQUAL(s.GetLabels(1), "basename", "basevalue");
-            ASSERT_LABEL_EQUAL(s.GetLabels(2), "labelname", "val2");
-            ASSERT_UINT_POINT(s, TInstant::MilliSeconds(1234567890), i64(2));
+            TPrometheusDecodeSettings settings;
+            settings.Mode = EPrometheusDecodeMode::RAW;
+            auto samples = Decode(inputMetrics, settings);
+            UNIT_ASSERT_EQUAL(samples.SamplesSize(), 2);
+
+            {
+                auto& s = samples.GetSamples(0);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
+                UNIT_ASSERT_EQUAL(s.LabelsSize(), 3);
+                ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "name");
+                ASSERT_LABEL_EQUAL(s.GetLabels(1), "basename", "basevalue");
+                ASSERT_LABEL_EQUAL(s.GetLabels(2), "labelname", "val1");
+                ASSERT_DOUBLE_POINT(s, TInstant::MilliSeconds(0), NAN);
+            }
+            {
+                auto& s = samples.GetSamples(1);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
+                UNIT_ASSERT_EQUAL(s.LabelsSize(), 3);
+                ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "name");
+                ASSERT_LABEL_EQUAL(s.GetLabels(1), "basename", "basevalue");
+                ASSERT_LABEL_EQUAL(s.GetLabels(2), "labelname", "val2");
+                ASSERT_DOUBLE_POINT(s, TInstant::MilliSeconds(1234567890), 2.3);
+            }
         }
     }
 
@@ -210,43 +247,58 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
     }
 
     Y_UNIT_TEST(Histogram) {
-        auto samples = Decode(
-                "# HELP request_duration_microseconds The response latency.\n"
-                "# TYPE request_duration_microseconds histogram\n"
-                "request_duration_microseconds_bucket{le=\"0\"} 0\n"
-                "request_duration_microseconds_bucket{le=\"100\"} 123\n"
-                "request_duration_microseconds_bucket{le=\"120\"} 412\n"
-                "request_duration_microseconds_bucket{le=\"144\"} 592\n"
-                "request_duration_microseconds_bucket{le=\"172.8\"} 1524\n"
-                "request_duration_microseconds_bucket{le=\"+Inf\"} 2693\n"
-                "request_duration_microseconds_sum 1.7560473e+06\n"
-                "request_duration_microseconds_count 2693\n");
-
-        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 3);
+        constexpr auto inputMetrics =
+            "# HELP request_duration_microseconds The response latency.\n"
+            "# TYPE request_duration_microseconds histogram\n"
+            "request_duration_microseconds_bucket{le=\"0\"} 0\n"
+            "request_duration_microseconds_bucket{le=\"100\"} 123\n"
+            "request_duration_microseconds_bucket{le=\"120\"} 412\n"
+            "request_duration_microseconds_bucket{le=\"144\"} 592\n"
+            "request_duration_microseconds_bucket{le=\"172.8\"} 1524\n"
+            "request_duration_microseconds_bucket{le=\"+Inf\"} 2693\n"
+            "request_duration_microseconds_sum 1.7560473e+06\n"
+            "request_duration_microseconds_count 2693\n";
 
         {
-            auto& s = samples.GetSamples(0);
-            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
-            UNIT_ASSERT_EQUAL(s.LabelsSize(), 1);
-            ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "request_duration_microseconds_sum");
-            ASSERT_DOUBLE_POINT(s, TInstant::Zero(), 1756047.3);
+            auto samples = Decode(inputMetrics);
+            {
+                auto& s = samples.GetSamples(0);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
+                UNIT_ASSERT_EQUAL(s.LabelsSize(), 1);
+                ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "request_duration_microseconds_sum");
+                ASSERT_DOUBLE_POINT(s, TInstant::Zero(), 1756047.3);
+            }
+            {
+                auto& s = samples.GetSamples(1);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::RATE);
+                UNIT_ASSERT_EQUAL(s.LabelsSize(), 1);
+                ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "request_duration_microseconds_count");
+                ASSERT_UINT_POINT(s, TInstant::Zero(), 2693);
+            }
+            {
+                auto& s = samples.GetSamples(2);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::HIST_RATE);
+                UNIT_ASSERT_EQUAL(s.LabelsSize(), 1);
+                ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "request_duration_microseconds");
+                auto hist = ExplicitHistogramSnapshot(
+                    {0, 100, 120, 144, 172.8, HISTOGRAM_INF_BOUND},
+                    {0, 123, 289, 180, 932, 1169});
+                ASSERT_HIST_POINT(s, TInstant::Zero(), *hist);
+            }
         }
         {
-            auto& s = samples.GetSamples(1);
-            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::RATE);
-            UNIT_ASSERT_EQUAL(s.LabelsSize(), 1);
-            ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "request_duration_microseconds_count");
-            ASSERT_UINT_POINT(s, TInstant::Zero(), 2693);
-        }
-        {
-            auto& s = samples.GetSamples(2);
-            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::HIST_RATE);
-            UNIT_ASSERT_EQUAL(s.LabelsSize(), 1);
-            ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "request_duration_microseconds");
-            auto hist = ExplicitHistogramSnapshot(
-                    { 0, 100, 120, 144, 172.8, HISTOGRAM_INF_BOUND },
-                    { 0, 123, 289, 180, 932, 1169 });
-            ASSERT_HIST_POINT(s, TInstant::Zero(), *hist);
+            TPrometheusDecodeSettings settings;
+            settings.Mode = EPrometheusDecodeMode::RAW;
+            auto samples = Decode(inputMetrics, settings);
+            UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 8);
+            {
+                auto& s = samples.GetSamples(0);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::EMetricType::GAUGE);
+                UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
+                ASSERT_LABEL_EQUAL(s.GetLabels(0), "sensor", "request_duration_microseconds_bucket");
+                ASSERT_LABEL_EQUAL(s.GetLabels(1), "le", "0");
+                ASSERT_DOUBLE_POINT(s, TInstant::Zero(), 0);
+            }
         }
     }
 

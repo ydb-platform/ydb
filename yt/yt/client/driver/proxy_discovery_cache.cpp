@@ -23,25 +23,10 @@ using namespace NApi::NRpcProxy;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TProxyDiscoveryRequest::operator==(const TProxyDiscoveryRequest& other) const
-{
-    return
-        Type == other.Type &&
-        Role == other.Role &&
-        AddressType == other.AddressType &&
-        NetworkName == other.NetworkName &&
-        IgnoreBalancers == other.IgnoreBalancers;
-}
-
-bool TProxyDiscoveryRequest::operator!=(const TProxyDiscoveryRequest& other) const
-{
-    return !(*this == other);
-}
-
 TProxyDiscoveryRequest::operator size_t() const
 {
     return MultiHash(
-        Type,
+        Kind,
         Role,
         AddressType,
         NetworkName,
@@ -52,17 +37,12 @@ TProxyDiscoveryRequest::operator size_t() const
 
 void FormatValue(TStringBuilderBase* builder, const TProxyDiscoveryRequest& request, TStringBuf /*spec*/)
 {
-    builder->AppendFormat("{Type: %v, Role: %v, AddressType: %v, NetworkName: %v, IgnoreBalancers: %v}",
-        request.Type,
+    builder->AppendFormat("{Kind: %v, Role: %v, AddressType: %v, NetworkName: %v, IgnoreBalancers: %v}",
+        request.Kind,
         request.Role,
         request.AddressType,
         request.NetworkName,
         request.IgnoreBalancers);
-}
-
-TString ToString(const TProxyDiscoveryRequest& request)
-{
-    return ToStringViaBuilder(request);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,7 +57,7 @@ public:
         IClientPtr client)
         : TAsyncExpiringCache(
             std::move(config),
-            DriverLogger.WithTag("Cache: ProxyDiscovery"))
+            DriverLogger().WithTag("Cache: ProxyDiscovery"))
         , Client_(std::move(client))
     { }
 
@@ -89,6 +69,8 @@ public:
 
 private:
     const IClientPtr Client_;
+
+    const NLogging::TLogger Logger = DriverLogger();
 
     TFuture<TProxyDiscoveryResponse> DoGet(
         const TProxyDiscoveryRequest& request,
@@ -113,7 +95,13 @@ private:
         options.ReadFrom = EMasterChannelKind::LocalCache;
         options.Attributes = {BalancersAttributeName};
 
-        auto path = GetProxyRegistryPath(request.Type) + "/@";
+        TYPath path;
+        try {
+            path = GetProxyRegistryPath(request.Kind) + "/@";
+        } catch (const std::exception& ex) {
+            YT_LOG_ERROR(ex, "Failed to get proxy registry path");
+            return MakeFuture<std::optional<TProxyDiscoveryResponse>>(ex);
+        }
         return Client_->GetNode(path, options).Apply(
             BIND([=] (const TYsonString& yson) -> std::optional<TProxyDiscoveryResponse> {
                 auto attributes = ConvertTo<IMapNodePtr>(yson);
@@ -140,7 +128,13 @@ private:
         options.SuppressTransactionCoordinatorSync = true;
         options.Attributes = {BannedAttributeName, RoleAttributeName, AddressesAttributeName};
 
-        auto path = GetProxyRegistryPath(request.Type);
+        TYPath path;
+        try {
+            path = GetProxyRegistryPath(request.Kind);
+        } catch (const std::exception& ex) {
+            YT_LOG_ERROR(ex, "Failed to get proxy registry path");
+            return MakeFuture<TProxyDiscoveryResponse>(ex);
+        }
         return Client_->GetNode(path, options).Apply(BIND([=] (const TYsonString& yson) {
             TProxyDiscoveryResponse response;
 
@@ -153,7 +147,7 @@ private:
                     continue;
                 }
 
-                if (proxyNode->Attributes().Get<TString>(RoleAttributeName, DefaultRpcProxyRole) != request.Role) {
+                if (proxyNode->Attributes().Get<std::string>(RoleAttributeName, DefaultRpcProxyRole) != request.Role) {
                     continue;
                 }
 
@@ -163,7 +157,7 @@ private:
                 if (address) {
                     response.Addresses.push_back(*address);
                 } else {
-                    // COMPAT(verytable): Drop it after all rpc proxies migrate to 22.3.
+                    // COMPAT(nadya73): Drop it after all http proxies migrate to 25.2.
                     if (!proxyNode->Attributes().Contains(AddressesAttributeName)) {
                         response.Addresses.push_back(proxyAddress);
                     }
@@ -174,13 +168,15 @@ private:
     }
 
 
-    static TYPath GetProxyRegistryPath(EProxyType type)
+    static TYPath GetProxyRegistryPath(EProxyKind type)
     {
         switch (type) {
-            case EProxyType::Rpc:
+            case EProxyKind::Rpc:
                 return RpcProxiesPath;
-            case EProxyType::Grpc:
+            case EProxyKind::Grpc:
                 return GrpcProxiesPath;
+            case EProxyKind::Http:
+                return HttpProxiesPath;
             default:
                 THROW_ERROR_EXCEPTION("Proxy type %Qlv is not supported",
                     type);

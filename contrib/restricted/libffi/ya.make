@@ -105,6 +105,7 @@ ELSEIF (ARCH_I386 AND OS_WINDOWS)
         contrib/restricted/libffi/configs/i386-microsoft-windows
         GLOBAL contrib/restricted/libffi/configs/i386-microsoft-windows/include
     )
+    LDFLAGS(/safeseh:no)
     SRCS(
         configs/i386-microsoft-windows/sysv_intel.masm
         src/x86/ffi.c
@@ -122,16 +123,6 @@ ELSEIF (ARCH_PPC64LE AND OS_LINUX)
         src/powerpc/linux64_closure.S
         src/powerpc/ppc_closure.S
         src/powerpc/sysv.S
-    )
-ELSEIF (ARCH_RISCV32 AND OS_NONE)
-    ADDINCL(
-        contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
-        GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include
-    )
-ELSEIF (ARCH_XTENSA AND OS_NONE)
-    ADDINCL(
-        contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
-        GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include
     )
 ELSEIF (ARCH_X86_64 AND OS_ANDROID)
     ADDINCL(
@@ -185,6 +176,11 @@ ELSEIF (ARCH_X86_64 AND OS_WINDOWS)
     SRCS(
         configs/x86_64-microsoft-windows/win64_intel.masm
         src/x86/ffiw64.c
+    )
+ELSEIF (OS_NONE)
+    ADDINCL(
+        contrib/restricted/libffi/configs/x86_64-pc-linux-gnu
+        GLOBAL contrib/restricted/libffi/configs/x86_64-pc-linux-gnu/include
     )
 ELSE()
     MESSAGE(FATAL_ERROR Unsupported libffi platform: ${TARGET_PLATFORM} / ${HARDWARE_TYPE})

@@ -2,6 +2,8 @@
 
 LIBRARY()
 
+VERSION(1.9.4)
+
 LICENSE(
     BSD-3-Clause AND
     BSL-1.0 AND

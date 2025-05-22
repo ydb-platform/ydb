@@ -11,11 +11,6 @@ message TTraceId {
     optional bytes Data = 1;
 }
 
-message TCallbackException {
-    required TActorId ActorId = 1;
-    required string ExceptionMessage = 2;
-}
-
 message TRemoteHttpInfo {
     message TQueryParam {
         optional string Key = 1;
@@ -34,6 +29,7 @@ message TRemoteHttpInfo {
     optional bytes PostContent = 8;
     repeated THeader Headers = 9;
     optional string RemoteAddr = 7;
+    optional string UserToken = 10;
 
     // for compatibility reasons (incorrect field types merged in 21-4)
     reserved 5;

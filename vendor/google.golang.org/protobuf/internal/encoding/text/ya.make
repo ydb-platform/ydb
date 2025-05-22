@@ -2,6 +2,8 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
+VERSION(v1.36.5)
+
 SRCS(
     decode.go
     decode_number.go
@@ -11,11 +13,4 @@ SRCS(
     encode.go
 )
 
-GO_XTEST_SRCS(
-    decode_test.go
-    encode_test.go
-)
-
 END()
-
-RECURSE(gotest)

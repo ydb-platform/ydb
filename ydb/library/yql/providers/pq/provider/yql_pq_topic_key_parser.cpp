@@ -1,6 +1,6 @@
 #include "yql_pq_topic_key_parser.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 namespace NYql {
 
@@ -65,6 +65,10 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
             }
             if (readSettings->Child(i)->Head().IsAtom("data.timestamp.format")) {
                 TimestampFormat = readSettings->Child(i);
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("data.date.format")) {
+                DateFormat = readSettings->Child(i);
                 continue;
             }
         }

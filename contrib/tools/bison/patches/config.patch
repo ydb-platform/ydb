@@ -1,0 +1,8 @@
+--- contrib/tools/bison/lib/config-linux.h	(index)
++++ contrib/tools/bison/lib/config-linux.h	(working tree)
+@@ -1666,2 +1666,5 @@
+ /* Define to `int' if <sys/types.h> doesn't define. */
+ /* #undef uid_t */
++#undef HAVE_THREADS_H
++#undef HAVE_SYS_SINGLE_THREADED_H
++#define _GL_ATTRIBUTE_FORMAT_PRINTF(...)

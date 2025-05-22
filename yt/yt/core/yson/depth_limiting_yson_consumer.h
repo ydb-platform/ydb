@@ -1,5 +1,8 @@
-#include "public.h"
-#include "consumer.h"
+#pragma once
+
+#include <library/cpp/yt/yson_string/public.h>
+
+#include <library/cpp/yt/yson/public.h>
 
 namespace NYT::NYson {
 

@@ -28,7 +28,7 @@ public:
     TInvokerQueueAdapter(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
         const TTagSet& counterTagSet,
-        const TDuration pollingPeriod)
+        TDuration pollingPeriod)
         : TMpmcInvokerQueue(callbackEventCount, counterTagSet)
         , TNotifyManager(callbackEventCount, counterTagSet, pollingPeriod)
     { }
@@ -95,20 +95,24 @@ public:
     TThreadPoolThread(
         TIntrusivePtr<TInvokerQueueAdapter> queue,
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        const TString& threadGroupName,
-        const TString& threadName,
-        NThreading::EThreadPriority threadPriority)
+        const std::string& threadGroupName,
+        const std::string& threadName,
+        const TThreadPoolOptions& options)
         : TSchedulerThread(
             callbackEventCount,
             threadGroupName,
             threadName,
-            threadPriority,
-            /*shutdownPriority*/ 0)
+            NThreading::TThreadOptions{
+                .ThreadPriority = options.ThreadPriority,
+                .ThreadInitializer = options.ThreadInitializer,
+            })
         , Queue_(std::move(queue))
+        , Options_(options)
     { }
 
 protected:
     const TIntrusivePtr<TInvokerQueueAdapter> Queue_;
+    const TThreadPoolOptions Options_;
 
     TEnqueuedAction CurrentAction_;
 
@@ -140,17 +144,17 @@ class TThreadPool
 public:
     TThreadPool(
         int threadCount,
-        const TString& threadNamePrefix,
-        NThreading::EThreadPriority threadPriority,
-        const TDuration pollingPeriod)
-        : TThreadPoolBase(threadNamePrefix, threadPriority)
+        const std::string& threadNamePrefix,
+        const TThreadPoolOptions& options)
+        : TThreadPoolBase(threadNamePrefix)
+        , Options_(options)
         , Queue_(New<TInvokerQueueAdapter>(
             CallbackEventCount_,
             GetThreadTags(ThreadNamePrefix_),
-            pollingPeriod))
+            options.PollingPeriod))
         , Invoker_(Queue_)
     {
-        Configure(threadCount);
+        SetThreadCount(threadCount);
     }
 
     ~TThreadPool()
@@ -164,9 +168,14 @@ public:
         return Invoker_;
     }
 
-    void Configure(int threadCount) override
+    void SetThreadCount(int threadCount) override
     {
-        TThreadPoolBase::Configure(threadCount);
+        TThreadPoolBase::SetThreadCount(threadCount);
+    }
+
+    void SetPollingPeriod(TDuration pollingPeriod) override
+    {
+        Queue_->SetPollingPeriod(pollingPeriod);
     }
 
     int GetThreadCount() override
@@ -180,32 +189,26 @@ public:
     }
 
 private:
+    const TThreadPoolOptions Options_;
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
     const TIntrusivePtr<TInvokerQueueAdapter> Queue_;
     const IInvokerPtr Invoker_;
 
     void DoShutdown() override
     {
-        Queue_->Shutdown();
+        Queue_->Shutdown(/*graceful*/ false);
         TThreadPoolBase::DoShutdown();
+        Queue_->OnConsumerFinished();
     }
 
-    TClosure MakeFinalizerCallback() override
-    {
-        return BIND_NO_PROPAGATE([queue = Queue_, callback = TThreadPoolBase::MakeFinalizerCallback()] {
-            callback();
-            queue->DrainConsumer();
-        });
-    }
-
-    TSchedulerThreadBasePtr SpawnThread(int index) override
+    TSchedulerThreadPtr SpawnThread(int index) override
     {
         return New<TThreadPoolThread>(
             Queue_,
             CallbackEventCount_,
             ThreadNamePrefix_,
             MakeThreadName(index),
-            ThreadPriority_);
+            Options_);
     }
 };
 
@@ -213,15 +216,13 @@ private:
 
 IThreadPoolPtr CreateThreadPool(
     int threadCount,
-    const TString& threadNamePrefix,
-    NThreading::EThreadPriority threadPriority,
-    TDuration pollingPeriod)
+    const std::string& threadNamePrefix,
+    const TThreadPoolOptions& options)
 {
     return New<TThreadPool>(
         threadCount,
         threadNamePrefix,
-        threadPriority,
-        pollingPeriod);
+        options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

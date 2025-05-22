@@ -22,11 +22,8 @@ class TestDeleteReadRulesAfterAbortBySystem(TestBaseWithAbortingConfigParams):
             PRAGMA dq.MaxTasksPerStage="5";
 
             INSERT INTO {conn}.`{output_topic}`
-            SELECT * FROM {conn}.`{input_topic}`;'''\
-        .format(
-            input_topic=self.input_topic,
-            output_topic=self.output_topic,
-            conn=conn
+            SELECT * FROM {conn}.`{input_topic}`;'''.format(
+            input_topic=self.input_topic, output_topic=self.output_topic, conn=conn
         )
 
         client = FederatedQueryClient("my_folder", streaming_over_kikimr=self.streaming_over_kikimr)
@@ -35,6 +32,8 @@ class TestDeleteReadRulesAfterAbortBySystem(TestBaseWithAbortingConfigParams):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
 
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        self.streaming_over_kikimr.compute_plane.wait_zero_checkpoint(query_id)
+
         read_rules = list_read_rules(self.input_topic)
         assert len(read_rules) == 1, read_rules
 

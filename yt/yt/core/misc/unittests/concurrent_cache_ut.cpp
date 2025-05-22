@@ -82,7 +82,7 @@ TEST_P(TConcurrentCacheTest, Stress)
 
     THazardPtrReclaimOnContextSwitchGuard flushGuard;
     TSlabAllocator allocator;
-    TConcurrentCache<TElement> concurrentCache(tableSize);
+    TConcurrentCache<TElement> concurrentCache(tableSize, /*memoryUsageTracker*/ nullptr);
 
     auto threadPool = CreateThreadPool(threadCount, "Workers");
     std::vector<TFuture<size_t>> asyncResults;
@@ -112,7 +112,7 @@ TEST_P(TConcurrentCacheTest, Stress)
                 if (!foundRef) {
                     auto value = NewWithExtraSpace<TElement>(&allocator, columnCount);
                     memcpy(value.Get(), key, sizeof(TElement) + columnCount);
-                    bool inserted = inserter.GetTable()->Insert(std::move(value));
+                    auto inserted = static_cast<bool>(inserter.GetTable()->Insert(std::move(value)));
 
                     insertCount += inserted;
                 } else if (reinsert) {
@@ -141,8 +141,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
         std::tuple(2, 1, 1000, false),
         std::tuple(2, 5, 1000, false),
-        std::tuple(2, 5, 1000, true)
-        ));
+        std::tuple(2, 5, 1000, true)));
 
 ////////////////////////////////////////////////////////////////////////////////
 

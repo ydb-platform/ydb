@@ -1,0 +1,52 @@
+LIBRARY()
+
+SRCS(
+    yql_yt_file_comp_nodes.cpp
+    yql_yt_file_mkql_compiler.cpp
+    yql_yt_file_services.cpp
+    yql_yt_file.cpp
+    yql_yt_file_text_yson.cpp
+)
+
+PEERDIR(
+    library/cpp/yson
+    library/cpp/yson/node
+    yt/cpp/mapreduce/common
+    yt/cpp/mapreduce/interface
+    yql/essentials/core/file_storage
+    yql/essentials/core/file_storage/proto
+    yql/essentials/core/file_storage/http_download
+    yql/essentials/core/issue
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/public/udf
+    yql/essentials/utils
+    yql/essentials/utils/threading
+    yql/essentials/core
+    yql/essentials/core/expr_nodes
+    yql/essentials/core/type_ann
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/gateway
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/mkql_simple_file
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/common/schema/mkql
+    yql/essentials/providers/result/expr_nodes
+    yt/yql/providers/yt/common
+    yt/yql/providers/yt/comp_nodes
+    yt/yql/providers/yt/expr_nodes
+    yt/yql/providers/yt/gateway/lib
+    yt/yql/providers/yt/lib/infer_schema
+    yt/yql/providers/yt/lib/lambda_builder
+    yt/yql/providers/yt/lib/mkql_helpers
+    yt/yql/providers/yt/lib/res_pull
+    yt/yql/providers/yt/lib/schema
+    yt/yql/providers/yt/lib/yson_helpers
+    yt/yql/providers/yt/provider
+    yql/essentials/parser/pg_wrapper
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()

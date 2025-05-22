@@ -1,7 +1,5 @@
 from markupsafe import escape
 from markupsafe import Markup
-from werkzeug.exceptions import abort as abort
-from werkzeug.utils import redirect as redirect
 
 from . import json as json
 from .app import Flask as Flask
@@ -13,17 +11,16 @@ from .ctx import after_this_request as after_this_request
 from .ctx import copy_current_request_context as copy_current_request_context
 from .ctx import has_app_context as has_app_context
 from .ctx import has_request_context as has_request_context
-from .globals import _app_ctx_stack as _app_ctx_stack
-from .globals import _request_ctx_stack as _request_ctx_stack
 from .globals import current_app as current_app
 from .globals import g as g
 from .globals import request as request
 from .globals import session as session
+from .helpers import abort as abort
 from .helpers import flash as flash
 from .helpers import get_flashed_messages as get_flashed_messages
 from .helpers import get_template_attribute as get_template_attribute
 from .helpers import make_response as make_response
-from .helpers import safe_join as safe_join
+from .helpers import redirect as redirect
 from .helpers import send_file as send_file
 from .helpers import send_from_directory as send_from_directory
 from .helpers import stream_with_context as stream_with_context
@@ -42,5 +39,33 @@ from .signals import signals_available as signals_available
 from .signals import template_rendered as template_rendered
 from .templating import render_template as render_template
 from .templating import render_template_string as render_template_string
+from .templating import stream_template as stream_template
+from .templating import stream_template_string as stream_template_string
 
-__version__ = "2.0.3"
+__version__ = "2.2.5"
+
+
+def __getattr__(name):
+    if name == "_app_ctx_stack":
+        import warnings
+        from .globals import __app_ctx_stack
+
+        warnings.warn(
+            "'_app_ctx_stack' is deprecated and will be removed in Flask 2.3.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return __app_ctx_stack
+
+    if name == "_request_ctx_stack":
+        import warnings
+        from .globals import __request_ctx_stack
+
+        warnings.warn(
+            "'_request_ctx_stack' is deprecated and will be removed in Flask 2.3.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return __request_ctx_stack
+
+    raise AttributeError(name)

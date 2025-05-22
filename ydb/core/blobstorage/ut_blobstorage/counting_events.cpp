@@ -2,6 +2,9 @@
 
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 
+#include <util/stream/null.h>
+
+#define Ctest Cnull
 
 Y_UNIT_TEST_SUITE(CountingEvents) {
 
@@ -86,8 +89,25 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
 
     void CountingEventsTest(TString typeOperation, ui32 eventsCount, TBlobStorageGroupType groupType)
     {
-        TEnvironmentSetup env(true, groupType);
+        TEnvironmentSetup env({
+            .VDiskReplPausedAtStart = true,
+            .Erasure = groupType,
+            .UseActorSystemTimeInBSQueue = false,
+        });
         auto& runtime = env.Runtime;
+
+        bool printEvents = false;
+        ui32 eventCtr = 0;
+        
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (printEvents) {
+                Ctest << "Counter# " << eventCtr++
+                        << " Type# " << ev->GetTypeRewrite()
+                        << " Name# " << ev->GetTypeName()
+                        << " ToString()# " << ev->ToString() << Endl;
+            }
+            return true;
+        };
 
         env.CreateBoxAndPool();
         env.CommenceReplication();
@@ -113,11 +133,13 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
             NormalizePredictedDelays(queues);
             SendPut(test, originalBlobId, data, NKikimrProto::OK);
 
+            printEvents = true;
             startEventsCount = test.Runtime->GetEventsProcessed();
             TLogoBlobID originalBlobId2(tabletId, 1, 1, 0, size, 0);
             NormalizePredictedDelays(queues);
             SendPut(test, originalBlobId2, data, NKikimrProto::OK);
             finishEventsCount = test.Runtime->GetEventsProcessed();
+            printEvents = false;
 
             UNIT_ASSERT_VALUES_EQUAL(finishEventsCount - startEventsCount, eventsCount);
 
@@ -135,10 +157,12 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
             NormalizePredictedDelays(queues);
             SendGet(test, originalBlobId, data, NKikimrProto::OK);
 
+            printEvents = true;
             startEventsCount = test.Runtime->GetEventsProcessed();
             NormalizePredictedDelays(queues);
             SendGet(test, originalBlobId, data, NKikimrProto::OK);
             finishEventsCount = test.Runtime->GetEventsProcessed();
+            printEvents = false;
 
             UNIT_ASSERT_VALUES_EQUAL(finishEventsCount - startEventsCount, eventsCount);
 
@@ -153,11 +177,13 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
             NormalizePredictedDelays(queues);
             SendPut(test, originalBlobId, data, NKikimrProto::OK);
 
+            printEvents = true;
             startEventsCount = test.Runtime->GetEventsProcessed();
             TLogoBlobID originalBlobId2(tabletId, 1, 1, 0, size, 0);
             NormalizePredictedDelays(queues);
             SendCollect(test, originalBlobId2, NKikimrProto::OK);
             finishEventsCount = test.Runtime->GetEventsProcessed();
+            printEvents = false;
 
             UNIT_ASSERT_VALUES_EQUAL(finishEventsCount - startEventsCount, eventsCount);
         }

@@ -83,6 +83,169 @@ Y_UNIT_TEST_SUITE(Donor) {
         UNIT_ASSERT(found);
     }
 
+    void CheckHasDonor(TEnvironmentSetup& env, const TActorId& vdiskActorId, const TVDiskID& vdiskId) {
+        auto baseConfig = env.FetchBaseConfig();
+        bool found = false;
+        for (const auto& slot : baseConfig.GetVSlot()) {
+            if (slot.DonorsSize()) {
+                UNIT_ASSERT(!found);
+                UNIT_ASSERT_VALUES_EQUAL(slot.DonorsSize(), 1);
+                const auto& donor = slot.GetDonors(0);
+                const auto& id = donor.GetVSlotId();
+                UNIT_ASSERT_VALUES_EQUAL(vdiskActorId, MakeBlobStorageVDiskID(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId()));
+                UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(donor.GetVDiskId()), vdiskId);
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
+    }
+
+    Y_UNIT_TEST(SkipBadDonor) {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .ReplMaxQuantumBytes = 1 << 20,
+            .ReplMaxDonorNotReadyCount = 2
+        }};
+        auto& runtime = env.Runtime;
+
+        env.EnableDonorMode();
+        env.CreateBoxAndPool(2, 1);
+        env.CommenceReplication();
+        env.Sim(TDuration::Seconds(30));
+
+        const ui32 groupId = env.GetGroups().front();
+
+        const TActorId edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString buffer = TString(2_MB, 'b');
+        for (ui32 i = 0; i < 20; ++i) {
+            TLogoBlobID id(1, 1, i, 0, buffer.size(), 0);
+            runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        }
+
+        // wait for sync and stuff
+        env.Sim(TDuration::Seconds(3));
+
+        // move slot out from disk
+        auto info = env.GetGroupInfo(groupId);
+        const TVDiskID& vdiskId = info->GetVDiskId(0);
+        const TActorId& vdiskActorId = info->GetActorId(0);
+        env.SettlePDisk(vdiskActorId);
+
+        CheckHasDonor(env, vdiskActorId, vdiskId);
+
+        ui32 nodeId, pdiskId;
+        std::tie(nodeId, pdiskId, std::ignore) = DecomposeVDiskServiceId(vdiskActorId);
+
+        ui32 donorRequestsCount = 0;
+
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGet) {
+                Y_UNUSED(nodeId);
+                auto* msg = ev->Get<TEvBlobStorage::TEvVGet>();
+
+                TVDiskID vdid = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
+                if (vdid == vdiskId) {
+                    donorRequestsCount++;
+                    auto reply = std::make_unique<TEvBlobStorage::TEvVGetResult>();
+                    reply->MakeError(NKikimrProto::NOTREADY, "BS_QUEUE is not ready", msg->Record);
+                    env.Runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), reply.release(), 0, ev->Cookie), ev->Sender.NodeId());
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        env.CommenceReplication();
+
+        UNIT_ASSERT_EQUAL(donorRequestsCount, 3);
+    }
+
+    Y_UNIT_TEST(ContinueWithFaultyDonor) {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .ReplMaxQuantumBytes = 1 << 20,
+            .ReplMaxDonorNotReadyCount = 2
+        }};
+        auto& runtime = env.Runtime;
+
+        env.EnableDonorMode();
+        env.CreateBoxAndPool(2, 1);
+        env.CommenceReplication();
+        env.Sim(TDuration::Seconds(30));
+
+        const ui32 groupId = env.GetGroups().front();
+
+        const TActorId edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString buffer = TString(2_MB, 'b');
+        for (ui32 i = 0; i < 20; ++i) {
+            TLogoBlobID id(1, 1, i, 0, buffer.size(), 0);
+            runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        }
+
+        // wait for sync and stuff
+        env.Sim(TDuration::Seconds(3));
+
+        // move slot out from disk
+        auto info = env.GetGroupInfo(groupId);
+        const TVDiskID& vdiskId = info->GetVDiskId(0);
+        const TActorId& vdiskActorId = info->GetActorId(0);
+        env.SettlePDisk(vdiskActorId);
+
+        CheckHasDonor(env, vdiskActorId, vdiskId);
+
+        ui32 nodeId, pdiskId;
+        std::tie(nodeId, pdiskId, std::ignore) = DecomposeVDiskServiceId(vdiskActorId);
+
+        ui32 droppedDonorRequestsCount = 0;
+        ui32 succeededDonorRequestsCount = 0;
+        bool respondError = true;
+
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGet) {
+                Y_UNUSED(nodeId);
+                auto* msg = ev->Get<TEvBlobStorage::TEvVGet>();
+
+                TVDiskID vdid = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
+                
+                auto senderActor = env.Runtime->GetActor(ev->Sender);
+
+                auto senderType = senderActor->GetActivityType().GetName();
+
+                if (vdid == vdiskId && senderType == "BS_VDISK_REPL_PROXY") {
+                    if (respondError) {
+                        // Will drop current request.
+                        respondError = false;
+                        droppedDonorRequestsCount++;
+                    } else {
+                        // Will respond on next request.
+                        respondError = true;
+                        succeededDonorRequestsCount++;
+                        return true;
+                    }
+                    auto reply = std::make_unique<TEvBlobStorage::TEvVGetResult>();
+                    reply->MakeError(NKikimrProto::NOTREADY, "BS_QUEUE is not ready", msg->Record);
+                    env.Runtime->Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), reply.release(), 0, ev->Cookie), ev->Sender.NodeId());
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        env.CommenceReplication();
+    }
+
     Y_UNIT_TEST(ConsistentWritesWhenSwitchingToDonorMode) {
         TEnvironmentSetup env{{
             .NodeCount = 9,
@@ -319,5 +482,147 @@ Y_UNIT_TEST_SUITE(Donor) {
             }
         }
        // env.Sim(TDuration::Seconds(10));
+    }
+
+    TVector<NKikimrBlobStorage::TBaseConfig_TVSlot_TDonorDisk> GetDonors(TEnvironmentSetup& env, const TVDiskID& vdiskId) {
+        TVector<NKikimrBlobStorage::TBaseConfig_TVSlot_TDonorDisk> result;
+        const auto& baseConfig = env.FetchBaseConfig();
+        for (const auto& slot : baseConfig.GetVSlot()) {
+            for (size_t donorId = 0; donorId < slot.DonorsSize(); ++donorId) {
+                const auto& donor = slot.GetDonors(donorId);
+                if (VDiskIDFromVDiskID(donor.GetVDiskId()) == vdiskId) {
+                    result.push_back(donor);
+                }
+            }
+        }
+        return result;
+    }
+
+    Y_UNIT_TEST(CheckOnlineReadRequestToDonor) {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .ReplMaxQuantumBytes = 1 << 20,
+            .ReplMaxDonorNotReadyCount = 2
+        }};
+        auto& runtime = env.Runtime;
+
+        env.EnableDonorMode();
+        env.CreateBoxAndPool(2, 1);
+        env.CommenceReplication();
+        env.Sim(TDuration::Seconds(30));
+
+        const ui32 groupId = env.GetGroups().front();
+
+        const TActorId edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString buffer = TString(2_MB, 'b');
+        TLogoBlobID logoBlobId(1, 1, 0, 0, buffer.size(), 0);
+        TVDiskID vdiskId;
+        bool vdiskIdWithBlobSet = false;
+        TLogoBlobID vdiskLogoBlobId;
+
+        // Put blob and find vdisk with it and partId = 1
+        {
+            env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvVPut) {
+                    Y_UNUSED(nodeId);
+                    auto* msg = ev->Get<TEvBlobStorage::TEvVPut>();
+                    const auto& blobId = LogoBlobIDFromLogoBlobID(msg->Record.GetBlobID());
+                    if (blobId.IsSameBlob(logoBlobId) && blobId.PartId() == 1 && !vdiskIdWithBlobSet) {
+                        vdiskId = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
+                        vdiskLogoBlobId = blobId;
+                        vdiskIdWithBlobSet = true;
+                    } else {
+                    }
+                }
+                return true;
+            };
+
+            runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(logoBlobId, buffer, TInstant::Max()));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT(vdiskIdWithBlobSet);
+        }
+
+        auto info = env.GetGroupInfo(groupId);
+        const TActorId& vdiskActorId = info->GetActorId(vdiskId);
+
+        // Move slot out from disk and finf donor
+        env.SettlePDisk(vdiskActorId);
+        CheckHasDonor(env, vdiskActorId, vdiskId);
+        const auto& donors = GetDonors(env, vdiskId);
+        UNIT_ASSERT_VALUES_EQUAL(donors.size(), 1);
+        const auto& donor = donors.front();
+
+        bool requestVdiskNotYet = false;
+        bool fastRequestToDonor = false;
+        bool asyncRequestToDonor = false;
+
+        const auto& checkRequestToDonor = [&](std::unique_ptr<IEventHandle>& ev, const NKikimrBlobStorage::EGetHandleClass& handleClass, bool& requestExist) {
+            auto* msg = ev->Get<TEvBlobStorage::TEvVGet>();
+            if (msg->Record.ExtremeQueriesSize() != 1) {
+                return;
+            }
+            const auto& query = msg->Record.GetExtremeQueries(0);
+            const auto& blobId = LogoBlobIDFromLogoBlobID(query.GetId());
+            const auto& slotId = donor.GetVSlotId();
+            const auto& donorActorId = MakeBlobStorageVDiskID(slotId.GetNodeId(), slotId.GetPDiskId(), slotId.GetVSlotId());
+
+            if (blobId == vdiskLogoBlobId &&
+                    ev->Recipient == donorActorId &&
+                    msg->Record.GetHandleClass() == handleClass) {
+                UNIT_ASSERT(!requestExist);
+                requestExist = true;
+            }
+            return;
+        };
+
+        // Check disk answer TEvEnrichNotYet and request FastRead from donor for online read
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            Y_UNUSED(nodeId);
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvEnrichNotYet) {
+                UNIT_ASSERT(!requestVdiskNotYet);
+                auto msg = ev->Get<TEvBlobStorage::TEvEnrichNotYet>()->Query.Get()->Get();
+                UNIT_ASSERT_VALUES_EQUAL(msg->Record.ExtremeQueriesSize(), 1);
+                const auto& query = msg->Record.GetExtremeQueries(0);
+                const auto& vdid = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
+                const auto& blobId = LogoBlobIDFromLogoBlobID(query.GetId());
+                UNIT_ASSERT(vdid.SameExceptGeneration(vdiskId));
+                UNIT_ASSERT_VALUES_EQUAL(vdid.GroupGeneration, 2);
+                UNIT_ASSERT_VALUES_EQUAL(blobId, vdiskLogoBlobId);
+                requestVdiskNotYet = true;
+            }
+
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGet) {
+                checkRequestToDonor(ev, NKikimrBlobStorage::EGetHandleClass::FastRead, fastRequestToDonor);
+            }
+            return true;
+        };
+
+        // Get blob
+        {
+            auto ev = new TEvBlobStorage::TEvGet(logoBlobId, 0, 0, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead);
+            runtime->WrapInActorContext(edge, [&] {SendToBSProxy(edge, groupId, ev);});
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT(requestVdiskNotYet);
+            UNIT_ASSERT(fastRequestToDonor);
+        }
+
+        // Check disk request AsyncRead from donor for replication
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            Y_UNUSED(nodeId);
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGet) {
+                checkRequestToDonor(ev, NKikimrBlobStorage::EGetHandleClass::AsyncRead, asyncRequestToDonor);
+            }
+            return true;
+        };
+
+        // Start replication
+        env.CommenceReplication();
+        UNIT_ASSERT(asyncRequestToDonor);
     }
 }

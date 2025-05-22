@@ -72,6 +72,7 @@ message THullDbEntryPoint {
 
     optional TLevelIndex LevelIndex = 1;
     optional TDiskPartVec RemovedHugeBlobs = 2;
+    optional TDiskPartVec AllocatedHugeBlobs = 4;
 
     // obsolete field
     repeated TUncommittedRemovedHugeBlob UncommittedRemovedHugeBlobs = 3;

@@ -1,8 +1,6 @@
 #include "protobuf_helpers.h"
 #include "mpl.h"
 
-#include <yt/yt/core/misc/singleton.h>
-
 #include <yt/yt/core/compression/codec.h>
 
 #include <yt/yt/core/logging/log.h>
@@ -12,6 +10,8 @@
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <library/cpp/yt/misc/cast.h>
+
+#include <library/cpp/yt/threading/spin_lock.h>
 
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream.h>
@@ -27,7 +27,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const NLogging::TLogger Logger("Serialize");
+[[maybe_unused]] static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Serialize");
 
 struct TSerializedMessageTag
 { };
@@ -89,7 +89,7 @@ bool TryDeserializeProto(google::protobuf::MessageLite* message, TRef data)
     // to find out more about protobuf message size limits.
     CodedInputStream codedInputStream(
         reinterpret_cast<const ui8*>(data.Begin()),
-        static_cast<int>(data.Size()));
+        std::ssize(data));
     codedInputStream.SetTotalBytesLimit(data.Size() + 1);
 
     // Raise recursion limit.
@@ -112,7 +112,7 @@ TSharedRef SerializeProtoToRefWithEnvelope(
 {
     NYT::NProto::TSerializedMessageEnvelope envelope;
     if (codecId != NCompression::ECodec::None) {
-        envelope.set_codec(static_cast<int>(codecId));
+        envelope.set_codec(ToProto(codecId));
     }
 
     auto serializedMessage = SerializeProtoToRef(message, partial);
@@ -125,17 +125,17 @@ TSharedRef SerializeProtoToRefWithEnvelope(
     fixedHeader.MessageSize = static_cast<ui32>(compressedMessage.Size());
 
     size_t totalSize =
-        sizeof (TEnvelopeFixedHeader) +
+        sizeof(TEnvelopeFixedHeader) +
         fixedHeader.EnvelopeSize +
         fixedHeader.MessageSize;
 
     auto data = TSharedMutableRef::Allocate<TSerializedMessageTag>(totalSize, {.InitializeStorage = false});
 
     char* targetFixedHeader = data.Begin();
-    char* targetHeader = targetFixedHeader + sizeof (TEnvelopeFixedHeader);
+    char* targetHeader = targetFixedHeader + sizeof(TEnvelopeFixedHeader);
     char* targetMessage = targetHeader + fixedHeader.EnvelopeSize;
 
-    memcpy(targetFixedHeader, &fixedHeader, sizeof (fixedHeader));
+    memcpy(targetFixedHeader, &fixedHeader, sizeof(fixedHeader));
     YT_VERIFY(envelope.SerializeToArray(targetHeader, fixedHeader.EnvelopeSize));
     memcpy(targetMessage, compressedMessage.Begin(), fixedHeader.MessageSize);
 
@@ -159,14 +159,14 @@ TString SerializeProtoToStringWithEnvelope(
     fixedHeader.MessageSize = CheckedCastToI32(message.ByteSizeLong());
 
     auto totalSize =
-        sizeof (fixedHeader) +
+        sizeof(fixedHeader) +
         fixedHeader.EnvelopeSize +
         fixedHeader.MessageSize;
 
     auto data = TString::Uninitialized(totalSize);
     char* ptr = data.begin();
-    ::memcpy(ptr, &fixedHeader, sizeof (fixedHeader));
-    ptr += sizeof (fixedHeader);
+    ::memcpy(ptr, &fixedHeader, sizeof(fixedHeader));
+    ptr += sizeof(fixedHeader);
     ptr = reinterpret_cast<char*>(envelope.SerializeWithCachedSizesToArray(reinterpret_cast<ui8*>(ptr)));
     ptr = reinterpret_cast<char*>(message.SerializeWithCachedSizesToArray(reinterpret_cast<ui8*>(ptr)));
     YT_ASSERT(ptr == data.end());
@@ -178,13 +178,13 @@ bool TryDeserializeProtoWithEnvelope(
     google::protobuf::MessageLite* message,
     TRef data)
 {
-    if (data.Size() < sizeof (TEnvelopeFixedHeader)) {
+    if (data.Size() < sizeof(TEnvelopeFixedHeader)) {
         return false;
     }
 
     const auto* fixedHeader = reinterpret_cast<const TEnvelopeFixedHeader*>(data.Begin());
-    const char* sourceHeader = data.Begin() + sizeof (TEnvelopeFixedHeader);
-    if (fixedHeader->EnvelopeSize + sizeof (*fixedHeader) > data.Size()) {
+    const char* sourceHeader = data.Begin() + sizeof(TEnvelopeFixedHeader);
+    if (fixedHeader->EnvelopeSize + sizeof(*fixedHeader) > data.Size()) {
         return false;
     }
 
@@ -195,23 +195,23 @@ bool TryDeserializeProtoWithEnvelope(
         return false;
     }
 
-    NCompression::ECodec codecId;
-    if (!TryEnumCast(envelope.codec(), &codecId)) {
+    auto codecId = TryCheckedEnumCast<NCompression::ECodec>(envelope.codec());
+    if (!codecId) {
         return false;
     }
 
-    if (fixedHeader->MessageSize + fixedHeader->EnvelopeSize + sizeof (*fixedHeader) > data.Size()) {
+    if (fixedHeader->MessageSize + fixedHeader->EnvelopeSize + sizeof(*fixedHeader) > data.Size()) {
         return false;
     }
 
     auto compressedMessage = TSharedRef(sourceMessage, fixedHeader->MessageSize, nullptr);
 
-    auto* codec = NCompression::GetCodec(codecId);
+    auto* codec = NCompression::GetCodec(*codecId);
     try {
         auto serializedMessage = codec->Decompress(compressedMessage);
 
         return TryDeserializeProto(message, serializedMessage);
-    } catch (const std::exception& ex) {
+    } catch (const std::exception&) {
         return false;
     }
 }
@@ -283,6 +283,25 @@ TSharedRef PushEnvelope(const TSharedRef& data)
     return MergeRefsToRef<TDefaultSharedBlobTag>(std::vector<TSharedRef>{headerRef, data});
 }
 
+TSharedRef PushEnvelope(const TSharedRef& data, NCompression::ECodec codec)
+{
+    NYT::NProto::TSerializedMessageEnvelope envelope;
+    envelope.set_codec(ToProto(codec));
+
+    TEnvelopeFixedHeader header;
+    header.EnvelopeSize = CheckedCastToI32(envelope.ByteSizeLong());
+    header.MessageSize = static_cast<ui32>(data.Size());
+
+    auto headerRef = TSharedMutableRef::Allocate(
+        sizeof(header) +
+        header.EnvelopeSize);
+
+    memcpy(headerRef.Begin(), &header, sizeof(header));
+    YT_VERIFY(envelope.SerializeToArray(headerRef.Begin() + sizeof(header), header.EnvelopeSize));
+
+    return MergeRefsToRef<TDefaultSharedBlobTag>(std::vector<TSharedRef>{headerRef, data});
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TProtobufExtensionRegistry
@@ -291,14 +310,15 @@ class TProtobufExtensionRegistry
 public:
     void AddAction(TRegisterAction action) override
     {
-        YT_VERIFY(State_ == EState::Uninitialized);
+        YT_VERIFY(State_.load() == EState::Uninitialized);
 
-        Actions_.push_back(std::move(action));
+        RegisterActions_.push_back(std::move(action));
     }
 
     void RegisterDescriptor(const TProtobufExtensionDescriptor& descriptor) override
     {
-        YT_VERIFY(State_ == EState::Initializing);
+        YT_VERIFY(State_.load() == EState::Initializing);
+        YT_VERIFY(InitializationLock_.IsLocked());
 
         EmplaceOrCrash(ExtensionTagToExtensionDescriptor_, descriptor.Tag, descriptor);
         EmplaceOrCrash(ExtensionNameToExtensionDescriptor_, descriptor.Name, descriptor);
@@ -328,28 +348,38 @@ private:
         Initialized
     };
 
-    EState State_ = EState::Uninitialized;
+    std::atomic<EState> State_ = EState::Uninitialized;
+    NThreading::TSpinLock InitializationLock_;
+    std::vector<TRegisterAction> RegisterActions_;
 
     THashMap<int, TProtobufExtensionDescriptor> ExtensionTagToExtensionDescriptor_;
     THashMap<TString, TProtobufExtensionDescriptor> ExtensionNameToExtensionDescriptor_;
 
-    std::vector<TRegisterAction> Actions_;
-
     void EnsureInitialized()
     {
-        if (State_ == EState::Initialized) {
+        // Fast path
+        if (State_.load(std::memory_order::relaxed) == EState::Initialized) {
             return;
         }
 
-        YT_VERIFY(State_ == EState::Uninitialized);
-        State_ = EState::Initializing;
+        // Slow path
+        {
+            auto guard = Guard(InitializationLock_);
 
-        for (const auto& action : Actions_) {
-            action();
+            if (State_.load() == EState::Initialized) {
+                return;
+            }
+
+            YT_VERIFY(State_.load() == EState::Uninitialized);
+            State_.store(EState::Initializing);
+
+            for (const auto& action : RegisterActions_) {
+                action();
+            }
+            RegisterActions_.clear();
+
+            State_.store(EState::Initialized);
         }
-        Actions_.clear();
-
-        State_ = EState::Initialized;
     }
 };
 
@@ -360,7 +390,7 @@ IProtobufExtensionRegistry* IProtobufExtensionRegistry::Get()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Intermediate extension representation for proto<->yson converter.
+//! Intermediate extension representation for proto<->YSON converter.
 struct TExtension
 {
     //! Extension tag.
@@ -370,7 +400,7 @@ struct TExtension
     TString Data;
 };
 
-//! Intermediate extension set representation for proto<->yson converter.
+//! Intermediate extension set representation for proto<->YSON converter.
 struct TExtensionSet
 {
     std::vector<TExtension> Extensions;
@@ -383,7 +413,7 @@ void FromProto(TExtensionSet* extensionSet, const NYT::NProto::TExtensionSet& pr
         if (IProtobufExtensionRegistry::Get()->FindDescriptorByTag(protoExtension.tag())) {
             TExtension extension{
                 .Tag = protoExtension.tag(),
-                .Data = protoExtension.data()
+                .Data = FromProto<TString>(protoExtension.data()),
             };
             extensionSet->Extensions.push_back(std::move(extension));
         }
@@ -399,7 +429,7 @@ void ToProto(NYT::NProto::TExtensionSet* protoExtensionSet, const TExtensionSet&
     }
 }
 
-void Serialize(const TExtensionSet& extensionSet, NYson::IYsonConsumer* consumer)
+void Serialize(const TExtensionSet& extensionSet, NYson::IYsonConsumer* consumer, const TProtobufParserOptions& parserOptions = {})
 {
     BuildYsonFluently(consumer)
         .DoMapFor(extensionSet.Extensions, [&] (TFluentMap fluent, const TExtension& extension) {
@@ -414,7 +444,8 @@ void Serialize(const TExtensionSet& extensionSet, NYson::IYsonConsumer* consumer
                     ParseProtobuf(
                         fluent.GetConsumer(),
                         &inputStream,
-                        ReflectProtobufMessageType(extensionDescriptor->MessageDescriptor));
+                        ReflectProtobufMessageType(extensionDescriptor->MessageDescriptor),
+                        parserOptions);
                 });
         });
 }
@@ -423,7 +454,8 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
 {
     auto mapNode = node->AsMap();
     for (const auto& [name, value] : mapNode->GetChildren()) {
-        const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByName(name);
+        // TODO(babenko): migrate to std::string
+        const auto* extensionDescriptor = IProtobufExtensionRegistry::Get()->FindDescriptorByName(TString(name));
         // Do not parse unknown extensions.
         if (!extensionDescriptor) {
             continue;
@@ -431,15 +463,19 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
         auto& extension = extensionSet.Extensions.emplace_back();
         extension.Tag = extensionDescriptor->Tag;
 
-        StringOutputStream stream(&extension.Data);
+        TProtobufString serializedExtension;
+        StringOutputStream stream(&serializedExtension);
+
         auto writer = CreateProtobufWriter(
             &stream,
             ReflectProtobufMessageType(extensionDescriptor->MessageDescriptor));
-        VisitTree(value, writer.get(), /*stable=*/false);
+        VisitTree(value, writer.get(), /*stable*/ false);
+
+        extension.Data = FromProto<TString>(std::move(serializedExtension));
     }
 }
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(NYT::NProto::TExtensionSet, TExtensionSet)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(NYT::NProto::TExtensionSet, TExtensionSet)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -456,9 +492,9 @@ TString DumpProto(::google::protobuf::Message& message)
 {
     ::google::protobuf::TextFormat::Printer printer;
     printer.SetSingleLineMode(true);
-    TString result;
+    TProtobufString result;
     YT_VERIFY(printer.PrintToString(message, &result));
-    return result;
+    return FromProto<TString>(std::move(result));
 }
 
 } // namespace
@@ -535,6 +571,101 @@ google::protobuf::Timestamp GetProtoNow()
 {
     // Unfortunately TimeUtil::GetCurrentTime provides only one second accuracy, so we use TInstant::Now.
     return google::protobuf::util::TimeUtil::MicrosecondsToTimestamp(TInstant::Now().MicroSeconds());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TProtobufInputStream::TProtobufInputStream(IInputStream* stream)
+    : Stream_(stream)
+{ }
+
+int TProtobufInputStream::Read(void* buffer, int size)
+{
+    try {
+        return Stream_->Read(buffer, size);
+    } catch (...) {
+        HasError_ = true;
+    }
+
+    return -1;
+}
+
+bool TProtobufInputStream::HasError() const
+{
+    return HasError_;
+}
+
+TProtobufInputStreamAdaptor::TProtobufInputStreamAdaptor(IInputStream* stream)
+    : TProtobufInputStream(stream)
+    , CopyingInputStreamAdaptor(this)
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
+TProtobufOutputStream::TProtobufOutputStream(IOutputStream* stream)
+    : Stream_(stream)
+{ }
+
+bool TProtobufOutputStream::Write(const void* buffer, int size)
+{
+    try {
+        Stream_->Write(buffer, size);
+        return true;
+    } catch (...) {
+        HasError_ = true;
+    }
+
+    return false;
+}
+
+bool TProtobufOutputStream::HasError() const
+{
+    return HasError_;
+}
+
+TProtobufOutputStreamAdaptor::TProtobufOutputStreamAdaptor(IOutputStream* stream)
+    : TProtobufOutputStream(stream)
+    , CopyingOutputStreamAdaptor(this)
+{ }
+
+TProtobufZeroCopyOutputStream::TProtobufZeroCopyOutputStream(IZeroCopyOutput* stream)
+    : Stream_(stream)
+{ }
+
+bool TProtobufZeroCopyOutputStream::Next(void** data, int* size)
+{
+    try {
+        size_t sizetSize = Stream_->Next(data);
+        constexpr int maxSize = std::numeric_limits<int>::max();
+        if (sizetSize > maxSize) {
+            Stream_->Undo(sizetSize - maxSize);
+            sizetSize = maxSize;
+        }
+        *size = sizetSize;
+    } catch (const std::exception&) {
+        Error_ = std::current_exception();
+        return false;
+    }
+    ByteCount_ += *size;
+    return true;
+}
+
+void TProtobufZeroCopyOutputStream::BackUp(int count)
+{
+    ByteCount_ -= count;
+    Stream_->Undo(count);
+}
+
+int64_t TProtobufZeroCopyOutputStream::ByteCount() const
+{
+    return ByteCount_;
+}
+
+void TProtobufZeroCopyOutputStream::ThrowOnError() const
+{
+    if (Error_) {
+        std::rethrow_exception(Error_);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

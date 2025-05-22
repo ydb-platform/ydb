@@ -159,7 +159,7 @@ Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
 
     auto actualResultFuture = strategy.List(
         NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{.MaxResultSet = 1});
-    auto expectedResult = NS3Lister::TListResult{MakeLimitExceededError("TTest", 1, 2)};
+    auto expectedResult = NS3Lister::TListResult{MakeLimitExceededError("TTest", 1, 2, 0)};
     const auto& actualResult = actualResultFuture.GetValue();
     UnitAssertListResultEquals(expectedResult, actualResult);
 }

@@ -21,6 +21,7 @@
 #include <library/cpp/svnversion/svnversion.h>
 
 #include <ydb/library/actors/memory_log/memlog.h>
+#include <ydb/library/services/services.pb.h>
 
 // TODO: limit number of messages per second
 // TODO: make TLogComponentLevelRequest/Response network messages
@@ -49,7 +50,7 @@
     do {                                                                                                                       \
         if (IS_CTX_LOG_PRIORITY_ENABLED(actorCtxOrSystem, priority, component, sampleBy)) {                                    \
             ::NActors::MemLogAdapter(                                                                                          \
-                actorCtxOrSystem, priority, component, __VA_ARGS__);                                                           \
+                actorCtxOrSystem, priority, component, __FILE_NAME__, __LINE__, __VA_ARGS__);                                  \
         }                                                                                                                      \
     } while (0) /**/
 
@@ -59,7 +60,7 @@
             TStringBuilder logStringBuilder;                                                                                   \
             logStringBuilder << stream;                                                                                        \
             ::NActors::MemLogAdapter(                                                                                          \
-                actorCtxOrSystem, priority, component, std::move(logStringBuilder));                                           \
+                actorCtxOrSystem, priority, component, __FILE_NAME__, __LINE__, std::move(logStringBuilder));                  \
         }                                                                                                                      \
     } while (0) /**/
 
@@ -264,7 +265,14 @@ namespace NActors {
         void HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx);
         void HandleWakeup();
         [[nodiscard]] bool OutputRecord(NLog::TEvLog *evLog) noexcept;
-        [[nodiscard]] bool OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component, const TString& formatted) noexcept;
+        [[nodiscard]] bool OutputRecord(
+            TInstant time,
+            NLog::EPrio priority,
+            NLog::EComponent component,
+            const char* fileName,
+            ui64 lineNumber,
+            const TString& formatted,
+            bool json) noexcept;
         void RenderComponentPriorities(IOutputStream& str);
         void FlushLogBufferMessage();
         void WriteMessageStat(const NLog::TEvLog& ev);
@@ -341,11 +349,27 @@ namespace NActors {
     }
 
     template <typename TCtx>
-    inline void DeliverLogMessage(TCtx& ctx, NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str)
+    inline void DeliverLogMessage(
+        TCtx& ctx,
+        NLog::EPriority mPriority,
+        NLog::EComponent mComponent,
+        const char* fileName,
+        ui64 lineNumber,
+        TString&& str,
+        bool json = false)
     {
         const NLog::TSettings *mSettings = ctx.LoggerSettings();
         TLoggerActor::Throttle(*mSettings);
-        ctx.Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str))));
+        ctx.Send(new IEventHandle(
+            mSettings->LoggerActorId,
+            TActorId(),
+            new NLog::TEvLog(
+                mPriority,
+                mComponent,
+                fileName,
+                lineNumber,
+                std::move(str),
+                json)));
     }
 
     template <typename TCtx, typename... TArgs>
@@ -353,7 +377,10 @@ namespace NActors {
         TCtx& actorCtxOrSystem,
         NLog::EPriority mPriority,
         NLog::EComponent mComponent,
-        const char* format, TArgs&&... params) {
+        const char* fileName,
+        ui64 lineNumber,
+        const char* format,
+        TArgs&&... params) {
         TString Formatted;
 
 
@@ -364,7 +391,14 @@ namespace NActors {
         }
 
         MemLogWrite(Formatted.data(), Formatted.size(), true);
-        DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(Formatted));
+        DeliverLogMessage(
+            actorCtxOrSystem,
+            mPriority,
+            mComponent,
+            fileName,
+            lineNumber,
+            std::move(Formatted),
+            false);
     }
 
     template <typename TCtx>
@@ -372,10 +406,20 @@ namespace NActors {
         TCtx& actorCtxOrSystem,
         NLog::EPriority mPriority,
         NLog::EComponent mComponent,
-        const TString& str) {
+        const char* fileName,
+        ui64 lineNumber,
+        const TString& str,
+        bool json = false) {
 
         MemLogWrite(str.data(), str.size(), true);
-        DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, TString(str));
+        DeliverLogMessage(
+            actorCtxOrSystem,
+            mPriority,
+            mComponent,
+            fileName,
+            lineNumber,
+            TString(str),
+            json);
     }
 
     template <typename TCtx>
@@ -383,10 +427,20 @@ namespace NActors {
         TCtx& actorCtxOrSystem,
         NLog::EPriority mPriority,
         NLog::EComponent mComponent,
-        TString&& str) {
+        const char* fileName,
+        ui64 lineNumber,
+        TString&& str,
+        bool json = false) {
 
         MemLogWrite(str.data(), str.size(), true);
-        DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(str));
+        DeliverLogMessage(
+            actorCtxOrSystem,
+            mPriority,
+            mComponent,
+            fileName,
+            lineNumber,
+            std::move(str),
+            json);
     }
 
     class TRecordWriter: public TStringBuilder {
@@ -404,7 +458,13 @@ namespace NActors {
 
         ~TRecordWriter() {
             if (ActorContext) {
-                ::NActors::MemLogAdapter(*ActorContext, Priority, Component, *this);
+                ::NActors::MemLogAdapter(
+                    *ActorContext,
+                    Priority,
+                    Component,
+                    __FILE_NAME__,
+                    __LINE__,
+                    *this);
             } else {
                 Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << static_cast<const TStringBuilder&>(*this) << Endl;
             }

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: xmltodict
-Version: 0.13.0
+Version: 0.14.2
 Summary: Makes working with XML feel like you are working with JSON
 Home-page: https://github.com/martinblech/xmltodict
 Author: Martin Blech
@@ -12,16 +12,17 @@ Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.4
-Classifier: Programming Language :: Python :: 3.5
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Text Processing :: Markup :: XML
-Requires-Python: >=3.4
+Requires-Python: >=3.6
 Description-Content-Type: text/markdown
 License-File: LICENSE
 
@@ -29,7 +30,7 @@ License-File: LICENSE
 
 `xmltodict` is a Python module that makes working with XML feel like you are working with [JSON](http://docs.python.org/library/json.html), as in this ["spec"](http://www.xml.com/pub/a/2006/05/31/converting-between-xml-and-json.html):
 
-[![Build Status](https://travis-ci.com/martinblech/xmltodict.svg?branch=master)](https://travis-ci.com/martinblech/xmltodict)
+[![Build Status](https://app.travis-ci.com/martinblech/xmltodict.svg?branch=master)](https://app.travis-ci.com/martinblech/xmltodict)
 
 ```python
 >>> print(json.dumps(xmltodict.parse("""
@@ -231,6 +232,17 @@ You just need to
 $ pip install xmltodict
 ```
 
+### Using conda
+
+For installing `xmltodict` using Anaconda/Miniconda (*conda*) from the 
+[conda-forge channel][#xmltodict-conda] all you need to do is:
+
+[#xmltodict-conda]: https://anaconda.org/conda-forge/xmltodict
+
+```sh
+$ conda install -c conda-forge xmltodict
+```
+
 ### RPM-based distro (Fedora, RHEL, …)
 
 There is an [official Fedora package for xmltodict](https://apps.fedoraproject.org/packages/python-xmltodict).
@@ -274,5 +286,3 @@ $ zypper in python2-xmltodict
 # Python3
 $ zypper in python3-xmltodict
 ```
-
-

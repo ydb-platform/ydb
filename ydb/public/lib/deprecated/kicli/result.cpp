@@ -1,7 +1,7 @@
 #include "kicli.h"
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <util/generic/ymath.h>
 
@@ -29,11 +29,6 @@ ui16 TResult::GetType() const {
 template <> const NKikimrClient::TResponse& TResult::GetResult<NKikimrClient::TResponse>() const {
     Y_ABORT_UNLESS(GetType() == NMsgBusProxy::MTYPE_CLIENT_RESPONSE, "Unexpected response type: %d", GetType());
     return static_cast<NMsgBusProxy::TBusResponse*>(Reply.Get())->Record;
-}
-
-template <> const NKikimrClient::TBsTestLoadResponse& TResult::GetResult<NKikimrClient::TBsTestLoadResponse>() const {
-    Y_ABORT_UNLESS(GetType() == NMsgBusProxy::MTYPE_CLIENT_LOAD_RESPONSE, "Unexpected response type: %d", GetType());
-    return static_cast<NMsgBusProxy::TBusBsTestLoadResponse*>(Reply.Get())->Record;
 }
 
 NMsgBusProxy::EResponseStatus TResult::GetStatus() const {
@@ -152,6 +147,12 @@ template <> TString TReadTableResult::ValueToString<TFormatCSV>(const YdbOld::Va
                 return TDuration::MicroSeconds(static_cast<ui64>(val)).ToString();
             return TString("-") + TDuration::MicroSeconds(static_cast<ui64>(-val)).ToString();
         }
+    case NScheme::NTypeIds::Date32:
+        return ToString(value.int32_value());
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Interval64:
+        return ToString(value.int64_value());
     case NScheme::NTypeIds::Decimal:
         {
             NYql::NDecimal::TInt128 val;

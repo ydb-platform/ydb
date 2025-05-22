@@ -1,18 +1,18 @@
-OWNER(g:ymake)
+SUBSCRIBER(g:ymake)
 
-PY23_LIBRARY()
+PY3_LIBRARY()
 
 STYLE_PYTHON()
 
 PY_SRCS(
     TOP_LEVEL
     _common.py
+    _dart_fields.py
     _requirements.py
     _xsyn_includes.py
     bundle.py
     coverage.py
     cp.py
-    cpp_style.py
     create_init_py.py
     credits.py
     docs.py
@@ -26,6 +26,7 @@ PY_SRCS(
     lj_archive.py
     llvm_bc.py
     macros_with_error.py
+    nots.py
     pybuild.py
     res.py
     suppressions.py
@@ -43,7 +44,9 @@ END()
 RECURSE(
     tests
     lib
+    lib/nots
     lib/proxy
     lib/test_const
     lib/test_const/proxy
+    lib/tests/utils
 )

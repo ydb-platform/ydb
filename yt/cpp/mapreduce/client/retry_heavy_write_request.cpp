@@ -7,6 +7,7 @@
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
@@ -24,82 +25,11 @@ using ::ToString;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void RetryHeavyWriteRequest(
-    const IClientRetryPolicyPtr& clientRetryPolicy,
-    const ITransactionPingerPtr& transactionPinger,
-    const TClientContext& context,
-    const TTransactionId& parentId,
-    THttpHeader& header,
-    std::function<THolder<IInputStream>()> streamMaker)
-{
-    int retryCount = context.Config->RetryCount;
-    if (context.ServiceTicketAuth) {
-        header.SetServiceTicket(context.ServiceTicketAuth->Ptr->IssueServiceTicket());
-    } else {
-        header.SetToken(context.Token);
-    }
-
-    if (context.ImpersonationUser) {
-        header.SetImpersonationUser(*context.ImpersonationUser);
-    }
-
-    for (int attempt = 0; attempt < retryCount; ++attempt) {
-        TPingableTransaction attemptTx(clientRetryPolicy, context, parentId, transactionPinger->GetChildTxPinger(), TStartTransactionOptions());
-
-        auto input = streamMaker();
-        TString requestId;
-
-        try {
-            auto hostName = GetProxyForHeavyRequest(context);
-            requestId = CreateGuidAsString();
-
-            UpdateHeaderForProxyIfNeed(hostName, context, header);
-
-            header.AddTransactionId(attemptTx.GetId(), /* overwrite = */ true);
-            header.SetRequestCompression(ToString(context.Config->ContentEncoding));
-
-            auto request = context.HttpClient->StartRequest(
-                GetFullUrlForProxy(hostName, context, header),
-                requestId,
-                header);
-            TransferData(input.Get(), request->GetStream());
-            request->Finish()->GetResponse();
-        } catch (TErrorResponse& e) {
-            YT_LOG_ERROR("RSP %v - attempt %v failed",
-                requestId,
-                attempt);
-
-            if (!IsRetriable(e) || attempt + 1 == retryCount) {
-                throw;
-            }
-            NDetail::TWaitProxy::Get()->Sleep(GetBackoffDuration(e, context.Config));
-            continue;
-
-        } catch (std::exception& e) {
-            YT_LOG_ERROR("RSP %v - %v - attempt %v failed",
-                requestId,
-                e.what(),
-                attempt);
-
-            if (attempt + 1 == retryCount) {
-                throw;
-            }
-            NDetail::TWaitProxy::Get()->Sleep(GetBackoffDuration(e, context.Config));
-            continue;
-        }
-
-        attemptTx.Commit();
-        return;
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 THeavyRequestRetrier::THeavyRequestRetrier(TParameters parameters)
     : Parameters_(std::move(parameters))
     , RequestRetryPolicy_(Parameters_.ClientRetryPolicy->CreatePolicyForGenericRequest())
     , StreamFactory_([] {
-        return MakeHolder<TNullInput>();
+        return std::make_unique<TNullInput>();
     })
 {
     Retry([] { });
@@ -137,7 +67,7 @@ void THeavyRequestRetrier::Retry(const std::function<void()> &function)
             function();
             return;
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("RSP %v - attempt %v failed",
+            YT_LOG_ERROR("RSP %v - %v failed",
                 Attempt_->RequestId,
                 RequestRetryPolicy_->GetAttemptDescription());
             Attempt_.reset();
@@ -159,6 +89,7 @@ void THeavyRequestRetrier::Retry(const std::function<void()> &function)
                 throw;
             }
             NDetail::TWaitProxy::Get()->Sleep(*backoffDuration);
+            RequestRetryPolicy_->NotifyNewAttempt();
         }
     }
 }
@@ -167,6 +98,7 @@ void THeavyRequestRetrier::TryStartAttempt()
 {
     Attempt_ = std::make_unique<TAttempt>();
     Attempt_->Transaction = std::make_unique<TPingableTransaction>(
+        Parameters_.RawClientPtr,
         Parameters_.ClientRetryPolicy, Parameters_.Context,
         Parameters_.TransactionId,
         Parameters_.TransactionPinger->GetChildTxPinger(),

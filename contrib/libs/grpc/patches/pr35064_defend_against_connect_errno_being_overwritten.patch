@@ -1,0 +1,62 @@
+From abbaa20223c95255f36a1bc70b3505e9daa006a2 Mon Sep 17 00:00:00 2001
+From: Benjamin Peterson <benjamin@engflow.com>
+Date: Tue, 19 Dec 2023 14:49:13 -0800
+Subject: [PATCH] [tcp] Defend against connect errno being overwritten.
+ (#35064)
+
+`grpc_tcp_client_create_from_prepared_fd` distinguishes "in-progress" `connect(2)` errors from fatal errors. However, it does a bunch of external calls between calling `connect(2`) and checking the `errno`. These calls may not preserve `errno`.
+
+This change parallels defensive `errno` saving pattern in the event_engine.
+
+<!--
+
+If you know who should review your pull request, please assign it to that
+person, otherwise the pull request would get assigned randomly.
+
+If your pull request is for a specific language, please add the appropriate
+lang label.
+
+-->
+
+Closes #35064
+
+COPYBARA_INTEGRATE_REVIEW=https://github.com/grpc/grpc/pull/35064 from benjaminp:save-errno a01f6b4309a1a0c146217823afa73ac88271ee6b
+PiperOrigin-RevId: 592350454
+---
+ src/core/lib/iomgr/tcp_client_posix.cc | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/core/lib/iomgr/tcp_client_posix.cc b/src/core/lib/iomgr/tcp_client_posix.cc
+index 23452e2a49ea6..60a2cd58144e8 100644
+--- a/src/core/lib/iomgr/tcp_client_posix.cc
++++ b/src/core/lib/iomgr/tcp_client_posix.cc
+@@ -336,6 +336,7 @@ int64_t grpc_tcp_client_create_from_prepared_fd(
+     err = connect(fd, reinterpret_cast<const grpc_sockaddr*>(addr->addr),
+                   addr->len);
+   } while (err < 0 && errno == EINTR);
++  int connect_errno = (err < 0) ? errno : 0;
+ 
+   auto addr_uri = grpc_sockaddr_to_uri(addr);
+   if (!addr_uri.ok()) {
+@@ -347,7 +348,7 @@ int64_t grpc_tcp_client_create_from_prepared_fd(
+   std::string name = absl::StrCat("tcp-client:", addr_uri.value());
+   grpc_fd* fdobj = grpc_fd_create(fd, name.c_str(), true);
+   int64_t connection_id = 0;
+-  if (errno == EWOULDBLOCK || errno == EINPROGRESS) {
++  if (connect_errno == EWOULDBLOCK || connect_errno == EINPROGRESS) {
+     // Connection is still in progress.
+     connection_id = g_connection_id.fetch_add(1, std::memory_order_acq_rel);
+   }
+@@ -359,10 +360,10 @@ int64_t grpc_tcp_client_create_from_prepared_fd(
+     grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, absl::OkStatus());
+     return 0;
+   }
+-  if (errno != EWOULDBLOCK && errno != EINPROGRESS) {
++  if (connect_errno != EWOULDBLOCK && connect_errno != EINPROGRESS) {
+     // Connection already failed. Return 0 to discourage any cancellation
+     // attempts.
+-    grpc_error_handle error = GRPC_OS_ERROR(errno, "connect");
++    grpc_error_handle error = GRPC_OS_ERROR(connect_errno, "connect");
+     error = grpc_error_set_str(
+         error, grpc_core::StatusStrProperty::kTargetAddress, addr_uri.value());
+     grpc_fd_orphan(fdobj, nullptr, nullptr, "tcp_client_connect_error");

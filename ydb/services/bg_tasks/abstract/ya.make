@@ -1,12 +1,7 @@
 LIBRARY()
 
 SRCS(
-    common.cpp
     interface.cpp
-    scheduler.cpp
-    activity.cpp
-    task.cpp
-    state.cpp
 )
 
 PEERDIR(
@@ -14,7 +9,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/public/api/protos
     ydb/services/bg_tasks/protos
-    ydb/core/base
+    ydb/library/conclusion
 )
 
 END()

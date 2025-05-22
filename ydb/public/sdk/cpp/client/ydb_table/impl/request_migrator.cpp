@@ -4,7 +4,7 @@
 #include <numeric>
 #include <cmath>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NMath {
 

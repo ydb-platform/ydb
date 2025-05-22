@@ -1,6 +1,10 @@
 #pragma once
 
+#include <yt/yt/core/misc/checksum.h>
+
 #include <library/cpp/yt/string/format.h>
+
+#include <library/cpp/yt/misc/enum.h>
 
 namespace NYT {
 
@@ -9,110 +13,101 @@ namespace NYT {
 class TSerializationDumper
 {
 public:
-    Y_FORCE_INLINE bool IsEnabled() const
+    void ConfigureMode(ESerializationDumpMode value);
+
+
+    Y_FORCE_INLINE void BeginIndentedBlock()
     {
-        return Enabled_;
+        ++IndentDepth_;
     }
 
-    Y_FORCE_INLINE void SetEnabled(bool value)
+    Y_FORCE_INLINE void EndIndentBlock()
     {
-        Enabled_ = value;
-    }
-
-    Y_FORCE_INLINE void SetLowerWriteCountDumpLimit(i64 lowerLimit)
-    {
-        LowerWriteCountDumpLimit_ = lowerLimit;
-    }
-
-    Y_FORCE_INLINE void SetUpperWriteCountDumpLimit(i64 upperLimit)
-    {
-        UpperWriteCountDumpLimit_ = upperLimit;
-    }
-
-    Y_FORCE_INLINE void Indent()
-    {
-        ++IndentCount_;
-    }
-
-    Y_FORCE_INLINE void Unindent()
-    {
-        --IndentCount_;
+        --IndentDepth_;
     }
 
 
-    Y_FORCE_INLINE void Suspend()
+    Y_FORCE_INLINE void BeginSuspendedBlock()
     {
-        ++SuspendCount_;
+        ContentDumpLock_ += SuspendLockDelta;
     }
 
-    Y_FORCE_INLINE void Resume()
+    Y_FORCE_INLINE void EndSuspendedBlock()
     {
-        --SuspendCount_;
+        ContentDumpLock_ -= SuspendLockDelta;
     }
 
-    Y_FORCE_INLINE bool IsSuspended() const
+    Y_FORCE_INLINE bool IsContentDumpActive() const
     {
-        return SuspendCount_ > 0;
+        return ContentDumpLock_ > 0;
+    }
+
+    Y_FORCE_INLINE bool IsChecksumDumpActive() const
+    {
+        return Mode_ == ESerializationDumpMode::Checksum;
     }
 
 
-    Y_FORCE_INLINE bool IsActive() const
+    void DisableScopeFiltering();
+    void BeginScopeFilterMatchBlock(TStringBuf path);
+    void EndScopeFilterMatchBlock(TStringBuf path);
+
+
+    void SetFieldName(TStringBuf name)
     {
-        return IsEnabled() && !IsSuspended();
+        FieldName_ = name;
     }
 
 
     template <class... TArgs>
-    void Write(const char* format, const TArgs&... args)
+    void WriteContent(const char* format, const TArgs&... args)
     {
-        if (!IsActive())
-            return;
-
-        if (WriteCount_ < LowerWriteCountDumpLimit_) {
-            ++WriteCount_;
-            return;
+        BeginWrite();
+        ScratchBuilder_.AppendChar(' ', IndentDepth_ * 2);
+        if (FieldName_) {
+            ScratchBuilder_.AppendString(FieldName_);
+            ScratchBuilder_.AppendString(": ");
+            FieldName_ = {};
         }
-        if (WriteCount_ >= UpperWriteCountDumpLimit_) {
-            SetEnabled(false);
-            return;
-        }
-
-        TStringBuilder builder;
-        builder.AppendString("DUMP ");
-        builder.AppendChar(' ', IndentCount_ * 2);
-        builder.AppendFormat(format, args...);
-        builder.AppendChar('\n');
-        auto buffer = builder.GetBuffer();
-        fwrite(buffer.begin(), buffer.length(), 1, stderr);
-
-        ++WriteCount_;
+        ScratchBuilder_.AppendFormat(format, args...);
+        ScratchBuilder_.AppendChar('\n');
+        EndWrite();
     }
 
-    void IncrementWriteCountIfNotSuspended()
+    void WriteChecksum(TStringBuf path, TChecksum checksum)
     {
-        if (!IsSuspended()) {
-            ++WriteCount_;
-        }
-    }
-
-    void ReportWriteCount()
-    {
-        TStringBuilder builder;
-        builder.AppendFormat("%v\n", WriteCount_);
-        auto buffer = builder.GetBuffer();
-        fwrite(buffer.begin(), buffer.length(), 1, stdout);
-        fflush(stdout);
+        BeginWrite();
+        ScratchBuilder_.AppendFormat("%v => %x\n", path, checksum);
+        EndWrite();
     }
 
 private:
-    bool Enabled_ = false;
-    int IndentCount_ = 0;
-    int SuspendCount_ = 0;
+    ESerializationDumpMode Mode_ = ESerializationDumpMode::None;
 
-    i64 WriteCount_ = 0;
-    i64 LowerWriteCountDumpLimit_ = 0;
-    i64 UpperWriteCountDumpLimit_ = std::numeric_limits<i64>::max();
+    int IndentDepth_ = 0;
+
+    // Positive values indicate that content dump is active.
+    // Initial value is effective -INF to suppress any dump.
+    static constexpr i64 ScopeFilterMatchLockDelta = +1;
+    static constexpr i64 SuspendLockDelta = -(1LL << 32);
+    i64 ContentDumpLock_ = -(1LL << 62);
+
+    TStringBuf FieldName_;
+    TStringBuilder ScratchBuilder_;
+
+    void BeginWrite()
+    {
+        ScratchBuilder_.Reset();
+    }
+
+    void EndWrite()
+    {
+        auto buffer = ScratchBuilder_.GetBuffer();
+        fwrite(buffer.begin(), buffer.length(), 1, stderr);
+    }
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TSerializeDumpIndentGuard
     : private TNonCopyable
@@ -121,7 +116,7 @@ public:
     explicit TSerializeDumpIndentGuard(TSerializationDumper* dumper)
         : Dumper_(dumper)
     {
-        Dumper_->Indent();
+        Dumper_->BeginIndentedBlock();
     }
 
     TSerializeDumpIndentGuard(TSerializeDumpIndentGuard&& other)
@@ -133,7 +128,7 @@ public:
     ~TSerializeDumpIndentGuard()
     {
         if (Dumper_) {
-            Dumper_->Unindent();
+            Dumper_->EndIndentBlock();
         }
     }
 
@@ -145,8 +140,9 @@ public:
 
 private:
     TSerializationDumper* Dumper_;
-
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TSerializeDumpSuspendGuard
     : private TNonCopyable
@@ -155,7 +151,7 @@ public:
     explicit TSerializeDumpSuspendGuard(TSerializationDumper* dumper)
         : Dumper_(dumper)
     {
-        Dumper_->Suspend();
+        Dumper_->BeginSuspendedBlock();
     }
 
     TSerializeDumpSuspendGuard(TSerializeDumpSuspendGuard&& other)
@@ -167,7 +163,7 @@ public:
     ~TSerializeDumpSuspendGuard()
     {
         if (Dumper_) {
-            Dumper_->Resume();
+            Dumper_->EndSuspendedBlock();
         }
     }
 
@@ -179,27 +175,26 @@ public:
 
 private:
     TSerializationDumper* Dumper_;
-
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 #define SERIALIZATION_DUMP_WRITE(context, ...) \
-    if (Y_LIKELY(!(context).Dumper().IsActive())) \
-    { \
-        if ((context).GetEnableTotalWriteCountReport()) \
-            (context).Dumper().IncrementWriteCountIfNotSuspended(); \
-    } \
-    else \
-        (context).Dumper().Write(__VA_ARGS__)
+    if (Y_LIKELY(!(context).Dumper().IsContentDumpActive())) { \
+    } else \
+        (context).Dumper().WriteContent(__VA_ARGS__)
 
 #define SERIALIZATION_DUMP_INDENT(context) \
-    if (auto SERIALIZATION_DUMP_INDENT__Guard = NYT::TSerializeDumpIndentGuard(&(context).Dumper())) \
-        { YT_ABORT(); } \
-    else
+    if (auto SERIALIZATION_DUMP_INDENT__Guard = NYT::TSerializeDumpIndentGuard(&(context).Dumper())) { \
+        Y_UNREACHABLE(); \
+    } else
 
 #define SERIALIZATION_DUMP_SUSPEND(context) \
-    if (auto SERIALIZATION_DUMP_SUSPEND__Guard = NYT::TSerializeDumpSuspendGuard(&(context).Dumper())) \
-        { YT_ABORT(); } \
-    else
+    if (auto SERIALIZATION_DUMP_SUSPEND__Guard = NYT::TSerializeDumpSuspendGuard(&(context).Dumper())) { \
+        Y_UNREACHABLE(); \
+    } else
+
+////////////////////////////////////////////////////////////////////////////////
 
 inline TString DumpRangeToHex(TRef data)
 {
@@ -214,13 +209,15 @@ inline TString DumpRangeToHex(TRef data)
     return builder.Flush();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T>
 struct TSerializationDumpPodWriter
 {
     template <class C>
     static void Do(C& context, const T& value)
     {
-        if constexpr(TFormatTraits<T>::HasCustomFormatValue) {
+        if constexpr(CFormattable<T>) {
             SERIALIZATION_DUMP_WRITE(context, "pod %v", value);
         } else {
             SERIALIZATION_DUMP_WRITE(context, "pod[%v] %v", sizeof(T), DumpRangeToHex(TRef::FromPod(value)));

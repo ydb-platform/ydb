@@ -113,8 +113,8 @@ struct TBlobStorageGroupType : public TErasureType {
             : PartCount(partCount)
         {}
 
-        TResult(const TString &error)
-            : Error(error)
+        TResult(TString error)
+            : Error(std::move(error))
         {}
 
         bool Good() const {
@@ -144,6 +144,7 @@ struct TBlobStorageGroupType : public TErasureType {
 
     ui64 PartSize(const TLogoBlobID &id) const;
     ui64 MaxPartSize(const TLogoBlobID &id) const;
+    ui64 MaxPartSize(TErasureType::ECrcMode crcMode, ui32 blobSize) const;
 
     bool PartFits(ui32 partId, ui32 idxInSubgroup) const;
 };

@@ -1,0 +1,14 @@
+--- contrib/tools/m4/lib/mkstemp-safer.c	(73a968936fc7a168adec50944afcde54a6274f7b)
++++ contrib/tools/m4/lib/mkstemp-safer.c	(index)
+@@ -21,9 +21,10 @@
+ 
+ #include "stdlib-safer.h"
+ 
+-#include <stdlib.h>
++#include "stdlib--.h"
+ #include "unistd-safer.h"
+ 
++
+ /* Like mkstemp, but do not return STDIN_FILENO, STDOUT_FILENO, or
+    STDERR_FILENO.  */
+ 

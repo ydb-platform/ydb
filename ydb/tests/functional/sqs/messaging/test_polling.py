@@ -32,7 +32,6 @@ class TestSqsPolling(KikimrSqsTestBase):
             matcher=ReadResponseMatcher().with_n_messages(1)
         )
         assert_that(read_result[0]['Body'], equal_to('test_send_message'))
-
         # check that there's no infinite loop for empty queue
         read_result = self._read_messages_and_assert(
             empty_queue_url, messages_count=3, visibility_timeout=1000, wait_timeout=polling_wait_timeout

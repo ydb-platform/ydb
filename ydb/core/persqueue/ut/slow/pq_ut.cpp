@@ -140,9 +140,8 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
         auto sourceIds = CmdSourceIdRead(tc);
         UNIT_ASSERT(sourceIds.size() > 0);
         for (auto& s: sourceIds) {
-            Cout << "try to find sourceId " << s << Endl;
             auto findIt = std::find(writtenSourceIds.begin(), writtenSourceIds.end(), s);
-            UNIT_ASSERT_VALUES_UNEQUAL(findIt, writtenSourceIds.end());
+            UNIT_ASSERT_C(findIt != writtenSourceIds.end(), "try to find sourceId " << s);
         }
         Cout << TInstant::Now() << "All Ok" << Endl;
     });

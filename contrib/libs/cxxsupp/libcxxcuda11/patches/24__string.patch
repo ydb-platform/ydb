@@ -1,0 +1,47 @@
+diff --git a/include/__string/extern_template_lists.h b/include/__string/extern_template_lists.h
+index a833c00..078c7c7 100644
+--- a/include/__string/extern_template_lists.h
++++ b/include/__string/extern_template_lists.h
+@@ -59,7 +59,6 @@
+   _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::push_back(value_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(size_type, value_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::size_type basic_string<_CharType>::rfind(value_type, size_type) const) \
+-  _Func(_LIBCPP_EXPORTED_FROM_ABI const basic_string<_CharType>::size_type basic_string<_CharType>::npos) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::assign(size_type, value_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::erase(size_type, size_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(basic_string const&, size_type, size_type)) \
+@@ -75,7 +74,8 @@
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::replace(size_type, size_type, basic_string const&, size_type, size_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::iterator basic_string<_CharType>::insert(basic_string::const_iterator, value_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::resize(size_type, value_type)) \
+-  _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::insert(size_type, basic_string const&, size_type, size_type))
++  _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::insert(size_type, basic_string const&, size_type, size_type)) \
++  _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(_Func, _CharType)
+ 
+ #define _LIBCPP_STRING_UNSTABLE_EXTERN_TEMPLATE_LIST(_Func, _CharType) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::replace(size_type, size_type, value_type const*, size_type)) \
+@@ -110,7 +110,6 @@
+   _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::push_back(value_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(size_type, value_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::size_type basic_string<_CharType>::rfind(value_type, size_type) const) \
+-  _Func(_LIBCPP_EXPORTED_FROM_ABI const basic_string<_CharType>::size_type basic_string<_CharType>::npos) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::assign(size_type, value_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::__erase_external_with_move(size_type, size_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::append(basic_string const&, size_type, size_type)) \
+@@ -124,7 +123,15 @@
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::replace(size_type, size_type, basic_string const&, size_type, size_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>::iterator basic_string<_CharType>::insert(basic_string::const_iterator, value_type)) \
+   _Func(_LIBCPP_EXPORTED_FROM_ABI void basic_string<_CharType>::resize(size_type, value_type)) \
+-  _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::insert(size_type, basic_string const&, size_type, size_type))
++  _Func(_LIBCPP_EXPORTED_FROM_ABI basic_string<_CharType>& basic_string<_CharType>::insert(size_type, basic_string const&, size_type, size_type)) \
++  _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(_Func, _CharType)
+ 
++// Workaround for CUDA which doesn't like extern templates for variables.
++#ifdef __CUDACC__
++#define _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(_Func, _CharType)
++#else
++#define _LIBCPP_STRING_EXTERN_TEMPLATE_VARIABLE_LIST(_Func, _CharType) \
++  _Func(_LIBCPP_EXPORTED_FROM_ABI const basic_string<_CharType>::size_type basic_string<_CharType>::npos)
++#endif
+ 
+ #endif // _LIBCPP___STRING_EXTERN_TEMPLATE_LISTS_H

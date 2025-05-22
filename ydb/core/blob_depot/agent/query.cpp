@@ -1,11 +1,12 @@
 #include "agent_impl.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<0>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<0>(std::unique_ptr<IEventHandle> ev, TMonotonic received) {
         switch (ev->GetTypeRewrite()) {
-#define XX(TYPE) case TEvBlobStorage::TYPE: return CreateQuery<TEvBlobStorage::TYPE>(std::move(ev));
+#define XX(TYPE) case TEvBlobStorage::TYPE: return CreateQuery<TEvBlobStorage::TYPE>(std::move(ev), received);
             ENUMERATE_INCOMING_EVENTS(XX)
 #undef XX
         }
@@ -14,8 +15,10 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::HandleStorageProxy(TAutoPtr<IEventHandle> ev) {
         bool doForward = false;
+        const ui32 type = ev->GetTypeRewrite();
+        TMonotonic received = TActivationContext::Monotonic();
 
-        switch (ev->GetTypeRewrite()) {
+        switch (type) {
             case TEvBlobStorage::EvGet:
                 doForward = ev->Get<TEvBlobStorage::TEvGet>()->Decommission
                     || ev->Get<TEvBlobStorage::TEvGet>()->PhantomCheck;
@@ -26,15 +29,26 @@ namespace NKikimr::NBlobDepot {
                 doForward = ev->Get<TEvBlobStorage::TEvRange>()->Decommission;
                 Y_ABORT_UNLESS(!doForward || !ev->Get<TEvBlobStorage::TEvRange>()->MustRestoreFirst);
                 break;
+
+            case TEvBlobStorage::EvCollectGarbage:
+                doForward = ev->Get<TEvBlobStorage::TEvCollectGarbage>()->Decommission;
+                break;
         }
 
         if (doForward) {
             if (ProxyId) {
                 TActivationContext::Forward(ev, ProxyId);
             } else {
-                CreateQuery<0>(std::unique_ptr<IEventHandle>(ev.Release()))->EndWithError(NKikimrProto::ERROR, "proxy has vanished");
+                CreateQuery<0>(std::unique_ptr<IEventHandle>(ev.Release()), received)
+                    ->EndWithError(NKikimrProto::ERROR, "proxy has vanished");
             }
             return;
+        }
+
+        if (const auto it = RequestsReceived.find(type); it != RequestsReceived.end()) {
+            ++*it->second;
+        } else {
+            Y_DEBUG_ABORT();
         }
 
         std::unique_ptr<IEventHandle> p(ev.Release());
@@ -42,23 +56,26 @@ namespace NKikimr::NBlobDepot {
         size_t size = 0;
 
         if (!IsConnected) { // check for queue overflow
-            switch (p->GetTypeRewrite()) {
+            switch (type) {
 #define XX(TYPE) case TEvBlobStorage::TYPE: size = p->Get<TEvBlobStorage::T##TYPE>()->CalculateSize(); break;
                 ENUMERATE_INCOMING_EVENTS(XX)
 #undef XX
             }
 
             if (size + PendingEventBytes > MaxPendingEventBytes) {
-                CreateQuery<0>(std::move(p))->EndWithError(NKikimrProto::ERROR, "pending event queue overflow");
+                CreateQuery<0>(std::move(p), received)->EndWithError(NKikimrProto::ERROR, "pending event queue overflow");
                 return;
             }
         }
 
         if (!IsConnected || !PendingEventQ.empty()) {
             PendingEventBytes += size;
-            PendingEventQ.push_back(TPendingEvent{std::move(p), size, TMonotonic::Now() + EventExpirationTime});
+            PendingEventQ.push_back(TPendingEvent{std::move(p), size, received + EventExpirationTime, received});
+
+            ++*PendingEventQueueItems;
+            *PendingEventQueueBytes += size;
         } else {
-            ProcessStorageEvent(std::move(p));
+            ProcessStorageEvent(std::move(p), received);
         }
     }
 
@@ -69,9 +86,13 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::HandlePendingEvent() {
         for (THPTimer timer; !PendingEventQ.empty(); ) {
             TPendingEvent& item = PendingEventQ.front();
-            ProcessStorageEvent(std::move(item.Event));
+            ProcessStorageEvent(std::move(item.Event), item.Received);
             Y_ABORT_UNLESS(PendingEventBytes >= item.Size);
             PendingEventBytes -= item.Size;
+
+            --*PendingEventQueueItems;
+            *PendingEventQueueBytes -= item.Size;
+
             PendingEventQ.pop_front();
             if (!PendingEventQ.empty() && TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1)) {
                 if (!ProcessPendingEventInFlight) {
@@ -93,12 +114,16 @@ namespace NKikimr::NBlobDepot {
         for (auto& item : std::exchange(PendingEventQ, {})) {
             Y_ABORT_UNLESS(PendingEventBytes >= item.Size);
             PendingEventBytes -= item.Size;
-            CreateQuery<0>(std::move(item.Event))->EndWithError(NKikimrProto::ERROR, reason);
+            CreateQuery<0>(std::move(item.Event), item.Received)->EndWithError(NKikimrProto::ERROR, reason);
         }
+
+        Y_ABORT_UNLESS(!PendingEventBytes);
+        *PendingEventQueueItems = 0;
+        *PendingEventQueueBytes = 0;
     }
 
-    void TBlobDepotAgent::ProcessStorageEvent(std::unique_ptr<IEventHandle> ev) {
-        TQuery *query = CreateQuery<0>(std::move(ev));
+    void TBlobDepotAgent::ProcessStorageEvent(std::unique_ptr<IEventHandle> ev, TMonotonic received) {
+        TQuery *query = CreateQuery<0>(std::move(ev), received);
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA13, "new query", (AgentId, LogId),
             (QueryId, query->GetQueryId()), (Name, query->GetName()));
         if (!TabletId) {
@@ -112,11 +137,18 @@ namespace NKikimr::NBlobDepot {
         if (!IsConnected) {
             const TMonotonic now = TActivationContext::Monotonic();
             std::deque<TPendingEvent>::iterator it;
+            size_t numItems = 0;
+            ui64 numBytes = 0;
             for (it = PendingEventQ.begin(); it != PendingEventQ.end() && it->ExpirationTimestamp <= now; ++it) {
-                CreateQuery<0>(std::move(it->Event))->EndWithError(NKikimrProto::ERROR, "pending event queue timeout");
+                CreateQuery<0>(std::move(it->Event), it->Received)
+                    ->EndWithError(NKikimrProto::ERROR, "pending event queue timeout");
                 PendingEventBytes -= it->Size;
+                ++numItems;
+                numBytes += it->Size;
             }
             PendingEventQ.erase(PendingEventQ.begin(), it);
+            *PendingEventQueueItems -= numItems;
+            *PendingEventQueueBytes -= numBytes;
         }
 
         TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvPendingEventQueueWatchdog, 0,
@@ -141,9 +173,10 @@ namespace NKikimr::NBlobDepot {
             {}, nullptr, 0));
     }
 
-    TBlobDepotAgent::TQuery::TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event)
+    TBlobDepotAgent::TQuery::TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event, TMonotonic received)
         : TRequestSender(agent)
         , Event(std::move(event))
+        , Received(received)
         , QueryId(RandomNumber<ui64>())
         , StartTime(TActivationContext::Monotonic())
         , QueryWatchdogMapIter(agent.QueryWatchdogMap.emplace(StartTime + WatchdogDuration, this))
@@ -171,13 +204,21 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
         STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA14, "query ends with error", (AgentId, Agent.LogId),
             (QueryId, GetQueryId()), (Status, status), (ErrorReason, errorReason),
-            (Duration, TActivationContext::Monotonic() - StartTime));
+            (Duration, TActivationContext::Monotonic() - Received));
+
+        if (const auto it = Agent.ErrorResponseTime.find(Event->GetTypeRewrite()); it != Agent.ErrorResponseTime.end()) {
+            const TMonotonic now = TActivationContext::Monotonic();
+            const TDuration passed = now - Received;
+            it->second->Collect(passed.MillisecondsFloat(), 1);
+        } else {
+            Y_DEBUG_ABORT();
+        }
 
         std::unique_ptr<IEventBase> response;
         switch (Event->GetTypeRewrite()) {
 #define XX(TYPE) \
             case TEvBlobStorage::TYPE: \
-                response = Event->Get<TEvBlobStorage::T##TYPE>()->MakeErrorResponse(status, errorReason, Agent.VirtualGroupId); \
+                response = Event->Get<TEvBlobStorage::T##TYPE>()->MakeErrorResponse(status, errorReason, TGroupId::FromValue(Agent.VirtualGroupId)); \
                 static_cast<TEvBlobStorage::T##TYPE##Result&>(*response).ExecutionRelay = std::move(ExecutionRelay); \
                 break; \
             //
@@ -193,7 +234,18 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA15, "query ends with success", (AgentId, Agent.LogId),
-            (QueryId, GetQueryId()), (Response, response->ToString()), (Duration, TActivationContext::Monotonic() - StartTime));
+            (QueryId, GetQueryId()),
+            (Response, response->ToString()),
+            (Duration, TActivationContext::Monotonic() - Received));
+
+        if (const auto it = Agent.SuccessResponseTime.find(Event->GetTypeRewrite()); it != Agent.SuccessResponseTime.end()) {
+            const TMonotonic now = TActivationContext::Monotonic();
+            const TDuration passed = now - Received;
+            it->second->Collect(passed.MillisecondsFloat(), 1);
+        } else {
+            Y_DEBUG_ABORT();
+        }
+
         switch (response->Type()) {
 #define XX(TYPE) \
             case TEvBlobStorage::TYPE##Result: \
@@ -207,6 +259,20 @@ namespace NKikimr::NBlobDepot {
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
         OnDestroy(true);
         DoDestroy();
+    }
+
+    NKikimrProto::EReplyStatus TBlobDepotAgent::TQuery::CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,
+            ui32 *blockedGeneration) {
+        const NKikimrProto::EReplyStatus status = Agent.BlocksManager.CheckBlockForTablet(tabletId, generation, this,
+            blockedGeneration);
+        if (status != NKikimrProto::OK) {
+            if (status != NKikimrProto::UNKNOWN) {
+                EndWithError(status, "block race detected");
+            } else if (!--BlockChecksRemain) {
+                EndWithError(NKikimrProto::ERROR, "failed to obtain blocked generation");
+            }
+        }
+        return status;
     }
 
     void TBlobDepotAgent::TQuery::DoDestroy() {

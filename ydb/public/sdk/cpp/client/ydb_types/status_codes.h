@@ -1,8 +1,10 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <util/system/types.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 constexpr size_t TRANSPORT_STATUSES_FIRST = 401000;
 constexpr size_t TRANSPORT_STATUSES_LAST  = 401999;

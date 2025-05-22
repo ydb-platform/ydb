@@ -8,19 +8,19 @@ namespace NKikimr {
 namespace NTable {
 namespace NPage {
 
-    TLabelWrapper::TResult TLabelWrapper::Read(TArrayRef<const char> raw, EPage type) const noexcept
+    TLabelWrapper::TResult TLabelWrapper::Read(TArrayRef<const char> raw, EPage type) const
     {
-        Y_ABORT_UNLESS(raw.size() >= sizeof(TLabel), "Page blob is too small to hold label");
+        Y_ENSURE(raw.size() >= sizeof(TLabel), "Page blob is too small to hold label");
 
         auto label = ReadUnaligned<TLabel>(raw.data());
 
-        Y_ABORT_UNLESS(label.Type == type || type == EPage::Undef,
+        Y_ENSURE(label.Type == type || type == EPage::Undef,
             "Page blob has an unexpected label type");
 
         if (Y_UNLIKELY(label.IsHuge())) {
-            Y_ABORT_UNLESS(raw.size() >= Max<ui32>(), "Page label huge page marker doesn't match data size");
+            Y_ENSURE(raw.size() >= Max<ui32>(), "Page label huge page marker doesn't match data size");
         } else {
-            Y_ABORT_UNLESS(label.Size == raw.size(), "Page label size doesn't match data size");
+            Y_ENSURE(label.Size == raw.size(), "Page label size doesn't match data size");
         }
 
         const ui16 version = label.Format & 0x7fff;
@@ -35,7 +35,7 @@ namespace NPage {
                 in-place crc (may be) or other pages common metadata.
              */
 
-            Y_ABORT_UNLESS(raw.size() >= sizeof(TLabel) + sizeof(TLabelExt), "Page extended label doesn't match data size");
+            Y_ENSURE(raw.size() >= sizeof(TLabel) + sizeof(TLabelExt), "Page extended label doesn't match data size");
 
             auto ext = ReadUnaligned<TLabelExt>(begin);
             codec = ext.Codec;
@@ -45,9 +45,9 @@ namespace NPage {
         return { label.Type, version, codec, { begin, raw.end() } };
     }
 
-    TSharedData TLabelWrapper::Wrap(TArrayRef<const char> plain, EPage page, ui16 version) noexcept
+    TSharedData TLabelWrapper::Wrap(TArrayRef<const char> plain, EPage page, ui16 version)
     {
-        Y_ABORT_UNLESS(!(version >> 15), "Version can use only 15 bits");
+        Y_ENSURE(!(version >> 15), "Version can use only 15 bits");
 
         TSharedData blob = TSharedData::Uninitialized(plain.size() + 8);
 
@@ -60,9 +60,9 @@ namespace NPage {
         return blob;
     }
 
-    TString TLabelWrapper::WrapString(TArrayRef<const char> plain, EPage page, ui16 version) noexcept
+    TString TLabelWrapper::WrapString(TArrayRef<const char> plain, EPage page, ui16 version)
     {
-        Y_ABORT_UNLESS(!(version >> 15), "Version can use only 15 bits");
+        Y_ENSURE(!(version >> 15), "Version can use only 15 bits");
 
         TString blob = TString::Uninitialized(plain.size() + 8);
 

@@ -4,6 +4,8 @@
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/kesus.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
 
 namespace NKikimr {
 namespace NKesus {
@@ -11,7 +13,7 @@ namespace NKesus {
 TString CanonizeQuoterResourcePath(const TVector<TString>& path);
 TString CanonizeQuoterResourcePath(const TString& path);
 
-struct TEvKesus {
+namespace TEvKesus {
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_KESUS),
 
@@ -440,11 +442,14 @@ struct TEvKesus {
     // Quoter API
 
     struct TEvDescribeQuoterResources : public TEventPB<TEvDescribeQuoterResources, NKikimrKesus::TEvDescribeQuoterResources, EvDescribeQuoterResources> {
-        using TEventPB::TEventPB;
+        using TBaseEvent = TEventPB<TEvDescribeQuoterResources, NKikimrKesus::TEvDescribeQuoterResources, EvDescribeQuoterResources>;
+        using TBaseEvent::TBaseEvent;
+
     };
 
     struct TEvDescribeQuoterResourcesResult : public TEventPB<TEvDescribeQuoterResourcesResult, NKikimrKesus::TEvDescribeQuoterResourcesResult, EvDescribeQuoterResourcesResult> {
-        using TEventPB::TEventPB;
+        using TBaseEvent = TEventPB<TEvDescribeQuoterResourcesResult, NKikimrKesus::TEvDescribeQuoterResourcesResult, EvDescribeQuoterResourcesResult>;
+        using TBaseEvent::TBaseEvent;
 
         TEvDescribeQuoterResourcesResult() = default;
 
@@ -454,13 +459,13 @@ struct TEvKesus {
     };
 
     struct TEvAddQuoterResource : public TEventPB<TEvAddQuoterResource, NKikimrKesus::TEvAddQuoterResource, EvAddQuoterResource> {
-        using TEventPB::TEventPB;
+        using TBaseEvent = TEventPB<TEvAddQuoterResource, NKikimrKesus::TEvAddQuoterResource, EvAddQuoterResource>;
+        using TBaseEvent::TBaseEvent;
     };
 
     struct TEvAddQuoterResourceResult : public TEventPB<TEvAddQuoterResourceResult, NKikimrKesus::TEvAddQuoterResourceResult, EvAddQuoterResourceResult> {
-        using TEventPB::TEventPB;
-
-        TEvAddQuoterResourceResult() = default;
+        using TBaseEvent = TEventPB<TEvAddQuoterResourceResult, NKikimrKesus::TEvAddQuoterResourceResult, EvAddQuoterResourceResult>;
+        using TBaseEvent::TBaseEvent;
 
         TEvAddQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) {
             FillError(Record.MutableError(), status, reason);
@@ -468,11 +473,13 @@ struct TEvKesus {
     };
 
     struct TEvUpdateQuoterResource : public TEventPB<TEvUpdateQuoterResource, NKikimrKesus::TEvUpdateQuoterResource, EvUpdateQuoterResource> {
-        using TEventPB::TEventPB;
+        using TBaseEvent = TEventPB<TEvUpdateQuoterResource, NKikimrKesus::TEvUpdateQuoterResource, EvUpdateQuoterResource>;
+        using TBaseEvent::TBaseEvent;
     };
 
     struct TEvUpdateQuoterResourceResult : public TEventPB<TEvUpdateQuoterResourceResult, NKikimrKesus::TEvUpdateQuoterResourceResult, EvUpdateQuoterResourceResult> {
-        using TEventPB::TEventPB;
+        using TBaseEvent = TEventPB<TEvUpdateQuoterResourceResult, NKikimrKesus::TEvUpdateQuoterResourceResult, EvUpdateQuoterResourceResult>;
+        using TBaseEvent::TBaseEvent;
 
         TEvUpdateQuoterResourceResult() = default;
 
@@ -482,11 +489,13 @@ struct TEvKesus {
     };
 
     struct TEvDeleteQuoterResource : public TEventPB<TEvDeleteQuoterResource, NKikimrKesus::TEvDeleteQuoterResource, EvDeleteQuoterResource> {
-        using TEventPB::TEventPB;
+        using TBaseEvent = TEventPB<TEvDeleteQuoterResource, NKikimrKesus::TEvDeleteQuoterResource, EvDeleteQuoterResource>;
+        using TBaseEvent::TBaseEvent;
     };
 
     struct TEvDeleteQuoterResourceResult : public TEventPB<TEvDeleteQuoterResourceResult, NKikimrKesus::TEvDeleteQuoterResourceResult, EvDeleteQuoterResourceResult> {
-        using TEventPB::TEventPB;
+        using TBaseEvent = TEventPB<TEvDeleteQuoterResourceResult, NKikimrKesus::TEvDeleteQuoterResourceResult, EvDeleteQuoterResourceResult>;
+        using TBaseEvent::TBaseEvent;
 
         TEvDeleteQuoterResourceResult() = default;
 

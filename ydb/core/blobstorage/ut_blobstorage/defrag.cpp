@@ -24,13 +24,7 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
 
     for (;;) {
         const TLogoBlobID id(1, 1, index /*step*/, 0, data.size(), 0);
-        const ui32 hash = id.FullID().Hash();
-        if (!info->GetTopology().BelongsToSubgroup(vdiskId, hash)) {
-            continue;
-        }
-        const ui32 idxInSubgroup = info->GetTopology().GetIdxInSubgroup(vdiskId, hash);
-        const ui32 partIdx = idxInSubgroup & 1; // 0 1 0 1 01 01 01 01 possible layouts; this fits them
-        env.PutBlob(vdiskId, TLogoBlobID(id, partIdx + 1), data);
+        env.PutBlob(vdiskId, TLogoBlobID(id, 1), data);
         ++index;
 
         env.Sim();
@@ -67,13 +61,6 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
 
     // wait for sync
     env.Sim(TDuration::Seconds(3));
-
-    // partition
-    for (const ui32 node : env.Runtime->GetNodes()) {
-        env.StopNode(node);
-    }
-    env.StartNode(actorId.NodeId());
-    env.Sim(TDuration::Seconds(20));
 
     for (;;) {
         // trigger compaction
@@ -115,8 +102,8 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
 Y_UNIT_TEST_SUITE(Defragmentation) {
     Y_UNIT_TEST(DoesItWork) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
         });
 
         TVector<TLogoBlobID> keep;
@@ -144,14 +131,14 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
                     ++chunkToBlobs[item.Location.ChunkIdx];
                 }
             }
-            UNIT_ASSERT_VALUES_EQUAL(chunkToBlobs.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(chunkToBlobs.size(), 9 + 1); // defragmentation stopping if number of can be freed chunks is 9 + 1 chunk really used
         }
     }
 
     Y_UNIT_TEST(DefragCompactionRace) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
         });
 
         TVector<TLogoBlobID> keep;
@@ -177,13 +164,6 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
 
         while (!caughtPut) {
             env.Sim(TDuration::Minutes(1));
-        }
-
-        // unpartition
-        for (const ui32 node : env.Runtime->GetNodes()) {
-            if (node != actorId.NodeId()) {
-                env.StartNode(node);
-            }
         }
 
         // issue collect garbage command
@@ -252,6 +232,8 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
         TAutoPtr<NPDisk::TEvChunkReadResult> readMsg;
         bool caughtRestore = false;
         bool caughtDone = false;
+        ui32 rewrittenRecs = 0;
+        ui32 rewrittenBytes = 0;
         env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             Y_UNUSED(nodeId);
             switch(ev->Type) {
@@ -271,13 +253,12 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
                     }
                     return true;
                 case TEvBlobStorage::EvDefragRewritten:
-                    if (rewriterActorId == ev->Sender) {
-                        UNIT_ASSERT_VALUES_EQUAL(caughtDone, false);
+                    {
                         caughtDone = true;
 
                         const TEvDefragRewritten* msg = ev->Get<TEvDefragRewritten>();
-                        UNIT_ASSERT_VALUES_EQUAL(msg->RewrittenRecs, 18);
-                        UNIT_ASSERT_VALUES_EQUAL(msg->RewrittenBytes, 9961567);
+                        rewrittenRecs += msg->RewrittenRecs;
+                        rewrittenBytes += msg->RewrittenBytes;
                     }
                     return true;
                 case TEvBlobStorage::EvRestoreCorruptedBlob:
@@ -298,9 +279,12 @@ Y_UNIT_TEST_SUITE(Defragmentation) {
                     return true;
             }
         };
-        while (!caughtDone || !caughtRestore) {
-            env.Sim(TDuration::Minutes(1));
-        }
+        env.Sim(TDuration::Minutes(10));
+        UNIT_ASSERT_VALUES_EQUAL(caughtDone, true);
+        UNIT_ASSERT_VALUES_EQUAL(caughtRestore, true);
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenRecs, 20 - (9 + 1));  // // defragmentation stopping if number of can be freed chunks is 9 + 1 chunk really used
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenBytes, 5767223);
+
     }
 
     Y_UNIT_TEST(CorruptedReadHandling) {

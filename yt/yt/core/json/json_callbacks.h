@@ -8,7 +8,7 @@
 #include <yt/yt/core/json/config.h>
 #include <yt/yt/core/misc/utf8_decoder.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <queue>
 

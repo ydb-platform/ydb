@@ -15,7 +15,7 @@
 
 #include <ydb/core/protos/index_builder.pb.h>
 
-#include <ydb/public/lib/operation_id/protos/operation_id.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -59,6 +59,15 @@ Ydb::TOperationId ToOperationId(const NKikimrIndexBuilder::TIndexBuild& build) {
 void ToOperation(const NKikimrIndexBuilder::TIndexBuild& build, Ydb::Operations::Operation* operation) {
     operation->set_id(NOperationId::ProtoToString(ToOperationId(build)));
     operation->mutable_issues()->CopyFrom(build.GetIssues());
+    if (build.HasStartTime()) {
+        *operation->mutable_create_time() = build.GetStartTime();
+    }
+    if (build.HasEndTime()) {
+        *operation->mutable_end_time() = build.GetEndTime();
+    }
+    if (build.HasUserSID()) {
+        operation->set_created_by(build.GetUserSID());
+    }
 
     switch (build.GetState()) {
         case Ydb::Table::IndexBuildState::STATE_DONE:

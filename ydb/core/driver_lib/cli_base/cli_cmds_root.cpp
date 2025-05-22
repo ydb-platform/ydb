@@ -1,5 +1,6 @@
 #include "cli.h"
 #include "cli_cmds.h"
+#include <ydb/public/lib/ydb_cli/commands/ydb_service_discovery.h> // for NConsoleClient::TCommandWhoAmI
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
@@ -17,7 +18,7 @@ TClientCommandRootKikimrBase::TClientCommandRootKikimrBase(const TString& name)
 
 void TClientCommandRootKikimrBase::Config(TConfig& config) {
     TClientCommandRootBase::Config(config);
-    NLastGetopt::TOpts& opts = *config.Opts;
+    NLastGetopt::TOpts& opts = config.Opts->GetOpts();
     opts.AddLongOption('d', "dump", "Dump requests to error log").NoArgument().Hidden().SetFlag(&DumpRequests);
 
     TStringBuilder tokenHelp;
@@ -57,7 +58,7 @@ void TClientCommandRootKikimrBase::Config(TConfig& config) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " -s <[protocol://]host[:port]> [options] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
     opts.SetCmdLineDescr(stream.Str());
 }
 
@@ -65,6 +66,8 @@ void TClientCommandRootKikimrBase::Parse(TConfig& config) {
     ParseProfile();
     GetProfileVariable("path", config.Path);
     TClientCommandRootBase::Parse(config);
+    ParseCredentials(config);
+    ParseAddress(config);
     NClient::TKikimr::DUMP_REQUESTS = DumpRequests;
 }
 
@@ -150,7 +153,7 @@ public:
         : TClientCommandRootKikimrBase("ydb")
     {
         AddCommand(std::make_unique<TClientCommandSchemaLite>());
-        AddCommand(std::make_unique<TClientCommandWhoAmI>());
+        AddCommand(std::make_unique<TCommandWhoAmI>());
         AddCommand(std::make_unique<TClientCommandDiscoveryLite>());
     }
 
@@ -183,6 +186,7 @@ public:
             throw TMisuseException() << message;
         }
         ParseCaCerts(config);
+        ParseClientCert(config);
         config.Address = Address;
 
         if (!hostname) {
@@ -192,6 +196,10 @@ public:
         if (config.EnableSsl) {
             CommandConfig.ClientConfig.EnableSsl = config.EnableSsl;
             CommandConfig.ClientConfig.SslCredentials.pem_root_certs = config.CaCerts;
+            if (config.ClientCert) {
+                CommandConfig.ClientConfig.SslCredentials.pem_cert_chain = config.ClientCert;
+                CommandConfig.ClientConfig.SslCredentials.pem_private_key = config.ClientCertPrivateKey;
+            }
         }
     }
 

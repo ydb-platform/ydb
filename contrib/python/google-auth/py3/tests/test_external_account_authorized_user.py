@@ -22,6 +22,7 @@ import pytest  # type: ignore
 from google.auth import exceptions
 from google.auth import external_account_authorized_user
 from google.auth import transport
+from google.auth.credentials import DEFAULT_UNIVERSE_DOMAIN
 
 TOKEN_URL = "https://sts.googleapis.com/v1/token"
 TOKEN_INFO_URL = "https://sts.googleapis.com/v1/introspect"
@@ -45,7 +46,6 @@ BASIC_AUTH_ENCODING = "dXNlcm5hbWU6cGFzc3dvcmQ="
 SCOPES = ["email", "profile"]
 NOW = datetime.datetime(1990, 8, 27, 6, 54, 30)
 FAKE_UNIVERSE_DOMAIN = "fake-universe-domain"
-DEFAULT_UNIVERSE_DOMAIN = external_account_authorized_user._DEFAULT_UNIVERSE_DOMAIN
 
 
 class TestCredentials(object):
@@ -82,6 +82,22 @@ class TestCredentials(object):
         request.side_effect = responses
 
         return request
+
+    def test_get_cred_info(self):
+        credentials = self.make_credentials()
+        assert not credentials.get_cred_info()
+
+        credentials._cred_file_path = "/path/to/file"
+        assert credentials.get_cred_info() == {
+            "credential_source": "/path/to/file",
+            "credential_type": "external account authorized user credentials",
+        }
+
+    def test__make_copy_get_cred_info(self):
+        credentials = self.make_credentials()
+        credentials._cred_file_path = "/path/to/file"
+        cred_copy = credentials._make_copy()
+        assert cred_copy._cred_file_path == "/path/to/file"
 
     def test_default_state(self):
         creds = self.make_credentials()

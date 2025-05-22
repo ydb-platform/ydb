@@ -5,17 +5,20 @@
   - activation.h
   - activscp.h
   - adhoc.h
+  - afunix.h
   - apiset.h
   - apisetcconv.h
   - atltime.h
   - audioclient.h
   - authz.h
+  - basetsd.h
   - basetyps.h
   - bcrypt.h
   - bits.h
   - capi.h
   - cet.h
   - cfg.h
+  - combaseapi.h
   - comdef.h
   - commctrl.h
   - commdlg.h
@@ -44,7 +47,9 @@
   - dcomp.h
   - debugapi.h
   - devguid.h
+  - dinput.h
   - direct.h
+  - directxmath.h
   - dispex.h
   - dos.h
   - downloadmgr.h
@@ -54,6 +59,7 @@
   - dsparse.h
   - dv.h
   - dvdmedia.h
+  - dwmapi.h
   - dwrite.h
   - dxgi.h
   - dxgi1_2.h
@@ -77,6 +83,7 @@
   - fltuser.h
   - fltuserstructures.h
   - fttypes.h
+  - functiondiscoverykeys_devpkey.h
   - fwpmu.h
   - gb18030.h
   - gdiplus.h
@@ -102,6 +109,7 @@
   - io.h
   - ioapiset.h
   - ipexport.h
+  - iphlpapi.h
   - ipifcons.h
   - iptypes.h
   - iwscapi.h
@@ -168,13 +176,13 @@
   - packon.h
   - packoff.h
   - pathcch.h
-  - p2p.h
   - pdh.h
   - pdhmsg.h
   - perflib.h
   - persist.h
   - poppack.h
   - powerbase.h
+  - powrprof.h
   - process.h
   - processenv.h
   - processsnapshot.h
@@ -182,6 +190,7 @@
   - processtopologyapi.h
   - profileapi.h
   - projectedfslib.h
+  - propidl.h
   - provider.h
   - psapi.h
   - pshpack1.h
@@ -212,6 +221,7 @@
   - securityappcontainer.h
   - securitybaseapi.h
   - sensors.h
+  - setupapi.h
   - sfc.h
   - share.h
   - shellapi.h
@@ -301,13 +311,6 @@
   - winwlx.h
   - wnnc.h
   - wow64apiset.h
-  - wrl.h
-  - wrl/async.h
-  - wrl/client.h
-  - wrl/event.h
-  - wrl/ftm.h
-  - wrl/implements.h
-  - wrl/wrappers/corewrappers.h
   - ws2bth.h
   - ws2def.h
   - ws2ipdef.h
@@ -319,4 +322,51 @@
   - wtypes.h
   - xa.h
   - xaudio2.h
+  - xinput.h
   - xmllite.h
+
+- case_sensitive: false
+  source_filter: "^(?!contrib/libs/nvidia/nccl/)"
+  includes:
+    - p2p.h
+
+# These headers are Microsoft Visual C specific.
+- case_sensitive: false
+  includes:
+    - comdef.h
+    - comutil.h
+    - concrt.h
+    - crtdefs.h
+    - crtversion.h
+    - eh.h
+    - excpt.h
+    - ppl.h
+    - ppltasks.h
+    - rtcapi.h
+    - vadefs.h
+    - varargs.h
+    - vcruntime_exception.h
+    - vcruntime_new.h
+    - vcruntime_new_debug.h
+    - vcruntime_typeinfo.h
+    - yvals.h
+
+# These headers belong to UWP application development.
+- case_sensitive: false
+  includes:
+    - wrl.h
+    - wrl/async.h
+    - wrl/client.h
+    - wrl/event.h
+    - wrl/ftm.h
+    - wrl/implements.h
+    - wrl/wrappers/corewrappers.h
+
+# These headers are required to use Windows Graphics Capture API.
+- case_sensitive: false
+  includes:
+    - windows.graphics.capture.interop.h
+    - windows.graphics.directx.direct3d11.interop.h
+    - winrt/windows.foundation.metadata.h
+    - winrt/windows.graphics.capture.h
+    - winrt/windows.system.h

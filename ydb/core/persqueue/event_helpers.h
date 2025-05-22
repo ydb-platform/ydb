@@ -1,5 +1,7 @@
 #pragma once
 
+#include "partition_id.h"
+
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
@@ -14,7 +16,7 @@ void ReplyPersQueueError(
     const TActorContext& ctx,
     ui64 tabletId,
     const TString& topicName,
-    TMaybe<ui32> partition,
+    TMaybe<TPartitionId> partition,
     NKikimr::TTabletCountersBase& counters,
     NKikimrServices::EServiceKikimr service,
     const ui64 responseCookie,

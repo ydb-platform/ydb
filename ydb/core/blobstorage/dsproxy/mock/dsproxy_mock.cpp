@@ -55,6 +55,21 @@ namespace NKikimr {
                     "not implemented")), 0, ev->Cookie);
             }
 
+            void Handle(TEvBlobStorage::TEvPatch::TPtr& ev) {
+                STLOG(PRI_DEBUG, BS_PROXY, BSPM10, "TEvPatch", (Msg, ev->Get()->ToString()));
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
+            }
+
+            void Handle(TEvBlobStorage::TEvGetBlock::TPtr& ev) {
+                STLOG(PRI_DEBUG, BS_PROXY, BSPM11, "TEvGetBlock", (Msg, ev->Get()->ToString()));
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
+            }
+
+            void Handle(TEvBlobStorage::TEvCheckIntegrity::TPtr& ev) {
+                STLOG(PRI_DEBUG, BS_PROXY, BSPM12, "TEvCheckIntegrity", (Msg, ev->Get()->ToString()));
+                Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
+            }
+
             template<typename TOut, typename TIn>
             TOut *CopyExecutionRelay(TIn *in, TOut *out) {
                 out->ExecutionRelay = std::move(in->ExecutionRelay);
@@ -76,10 +91,13 @@ namespace NKikimr {
                     hFunc(TEvBlobStorage::TEvPut, Handle);
                     hFunc(TEvBlobStorage::TEvGet, Handle);
                     hFunc(TEvBlobStorage::TEvBlock, Handle);
+                    hFunc(TEvBlobStorage::TEvGetBlock, Handle);
                     hFunc(TEvBlobStorage::TEvDiscover, Handle);
                     hFunc(TEvBlobStorage::TEvRange, Handle);
                     hFunc(TEvBlobStorage::TEvCollectGarbage, Handle);
                     hFunc(TEvBlobStorage::TEvStatus, Handle);
+                    hFunc(TEvBlobStorage::TEvPatch, Handle);
+                    hFunc(TEvBlobStorage::TEvCheckIntegrity, Handle);
 
                     hFunc(TEvents::TEvPoisonPill, HandlePoison);
                     hFunc(TEvBlobStorage::TEvConfigureProxy, Handle);
@@ -100,7 +118,7 @@ namespace NKikimr {
             {}
 
 
-            TBlobStorageGroupProxyMockActor(ui32 groupId)
+            TBlobStorageGroupProxyMockActor(TGroupId groupId)
                 : TActor(&TBlobStorageGroupProxyMockActor::StateFunc)
                 , Model(MakeIntrusive<NFake::TProxyDS>(groupId))
             {}
@@ -111,7 +129,7 @@ namespace NKikimr {
         return new TBlobStorageGroupProxyMockActor(std::move(model));
     }
 
-    IActor *CreateBlobStorageGroupProxyMockActor(ui32 groupId) {
+    IActor *CreateBlobStorageGroupProxyMockActor(TGroupId groupId) {
         return new TBlobStorageGroupProxyMockActor(groupId);
     }
 

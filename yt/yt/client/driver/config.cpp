@@ -58,6 +58,9 @@ void TDriverConfig::Register(TRegistrar registrar)
     registrar.Parameter("expect_structured_input_in_structured_batch_commands", &TThis::ExpectStructuredInputInStructuredBatchCommands)
         .Default(true);
 
+    registrar.Parameter("require_password_in_authentication_commands", &TThis::RequirePasswordInAuthenticationCommands)
+        .Default(true);
+
     registrar.Preprocessor([] (TThis* config) {
         config->ClientCache->Capacity = 1024_KB;
         config->ProxyDiscoveryCache->RefreshTime = TDuration::Seconds(15);

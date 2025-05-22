@@ -11,8 +11,9 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/tx_proxy/mon.h>
 
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/system/spinlock.h>
 
@@ -335,6 +336,7 @@ public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
     ::NMonitoring::TDynamicCounterPtr GetKqpCounters() const;
     ::NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
+    ::NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetActiveSessionActors() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetTxReplySizeExceededError() const;
     const ::NMonitoring::TDynamicCounters::TCounterPtr GetDataShardTxReplySizeExceededError() const;
@@ -345,6 +347,10 @@ public:
     void RemoveDbCounters(const TString& database);
 
 public:
+    ::NMonitoring::TDynamicCounterPtr WorkloadManagerGroup;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
+
     // Lease updates counters
     ::NMonitoring::THistogramPtr LeaseUpdateLatency;
     ::NMonitoring::THistogramPtr RunActorLeaseUpdateBacklog;
@@ -371,6 +377,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughMemory;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOnStartAllocs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemFree;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOnCompleteFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
     NMonitoring::THistogramPtr RmSnapshotLatency;
     NMonitoring::THistogramPtr NodeServiceStartEventDelivery;
@@ -400,6 +409,45 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorMessages;
     ::NMonitoring::TDynamicCounters::TCounterPtr IteratorDeliveryProblems;
 
+    // Sink write counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ForwardActorsCount;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWrites;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWritesRetries;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorPrepareWrites;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorWriteOnlyOperations;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorReadWriteOperations;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorFlushes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorImmediateCommits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorDistributedCommits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorRollbacks;
+
+    NMonitoring::THistogramPtr WriteActorWritesSizeHistogram;
+    NMonitoring::THistogramPtr WriteActorWritesOperationsHistogram;
+    NMonitoring::THistogramPtr WriteActorWritesLatencyHistogram;
+
+    NMonitoring::THistogramPtr BufferActorPrepareLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorCommitLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorFlushLatencyHistogram;
+
+    NMonitoring::THistogramPtr ForwardActorWritesSizeHistogram;
+    NMonitoring::THistogramPtr ForwardActorWritesLatencyHistogram;
+
+    // Scheduler signals
+    ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerThrottled;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerCapacity;
+    NMonitoring::THistogramPtr ComputeActorExecutions;
+    NMonitoring::THistogramPtr ComputeActorDelays;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ThrottledActorsSpuriousActivations;
+    NMonitoring::THistogramPtr SchedulerDelays;
+    NMonitoring::TDynamicCounters::TCounterPtr SchedulerGroupsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr SchedulerValuesCount;
+
     // Sequences counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerActorsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr SequencerErrors;
@@ -410,12 +458,36 @@ public:
     NMonitoring::THistogramPtr DataTxTotalTimeHistogram;
     NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;
 
+    NMonitoring::TDynamicCounters::TCounterPtr RowsDuplicationsFound;
+
+    // Locality metrics for request
+    NMonitoring::TDynamicCounters::TCounterPtr TotalSingleNodeReqCount;
+    NMonitoring::TDynamicCounters::TCounterPtr NonLocalSingleNodeReqCount;
+
     TAlignedPagePoolCounters AllocCounters;
 
     // db counters
     TConcurrentRWHashMap<TString, TKqpDbCountersPtr, 256> DbCounters;
     TActorSystem* ActorSystem = nullptr;
     TActorId DbWatcherActorId;
+
+    // Statistics CPU usage
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatCpuCollectUs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatCpuFinishUs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatCpuConvertUs;
+    // Statistics MEM inflight (non deriv)
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemCollectInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemFinishInflightBytes;
+    // Statistics MEM output (deriv)
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemFinishBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemConvertBytes;
+
+    // Statistics batch operations
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationRetries;
 };
 
 struct TKqpRequestCounters : public TThrRefBase {

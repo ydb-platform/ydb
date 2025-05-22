@@ -14,6 +14,8 @@ private:
     TEvDataShard::TEvSplit::TPtr Ev;
     bool SplitAlreadyFinished;
 
+    std::vector<std::unique_ptr<IEventHandle>> Replies;
+
 public:
     TTxSplit(TDataShard* ds, TEvDataShard::TEvSplit::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
@@ -38,7 +40,7 @@ public:
             // Persist split description
             TString splitDescr;
             bool serilaizeOk = Self->SrcSplitDescription->SerializeToString(&splitDescr);
-            Y_ABORT_UNLESS(serilaizeOk, "Failed to serialize split/merge description");
+            Y_ENSURE(serilaizeOk, "Failed to serialize split/merge description");
             db.Table<Schema::Sys>().Key(Schema::Sys_SrcSplitDescription).Update(NIceDb::TUpdate<Schema::Sys::Bytes>(splitDescr));
 
             Self->PersistSys(db, Schema::Sys_SrcSplitOpId, Self->SrcSplitOpId);
@@ -53,11 +55,13 @@ public:
                 Self->Pipeline.AddCandidateOp(op);
                 Self->PlanQueue.Progress(ctx);
             }
+
+            Self->Pipeline.CleanupWaitingVolatile(ctx, Replies);
         } else {
             // Check that this is the same split request
-            Y_ABORT_UNLESS(opId == Self->SrcSplitOpId,
-                "Datashard %" PRIu64 " got unexpected split request opId %" PRIu64 " while already executing split request opId %" PRIu64,
-                Self->TabletID(), opId, Self->SrcSplitOpId);
+            Y_ENSURE(opId == Self->SrcSplitOpId,
+                "Datashard " << Self->TabletID() << " got unexpected split request opId " << opId
+                << " while already executing split request opId " << Self->SrcSplitOpId);
 
             Self->SrcAckSplitTo.insert(Ev->Sender);
 
@@ -67,10 +71,10 @@ public:
                 SplitAlreadyFinished = false;
                 return true;
             } else if (Self->State == TShardState::SplitSrcSendingSnapshot) {
-                Y_ABORT_UNLESS(!Self->SplitSrcSnapshotSender.AllAcked(), "State should have changed at the moment when last ack was recevied");
+                Y_ENSURE(!Self->SplitSrcSnapshotSender.AllAcked(), "State should have changed at the moment when last ack was recevied");
                 // Do nothing because we are still waiting for acks from DSTs
             } else {
-                Y_ABORT_UNLESS(
+                Y_ENSURE(
                     Self->State == TShardState::SplitSrcWaitForPartitioningChanged ||
                     Self->State == TShardState::PreOffline ||
                     Self->State == TShardState::Offline);
@@ -83,6 +87,8 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
+        Self->SendCommittedReplies(std::move(Replies));
+
         if (SplitAlreadyFinished) {
             // Send the Ack
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
@@ -128,7 +134,7 @@ public:
             return true;
         }
 
-        Y_ABORT_UNLESS(Self->TxInFly() == 0, "Currently split operation shouldn't start while there are in-flight transactions");
+        Y_ENSURE(Self->TxInFly() == 0, "Currently split operation shouldn't start while there are in-flight transactions");
 
         // We need to remove all locks first, making sure persistent uncommitted
         // changes are not borrowed by new shards. Otherwise those will become
@@ -146,7 +152,7 @@ public:
             }
             Self->SysLocksTable().ApplyLocks();
             auto countAfter = Self->SysLocksTable().GetLocks().size();
-            Y_ABORT_UNLESS(countAfter < countBefore, "Expected to erase at least one lock");
+            Y_ENSURE(countAfter < countBefore, "Expected to erase at least one lock");
             Self->Execute(Self->CreateTxStartSplit(), ctx);
             return true;
         }
@@ -171,7 +177,7 @@ public:
                     return false; \
             } \
             if (isStrictCheck) { \
-                Y_ABORT_UNLESS(str.empty(), #table " table is not empty when starting Split at tablet %" PRIu64 " : \n%s", Self->TabletID(), str.Str().data()); \
+                Y_ENSURE(str.empty(), #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : \n" << str.Str()); \
             } else if (!str.empty()) { \
                 LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, \
                      #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : " << str.Str()); \
@@ -198,16 +204,11 @@ public:
         }
 
         TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext;
-        if (Self->IsMvccEnabled()) {
-            snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot),
-                                                    Self->GetSnapshotManager().GetCompleteEdge(),
-                                                    Self->GetSnapshotManager().GetIncompleteEdge(),
-                                                    Self->GetSnapshotManager().GetImmediateWriteEdge(),
-                                                    Self->GetSnapshotManager().GetLowWatermark(),
-                                                    Self->GetSnapshotManager().GetPerformedUnprotectedReads());
-        } else {
-            snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot));
-        }
+        snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot),
+                                                Self->GetSnapshotManager().GetCompleteEdge(),
+                                                Self->GetSnapshotManager().GetIncompleteEdge(),
+                                                Self->GetSnapshotManager().GetImmediateWriteEdge(),
+                                                Self->GetSnapshotManager().GetLowWatermark());
 
         txc.Env.MakeSnapshot(snapContext);
 
@@ -238,6 +239,8 @@ class TDataShard::TTxSplitSnapshotComplete : public NTabletFlatExecutor::TTransa
 private:
     TIntrusivePtr<TSplitSnapshotContext> SnapContext;
     bool ChangeExchangeSplit;
+    THashSet<ui64> ActivationList;
+    THashSet<ui64> SplitList;
 
 public:
     TTxSplitSnapshotComplete(TDataShard* ds, TIntrusivePtr<TSplitSnapshotContext> snapContext)
@@ -252,7 +255,7 @@ public:
         ui64 opId = Self->SrcSplitOpId;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " snapshot complete for split OpId " << opId);
 
-        Y_ABORT_UNLESS(Self->State == TShardState::SplitSrcMakeSnapshot, "Datashard in unexpected state %s", DatashardStateName(Self->State).data());
+        Y_ENSURE(Self->State == TShardState::SplitSrcMakeSnapshot, "Datashard in unexpected state " << DatashardStateName(Self->State));
 
         txc.Env.ClearSnapshot(*SnapContext);
 
@@ -277,7 +280,7 @@ public:
             snapshot->SetOperationCookie(opId);
 
             // Fill user table scheme
-            Y_ABORT_UNLESS(Self->TableInfos.size() == 1, "Support for more than 1 user table in a datashard is not implemented here");
+            Y_ENSURE(Self->TableInfos.size() == 1, "Support for more than 1 user table in a datashard is not implemented here");
             const TUserTable& tableInfo = *Self->TableInfos.begin()->second;
             tableInfo.GetSchema(*snapshot->MutableUserTableScheme());
 
@@ -295,7 +298,7 @@ public:
                             rawVals.push_back(
                                         cells.GetCells()[ki].IsNull() ?
                                             TRawTypeValue() :
-                                            TRawTypeValue(cells.GetCells()[ki].Data(), cells.GetCells()[ki].Size(), tableInfo.KeyColumnTypes[ki])
+                                            TRawTypeValue(cells.GetCells()[ki].Data(), cells.GetCells()[ki].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId())
                                             );
                         }
                         // Extend with NULLs if needed
@@ -344,17 +347,15 @@ public:
                     snapshot->SetMinWriteVersionTxId(minVersion.TxId);
                 }
 
-                if (Self->IsMvccEnabled()) {
-                    snapshot->SetMvccLowWatermarkStep(SnapContext->LowWatermark.Step);
-                    snapshot->SetMvccLowWatermarkTxId(SnapContext->LowWatermark.TxId);
-                    snapshot->SetMvccCompleteEdgeStep(SnapContext->CompleteEdge.Step);
-                    snapshot->SetMvccCompleteEdgeTxId(SnapContext->CompleteEdge.TxId);
-                    snapshot->SetMvccIncompleteEdgeStep(SnapContext->IncompleteEdge.Step);
-                    snapshot->SetMvccIncompleteEdgeTxId(SnapContext->IncompleteEdge.TxId);
-                    snapshot->SetMvccImmediateWriteEdgeStep(SnapContext->ImmediateWriteEdge.Step);
-                    snapshot->SetMvccImmediateWriteEdgeTxId(SnapContext->ImmediateWriteEdge.TxId);
-                    snapshot->SetMvccPerformedUnprotectedReads(SnapContext->PerformedUnprotectedReads);
-                }
+                snapshot->SetMvccLowWatermarkStep(SnapContext->LowWatermark.Step);
+                snapshot->SetMvccLowWatermarkTxId(SnapContext->LowWatermark.TxId);
+                snapshot->SetMvccCompleteEdgeStep(SnapContext->CompleteEdge.Step);
+                snapshot->SetMvccCompleteEdgeTxId(SnapContext->CompleteEdge.TxId);
+                snapshot->SetMvccIncompleteEdgeStep(SnapContext->IncompleteEdge.Step);
+                snapshot->SetMvccIncompleteEdgeTxId(SnapContext->IncompleteEdge.TxId);
+                snapshot->SetMvccImmediateWriteEdgeStep(SnapContext->ImmediateWriteEdge.Step);
+                snapshot->SetMvccImmediateWriteEdgeTxId(SnapContext->ImmediateWriteEdge.TxId);
+                snapshot->SetMvccPerformedUnprotectedReads(true);
 
                 // Send info about existing persistent snapshots
                 for (const auto& kv : Self->GetSnapshotManager().GetSnapshots()) {
@@ -372,13 +373,11 @@ public:
                     proto->SetTimeoutMs(kv.second.Timeout.MilliSeconds());
                 }
 
-                if (Self->ChangesQueue || tableInfo.HasCdcStreams()) {
+                if (tableInfo.HasAsyncIndexes() || tableInfo.HasCdcStreams()) {
                     snapshot->SetWaitForActivation(true);
-                    Self->ChangeSenderActivator.AddDst(dstTablet);
-                    db.Table<Schema::SrcChangeSenderActivations>().Key(dstTablet).Update();
-
+                    ActivationList.insert(dstTablet);
                     if (tableInfo.HasCdcStreams()) {
-                        Self->ChangeExchangeSplitter.AddDst(dstTablet);
+                        SplitList.insert(dstTablet);
                     }
                 }
 
@@ -397,13 +396,22 @@ public:
             }
         }
 
-        ChangeExchangeSplit = !Self->ChangesQueue && !Self->ChangeExchangeSplitter.Done();
-
         if (needToReadPages) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot is restarting for split OpId " << opId);
             return false;
         } else {
             txc.Env.DropSnapshot(SnapContext);
+
+            for (ui64 dstTabletId : ActivationList) {
+                Self->ChangeSenderActivator.AddDst(dstTabletId);
+                db.Table<Schema::SrcChangeSenderActivations>().Key(dstTabletId).Update();
+            }
+
+            for (ui64 dstTabletId : SplitList) {
+                Self->ChangeExchangeSplitter.AddDst(dstTabletId);
+            }
+
+            ChangeExchangeSplit = !Self->ChangesQueue && !Self->ChangeExchangeSplitter.Done();
 
             Self->State = TShardState::SplitSrcSendingSnapshot;
             Self->PersistSys(db, Schema::Sys_State, Self->State);
@@ -432,14 +440,14 @@ class TDataShard::TTxSplitTransferSnapshotAck : public NTabletFlatExecutor::TTra
 private:
     TEvDataShard::TEvSplitTransferSnapshotAck::TPtr Ev;
     bool AllDstAcksReceived;
-    bool Activate;
+    ui64 ActivateTabletId;
 
 public:
     TTxSplitTransferSnapshotAck(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
         , AllDstAcksReceived(false)
-        , Activate(false)
+        , ActivateTabletId(0)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT_ACK; }
@@ -463,8 +471,8 @@ public:
         // Remove the row for acked snapshot
         db.Table<Schema::SplitSrcSnapshots>().Key(dstTabletId).Delete();
 
-        if (!Self->ChangesQueue && Self->ChangeExchangeSplitter.Done()) {
-            Activate = !Self->ChangeSenderActivator.Acked(dstTabletId);
+        if (!Self->ChangesQueue && Self->ChangeExchangeSplitter.Done() && !Self->ChangeSenderActivator.Acked(dstTabletId)) {
+            ActivateTabletId = dstTabletId;
         }
 
         return true;
@@ -479,11 +487,8 @@ public:
             }
         }
 
-        if (Activate) {
-            const ui64 dstTabletId = Ev->Get()->Record.GetTabletId();
-            if (!Self->ChangeSenderActivator.Acked(dstTabletId)) {
-                Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
-            }
+        if (ActivateTabletId) {
+            Self->ChangeSenderActivator.DoSend(ActivateTabletId, ctx);
         }
     }
 };
@@ -501,13 +506,13 @@ public:
     TTxType GetTxType() const override { return TXTYPE_SPLIT_PARTITIONING_CHANGED; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        Y_ABORT_UNLESS(!Self->ChangesQueue && Self->ChangeSenderActivator.AllAcked());
+        Y_ENSURE(!Self->ChangesQueue && Self->ChangeSenderActivator.AllAcked());
 
         // TODO: At this point Src should start rejecting all new Tx with SchemaChanged status
         if (Self->State != TShardState::SplitSrcWaitForPartitioningChanged) {
-            Y_ABORT_UNLESS(Self->State == TShardState::PreOffline || Self->State == TShardState::Offline,
-                "Unexpected TEvSplitPartitioningChanged at datashard %" PRIu64 " state %s",
-                Self->TabletID(), DatashardStateName(Self->State).data());
+            Y_ENSURE(Self->State == TShardState::PreOffline || Self->State == TShardState::Offline,
+                "Unexpected TEvSplitPartitioningChanged at datashard " << Self->TabletID()
+                << " state " << DatashardStateName(Self->State));
 
             return true;
         }
@@ -527,6 +532,15 @@ public:
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split partitioning changed to schemeshard " << opId);
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitPartitioningChangedAck(opId, Self->TabletID()));
             }
+        }
+
+        if (!Self->MediatorDelayedReplies.empty()) {
+            // We have some pending mediator replies, which must not be replied.
+            // Unfortunately we may linger around for a long time, and clients
+            // would keep awaiting replies for all that time. We have to make
+            // sure those clients receive an appropriate disconnection error
+            // instead.
+            ctx.Send(Self->SelfId(), new TEvents::TEvPoison);
         }
 
         // TODO: properly check if there are no loans

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(8.2.3)
+VERSION(8.4.1)
 
 LICENSE(Apache-2.0)
 
@@ -15,9 +15,10 @@ NO_CHECK_IMPORTS(
 PY_SRCS(
     TOP_LEVEL
     tenacity/__init__.py
-    tenacity/_asyncio.py
     tenacity/_utils.py
     tenacity/after.py
+    tenacity/asyncio/__init__.py
+    tenacity/asyncio/retry.py
     tenacity/before.py
     tenacity/before_sleep.py
     tenacity/nap.py

@@ -8,7 +8,7 @@ with cs_ui as
   where cs_item_sk = cr_item_sk
     and cs_order_number = cr_order_number
   group by cs_item_sk
-  having sum(cs_ext_list_price)>2::numeric*sum(cr_refunded_cash+cr_reversed_charge+cr_store_credit)),
+  having sum(cs_ext_list_price)>2*sum(cr_refunded_cash+cr_reversed_charge+cr_store_credit)),
 cross_sales as
  (select i_product_name product_name
      ,i_item_sk item_sk
@@ -66,9 +66,9 @@ cross_sales as
          hd1.hd_income_band_sk = ib1.ib_income_band_sk and
          hd2.hd_income_band_sk = ib2.ib_income_band_sk and
          cd1.cd_marital_status <> cd2.cd_marital_status and
-         i_color in ('maroon','burnished','dim','steel','navajo','chocolate') and
-         i_current_price between 35::numeric and (35 + 10)::numeric and
-         i_current_price between (35 + 1)::numeric and (35 + 15)::numeric
+         i_color in ('purple','burlywood','indian','spring','floral','medium') and
+         i_current_price between 64::numeric and (64 + 10)::numeric and
+         i_current_price between (64 + 1)::numeric and (64 + 15)::numeric
 group by i_product_name
        ,i_item_sk
        ,s_store_name
@@ -108,15 +108,16 @@ select cs1.product_name
      ,cs2.cnt as cs2_cnt
 from cross_sales cs1,cross_sales cs2
 where cs1.item_sk=cs2.item_sk and
-     cs1.syear = 2000 and
-     cs2.syear = 2000 + 1 and
+     cs1.syear = 1999 and
+     cs2.syear = 1999 + 1 and
      cs2.cnt <= cs1.cnt and
      cs1.store_name = cs2.store_name and
      cs1.store_zip = cs2.store_zip
 order by cs1.product_name
        ,cs1.store_name
        ,cs2_cnt
-       ,cs1.s1
-       ,cs2.s1;
+       ,s11
+       ,s21
+       ,s22;
 
 -- end query 1 in stream 0 using template ../query_templates/query64.tpl

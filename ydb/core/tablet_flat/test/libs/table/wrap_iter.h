@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ydb/core/tablet_flat/flat_part_overlay.h"
 #include <ydb/core/tablet_flat/flat_table_subset.h>
 #include <ydb/core/tablet_flat/flat_iterator.h>
 #include <ydb/core/tablet_flat/flat_row_scheme.h>
@@ -24,9 +25,9 @@ namespace NTest {
             TVector<const TPartView*> parts;
             parts.reserve(Flatten.size());
             for (auto &partView: Flatten) {
-                Y_ABORT_UNLESS(partView.Part, "Creating TWrapIter without a part");
-                Y_ABORT_UNLESS(partView.Slices, "Creating TWrapIter without slices");
-                Y_ABORT_UNLESS(!partView.Screen, "Creating TWrapIter with a screen");
+                Y_ENSURE(partView.Part, "Creating TWrapIter without a part");
+                Y_ENSURE(partView.Slices, "Creating TWrapIter without slices");
+                TOverlay{partView.Screen, partView.Slices}.Validate();
                 parts.push_back(&partView);
             }
             std::sort(parts.begin(), parts.end(),
@@ -53,12 +54,12 @@ namespace NTest {
             return Iter->Remap;
         }
 
-        void Make(IPages *env) noexcept
+        void Make(IPages *env)
         {
             Iter = nullptr, Env = env; /* Have to make on each Seek(...) */
         }
 
-        EReady Seek(TRawVals key_, ESeek seek) noexcept
+        EReady Seek(TRawVals key_, ESeek seek)
         {
             const TCelled key(key_, *Scheme->Keys, false);
 
@@ -68,11 +69,11 @@ namespace NTest {
 
             for (auto &mem: Frozen)
                 Iter->Push(
-                    TMemIt::Make(*mem, mem.Snapshot, key, seek, KeyCellDefaults, &Iter->Remap, Env,
+                    TMemIter::Make(*mem, mem.Snapshot, key, seek, KeyCellDefaults, &Iter->Remap, Env,
                         TIter::Direction));
 
             for (auto &run: Levels) {
-                auto one = MakeHolder<TRunIt>(run, Remap().Tags, KeyCellDefaults, Env);
+                auto one = MakeHolder<TRunIter>(run, Remap().Tags, KeyCellDefaults, Env);
 
                 EReady status;
                 if constexpr (TIter::Direction == EDirection::Reverse) {
@@ -88,12 +89,12 @@ namespace NTest {
             return Iter->Next(ENext::All);
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             return Iter->Next(ENext::All);
         }
 
-        const TRowState& Apply() noexcept
+        const TRowState& Apply()
         {
             return Iter->Row();
         }
@@ -111,8 +112,8 @@ namespace NTest {
         TAutoPtr<TIter> Iter;
     };
 
-    using TWrapIter = TWrapIterImpl<TTableIt>;
-    using TWrapReverseIter = TWrapIterImpl<TTableReverseIt>;
+    using TWrapIter = TWrapIterImpl<TTableIter>;
+    using TWrapReverseIter = TWrapIterImpl<TTableReverseIter>;
 
 }
 }

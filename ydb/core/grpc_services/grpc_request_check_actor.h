@@ -16,12 +16,64 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/security/secure_request.h>
+#include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/string/split.h>
 
 namespace NKikimr {
 namespace NGRpcService {
+
+template<typename TCtx>
+bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
+    TString validationError;
+    if (!ctx->Validate(validationError)) {
+        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError);
+        ctx->RaiseIssue(issue);
+        ctx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        ctx->FinishSpan();
+        return false;
+    } else {
+        return true;
+    }
+}
+
+inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev, const TVector<std::pair<TString, TString>>& rootAttributes) {
+    const bool isBearerToken = ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer");
+    const bool useAccessService = AppData()->AuthConfig.GetUseAccessService();
+    const bool needClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0;
+
+    if (!isBearerToken || !useAccessService || !needClusterAccessResourceCheck) {
+        return {};
+    }
+
+    const TString& accessServiceType = AppData()->AuthConfig.GetAccessServiceType();
+
+    if (accessServiceType == "Yandex_v2") {
+        static const TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+            {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
+        };
+        return entries;
+    } else if (accessServiceType == "Nebius_v1") {
+        static const auto permissions = NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({
+            "ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"
+        });
+        auto it = std::find_if(rootAttributes.begin(), rootAttributes.end(),
+        [](const std::pair<TString, TString>& p) {
+            return p.first == "folder_id";
+        });
+        if (it == rootAttributes.end()) {
+            return {};
+        }
+        return {
+            {permissions, {{"gizmo_id", it->second}}}
+        };
+    } else {
+        return {};
+    }
+}
 
 template <typename TEvent>
 class TGrpcRequestCheckActor
@@ -50,14 +102,15 @@ public:
 
     static const TVector<TString>& GetPermissions();
 
-    void InitializeAttributesFromSchema(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+    void InitializeAttributesFromSchema(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
         CheckedDatabaseName_ = CanonizePath(schemeData.GetPath());
         if (!GrpcRequestBaseCtx_->TryCustomAttributeProcess(schemeData, this)) {
-            ProcessCommonAttributes(schemeData);
+            ProcessCommonAttributes(schemeData, rootAttributes);
         }
     }
 
-    void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+    void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
+        TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries;
         static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
         TVector<std::pair<TString, TString>> attributes;
         attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
@@ -67,7 +120,16 @@ public:
             }
         }
         if (!attributes.empty()) {
-            SetEntries({{GetPermissions(), attributes}});
+            entries.emplace_back(GetPermissions(), attributes);
+        }
+
+        if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
+            const auto& e = GetEntriesForAuthAndCheckRequest(Request_, rootAttributes);
+            entries.insert(entries.end(), e.begin(), e.end());
+        }
+
+        if (!entries.empty()) {
+            SetEntries(entries);
         }
     }
 
@@ -75,7 +137,15 @@ public:
         TBase::SetEntries(entries);
     }
 
-    void InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
+    void InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes);
+
+    void Initialize(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
+        TString peerName = GrpcRequestBaseCtx_->GetPeerName();
+        TBase::SetPeerName(peerName);
+        InitializeAttributes(schemeData, rootAttributes);
+        TBase::SetDatabase(CheckedDatabaseName_);
+        InitializeAuditSettings(schemeData);
+    }
 
     TGrpcRequestCheckActor(
         const TActorId& owner,
@@ -83,25 +153,29 @@ public:
         TIntrusivePtr<TSecurityObject> securityObject,
         TAutoPtr<TEventHandle<TEvent>> request,
         IGRpcProxyCounters::TPtr counters,
-        bool skipCheckConnectRigths,
-        const IFacilityProvider* facilityProvider)
+        bool skipCheckConnectRights,
+        const IFacilityProvider* facilityProvider,
+        const TVector<std::pair<TString, TString>>& rootAttributes)
         : Owner_(owner)
         , Request_(std::move(request))
         , Counters_(counters)
         , SecurityObject_(std::move(securityObject))
-        , SkipCheckConnectRigths_(skipCheckConnectRigths)
+        , GrpcRequestBaseCtx_(Request_->Get())
+        , SkipCheckConnectRights_(skipCheckConnectRights)
         , FacilityProvider_(facilityProvider)
+        , Span_(TWilsonGrpc::RequestCheckActor, GrpcRequestBaseCtx_->GetWilsonTraceId(), "RequestCheckActor")
     {
-        GrpcRequestBaseCtx_ = Request_->Get();
         TMaybe<TString> authToken = GrpcRequestBaseCtx_->GetYdbToken();
         if (authToken) {
-            TString peerName = GrpcRequestBaseCtx_->GetPeerName();
             TBase::SetSecurityToken(authToken.GetRef());
-            TBase::SetPeerName(peerName);
-            InitializeAttributes(schemeData);
-            TBase::SetDatabase(CheckedDatabaseName_);
-            InitializeAuditSettings(schemeData);
+        } else {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, "Ydb token was not provided. Try to auth by certificate");
+            const auto& clientCertificates = GrpcRequestBaseCtx_->FindClientCertPropertyValues();
+            if (!clientCertificates.empty()) {
+                TBase::SetSecurityToken(TString(clientCertificates.front()));
+            }
         }
+        Initialize(schemeData, rootAttributes);
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -121,6 +195,7 @@ public:
         {
             auto [error, issue] = CheckConnectRight();
             if (error) {
+                AuditLogConnectDbAccessDenied(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
                 ReplyUnauthorizedAndDie(*issue);
                 return;
             }
@@ -128,7 +203,7 @@ public:
 
         if (AppData(ctx)->FeatureFlags.GetEnableGrpcAudit()) {
             // log info about input connection (remote address, basically)
-            AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
+            AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
         }
 
         // Simple rps limitation
@@ -225,7 +300,8 @@ public:
     }
 
     void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
-        TBase::PassAway();
+        GrpcRequestBaseCtx_->FinishSpan();
+        PassAway();
     }
 
     ui64 GetChannelBufferSize() const override {
@@ -236,6 +312,11 @@ public:
         // CheckActor will die after creation rpc_ actor
         // so we can use same mailbox
         return this->RegisterWithSameMailbox(actor);
+    }
+
+    void PassAway() override {
+        Span_.EndOk();
+        TBase::PassAway();
     }
 
 private:
@@ -256,6 +337,7 @@ private:
                     SetTokenAndDie();
                     break;
                 case Ydb::StatusIds::TIMEOUT:
+                case Ydb::StatusIds::CANCELLED:
                     Counters_->IncDatabaseRateLimitedCounter();
                     LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Throughput limit exceeded");
                     ReplyOverloadedAndDie(MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED, "Throughput limit exceeded"));
@@ -275,7 +357,8 @@ private:
             }
         };
 
-        req.mutable_operation_params()->mutable_operation_timeout()->set_nanos(200000000); // same as cloud-go serverless proxy
+        req.mutable_operation_params()->mutable_operation_timeout()->set_seconds(10);
+        req.mutable_operation_params()->mutable_cancel_after()->set_nanos(200000000); // same as cloud-go serverless proxy
 
         NKikimr::NRpcService::RateLimiterAcquireUseSameMailbox(
             std::move(req),
@@ -358,11 +441,11 @@ private:
         return DmlAuditEnabled_ && !DmlAuditExpectedSubjects_.contains(userSID);
     };
 
-    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID) const {
+    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID, const TString& sanitizedToken) const {
         const bool dmlAuditEnabled = requestBaseCtx->IsAuditable() && IsAuditEnabledFor(userSID);
 
         if (dmlAuditEnabled) {
-            AuditContextStart(requestBaseCtx, databaseName, userSID, Attributes_);
+            AuditContextStart(requestBaseCtx, databaseName, userSID, sanitizedToken, Attributes_);
             requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
                 AuditContextEnd(requestBaseCtx);
                 AuditLog(status, parts);
@@ -374,35 +457,40 @@ private:
     void ReplyUnauthorizedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
-        TBase::PassAway();
+        GrpcRequestBaseCtx_->FinishSpan();
+        PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        TBase::PassAway();
+        GrpcRequestBaseCtx_->FinishSpan();
+        PassAway();
     }
 
     void ReplyUnavailableAndDie(const NYql::TIssues& issue) {
         GrpcRequestBaseCtx_->RaiseIssues(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-        TBase::PassAway();
+        GrpcRequestBaseCtx_->FinishSpan();
+        PassAway();
     }
 
     void ReplyUnauthenticatedAndDie() {
         GrpcRequestBaseCtx_->ReplyUnauthenticated("Unknown database");
-        TBase::PassAway();
+        GrpcRequestBaseCtx_->FinishSpan();
+        PassAway();
     }
 
     void ReplyOverloadedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::OVERLOADED);
-        TBase::PassAway();
+        GrpcRequestBaseCtx_->FinishSpan();
+        PassAway();
     }
 
     void Continue() {
         if (!ValidateAndReplyOnError(GrpcRequestBaseCtx_)) {
-            TBase::PassAway();
+            PassAway();
             return;
         }
         HandleAndDie(Request_);
@@ -411,10 +499,11 @@ private:
     void HandleAndDie(TAutoPtr<TEventHandle<TEvProxyRuntimeEvent>>& event) {
         // Request audit happen after successful authentication
         // and authorization check against the database
-        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
+        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
 
+        GrpcRequestBaseCtx_->FinishSpan();
         event->Release().Release()->Pass(*this);
-        TBase::PassAway();
+        PassAway();
     }
 
     void HandleAndDie(TAutoPtr<TEventHandle<TEvListEndpointsRequest>>&) {
@@ -426,31 +515,28 @@ private:
         ReplyBackAndDie();
     }
 
+    void HandleAndDie(TEvRequestAuthAndCheck::TPtr& ev) {
+        GrpcRequestBaseCtx_->FinishSpan();
+        ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
+        PassAway();
+    }
+
     template <typename T>
     void HandleAndDie(T& event) {
-        GrpcRequestBaseCtx_->LegacyFinishSpan();
+        GrpcRequestBaseCtx_->FinishSpan();
         TGRpcRequestProxyHandleMethods::Handle(event, TlsActivationContext->AsActorContext());
-        TBase::PassAway();
+        PassAway();
     }
 
     void ReplyBackAndDie() {
         TlsActivationContext->Send(Request_->Forward(Owner_));
-        TBase::PassAway();
+        PassAway();
     }
 
     std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
-        if (SkipCheckConnectRigths_) {
+        if (SkipCheckConnectRights_) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
                         "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, there is no db provided from user"
-                        << ", database: " << CheckedDatabaseName_
-                        << ", user: " << TBase::GetUserSID()
-                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-            return {false, std::nullopt};
-        }
-
-        if (TBase::IsUserAdmin()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "Skip check permission connect db, user is a admin"
                         << ", database: " << CheckedDatabaseName_
                         << ", user: " << TBase::GetUserSID()
                         << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
@@ -477,18 +563,26 @@ private:
             return {false, std::nullopt};
         }
 
-        const ui32 access = NACLib::ConnectDatabase;
         const auto& parsedToken = TBase::GetParsedToken();
-        if (parsedToken && SecurityObject_->CheckAccess(access, *parsedToken)) {
+        const auto& databaseOwner = SecurityObject_->GetOwnerSID();
+
+        // admins can connect to databases without having connect rights:
+        // - cluster admin -- to any database
+        // - database admin -- to their database
+        const bool isAdmin = TBase::IsUserAdmin() || (parsedToken && IsDatabaseAdministrator(parsedToken.Get(), databaseOwner));
+        if (isAdmin) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                        "Skip check permission connect db, user is a admin"
+                        << ", database: " << CheckedDatabaseName_
+                        << ", user: " << TBase::GetUserSID()
+                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
             return {false, std::nullopt};
         }
 
-        const TString error = TStringBuilder()
-            << "User has no permission to perform query on this database"
-            << ", database: " << CheckedDatabaseName_
-            << ", user: " << TBase::GetUserSID()
-            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName();
-        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "%s", error.c_str());
+        const ui32 access = NACLib::ConnectDatabase;
+        if (parsedToken && SecurityObject_->CheckAccess(access, *parsedToken)) {
+            return {false, std::nullopt};
+        }
 
         Counters_->IncDatabaseAccessDenyCounter();
 
@@ -496,8 +590,15 @@ private:
             return {false, std::nullopt};
         }
 
-        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", error.c_str());
-        return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)};
+        const TString error = "No permission to connect to the database";
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER,
+            error
+            << ": " << CheckedDatabaseName_
+            << ", user: " << TBase::GetUserSID()
+            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName()
+        );
+
+        return {true, MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error)};;
     }
 
     const TActorId Owner_;
@@ -507,20 +608,21 @@ private:
     TString CheckedDatabaseName_;
     IRequestProxyCtx* GrpcRequestBaseCtx_;
     NRpcService::TRlConfig* RlConfig = nullptr;
-    bool SkipCheckConnectRigths_ = false;
+    bool SkipCheckConnectRights_ = false;
     std::vector<std::pair<TString, TString>> Attributes_;
     const IFacilityProvider* FacilityProvider_;
     bool DmlAuditEnabled_ = false;
     std::unordered_set<TString> DmlAuditExpectedSubjects_;
+    NWilson::TSpan Span_;
 };
 
 // default behavior - attributes in schema
 template <typename TEvent>
-void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
     for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
         Attributes_.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
     }
-    InitializeAttributesFromSchema(schemeData);
+    InitializeAttributesFromSchema(schemeData, rootAttributes);
 }
 
 template<typename T>
@@ -563,10 +665,11 @@ IActor* CreateGrpcRequestCheckActor(
     TIntrusivePtr<TSecurityObject> securityObject,
     TAutoPtr<TEventHandle<TEvent>> request,
     IGRpcProxyCounters::TPtr counters,
-    bool skipCheckConnectRigths,
+    bool skipCheckConnectRights,
+    const TVector<std::pair<TString, TString>>& rootAttributes,
     const IFacilityProvider* facilityProvider) {
 
-    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRigths, facilityProvider);
+    return new TGrpcRequestCheckActor<TEvent>(owner, schemeData, std::move(securityObject), std::move(request), counters, skipCheckConnectRights, facilityProvider, rootAttributes);
 }
 
 }

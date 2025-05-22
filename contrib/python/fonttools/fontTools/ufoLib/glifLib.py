@@ -91,7 +91,6 @@ GLIFFormatVersion.__str__ = _VersionTupleEnumMixin.__str__
 
 
 class Glyph:
-
     """
     Minimal glyph object. It has no glyph attributes until either
     the draw() or the drawPoints() method has been called.
@@ -123,7 +122,6 @@ class Glyph:
 
 
 class GlyphSet(_UFOBaseIO):
-
     """
     GlyphSet manages a set of .glif files inside one directory.
 
@@ -1193,8 +1191,12 @@ def _readGlyphFromTreeFormat1(
             haveSeenAdvance = True
             _readAdvance(glyphObject, element)
         elif element.tag == "unicode":
+            v = element.get("hex")
+            if v is None:
+                raise GlifLibError(
+                    "A unicode element is missing its required hex attribute."
+                )
             try:
-                v = element.get("hex")
                 v = int(v, 16)
                 if v not in unicodes:
                     unicodes.append(v)
@@ -1228,9 +1230,9 @@ def _readGlyphFromTreeFormat2(
     unicodes = []
     guidelines = []
     anchors = []
-    haveSeenAdvance = (
-        haveSeenImage
-    ) = haveSeenOutline = haveSeenLib = haveSeenNote = False
+    haveSeenAdvance = haveSeenImage = haveSeenOutline = haveSeenLib = haveSeenNote = (
+        False
+    )
     identifiers = set()
     for element in tree:
         if element.tag == "outline":
@@ -1256,8 +1258,12 @@ def _readGlyphFromTreeFormat2(
             haveSeenAdvance = True
             _readAdvance(glyphObject, element)
         elif element.tag == "unicode":
+            v = element.get("hex")
+            if v is None:
+                raise GlifLibError(
+                    "A unicode element is missing its required hex attribute."
+                )
             try:
-                v = element.get("hex")
                 v = int(v, 16)
                 if v not in unicodes:
                     unicodes.append(v)
@@ -1759,7 +1765,7 @@ class _BaseParser:
         parser = ParserCreate()
         parser.StartElementHandler = self.startElementHandler
         parser.EndElementHandler = self.endElementHandler
-        parser.Parse(text)
+        parser.Parse(text, 1)
 
     def startElementHandler(self, name, attrs):
         self._elementStack.append(name)
@@ -1883,7 +1889,6 @@ _transformationInfo = [
 
 
 class GLIFPointPen(AbstractPointPen):
-
     """
     Helper class using the PointPen protocol to write the <outline>
     part of .glif files.

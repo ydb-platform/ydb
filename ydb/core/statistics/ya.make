@@ -1,19 +1,15 @@
 LIBRARY()
 
-OWNER(
-    monster
-    g:kikimr
-)
-
 SRCS(
+    common.h
     events.h
-    stat_service.h
-    stat_service.cpp
 )
 
 PEERDIR(
     util
     ydb/library/actors/core
+    ydb/library/query_actor
+    yql/essentials/core/minsketch
     ydb/core/protos
     ydb/core/scheme
 )
@@ -22,8 +18,13 @@ END()
 
 RECURSE(
     aggregator
+    database
+    service
+    ut_common
 )
 
 RECURSE_FOR_TESTS(
-    ut
+    aggregator/ut
+    database/ut
+    service/ut
 )

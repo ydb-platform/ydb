@@ -15,7 +15,6 @@ END()
 RECURSE(
     mon
     probes
-    protos
     schemu
     schine
     schoot

@@ -39,6 +39,11 @@ message TMessageAttribute {
     optional bytes  BinaryValue = 4;
 }
 
+message TQueueTag {
+    optional string Key = 1;
+    optional string Value = 2;
+}
+
 message TChangeMessageVisibilityRequest {
     optional TCredentials Credentials = 100;
     /// Sender's authentification.
@@ -99,6 +104,9 @@ message TCreateQueueRequest {
     optional string CustomQueueName = 10;
     /// Created time of queue
     optional uint64 CreatedTimestamp = 11;
+
+    /// Queue's tags.
+    repeated TQueueTag Tags = 12;
 }
 
 message TCreateQueueResponse {
@@ -555,4 +563,45 @@ message TCountQueuesResponse {
     optional string RequestId = 2;
 
     optional uint64 Count = 3;
+}
+
+message TListQueueTagsRequest {
+    optional TCredentials Credentials = 100;
+    /// Sender's authentification.
+    optional TAuthentification Auth = 1;
+    optional string QueueName = 2;
+}
+
+message TListQueueTagsResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
+    repeated TQueueTag Tags = 4;
+}
+
+message TTagQueueRequest {
+    optional TCredentials Credentials = 100;
+    /// Sender's authentification.
+    optional TAuthentification Auth = 1;
+    /// The name of the queue.
+    optional string QueueName = 2;
+    repeated TQueueTag Tags = 3;
+}
+
+message TTagQueueResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
+}
+
+message TUntagQueueRequest {
+    optional TCredentials Credentials = 100;
+    /// Sender's authentification.
+    optional TAuthentification Auth = 1;
+    /// The name of the queue.
+    optional string QueueName = 2;
+    repeated string TagKeys = 3;
+}
+
+message TUntagQueueResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
 }

@@ -18,6 +18,7 @@
 #include <string>
 #include <boost/property_map/property_map.hpp>
 #include <boost/tuple/tuple.hpp>
+#include <boost/graph/exception.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/properties.hpp>
 #include <boost/graph/subgraph.hpp>
@@ -649,53 +650,6 @@ void write_graphviz_dp(std::ostream& out, const Graph& g,
 /////////////////////////////////////////////////////////////////////////////
 // Graph reader exceptions
 /////////////////////////////////////////////////////////////////////////////
-struct BOOST_SYMBOL_VISIBLE graph_exception : public std::exception
-{
-    ~graph_exception() BOOST_OVERRIDE {}
-    const char* what() const noexcept BOOST_OVERRIDE = 0;
-};
-
-struct BOOST_SYMBOL_VISIBLE bad_parallel_edge : public graph_exception
-{
-    std::string from;
-    std::string to;
-    mutable std::string statement;
-    bad_parallel_edge(const std::string& i, const std::string& j)
-    : from(i), to(j)
-    {
-    }
-
-    ~bad_parallel_edge() BOOST_OVERRIDE {}
-    const char* what() const noexcept BOOST_OVERRIDE
-    {
-        if (statement.empty())
-            statement = std::string("Failed to add parallel edge: (") + from
-                + "," + to + ")\n";
-
-        return statement.c_str();
-    }
-};
-
-struct BOOST_SYMBOL_VISIBLE directed_graph_error : public graph_exception
-{
-    ~directed_graph_error() BOOST_OVERRIDE {}
-    const char* what() const noexcept BOOST_OVERRIDE
-    {
-        return "read_graphviz: "
-               "Tried to read a directed graph into an undirected graph.";
-    }
-};
-
-struct BOOST_SYMBOL_VISIBLE undirected_graph_error : public graph_exception
-{
-    ~undirected_graph_error() BOOST_OVERRIDE {}
-    const char* what() const noexcept BOOST_OVERRIDE
-    {
-        return "read_graphviz: "
-               "Tried to read an undirected graph into a directed graph.";
-    }
-};
-
 struct BOOST_SYMBOL_VISIBLE bad_graphviz_syntax : public graph_exception
 {
     std::string errmsg;

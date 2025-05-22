@@ -63,7 +63,7 @@ namespace NTable {
      ---------------------------------------------------------------------
        15   Complete support ELargeObj::Outer, values packed in page collection
      ---------------------------------------------------------------------
-       16   Read and write final key in EPage::Index
+       16   Read and write final key in EPage::FlatIndex
      ---------------------------------------------------------------------
        17   Fixed incomplete read support of rooted page collections
      ---------------------------------------------------------------------

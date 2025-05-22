@@ -42,7 +42,7 @@ public:
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "dsproxynode", "DsProxyNode", false, TlsActivationContext->ExecutorThread.ActorSystem,
+            mon->RegisterActorPage(actorsMonPage, "dsproxynode", "DsProxyNode", false, TActivationContext::ActorSystem(),
                 SelfId());
         }
 
@@ -107,4 +107,3 @@ IActor* CreateDsProxyNodeMon(TIntrusivePtr<TDsProxyNodeMon> mon) {
 }
 
 } // NKikimr
-

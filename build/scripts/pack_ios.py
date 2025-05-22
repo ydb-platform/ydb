@@ -1,3 +1,4 @@
+from __future__ import print_function
 import argparse
 import os
 import shutil
@@ -15,7 +16,7 @@ def just_do_it():
     args = parser.parse_args()
     app_tar = [p for p in args.peers if p.endswith('.ios.interface')]
     if not app_tar:
-        print >> sys.stderr, 'No one IOS_INTERFACE module found'
+        print('No one IOS_INTERFACE module found', file=sys.stderr)
         shutil.copyfile(args.binary, os.path.join(args.temp_dir, 'bin'))
         if os.path.exists(args.target):
             os.remove(args.target)
@@ -27,7 +28,7 @@ def just_do_it():
     if len(app_tar) > 1:
         app_tar = [p for p in args.peers if not p.endswith('.default.ios.interface')]
     if len(app_tar) > 1:
-        print >> sys.stderr, 'Many IOS_INTERFACE modules found, {} will be used'.format(app_tar[-1])
+        print('Many IOS_INTERFACE modules found, {} will be used'.format(app_tar[-1]), file=sys.stderr)
     app_tar = app_tar[-1]
     with tarfile.open(app_tar) as tf:
         tf.extractall(args.temp_dir)

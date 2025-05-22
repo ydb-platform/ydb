@@ -1,10 +1,10 @@
 PY3TEST()
 
 FORK_TEST_FILES()
-TIMEOUT(600)
 SIZE(MEDIUM)
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_HARD_MEMORY_LIMIT_BYTES="8000000000")
 
 TEST_SRCS(
     test_session_pool.py
@@ -31,6 +31,8 @@ PEERDIR(
     ydb/public/sdk/python
 )
 
-REQUIREMENTS(ram:10)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:10)
+ENDIF()
 
 END()

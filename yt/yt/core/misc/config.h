@@ -18,11 +18,16 @@ struct TExponentialBackoffOptions
     static constexpr double DefaultBackoffMultiplier = 1.5;
     static constexpr double DefaultBackoffJitter = 0.1;
 
+    /*!
+     * \note Can be up to std::numeric_limits<int>::max() inclusive.
+    */
     int InvocationCount = DefaultInvocationCount;
     TDuration MinBackoff = DefaultMinBackoff;
     TDuration MaxBackoff = DefaultMaxBackoff;
     double BackoffMultiplier = DefaultBackoffMultiplier;
     double BackoffJitter = DefaultBackoffJitter;
+
+    bool operator==(const TExponentialBackoffOptions& other) const = default;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -42,10 +47,11 @@ struct TConstantBackoffOptions
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TLogDigestConfig
+//! TODO(arkady-e1ppa): Make configs below pairs of POD-structs and TExternalizedYsonStruct.
+
+struct TLogDigestConfig
     : public NYTree::TYsonStruct
 {
-public:
     // We will round each sample x to the range from [(1 - RelativePrecision)*x, (1 + RelativePrecision)*x].
     // This parameter affects the memory usage of the digest, it is proportional to
     // log(UpperBound / LowerBound) / log(1 + RelativePrecision).
@@ -67,10 +73,23 @@ DEFINE_REFCOUNTED_TYPE(TLogDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THistogramDigestConfig
+struct TFairShareHierarchicalSchedulerDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
+    TDuration WindowSize;
+
+    REGISTER_YSON_STRUCT(TFairShareHierarchicalSchedulerDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TFairShareHierarchicalSchedulerDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct THistogramDigestConfig
+    : public NYTree::TYsonStruct
+{
     // We will round each sample x to a value from [x - AbsolutePrecision / 2, x + AbsolutePrecision / 2].
     // More precisely, size of each bucket in the histogram will be equal to AbsolutePrecision.
     // This parameter affects the memory usage of the digest, it is proportional to ((UpperBound - LowerBound) / AbsolutePrecision).
@@ -92,39 +111,9 @@ DEFINE_REFCOUNTED_TYPE(THistogramDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(EHistoricUsageAggregationMode,
-    ((None)                     (0))
-    ((ExponentialMovingAverage) (1))
-);
-
-// TODO(arkady-e1ppa): Use YsonExternalSerializer from pr5052145 once it's ready.
-class THistoricUsageConfig
-    : public NYTree::TYsonStruct
-{
-public:
-    EHistoricUsageAggregationMode AggregationMode;
-
-    //! Parameter of exponential moving average (EMA) of the aggregated usage.
-    //! Roughly speaking, it means that current usage ratio is twice as relevant for the
-    //! historic usage as the usage ratio alpha seconds ago.
-    //! EMA for unevenly spaced time series was adapted from here: https://clck.ru/HaGZs
-    double EmaAlpha;
-
-    bool ResetOnNewParameters;
-
-    REGISTER_YSON_STRUCT(THistoricUsageConfig);
-
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(THistoricUsageConfig)
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TAdaptiveHedgingManagerConfig
+struct TAdaptiveHedgingManagerConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Percentage of primary requests that should have a hedging counterpart.
     //! Null is for disabled hedging.
     std::optional<double> MaxBackupRequestRatio;
@@ -157,7 +146,6 @@ public:
     static void Register(TRegistrar registrar);
 };
 
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TConstantBackoffOptionsSerializer
@@ -169,13 +157,11 @@ public:
     static void Register(TRegistrar registrar);
 };
 
-
-
 } // namespace NDetail
+
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TExponentialBackoffOptions, NDetail::TExponentialBackoffOptionsSerializer);
+ASSIGN_EXTERNAL_YSON_SERIALIZER(TConstantBackoffOptions, NDetail::TConstantBackoffOptionsSerializer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::TExponentialBackoffOptions, NYT::NDetail::TExponentialBackoffOptionsSerializer);
-ASSIGN_EXTERNAL_YSON_SERIALIZER(NYT::TConstantBackoffOptions, NYT::NDetail::TConstantBackoffOptionsSerializer);

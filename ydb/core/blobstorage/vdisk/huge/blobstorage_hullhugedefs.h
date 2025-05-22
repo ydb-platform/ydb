@@ -21,17 +21,16 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         struct TFreeRes {
             ui32 ChunkId = 0;
-            TMask Mask;
-            ui32 MaskSize = 0;
+            bool InLockedChunks = false;
 
             TFreeRes() = default;
-            TFreeRes(ui32 chunkId, TMask mask, ui32 maskSize)
+            TFreeRes(ui32 chunkId, bool inLockedChunks)
                 : ChunkId(chunkId)
-                , Mask(mask)
-                , MaskSize(maskSize)
+                , InLockedChunks(inLockedChunks)
             {}
 
             void Output(IOutputStream &str) const;
+
             TString ToString() const {
                 TStringStream str;
                 Output(str);
@@ -129,11 +128,7 @@ namespace NKikimr {
             }
 
             ui64 Hash() const {
-                ui64 x = 0;
-                x |= (ui64)ChunkId;
-                x <<= 32u;
-                x |= (ui64)Offset;
-                return x;
+                return MultiHash(ChunkId, Offset);
             }
 
             void Serialize(IOutputStream &str) const {
@@ -207,161 +202,6 @@ namespace NKikimr {
             bool ParseFromString(const TString &data);
             bool ParseFromArray(const char* data, size_t size);
             TString ToString() const;
-        };
-
-
-        ////////////////////////////////////////////////////////////////////////////
-        // TBlobMerger
-        ////////////////////////////////////////////////////////////////////////////
-        class TBlobMerger {
-            using TCircaLsns = TVector<ui64>;
-
-        public:
-            TBlobMerger() = default;
-
-            void Clear() {
-                DiskPtrs.clear();
-                Deleted.clear();
-                Parts.Clear();
-                CircaLsns.clear();
-            }
-
-            void SetEmptyFromAnotherMerger(const TBlobMerger *fromMerger) {
-                Clear();
-                Deleted.insert(Deleted.end(), fromMerger->SavedData().begin(), fromMerger->SavedData().end());
-                Deleted.insert(Deleted.end(), fromMerger->DeletedData().begin(), fromMerger->DeletedData().end());
-            }
-
-            void Add(const TDiskPart *begin, const TDiskPart *end, const NMatrix::TVectorType &parts, ui64 circaLsn) {
-                if (DiskPtrs.empty()) {
-                    Parts = parts;
-                    DiskPtrs = {begin, end};
-                    CircaLsns = TCircaLsns(end - begin, circaLsn);
-                    Y_ABORT_UNLESS(DiskPtrs.size() == Parts.CountBits());
-                } else {
-                    Merge(begin, end, parts, circaLsn);
-                }
-            }
-
-            void AddMetadataParts(NMatrix::TVectorType parts) {
-                // this is special case for mirror3of4, where data can have empty TDiskPart
-                std::array<TDiskPart, 8> zero;
-                zero.fill(TDiskPart());
-                // empty TDiskPart at a position means that every circaLsn shoud work
-                const ui64 circaLsn = Max<ui64>();
-                Merge(zero.begin(), zero.begin() + parts.CountBits(), parts, circaLsn);
-            }
-
-            bool Empty() const {
-                return Parts.Empty();
-            }
-
-            void Swap(TBlobMerger &m) {
-                DiskPtrs.swap(m.DiskPtrs);
-                Deleted.swap(m.Deleted);
-                Parts.Swap(m.Parts);
-                CircaLsns.swap(m.CircaLsns);
-            }
-
-            TBlobType::EType GetBlobType() const {
-                Y_ABORT_UNLESS(!Empty());
-                return DiskPtrs.size() == 1 ? TBlobType::HugeBlob : TBlobType::ManyHugeBlobs;
-            }
-
-            ui32 GetNumParts() const {
-                return DiskPtrs.size();
-            }
-
-            void Output(IOutputStream &str) const {
-                if (Empty()) {
-                    str << "empty";
-                } else {
-                    str << "{Parts# " << Parts.ToString();
-                    str << " CircaLsns# " << FormatList(CircaLsns);
-                    str << " DiskPtrs# ";
-                    FormatList(str, DiskPtrs);
-                    str << " Deleted# ";
-                    FormatList(str, Deleted);
-                    str << "}";
-                }
-            }
-
-            TString ToString() const {
-                TStringStream str;
-                Output(str);
-                return str.Str();
-            }
-
-            const TVector<TDiskPart> &SavedData() const {
-                return DiskPtrs;
-            }
-
-            const TVector<TDiskPart> &DeletedData() const {
-                return Deleted;
-            }
-
-            const TCircaLsns &GetCircaLsns() const {
-                return CircaLsns;
-            }
-
-        private:
-            typedef TVector<TDiskPart> TDiskPtrs;
-
-            TDiskPtrs DiskPtrs;
-            TDiskPtrs Deleted;
-            NMatrix::TVectorType Parts;
-            TCircaLsns CircaLsns;
-
-            void Merge(const TDiskPart *begin, const TDiskPart *end, const NMatrix::TVectorType &parts, ui64 circaLsn)
-            {
-                Y_ABORT_UNLESS(end - begin == parts.CountBits());
-                Y_DEBUG_ABORT_UNLESS(Parts.GetSize() == parts.GetSize());
-                const ui8 maxSize = parts.GetSize();
-                TDiskPtrs newDiskPtrs;
-                TCircaLsns newCircaLsns;
-                newDiskPtrs.reserve(maxSize);
-                newCircaLsns.reserve(maxSize);
-
-                TDiskPtrs::const_iterator locBegin = DiskPtrs.begin();
-                TDiskPtrs::const_iterator locEnd = DiskPtrs.end();
-                TDiskPtrs::const_iterator locIt = locBegin;
-                const TDiskPart *it = begin;
-
-                for (ui8 i = 0; i < maxSize; i++) {
-                    if (Parts.Get(i) && parts.Get(i)) {
-                        // both
-                        Y_DEBUG_ABORT_UNLESS(locIt != locEnd && it != end);
-                        if (CircaLsns[locIt - locBegin] < circaLsn) {
-                            // incoming value wins
-                            newDiskPtrs.push_back(*it);
-                            newCircaLsns.push_back(circaLsn);
-                            Deleted.push_back(*locIt);
-                        } else {
-                            // already seen value wins
-                            newDiskPtrs.push_back(*locIt);
-                            newCircaLsns.push_back(CircaLsns[locIt - locBegin]);
-                            Deleted.push_back(*it);
-                        }
-                        ++locIt;
-                        ++it;
-                    } else if (Parts.Get(i)) {
-                        Y_DEBUG_ABORT_UNLESS(locIt != locEnd);
-                        newDiskPtrs.push_back(*locIt);
-                        newCircaLsns.push_back(CircaLsns[locIt - locBegin]);
-                        ++locIt;
-                    } else if (parts.Get(i)) {
-                        Y_DEBUG_ABORT_UNLESS(it != end);
-                        newDiskPtrs.push_back(*it);
-                        newCircaLsns.push_back(circaLsn);
-                        ++it;
-                    }
-                }
-
-                Parts |= parts;
-                DiskPtrs.swap(newDiskPtrs);
-                CircaLsns.swap(newCircaLsns);
-                Y_ABORT_UNLESS(DiskPtrs.size() == Parts.CountBits());
-            }
         };
 
     } // NHuge

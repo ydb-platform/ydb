@@ -94,7 +94,10 @@ void TPQTabletMock::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCo
 {
     Y_UNUSED(ctx);
 
-    ReadSet = ev->Get()->Record;
+    const auto& record = ev->Get()->Record;
+
+    ReadSet = record;
+    ReadSets[std::make_pair(record.GetStep(), record.GetTxId())].push_back(record);
 }
 
 void TPQTabletMock::Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx)

@@ -25,13 +25,10 @@ public:
 
         TSourceIdInfo::EState State;
         ui64 SeqNo = 0;
+        ui64 MinSeqNo = 0;
         ui64 Offset = 0;
         bool Explicit = false;
         TInstant WriteTimestamp;
-
-        bool Pending = false;
-
-        operator bool() const;
     };
 
     class TSourceManager {
@@ -51,8 +48,6 @@ public:
 
         void Update(ui64 seqNo, ui64 offset, TInstant timestamp);
         void Update(THeartbeat&& heartbeat);
-
-        operator bool() const;
 
     private:
         const TSourceIdMap& MemoryStorage() const;
@@ -103,51 +98,18 @@ public:
 
     explicit TPartitionSourceManager(TPartition& partition);
 
-    // For a partition obtained as a result of a merge or split, it requests 
-    // information about the consumer's parameters from the parent partitions.
-    void EnsureSourceId(const TString& sourceId);
-    void EnsureSourceIds(const TVector<TString>& sourceIds);
-
-    // Returns true if we expect a response from the parent partitions
-    bool WaitSources() const;
-
     const TSourceInfo Get(const TString& sourceId) const;
 
     TModificationBatch CreateModificationBatch(const TActorContext& ctx);
 
-    void PassAway();
-
-public:
-    void Handle(TEvPQ::TEvSourceIdResponse::TPtr& ev, const TActorContext& ctx);
-
 private:
-    void ScheduleBatch();
-    void FinishBatch(const TActorContext& ctx);
-    bool RequireEnqueue(const TString& sourceId);
-
     const TPartitionNode* GetPartitionNode() const;
     TSourceIdStorage& GetSourceIdStorage() const;
     bool HasParents() const;
 
-    TActorId PartitionRequester(TPartitionId id, ui64 tabletId);
-    std::unique_ptr<TEvPQ::TEvSourceIdRequest> CreateRequest(TPartitionId id) const;
-
 
 private:
     TPartition& Partition;
-
-    TSourceIds UnknownSourceIds;
-    TSourceIds PendingSourceIds;
-
-    std::unordered_map<TString, TSourceInfo> Sources;
-
-    ui64 Cookie = 0;
-    std::set<ui64> PendingCookies;
-    std::vector<TEvPQ::TEvSourceIdResponse::TPtr> Responses;
-    std::unordered_map<TPartitionId, TActorId> RequesterActors;
 };
-
-NKikimrPQ::TEvSourceIdResponse::EState Convert(TSourceIdInfo::EState value);
-TSourceIdInfo::EState Convert(NKikimrPQ::TEvSourceIdResponse::EState value);
 
 } // namespace NKikimr::NPQ

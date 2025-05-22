@@ -1,5 +1,5 @@
 #include <Python.h>
-#include <contrib/tools/python3/src/Include/internal/pycore_runtime.h> // _PyRuntime_Initialize()
+#include <contrib/tools/python3/Include/internal/pycore_runtime.h> // _PyRuntime_Initialize()
 
 #include <stdlib.h>
 #include <string.h>
@@ -74,12 +74,36 @@ static int RunModule(const char* modname)
     return 0;
 }
 
-static int pymain(int argc, char** argv) {
+#ifdef MS_WINDOWS
+static int pymain(int argc, wchar_t** argv)
+#else
+static int pymain(int argc, char** argv)
+#endif
+{
+    PyStatus status;
+
     if (IsYaIdeVenv()) {
+#ifdef MS_WINDOWS
+        return Py_Main(argc, argv);
+#else
         return Py_BytesMain(argc, argv);
+#endif
     }
 
-    PyStatus status = _PyRuntime_Initialize();
+    status = _PyRuntime_Initialize();
+    if (PyStatus_Exception(status)) {
+        Py_ExitStatusException(status);
+    }
+
+    PyPreConfig preconfig;
+    PyPreConfig_InitPythonConfig(&preconfig);
+    // Enable UTF-8 mode for all (DEVTOOLSSUPPORT-46624)
+    preconfig.utf8_mode = 1;
+#ifdef MS_WINDOWS
+    preconfig.legacy_windows_fs_encoding = 0;
+#endif
+
+    status = Py_PreInitialize(&preconfig);
     if (PyStatus_Exception(status)) {
         Py_ExitStatusException(status);
     }
@@ -100,12 +124,20 @@ static int pymain(int argc, char** argv) {
     }
 
     if (argc > 0 && argv) {
+#ifdef MS_WINDOWS
+        status = PyConfig_SetString(&config, &config.program_name, argv[0]);
+#else
         status = PyConfig_SetBytesString(&config, &config.program_name, argv[0]);
+#endif
         if (PyStatus_Exception(status)) {
             goto error;
         }
 
+#ifdef MS_WINDOWS
+        status = PyConfig_SetArgv(&config, argc, argv);
+#else
         status = PyConfig_SetBytesArgv(&config, argc, argv);
+#endif
         if (PyStatus_Exception(status)) {
             goto error;
         }
@@ -140,7 +172,11 @@ static int pymain(int argc, char** argv) {
     }
 
     if (entry_point_copy && !strcmp(entry_point_copy, main_entry_point)) {
+#ifdef MS_WINDOWS
+        sts = Py_Main(argc, argv);
+#else
         sts = Py_BytesMain(argc, argv);
+#endif
         free(entry_point_copy);
         return sts;
     }
@@ -202,8 +238,16 @@ error:
     return sts;
 }
 
+#ifdef MS_WINDOWS
+int (*mainptr)(int argc, wchar_t** argv) = pymain;
+
+int wmain(int argc, wchar_t** argv) {
+    return mainptr(argc, argv);
+}
+#else
 int (*mainptr)(int argc, char** argv) = pymain;
 
 int main(int argc, char** argv) {
     return mainptr(argc, argv);
 }
+#endif

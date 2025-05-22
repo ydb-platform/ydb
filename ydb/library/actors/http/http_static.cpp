@@ -16,44 +16,44 @@ public:
     const TFsPath URL;
     const TFsPath FilePath;
     const TFsPath ResourcePath;
-    const TFsPath Index;
+    TUrlAdapter UrlAdapter;
 
-    THttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, const TString& index)
+    THttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, TUrlAdapter&& urlAdapter)
         : TBase(&THttpStaticContentHandler::StateWork)
         , URL(url)
         , FilePath(filePath)
         , ResourcePath(resourcePath)
-        , Index(index)
+        , UrlAdapter(std::move(urlAdapter))
     {}
 
     static constexpr char ActorName[] = "HTTP_STATIC_ACTOR";
 
     static TInstant GetCompileTime() {
-        tm compileTime;
+        tm compileTime = {};
         strptime(__DATE__ " " __TIME__, "%B %d %Y %H:%M:%S", &compileTime);
         return TInstant::Seconds(mktime(&compileTime));
     }
 
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& event) {
         THttpOutgoingResponsePtr response;
         if (event->Get()->Request->Method != "GET") {
             response = event->Get()->Request->CreateResponseBadRequest("Wrong request");
-            ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+            Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
             return;
         }
         TFsPath url(event->Get()->Request->URL.Before('?'));
         if (!url.IsAbsolute()) {
             response = event->Get()->Request->CreateResponseBadRequest("Completely wrong URL");
-            ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+            Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
             return;
         }
-        if (url.GetPath().EndsWith('/') && Index.IsDefined()) {
-            url /= Index;
+        if (UrlAdapter) {
+            UrlAdapter(url);
         }
         url = url.RelativeTo(URL);
         try {
             // TODO: caching?
-            TString contentType = mimetypeByExt(url.GetExtension().c_str());
+            TString contentType = mimetypeByExt(url.GetName().c_str());
             TString data;
             TFileStat filestat;
             TFsPath resourcename(ResourcePath / url);
@@ -64,7 +64,7 @@ public:
                 TFsPath filename(FilePath / url);
                 if (!filename.IsSubpathOf(FilePath) && filename != FilePath) {
                     response = event->Get()->Request->CreateResponseBadRequest("Wrong URL");
-                    ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+                    Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
                     return;
                 }
                 if (filename.Stat(filestat) && filestat.IsFile()) {
@@ -80,18 +80,26 @@ public:
         catch (const yexception&) {
             response = event->Get()->Request->CreateResponseServiceUnavailable("Not available");
         }
-        ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+        Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
 
-    STFUNC(StateWork) {
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
         }
     }
 };
 
+NActors::IActor* CreateHttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, TUrlAdapter&& urlAdapter) {
+    return new THttpStaticContentHandler(url, filePath, resourcePath, std::move(urlAdapter));
+}
+
 NActors::IActor* CreateHttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, const TString& index) {
-    return new THttpStaticContentHandler(url, filePath, resourcePath, index);
+    return CreateHttpStaticContentHandler(url, filePath, resourcePath, [index](TFsPath& url) {
+        if (url.GetPath().EndsWith('/') && index) {
+            url /= index;
+        }
+    });
 }
 
 }

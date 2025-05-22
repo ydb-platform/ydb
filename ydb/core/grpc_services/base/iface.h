@@ -14,6 +14,11 @@ class TUserToken;
 }
 namespace NKikimr {
 
+namespace NRpcService {
+struct  TRlPath;
+
+}
+
 namespace NGRpcService {
 
 using TAuditLogParts = TVector<std::pair<TString, TString>>;
@@ -34,6 +39,15 @@ public:
     virtual bool IsInternalCall() const {
         return false;
     }
+    // Meta value from request
+    virtual const TMaybe<TString> GetPeerMetaValues(const TString&) const = 0;
+    // Return address of the peer
+    virtual TString GetPeerName() const = 0;
+    virtual const TString& GetRequestName() const = 0;
+    // Returns path and resource for rate limiter
+    virtual TMaybe<NRpcService::TRlPath> GetRlPath() const = 0;
+    // Return deadile of request execution, calculated from client timeout by grpc
+    virtual TInstant GetDeadline() const = 0;
 };
 
 

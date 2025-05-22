@@ -65,7 +65,7 @@ NActors::TActorId CreateFakeMetering(NActors::TTestActorRuntime &runtime) {
 
 TTestContext::TTestContext()
     : TabletType(TTabletTypes::Kesus)
-    , TabletId(MakeTabletID(0, 0, 1))
+    , TabletId(MakeTabletID(false, 1))
 {}
 
 void TTestContext::Setup(ui32 nodeCount, bool useRealThreads) {
@@ -188,9 +188,14 @@ void TTestContext::SyncProxy(const TActorId& proxy, ui64 generation, bool useTra
     ExpectEdgeEvent<TEvKesus::TEvDummyResponse>(proxy, cookie);
 }
 
-NKikimrKesus::TEvRegisterProxyResult TTestContext::RegisterProxy(const TActorId& proxy, ui64 generation) {
+ui64 TTestContext::SendRegisterProxy(const TActorId& proxy, ui64 generation) {
     ui64 cookie = RandomNumber<ui64>();
     SendFromProxy(proxy, generation, new TEvKesus::TEvRegisterProxy("", generation), cookie);
+    return cookie;
+}
+
+NKikimrKesus::TEvRegisterProxyResult TTestContext::RegisterProxy(const TActorId& proxy, ui64 generation) {
+    ui64 cookie = SendRegisterProxy(proxy, generation);
     auto result = ExpectEdgeEvent<TEvKesus::TEvRegisterProxyResult>(proxy, cookie);
     UNIT_ASSERT_VALUES_EQUAL(result->Record.GetProxyGeneration(), generation);
     return result->Record;

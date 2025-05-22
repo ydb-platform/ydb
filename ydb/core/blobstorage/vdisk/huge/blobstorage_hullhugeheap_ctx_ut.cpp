@@ -31,12 +31,11 @@ namespace NKikimr {
                     cfg.MaxLogoBlobDataSize,
                     cfg.HugeBlobOverhead,
                     cfg.HugeBlobsFreeChunkReservation,
-                    cfg.HugeBlobOldMapCompatible,
                     logFunc);
 
-            return std::make_shared<THugeBlobCtx>(
-                    repairedHuge->GetMinREALHugeBlobInBytes(),
-                    repairedHuge->Heap->BuildHugeSlotsMap());
+            return std::make_shared<THugeBlobCtx>("",
+                    repairedHuge->Heap->BuildHugeSlotsMap(),
+                    true);
         }
 
 

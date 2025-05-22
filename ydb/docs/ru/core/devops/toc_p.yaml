@@ -1,0 +1,23 @@
+items:
+- name: Концепции
+  href: concepts/index.md
+  include:
+    mode: link
+    path: concepts/toc_p.yaml
+- name: Управление конфигурацией кластера
+  href: configuration-management/index.md
+  include:
+    mode: link
+    path: configuration-management/toc_p.yaml
+- name: Способы развёртывания
+  href: deployment-options/index.md
+  include:
+    mode: link
+    path: deployment-options/toc_p.yaml
+- name: Наблюдаемость
+  href: observability/index.md
+  include:
+    mode: link
+    path: observability/toc_p.yaml
+- name: Резервное копирование и восстановление
+  href: backup-and-recovery.md

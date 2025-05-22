@@ -912,7 +912,6 @@ namespace {
         THttpConnManager()
             : TotalConn(0)
             , EP_(THttp2Options::AsioThreads)
-            , InPurging_(0)
             , MaxConnId_(0)
             , Shutdown_(false)
         {
@@ -1011,7 +1010,7 @@ namespace {
         }
 
         void SuggestPurgeCache() {
-            if (AtomicTryLock(&InPurging_)) {
+            if (InPurging_.TryAcquire()) {
                 //evaluate the usefulness of purging the cache
                 //если в кеше мало соединений (< MaxConnId_/16 или 64), не чистим кеш
                 if (Cache_.Size() > (Min((size_t)AtomicGet(MaxConnId_), (size_t)1024U) >> 4)) {
@@ -1031,7 +1030,7 @@ namespace {
                         return; //memo: thread MUST unlock InPurging_ (see DoExecute())
                     }
                 }
-                AtomicUnlock(&InPurging_);
+                InPurging_.Release();
             }
         }
 
@@ -1049,7 +1048,7 @@ namespace {
 
                 PurgeCache();
 
-                AtomicUnlock(&InPurging_);
+                InPurging_.Release();
             }
         }
 
@@ -1076,7 +1075,7 @@ namespace {
         TExecutorsPool EP_;
 
         TConnCache<THttpConn> Cache_;
-        TAtomic InPurging_;
+        TSpinLock InPurging_;
         TAtomic MaxConnId_;
 
         TAutoPtr<IThreadFactory::IThread> T_;
@@ -1230,7 +1229,7 @@ namespace {
     void THttpRequest::OnResponse(TAutoPtr<THttpParser>& rsp) {
         DBGOUT("THttpRequest::OnResponse()");
         ReleaseConn();
-        if (Y_LIKELY(((rsp->RetCode() >= 200 && rsp->RetCode() < (!THttp2Options::RedirectionNotError ? 300 : 400)) || THttp2Options::AnyResponseIsNotError))) {
+        if (Y_LIKELY(((rsp->RetCode() >= 200u && rsp->RetCode() < (!THttp2Options::RedirectionNotError ? 300u : 400u)) || THttp2Options::AnyResponseIsNotError))) {
             NotifyResponse(rsp->DecodedContent(), rsp->FirstLine(), rsp->Headers());
         } else {
             TString message;

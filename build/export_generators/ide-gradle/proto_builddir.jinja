@@ -1,0 +1,5 @@
+{%- include "[generator]/builddir.jinja" %}
+val mainProtosDir = File(buildDir, "main_protos")
+{%- if extractLibrariesProtosTask %}
+val mainExtractedIncludeProtosDir = File(buildDir, "extracted-include-protos/main")
+{%- endif %}

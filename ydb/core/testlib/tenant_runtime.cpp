@@ -1,20 +1,26 @@
 #include "tenant_runtime.h"
 
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/feature_flags_configurator.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/labels_maintainer.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/persqueue/pq.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/statistics/aggregator/aggregator.h>
+#include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
-#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -22,9 +28,6 @@
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/sys_view/processor/processor.h>
-#include <ydb/core/persqueue/pq.h>
-#include <ydb/core/statistics/aggregator/aggregator.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
@@ -39,9 +42,9 @@ using namespace NSchemeShard;
 using namespace NConsole;
 using namespace NTenantSlotBroker;
 
-const ui64 SCHEME_SHARD1_ID = 0x0000000000840100;
-const ui64 SCHEME_SHARD2_ID = 0x0000000000840101;
-const ui64 HIVE_ID = 0x0000000000840102;
+const ui64 SCHEME_SHARD1_ID = MakeTabletID(false, 0x0000000000840100);
+const ui64 SCHEME_SHARD2_ID = MakeTabletID(false, 0x0000000000840101);
+const ui64 HIVE_ID = MakeTabletID(false, 0x0000000000840102);
 
 const TString DOMAIN1_NAME = "dc-1";
 const TString TENANT1_1_NAME = "/dc-1/users/tenant-1";
@@ -392,7 +395,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
     {
         TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
                                                                                        TMailboxType::Simple, 0)));
-        return ctx.ExecutorThread.RegisterActor(CreateBootstrapper(CreateTestTabletInfo(State.NextTabletId, tabletType, erasure), bi.Get()));
+        return ctx.Register(CreateBootstrapper(CreateTestTabletInfo(State.NextTabletId, tabletType, erasure), bi.Get()));
     }
 
     void SendDeletionNotification(ui64 tabletId, TActorId waiter, const TActorContext& ctx)
@@ -820,9 +823,13 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     TAppPrepare app;
 
     app.FeatureFlags = Extension.GetFeatureFlags();
+    app.ImmediateControlsConfig = Extension.GetImmediateControlsConfig();
     app.ClearDomainsAndHive();
 
     ui32 planResolution = 500;
+
+    Y_ABORT_UNLESS(Config.Domains.size() == 1);
+
     // Add domains info.
     for (ui32 i = 0; i < Config.Domains.size(); ++i) {
         auto &domain = Config.Domains[i];
@@ -837,12 +844,10 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         poolTypes["hdd-2"] = hddPool;
         poolTypes["hdd-3"] = hddPool;
         auto domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domain.Name, i, domain.SchemeShardId,
-                                                                i, i, TVector<ui32>{i},
-                                                                i, TVector<ui32>{i},
                                                                 planResolution,
-                                                                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(i, 1)},
-                                                                TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(i, 1)},
-                                                                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(i, 1)},
+                                                                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
+                                                                TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(1)},
+                                                                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)},
                                                                 poolTypes);
 
         TVector<ui64> ids = GetTxAllocatorTabletIds();
@@ -850,10 +855,12 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         SetTxAllocatorTabletIds(ids);
 
         app.AddDomain(domainPtr.Release());
-        app.AddHive(i, Config.HiveId);
+        app.AddHive(Config.HiveId);
     }
 
-    for (size_t i = 0; i< Config.Nodes.size(); ++i) {
+    app.InitIcb(Config.Nodes.size());
+
+    for (size_t i = 0; i < Config.Nodes.size(); ++i) {
         AddLocalService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetNodeId(i)),
                         TActorSetupCmd(new TFakeNodeWhiteboardService, TMailboxType::Simple, 0), i);
     }
@@ -865,8 +872,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         Register(NTabletMonitoringProxy::CreateTabletMonitoringProxy());
     }
 
-    for (auto &pr : GetAppData().DomainsInfo->Domains) {
-        auto &domain = pr.second;
+    if (const auto& domain = GetAppData().DomainsInfo->Domain) {
         for (auto id : domain->TxAllocators) {
             auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::TxAllocator), &CreateTxAllocator);
             EnableScheduleForActor(aid, true);
@@ -977,7 +983,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create BS Controller.
     {
-        auto info = CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::BSController);
+        auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
         TActorId actorId = CreateTestBootstrapper(*this, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
                 //return new TFakeBSController(tablet, info);
                 return CreateFlatBsController(tablet, info);
@@ -1007,7 +1013,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        SendToPipe(MakeBSControllerID(0), Sender, request.Release(), 0, pipeConfig);
+        SendToPipe(MakeBSControllerID(), Sender, request.Release(), 0, pipeConfig);
 
         auto reply2 = GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply2->Record.GetResponse().GetSuccess(), true);
@@ -1034,9 +1040,19 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
                 labels[label.GetName()] = label.GetValue();
             }
             labels.emplace("node_id", ToString(i));
-            auto aid = Register(CreateConfigsDispatcher(Extension, labels));
+            auto aid = Register(CreateConfigsDispatcher(
+                    NKikimr::NConfig::TConfigsDispatcherInitInfo {
+                        .InitialConfig = Extension,
+                        .Labels = labels,
+                    }
+                ));
             EnableScheduleForActor(aid, true);
             RegisterService(MakeConfigsDispatcherID(GetNodeId(0)), aid, 0);
+            if (Config.RegisterFeatureFlagsConfigurator) {
+                RegisterService(
+                    MakeFeatureFlagsServiceID(),
+                    Register(CreateFeatureFlagsConfigurator()));
+            }
         }
 
         Register(NKikimr::CreateLabelsMaintainer(Extension.GetMonitoringConfig()),
@@ -1052,7 +1068,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create Console
     {
-        auto info = CreateTestTabletInfo(MakeConsoleID(0), TTabletTypes::Console, TErasureType::ErasureNone);
+        auto info = CreateTestTabletInfo(MakeConsoleID(), TTabletTypes::Console, TErasureType::ErasureNone);
         TActorId actorId = CreateTestBootstrapper(*this, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
                 return CreateConsole(tablet, info);
             });
@@ -1119,7 +1135,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create Tenant Slot Broker
     {
-        auto info = CreateTestTabletInfo(MakeTenantSlotBrokerID(0), TTabletTypes::TenantSlotBroker, TErasureType::ErasureNone);
+        auto info = CreateTestTabletInfo(MakeTenantSlotBrokerID(), TTabletTypes::TenantSlotBroker, TErasureType::ErasureNone);
         TActorId actorId = CreateTestBootstrapper(*this, info, [&config=this->Config](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
                 if (config.FakeTenantSlotBroker)
                     return new TFakeTenantSlotBroker(tablet, info);
@@ -1145,6 +1161,8 @@ TTenantTestRuntime::TTenantTestRuntime(const TTenantTestConfig &config,
     , Extension(extension)
 {
     Extension.MutableFeatureFlags()->SetEnableExternalHive(false);
+    Extension.MutableFeatureFlags()->SetEnableColumnStatistics(false);
+    Extension.MutableFeatureFlags()->SetEnableScaleRecommender(true);
     Setup(createTenantPools);
 }
 
@@ -1157,12 +1175,12 @@ void TTenantTestRuntime::WaitForHiveState(const TVector<TEvTest::TEvWaitHiveStat
 
 void TTenantTestRuntime::SendToBroker(IEventBase* event)
 {
-    SendToPipe(MakeTenantSlotBrokerID(0), Sender, event, 0, GetPipeConfigWithRetries());
+    SendToPipe(MakeTenantSlotBrokerID(), Sender, event, 0, GetPipeConfigWithRetries());
 }
 
 void TTenantTestRuntime::SendToConsole(IEventBase* event)
 {
-    SendToPipe(MakeConsoleID(0), Sender, event, 0, GetPipeConfigWithRetries());
+    SendToPipe(MakeConsoleID(), Sender, event, 0, GetPipeConfigWithRetries());
 }
 
 NKikimrTenantPool::TSlotStatus MakeSlotStatus(const TString &id, const TString &type, const TString &tenant,
@@ -1179,11 +1197,11 @@ NKikimrTenantPool::TSlotStatus MakeSlotStatus(const TString &id, const TString &
     return res;
 }
 
-void CheckTenantPoolStatus(TTenantTestRuntime &runtime, ui32 domain,
+void CheckTenantPoolStatus(TTenantTestRuntime &runtime,
                            THashMap<TString, NKikimrTenantPool::TSlotStatus> status,
                            ui32 nodeId)
 {
-    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeId), domain),
+    runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(nodeId)),
                                   runtime.Sender,
                                   new TEvTenantPool::TEvGetStatus));
     TAutoPtr<IEventHandle> handle;

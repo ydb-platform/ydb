@@ -152,7 +152,7 @@ void TDynamicTableTransactionMixin::LockRows(
     const NYPath::TYPath& path,
     TNameTablePtr nameTable,
     TSharedRange<TLegacyKey> keys,
-    const std::vector<TString>& locks,
+    const std::vector<std::string>& locks,
     ELockType lockType)
 {
     const auto& tableMountCache = GetClient()->GetTableMountCache();

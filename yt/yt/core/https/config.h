@@ -10,12 +10,12 @@ namespace NYT::NHttps {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerCredentialsConfig
+struct TServerCredentialsConfig
     : public NYTree::TYsonStruct
 {
-public:
     NCrypto::TPemBlobConfigPtr PrivateKey;
     NCrypto::TPemBlobConfigPtr CertChain;
+    TDuration UpdatePeriod;
 
     REGISTER_YSON_STRUCT(TServerCredentialsConfig);
 
@@ -26,10 +26,9 @@ DEFINE_REFCOUNTED_TYPE(TServerCredentialsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerConfig
+struct TServerConfig
     : public NHttp::TServerConfig
 {
-public:
     TServerCredentialsConfigPtr Credentials;
 
     REGISTER_YSON_STRUCT(TServerConfig);
@@ -41,10 +40,9 @@ DEFINE_REFCOUNTED_TYPE(TServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TClientCredentialsConfig
+struct TClientCredentialsConfig
     : public NYTree::TYsonStruct
 {
-public:
     NCrypto::TPemBlobConfigPtr PrivateKey;
     NCrypto::TPemBlobConfigPtr CertChain;
 
@@ -57,10 +55,9 @@ DEFINE_REFCOUNTED_TYPE(TClientCredentialsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TClientConfig
+struct TClientConfig
     : public NHttp::TClientConfig
 {
-public:
     // If missing then builtin certificate store is used.
     TClientCredentialsConfigPtr Credentials;
 

@@ -13,9 +13,7 @@
 // limitations under the License.
 #include "y_absl/status/status_payload_printer.h"
 
-#include <atomic>
-
-#include "y_absl/base/attributes.h"
+#include "y_absl/base/config.h"
 #include "y_absl/base/internal/atomic_hook.h"
 
 namespace y_absl {

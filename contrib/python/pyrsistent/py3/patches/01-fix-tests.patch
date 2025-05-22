@@ -1,0 +1,37 @@
+--- contrib/python/pyrsistent/py3/tests/checked_map_test.py	(index)
++++ contrib/python/pyrsistent/py3/tests/checked_map_test.py	(working tree)
+@@ -127,8 +127,8 @@ class FloatVector(CheckedPVector):
+ 
+ 
+ class VectorToSetMap(CheckedPMap):
+-    __key_type__ = 'checked_map_test.FloatVector'
+-    __value_type__ = 'checked_map_test.FloatSet'
++    __key_type__ = '__tests__.checked_map_test.FloatVector'
++    __value_type__ = '__tests__.checked_map_test.FloatSet'
+ 
+ 
+ def test_type_check_with_string_specification():
+--- contrib/python/pyrsistent/py3/tests/checked_vector_test.py	(index)
++++ contrib/python/pyrsistent/py3/tests/checked_vector_test.py	(working tree)
+@@ -184,7 +184,7 @@ def test_multiple_optional_types():
+ 
+ 
+ class NaturalsVectorStr(CheckedPVector):
+-    __type__ = 'checked_vector_test.Naturals'
++    __type__ = '__tests__.checked_vector_test.Naturals'
+ 
+ 
+ def test_check_with_string_specification():
+--- contrib/python/pyrsistent/py3/tests/class_test.py	(index)
++++ contrib/python/pyrsistent/py3/tests/class_test.py	(working tree)
+@@ -271,8 +271,8 @@ class Numbers(CheckedPVector):
+ 
+ 
+ class LinkedList(PClass):
+-    value = field(type='class_test.Numbers')
+-    next = field(type=optional('class_test.LinkedList'))
++    value = field(type='__tests__.class_test.Numbers')
++    next = field(type=optional('__tests__.class_test.LinkedList'))
+ 
+ 
+ def test_string_as_type_specifier():

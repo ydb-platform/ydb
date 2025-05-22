@@ -3,7 +3,7 @@
 with my_customers as (
  select distinct c_customer_sk
         , c_current_addr_sk
- from   
+ from
         ( select cs_sold_date_sk sold_date_sk,
                  cs_bill_customer_sk customer_sk,
                  cs_item_sk item_sk
@@ -19,11 +19,11 @@ with my_customers as (
          {{customer}}
  where   sold_date_sk = d_date_sk
          and item_sk = i_item_sk
-         and i_category = 'Jewelry'
-         and i_class = 'consignment'
+         and i_category = 'Women'
+         and i_class = 'maternity'
          and c_customer_sk = cs_or_ws_sales.customer_sk
-         and d_moy = 3
-         and d_year = 1999
+         and d_moy = 12
+         and d_year = 2000
  )
  , my_revenue as (
  select c_customer_sk,
@@ -39,13 +39,13 @@ with my_customers as (
         and ss_sold_date_sk = d_date_sk
         and c_customer_sk = ss_customer_sk
         and d_month_seq between (select distinct d_month_seq+1
-                                 from   {{date_dim}} where d_year = 1999 and d_moy = 3)
+                                 from   {{date_dim}} where d_year = 1998 and d_moy = 12)
                            and  (select distinct d_month_seq+3
-                                 from   {{date_dim}} where d_year = 1999 and d_moy = 3)
+                                 from   {{date_dim}} where d_year = 1998 and d_moy = 12)
  group by c_customer_sk
  )
  , segments as
- (select cast((revenue/50::numeric) as int) as segment
+ (select cast((revenue/50) as int) as segment
   from   my_revenue
  )
   select  segment, count(*) as num_customers, segment*50 as segment_base

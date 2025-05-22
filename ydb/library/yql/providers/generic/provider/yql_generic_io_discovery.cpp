@@ -1,11 +1,13 @@
 #include "yql_generic_provider_impl.h"
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include "yql_generic_utils.h"
+
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -91,6 +93,7 @@ namespace NYql {
                     for (const auto& [databaseIdWithType, databaseDescription] : response.DatabaseDescriptionMap) {
                         YQL_CLOG(INFO, ProviderGeneric) << "resolved database id into endpoint"
                                                         << ": databaseId=" << databaseIdWithType.first
+                                                        << ", databaseKind=" << databaseIdWithType.second
                                                         << ", host=" << databaseDescription.Host
                                                         << ", port=" << databaseDescription.Port;
                     }
@@ -157,7 +160,10 @@ namespace NYql {
 
                         if (clusterConfigIter == clusterNamesToClusterConfigs.end()) {
                             TIssues issues;
-                            issues.AddIssue(TStringBuilder() << "no cluster names for database id " << databaseIdWithType.first << " and cluster name " << clusterName);
+                            issues.AddIssue(TStringBuilder() << "no cluster names for database id "
+                                                             << databaseIdWithType.first
+                                                             << " and cluster name "
+                                                             << clusterName);
                             ctx.IssueManager.AddIssues(issues);
                             return TStatus::Error;
                         }
@@ -165,6 +171,15 @@ namespace NYql {
                         auto endpointDst = clusterConfigIter->second.mutable_endpoint();
                         endpointDst->set_host(databaseDescription.Host);
                         endpointDst->set_port(databaseDescription.Port);
+
+                        // If we work with managed YDB, we find out database name
+                        // only after database id (== cluster id) resolving.
+                        if (clusterConfigIter->second.kind() == NYql::EGenericDataSourceKind::YDB) {
+                            clusterConfigIter->second.set_databasename(databaseDescription.Database);
+                        }
+
+                        YQL_CLOG(INFO, ProviderGeneric) << "ModifyClusterConfigs: "
+                                                        << DumpGenericClusterConfig(clusterConfigIter->second);
                     }
                 }
 
@@ -175,10 +190,10 @@ namespace NYql {
             TDatabaseResolverResponse::TDatabaseDescriptionMap DatabaseDescriptions_;
             NThreading::TFuture<void> AsyncFuture_;
         };
-    }
+    } // namespace
 
     THolder<IGraphTransformer> CreateGenericIODiscoveryTransformer(TGenericState::TPtr state) {
         return THolder(new TGenericIODiscoveryTransformer(std::move(state)));
     }
 
-}
+} // namespace NYql

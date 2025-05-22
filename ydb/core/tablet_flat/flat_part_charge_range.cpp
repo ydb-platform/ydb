@@ -5,7 +5,7 @@ namespace NKikimr::NTable {
 
 bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
-            ui64 items, ui64 bytes, bool includeHistory) noexcept
+            ui64 items, ui64 bytes, bool includeHistory)
 {
     bool ready = true;
     auto pos = run.LowerBound(key1);
@@ -40,8 +40,8 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
             if (r.Overshot && ++pos != run.end()) {
                 // Unfortunately first key > key2 might be at the start of the next slice
                 TRowId firstRow = pos->Slice.BeginRowId();
-                // Precharge the first row on the next slice
-                ready &= CreateCharge(env, *pos->Part, tags, includeHistory)->Do(firstRow, firstRow, keyDefaults, items, bytes);
+                // Precharge the first row main key on the next slice
+                ready &= CreateCharge(env, *pos->Part, { }, false)->Do(firstRow, firstRow, keyDefaults, items, bytes);
             }
 
             break;
@@ -57,7 +57,7 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
 
 bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
-            ui64 items, ui64 bytes, bool includeHistory) noexcept
+            ui64 items, ui64 bytes, bool includeHistory)
 {
     bool ready = true;
     auto pos = run.LowerBoundReverse(key1);
@@ -98,8 +98,8 @@ bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
                 --pos;
                 // Unfortunately first key <= key2 might be at the end of the previous slice
                 TRowId lastRow = pos->Slice.EndRowId() - 1;
-                // Precharge the last row on the previous slice
-                ready &= CreateCharge(env, *pos->Part, tags, includeHistory)->DoReverse(lastRow, lastRow, keyDefaults, items, bytes);
+                // Precharge the last row main key on the previous slice
+                ready &= CreateCharge(env, *pos->Part, { }, false)->DoReverse(lastRow, lastRow, keyDefaults, items, bytes);
             }
 
             break;

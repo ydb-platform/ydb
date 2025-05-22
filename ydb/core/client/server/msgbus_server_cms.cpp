@@ -31,28 +31,17 @@ public:
         , Request(request)
     {
         TBase::SetSecurityToken(request.GetSecurityToken());
+        TBase::SetPeerName(msg.GetPeerName());
     }
 
     void Bootstrap(const TActorContext &ctx)
     {
         auto dinfo = AppData(ctx)->DomainsInfo;
 
-        if (Request.HasDomainName()) {
-            auto *domain = dinfo->GetDomainByName(Request.GetDomainName());
-            if (!domain) {
-                auto error = Sprintf("Unknown domain %s", Request.GetDomainName().data());
-                ReplyWithErrorAndDie(error, ctx);
-                return;
-            }
-            StateStorageGroup = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
-        } else {
-            if (dinfo->Domains.size() > 1) {
-                auto error = "Ambiguous domain (use --domain option)";
-                ReplyWithErrorAndDie(error, ctx);
-            }
-
-            auto domain = dinfo->Domains.begin()->second;
-            StateStorageGroup = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
+        if (Request.HasDomainName() && (!dinfo->Domain || dinfo->GetDomain()->Name != Request.GetDomainName())) {
+            auto error = Sprintf("Unknown domain %s", Request.GetDomainName().data());
+            ReplyWithErrorAndDie(error, ctx);
+            return;
         }
 
         SendRequest(ctx);
@@ -63,7 +52,7 @@ public:
     {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
-        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(StateStorageGroup), pipeConfig);
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeCmsID(), pipeConfig);
         CmsPipe = ctx.RegisterWithSameMailbox(pipe);
 
         LOG_DEBUG(ctx, NKikimrServices::CMS, "Forwarding CMS request: %s",
@@ -290,7 +279,6 @@ public:
 private:
     NKikimrClient::TCmsRequest Request;
     NKikimrClient::TCmsResponse Response;
-    ui32 StateStorageGroup = 0;
     TActorId CmsPipe;
 };
 

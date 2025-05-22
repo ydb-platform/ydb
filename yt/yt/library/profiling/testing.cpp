@@ -32,6 +32,12 @@ TDuration TTesting::ReadTimeCounter(const TTimeCounter& counter)
     return counter.Counter_->GetValue();
 }
 
+THistogramSnapshot TTesting::ReadRateHistogram(const TRateHistogram& histogram)
+{
+    Y_ENSURE(histogram.Histogram_, "Histogram is not registered");
+    return histogram.Histogram_->GetSnapshot(false);
+}
+
 const TSensorOptions& TTesting::ReadOptions(const TProfiler& profiler) {
     return profiler.Options_;
 }

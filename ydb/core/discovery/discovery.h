@@ -59,6 +59,7 @@ namespace NDiscovery {
         const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&,
         TMap<TActorId, TEvStateStorage::TBoardInfoEntry>,
         TSet<TString>,
+        TString,
         const THolder<TEvInterconnect::TEvNodeInfo>&);
 }
 
@@ -74,6 +75,6 @@ IActor* CreateDiscoverer(
     const TActorId& cacheId);
 
 // Used to reduce number of requests to Board
-IActor* CreateDiscoveryCache();
+IActor* CreateDiscoveryCache(const TString& endpointId = {});
 
 }

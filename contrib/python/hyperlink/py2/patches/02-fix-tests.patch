@@ -1,0 +1,53 @@
+--- contrib/python/hyperlink/py2/hyperlink/test/test_decoded_url.py	(index)
++++ contrib/python/hyperlink/py2/hyperlink/test/test_decoded_url.py	(working tree)
+@@ -3,8 +3,8 @@
+ from __future__ import unicode_literals
+ 
+ from typing import Dict, Union
+-from .. import DecodedURL, URL
+-from .._url import _percent_decode
++from hyperlink import DecodedURL, URL
++from hyperlink._url import _percent_decode
+ from .common import HyperlinkTestCase
+ 
+ BASIC_URL = "http://example.com/#"
+--- contrib/python/hyperlink/py2/hyperlink/test/test_hypothesis.py	(index)
++++ contrib/python/hyperlink/py2/hyperlink/test/test_hypothesis.py	(working tree)
+@@ -24,8 +24,8 @@ else:
+     from idna import IDNAError, check_label, encode as idna_encode
+ 
+     from .common import HyperlinkTestCase
+-    from .. import DecodedURL, EncodedURL
+-    from ..hypothesis import (
++    from hyperlink import DecodedURL, EncodedURL
++    from hyperlink.hypothesis import (
+         DrawCallable,
+         composite,
+         decoded_urls,
+--- contrib/python/hyperlink/py2/hyperlink/test/test_scheme_registration.py	(index)
++++ contrib/python/hyperlink/py2/hyperlink/test/test_scheme_registration.py	(working tree)
+@@ -3,9 +3,9 @@ from __future__ import unicode_literals
+ from typing import cast
+ 
+ 
+-from .. import _url
++from hyperlink import _url
+ from .common import HyperlinkTestCase
+-from .._url import register_scheme, URL, DecodedURL
++from hyperlink._url import register_scheme, URL, DecodedURL
+ 
+ 
+ class TestSchemeRegistration(HyperlinkTestCase):
+--- contrib/python/hyperlink/py2/hyperlink/test/test_url.py	(index)
++++ contrib/python/hyperlink/py2/hyperlink/test/test_url.py	(working tree)
+@@ -10,8 +10,8 @@ import socket
+ from typing import Any, Iterable, Optional, Text, Tuple, cast
+ 
+ from .common import HyperlinkTestCase
+-from .. import URL, URLParseError
+-from .._url import inet_pton, SCHEME_PORT_MAP
++from hyperlink import URL, URLParseError
++from hyperlink._url import inet_pton, SCHEME_PORT_MAP
+ 
+ 
+ PY2 = sys.version_info[0] == 2

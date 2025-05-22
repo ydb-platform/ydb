@@ -35,6 +35,7 @@ public:
     NHttp::THttpIncomingRequestPtr GetHttpRequest() const;
     TString GetContentType() const;
     TString GetIdempotencyKey() const;
+    TString GetPeer() const;
 
 private:
     void ParseHeaders(TStringBuf headers);

@@ -65,7 +65,6 @@ void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx
         Self->SendCommittedReplies(std::move(Replies));
     }
     Self->CheckSplitCanStart(ctx);
-    Self->CheckMvccStateChangeCanStart(ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, const TActorContext &ctx) {

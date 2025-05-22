@@ -12,11 +12,12 @@ SRCS(
     kqp_opt_log_sqlin.cpp
     kqp_opt_log_sqlin_compact.cpp
     kqp_opt_log.cpp
+    kqp_opt_cbo.cpp
 )
 
 PEERDIR(
     ydb/core/kqp/common
-    ydb/library/yql/core/extract_predicate
+    yql/essentials/core/extract_predicate
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
 )

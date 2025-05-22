@@ -3,7 +3,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/map.h>
 
-#include <ydb/library/yql/core/file_storage/file_storage.h>
+#include <yql/essentials/core/file_storage/file_storage.h>
 
 namespace NYql {
 
@@ -32,6 +32,14 @@ public:
 using IDqControlFactoryPtr = TIntrusivePtr<IDqControlFactory>;
 
 IDqControlFactoryPtr CreateDqControlFactory(const NProto::TDqConfig& config, const TMap<TString, TString>& udfs, const TFileStoragePtr& fileStorage);
+IDqControlFactoryPtr CreateDqControlFactory(
+    const uint32_t port,
+    const TString& vanillaJobLite,
+    const TString& vanillaJobLiteMd5,
+    const bool enableStrip,
+    const THashSet<TString> indexedUdfFilter,
+    const TMap<TString, TString>& udfs,
+    const TFileStoragePtr& fileStorage);
 
 extern const TString DqStrippedSuffied;
 

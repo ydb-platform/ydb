@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Execution
+
+    <tmp_path>/program.sql:<main>:4:1: Error: Execution of node: Result
+    	SELECT Yson::ConvertTo(Yson('{}'), String)
+	^
+        <tmp_path>/program.sql:<main>:4:14: Error: Failed to convert Yson DOM into strict type: String
+        	SELECT Yson::ConvertTo(Yson('{}'), String)
+	             ^

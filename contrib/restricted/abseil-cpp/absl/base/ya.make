@@ -6,6 +6,8 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(20250127.1)
+
 PEERDIR(
     library/cpp/sanitizer/include
 )
@@ -21,6 +23,7 @@ NO_UTIL()
 SRCS(
     internal/cycleclock.cc
     internal/low_level_alloc.cc
+    internal/poison.cc
     internal/raw_logging.cc
     internal/scoped_set_env.cc
     internal/spinlock.cc
@@ -29,6 +32,7 @@ SRCS(
     internal/sysinfo.cc
     internal/thread_identity.cc
     internal/throw_delegate.cc
+    internal/tracing.cc
     internal/unscaledcycleclock.cc
     log_severity.cc
 )

@@ -2,6 +2,10 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-SRCS(version.go)
+VERSION(v1.36.5)
+
+SRCS(
+    version.go
+)
 
 END()

@@ -6,7 +6,7 @@
 
 #include <util/generic/ptr.h>
 
-namespace NSolomonStatExtension {
+namespace NSolomonStatExtension::inline V2 {
 
 template <typename TMetricRegistryPtr>
 class TMetricRegistryConnector: public NYdb::IExtension {

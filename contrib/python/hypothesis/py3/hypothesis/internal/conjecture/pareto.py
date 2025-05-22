@@ -133,9 +133,10 @@ class ParetoFront:
         """Attempts to add ``data`` to the pareto front. Returns True if
         ``data`` is now in the front, including if data is already in the
         collection, and False otherwise"""
-        data = data.as_result()
         if data.status < Status.VALID:
             return False
+
+        data = data.as_result()
 
         if not self.front:
             self.front.add(data)
@@ -178,8 +179,7 @@ class ParetoFront:
             failures = 0
             while i + 1 < len(front) and failures < 10:
                 j = self.__random.randrange(i + 1, len(front))
-                swap(front, j, len(front) - 1)
-                candidate = front.pop()
+                candidate = front.pop(j)
                 dom = dominance(data, candidate)
                 assert dom != DominanceRelation.RIGHT_DOMINATES
                 if dom == DominanceRelation.LEFT_DOMINATES:
@@ -317,7 +317,7 @@ class ParetoOptimiser:
                     # If ``destination`` dominates ``source`` then ``source``
                     # must be dominated in the front - either ``destination`` is in
                     # the front, or it was not added to it because it was
-                    # dominated by something in it.,
+                    # dominated by something in it.
                     try:
                         self.front.front.remove(source)
                     except ValueError:

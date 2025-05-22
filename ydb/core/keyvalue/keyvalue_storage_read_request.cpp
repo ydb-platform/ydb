@@ -14,7 +14,7 @@ namespace NKeyValue {
 #define STLOG_WITH_ERROR_DESCRIPTION(VARIABLE, PRIO, COMP, ...) \
     do { \
         VARIABLE += "\n"; \
-        STLOG_STREAM(__stream, 0, __VA_ARGS__); \
+        STLOG_STREAM(__stream, __VA_ARGS__); \
         const TString message = __stream.Str(); \
         VARIABLE += message; \
         const auto priority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
@@ -511,7 +511,7 @@ public:
         : IntermediateResult(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , TabletGeneration(tabletGeneration)
-        , Span(TWilsonTablet::Tablet, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")
+        , Span(TWilsonTablet::TabletBasic, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")
     {}
 };
 

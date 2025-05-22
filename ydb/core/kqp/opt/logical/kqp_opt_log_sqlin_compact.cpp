@@ -4,8 +4,8 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/common_opt/yql_co_sqlin.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/common_opt/yql_co_sqlin.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -120,6 +120,12 @@ TExprBase KqpRewriteSqlInCompactToJoin(const TExprBase& node, TExprContext& ctx)
         .Value(leftLabelStr)
         .Done().Ptr();
 
+    TVector<TCoAtom> leftJoinKeyNames;
+    TVector<TCoAtom> rightJoinKeyNames;
+
+    leftJoinKeyNames.emplace_back(leftColumn);
+    rightJoinKeyNames.emplace_back(rightColumn);
+
     auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, node.Pos())
         .Add<TDqJoinKeyTuple>()
             .LeftLabel(leftLabel)
@@ -149,6 +155,12 @@ TExprBase KqpRewriteSqlInCompactToJoin(const TExprBase& node, TExprContext& ctx)
             .Value("LeftSemi")
             .Build()
         .JoinKeys(joinKeys)
+        .LeftJoinKeyNames()
+            .Add(leftJoinKeyNames)
+            .Build()
+        .RightJoinKeyNames()
+            .Add(rightJoinKeyNames)
+            .Build()
         .Done();
 
     // Convert column names back, i.e. leftLabel.ColumnName -> ColumnName

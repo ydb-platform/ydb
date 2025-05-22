@@ -1,6 +1,10 @@
 #include "yaml_config.h"
 
+#include <ydb/library/yaml_config/yaml_config_parser.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <ydb/core/protos/key.pb.h>
 
 using namespace NKikimr;
 
@@ -1476,7 +1480,7 @@ metadata:
   version: 10
   cluster: foo
 )";
-            auto metadata = NYamlConfig::GetMetadata(str);
+            auto metadata = NYamlConfig::GetMainMetadata(str);
             UNIT_ASSERT_VALUES_EQUAL(*metadata.Version, 10);
             UNIT_ASSERT_VALUES_EQUAL(*metadata.Cluster, "foo");
         }
@@ -1486,7 +1490,7 @@ metadata:
 metadata:
   version: 10
 )";
-            auto metadata = NYamlConfig::GetMetadata(str);
+            auto metadata = NYamlConfig::GetMainMetadata(str);
             UNIT_ASSERT_VALUES_EQUAL(*metadata.Version, 10);
             UNIT_ASSERT(!metadata.Cluster);
         }
@@ -1496,7 +1500,7 @@ metadata:
 metadata:
   cluster: foo
 )";
-            auto metadata = NYamlConfig::GetMetadata(str);
+            auto metadata = NYamlConfig::GetMainMetadata(str);
             UNIT_ASSERT(!metadata.Version);
             UNIT_ASSERT_VALUES_EQUAL(*metadata.Cluster, "foo");
         }
@@ -1505,21 +1509,21 @@ metadata:
             TString str = R"(
 metadata: {}
 )";
-            auto metadata = NYamlConfig::GetMetadata(str);
+            auto metadata = NYamlConfig::GetMainMetadata(str);
             UNIT_ASSERT(!metadata.Version);
             UNIT_ASSERT(!metadata.Cluster);
         }
 
         {
             TString str = "foo: bar";
-            auto metadata = NYamlConfig::GetMetadata(str);
+            auto metadata = NYamlConfig::GetMainMetadata(str);
             UNIT_ASSERT(!metadata.Version);
             UNIT_ASSERT(!metadata.Cluster);
         }
     }
 
     Y_UNIT_TEST(ReplaceMetadata) {
-        NYamlConfig::TMetadata metadata;
+        NYamlConfig::TMainMetadata metadata;
         metadata.Version = 1;
         metadata.Cluster = "test";
 
@@ -1723,6 +1727,36 @@ metadata:
   cluster: "test"
   version: 1
 # comment1
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString res = NYamlConfig::ReplaceMetadata(str, metadata);
+
+            UNIT_ASSERT_VALUES_EQUAL(res, exp);
+        }
+
+        {
+            TString str = R"(
+---
+metadata:
+  kind: MainConfig
+  version: 0
+  cluster: "test"
+value: 1
+array: [{test: "1"}]
+obj: {value: 2} # comment2
+# comment3
+)";
+
+            TString exp = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: "test"
+  version: 1
 value: 1
 array: [{test: "1"}]
 obj: {value: 2} # comment2

@@ -29,14 +29,14 @@ class TSerializableHunkDescriptor
     , public NYTree::TYsonStruct
 {
 public:
-    TSerializableHunkDescriptor(const THunkDescriptor& descriptor);
-
     REGISTER_YSON_STRUCT(TSerializableHunkDescriptor);
 
     static void Register(TRegistrar registrar);
 };
 
 using TSerializableHunkDescriptorPtr = TIntrusivePtr<TSerializableHunkDescriptor>;
+
+TSerializableHunkDescriptorPtr CreateSerializableHunkDescriptor(const THunkDescriptor& descriptor);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -106,6 +106,26 @@ struct TGetOrderedTabletSafeTrimRowCountRequest
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TRegisterShuffleChunksOptions
+    : public TTimeoutOptions
+{
+    bool OverwriteExistingWriterData = false;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TFetchShuffleChunksOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TForsakeChaosCoordinatorOptions
+    : public TTimeoutOptions
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Provides a set of private APIs.
 /*!
  *  Only native clients are expected to implement this.
@@ -137,7 +157,7 @@ struct IInternalClient
         const TUnlockHunkStoreOptions& options = {}) = 0;
 
     //! Same as NApi::IClient::PullQueue, but without authentication.
-    //! This is used inside methods like NApi::IClient::PullConsumer, which perform their own authentication
+    //! This is used inside methods like NApi::IClient::PullQueueConsumer, which perform their own authentication
     //! and allow reading from a queue without having read permissions for the underlying dynamic table.
     virtual TFuture<NQueueClient::IQueueRowsetPtr> PullQueueUnauthenticated(
         const NYPath::TRichYPath& queuePath,
@@ -173,6 +193,23 @@ struct IInternalClient
         NObjectClient::TObjectId leaseId,
         bool persistent,
         const TUnreferenceLeaseOptions& options = {}) = 0;
+
+    virtual TFuture<void> RegisterShuffleChunks(
+        const TShuffleHandlePtr& handle,
+        const std::vector<NChunkClient::NProto::TChunkSpec>& chunkSpecs,
+        std::optional<int> writerIndex,
+        const TRegisterShuffleChunksOptions& options = {}) = 0;
+
+    virtual TFuture<std::vector<NChunkClient::NProto::TChunkSpec>> FetchShuffleChunks(
+        const TShuffleHandlePtr& handle,
+        int partitionIndex,
+        std::optional<std::pair<int, int>> writerIndexRange,
+        const TFetchShuffleChunksOptions& options = {}) = 0;
+
+    virtual TFuture<void> ForsakeChaosCoordinator(
+        NHydra::TCellId chaosCellId,
+        NHydra::TCellId coordiantorCellId,
+        const TForsakeChaosCoordinatorOptions& options = {}) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IInternalClient)

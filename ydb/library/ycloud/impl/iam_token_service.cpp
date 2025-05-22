@@ -2,14 +2,14 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
 #include "iam_token_service.h"
-#include "grpc_service_client.h"
-#include "grpc_service_cache.h"
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
+#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 
 namespace NCloud {
 
 using namespace NKikimr;
 
-class TIamTokenService : public NActors::TActor<TIamTokenService>, TGrpcServiceClient<yandex::cloud::priv::iam::v1::IamTokenService> {
+class TIamTokenService : public NActors::TActor<TIamTokenService>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::iam::v1::IamTokenService> {
     using TThis = TIamTokenService;
     using TBase = NActors::TActor<TIamTokenService>;
 
@@ -46,7 +46,7 @@ IActor* CreateIamTokenService(const TIamTokenServiceSettings& settings) {
 
 IActor* CreateIamTokenServiceWithCache(const TIamTokenServiceSettings& settings) {
     IActor* iamTokenService = CreateIamTokenService(settings);
-    iamTokenService = CreateGrpcServiceCache<TEvIamTokenService::TEvCreateForServiceAccountRequest, TEvIamTokenService::TEvCreateResponse>(iamTokenService);
+    iamTokenService = NGrpcActorClient::CreateGrpcServiceCache<TEvIamTokenService::TEvCreateForServiceAccountRequest, TEvIamTokenService::TEvCreateResponse>(iamTokenService);
     return iamTokenService;
 }
 

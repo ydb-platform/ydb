@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <ydb/library/accessor/accessor.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -15,11 +16,11 @@ public:
 
     void AddProgress(size_t value);
 
+    YDB_READONLY(size_t, Capacity, 0);
+    YDB_READONLY(size_t, CurProgress, 0);
 private:
     void Render();
 
-    size_t Capacity = 0;
-    size_t CurProgress = 0;
     bool Finished = false;
 };
 

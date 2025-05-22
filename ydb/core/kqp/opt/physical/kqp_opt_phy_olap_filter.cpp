@@ -1,12 +1,10 @@
 #include "kqp_opt_phy_rules.h"
+#include "predicate_collector.h"
 
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/providers/common/pushdown/collection.h>
-#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 
 #include <unordered_set>
 
@@ -25,25 +23,31 @@ static const std::unordered_set<std::string> SecondLevelFilters = {
     "ends_with"
 };
 
-struct TPushdownSettings : public NPushdown::TSettings {
-    TPushdownSettings()
-        : NPushdown::TSettings(NYql::NLog::EComponent::ProviderKqp)
-    {
-        using EFlag = NPushdown::TSettings::EFeatureFlag;
-        Enable(EFlag::LikeOperator, NSsa::RuntimeVersion >= 2U);
-        Enable(EFlag::LikeOperatorOnlyForUtf8, NSsa::RuntimeVersion < 3U);
-        Enable(EFlag::JsonQueryOperators | EFlag::JsonExistsOperator, NSsa::RuntimeVersion >= 3U);
-        Enable(EFlag::ArithmeticalExpressions | EFlag::UnaryOperators | EFlag::DoNotCheckCompareArgumentsTypes, NSsa::RuntimeVersion >= 4U);
-        Enable(EFlag::LogicalXorOperator
-            | EFlag::ParameterExpression
-            | EFlag::CastExpression
-            | EFlag::StringTypes
-            | EFlag::DateTimeTypes
-            | EFlag::UuidType
-            | EFlag::DecimalType
-            | EFlag::DyNumberType);
+static TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TExprBase>& conjuncts, TExprContext& ctx, TPositionHandle pos, bool useOlapAnd, bool trueForEmpty) {
+    if (conjuncts.empty()) {
+        return trueForEmpty ? TMaybeNode<TExprBase>{MakeBool<true>(pos, ctx)} : TMaybeNode<TExprBase>{};
+    } else if (conjuncts.size() == 1) {
+        return conjuncts[0];
+    } else {
+        if (useOlapAnd) {
+            return Build<TKqpOlapAnd>(ctx, pos)
+                .Add(conjuncts)
+            .Done();
+        } else {
+            return Build<TCoAnd>(ctx, pos)
+                .Add(conjuncts)
+            .Done();
+        }
     }
-};
+}
+
+static TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TOLAPPredicateNode>& conjuncts, TExprContext& ctx, TPositionHandle pos, bool useOlapAnd, bool trueForEmpty) {
+    TVector<TExprBase> exprs;
+    for(const auto& c: conjuncts) {
+        exprs.emplace_back(c.ExprNode);
+    }
+    return CombinePredicatesWithAnd(exprs, ctx, pos, useOlapAnd, trueForEmpty);
+}
 
 struct TFilterOpsLevels {
     TFilterOpsLevels(const TMaybeNode<TExprBase>& firstLevel, const TMaybeNode<TExprBase>& secondLevel)
@@ -90,6 +94,23 @@ struct TFilterOpsLevels {
     }
 
 
+    static TFilterOpsLevels Merge(TVector<TFilterOpsLevels> predicates, TExprContext& ctx, TPositionHandle pos) {
+        TVector<TExprBase> predicatesFirstLevel;
+        TVector<TExprBase> predicatesSecondLevel;
+        for (const auto& p: predicates) {
+            if (p.FirstLevelOps.IsValid()) {
+                predicatesFirstLevel.emplace_back(p.FirstLevelOps.Cast());
+            }
+            if (p.SecondLevelOps.IsValid()) {
+                predicatesSecondLevel.emplace_back(p.SecondLevelOps.Cast());
+            }
+        }
+        return {
+            CombinePredicatesWithAnd(predicatesFirstLevel, ctx, pos, true, false),
+            CombinePredicatesWithAnd(predicatesSecondLevel, ctx, pos, true, false),
+        };
+    }
+
     TMaybeNode<TExprBase> FirstLevelOps;
     TMaybeNode<TExprBase> SecondLevelOps;
 };
@@ -100,16 +121,16 @@ bool IsFalseLiteral(TExprBase node) {
     return node.Maybe<TCoBool>() && !FromString<bool>(node.Cast<TCoBool>().Literal().Value());
 }
 
-std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, TExprContext& ctx, TPositionHandle pos);
+std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, bool allowApply);
 
-std::optional<std::pair<TExprBase, TExprBase>> ExtractBinaryFunctionParameters(const TExprBase& op, TExprContext& ctx, TPositionHandle pos)
+std::optional<std::pair<TExprBase, TExprBase>> ExtractBinaryFunctionParameters(const TExprBase& op, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, bool allowApply)
 {
-    const auto left = ConvertComparisonNode(TExprBase(op.Ref().HeadPtr()), ctx, pos);
+    const auto left = ConvertComparisonNode(TExprBase(op.Ref().HeadPtr()), argument, ctx, pos, allowApply);
     if (left.size() != 1U) {
         return std::nullopt;
     }
 
-    const auto right = ConvertComparisonNode(TExprBase(op.Ref().TailPtr()), ctx, pos);
+    const auto right = ConvertComparisonNode(TExprBase(op.Ref().TailPtr()), argument, ctx, pos, allowApply);
     if (right.size() != 1U) {
         return std::nullopt;
     }
@@ -117,16 +138,35 @@ std::optional<std::pair<TExprBase, TExprBase>> ExtractBinaryFunctionParameters(c
     return std::make_pair(left.front(), right.front());
 }
 
-std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos)
+std::optional<std::array<TExprBase, 3U>> ExtractTernaryFunctionParameters(const TExprBase& op, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, bool allowApply)
+{
+    const auto first = ConvertComparisonNode(TExprBase(op.Ref().ChildPtr(0U)), argument, ctx, pos, allowApply);
+    if (first.size() != 1U) {
+        return std::nullopt;
+    }
+
+    const auto second = ConvertComparisonNode(TExprBase(op.Ref().ChildPtr(1U)), argument, ctx, pos, allowApply);
+    if (second.size() != 1U) {
+        return std::nullopt;
+    }
+
+    const auto third = ConvertComparisonNode(TExprBase(op.Ref().ChildPtr(2U)), argument, ctx, pos, allowApply);
+    if (third.size() != 1U) {
+        return std::nullopt;
+    }
+
+    return std::array<TExprBase, 3U>{first.front(), second.front(), third.front()};
+}
+
+std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const TCoCompare& predicate, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, bool allowApply)
 {
     std::vector<std::pair<TExprBase, TExprBase>> out;
-    auto left = ConvertComparisonNode(predicate.Left(), ctx, pos);
-
+    auto left = ConvertComparisonNode(predicate.Left(), argument, ctx, pos, allowApply);
     if (left.empty()) {
         return out;
     }
 
-    auto right = ConvertComparisonNode(predicate.Right(), ctx, pos);
+    auto right = ConvertComparisonNode(predicate.Right(), argument, ctx, pos, allowApply);
     if (left.size() != right.size()) {
         return out;
     }
@@ -140,8 +180,9 @@ std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const T
 
 TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, TExprBase>>& parameters, const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos);
 
-TMaybeNode<TExprBase> YqlCoalescePushdown(const TCoCoalesce& coalesce, TExprContext& ctx) {
-    if (const auto params = ExtractBinaryFunctionParameters(coalesce, ctx, coalesce.Pos())) {
+[[maybe_unused]]
+TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, const TExprNode& argument, TExprContext& ctx, bool allowApply) {
+    if (const auto params = ExtractBinaryFunctionParameters(coalesce, argument, ctx, coalesce.Pos(), allowApply)) {
         return Build<TKqpOlapFilterBinaryOp>(ctx, coalesce.Pos())
                 .Operator().Value("??", TNodeFlags::Default).Build()
                 .Left(params->first)
@@ -152,10 +193,129 @@ TMaybeNode<TExprBase> YqlCoalescePushdown(const TCoCoalesce& coalesce, TExprCont
     return NullNode;
 }
 
-std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, TExprContext& ctx, TPositionHandle pos)
+TMaybeNode<TExprBase> YqlIfPushdown(const TCoIf& ifOp, const TExprNode& argument, TExprContext& ctx, bool allowApply) {
+    if (const auto params = ExtractTernaryFunctionParameters(ifOp, argument, ctx, ifOp.Pos(), allowApply)) {
+        return Build<TKqpOlapFilterTernaryOp>(ctx, ifOp.Pos())
+            .Operator().Value("if", TNodeFlags::Default).Build()
+            .First(std::get<0U>(*params))
+            .Second(std::get<1U>(*params))
+            .Third(std::get<2U>(*params))
+            .Done();
+    }
+
+    return NullNode;
+}
+
+TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx) {
+    const auto parameters = FindNodes(apply.Ptr(), [] (const TExprNode::TPtr& node) {
+        if (const auto maybeParam = TMaybeNode<TCoParameter>(node))
+            return true;
+        return false;
+    });
+
+    const auto members = FindNodes(apply.Ptr(), [&argument] (const TExprNode::TPtr& node) {
+        if (const auto maybeMember = TMaybeNode<TCoMember>(node))
+            return maybeMember.Cast().Struct().Raw() == &argument;
+        return false;
+    });
+
+    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
+    if (!members.size()) {
+        return nullptr;
+    }
+
+    TNodeOnNodeOwnedMap replacements(members.size());
+    TExprNode::TListType realArgs;
+    TExprNode::TListType lambdaArgs;
+
+    for (const auto& member : members) {
+        const auto& columnName = member->TailPtr();
+        auto columnArg = Build<TKqpOlapApplyColumnArg>(ctx, member->Pos())
+            .TableRowType(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
+            .ColumnName(columnName)
+        .Done();
+
+        realArgs.push_back(columnArg.Ptr());
+        TString argumentName = "members_" + TString(columnName->Content());
+        lambdaArgs.emplace_back(ctx.NewArgument(member->Pos(), TStringBuf(argumentName)));
+        replacements.emplace(member.Get(), lambdaArgs.back());
+    }
+
+    for(const auto& pptr : parameters) {
+        realArgs.push_back(pptr);
+        const auto& parameter = TMaybeNode<TCoParameter>(pptr).Cast();
+        TString argumentName = "parameter_" + TString(parameter.Name().StringValue());
+        lambdaArgs.emplace_back(ctx.NewArgument(pptr->Pos(), TStringBuf(argumentName)));
+        replacements.emplace(pptr.Get(), lambdaArgs.back());
+    }
+
+
+    return Build<TKqpOlapApply>(ctx, apply.Pos())
+        .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(lambdaArgs)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
+        .Args().Add(std::move(realArgs)).Build()
+        .KernelName(ctx.NewAtom(apply.Pos(), ""))    
+        .Done();
+}
+
+TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
 {
-    std::vector<TExprBase> out;
-    const auto convertNode = [&ctx, &pos](const TExprBase& node) -> TMaybeNode<TExprBase> {
+    auto columnName = jsonExists.Json().Cast<TCoMember>().Name();
+    return Build<TKqpOlapJsonExists>(ctx, pos)
+        .Column(columnName)
+        .Path(jsonExists.JsonPath().Cast<TCoUtf8>())
+        .Done();
+}
+TMaybeNode<TExprBase> SimplePredicatePushdown(const TCoCompare& predicate, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, bool allowApply)
+{
+    const auto parameters = ExtractComparisonParameters(predicate, argument, ctx, pos, allowApply);
+    if (parameters.empty()) {
+        return NullNode;
+    }
+
+    return ComparisonPushdown(parameters, predicate, ctx, pos);
+}
+
+TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, bool allowApply)
+{
+    /*
+     * There are three ways of comparison in following format:
+     *
+     * FlatMap (LeftArgument, FlatMap(RightArgument(), Just(Predicate))
+     *
+     * Examples:
+     * FlatMap (SafeCast(), FlatMap(Member(), Just(Comparison))
+     * FlatMap (Member(), FlatMap(SafeCast(), Just(Comparison))
+     * FlatMap (SafeCast(), FlatMap(SafeCast(), Just(Comparison))
+     */
+    auto left = ConvertComparisonNode(inputFlatmap.Input(), argument, ctx, pos, allowApply);
+    if (left.empty()) {
+        return NullNode;
+    }
+
+    auto flatmap = inputFlatmap.Lambda().Body().Cast<TCoFlatMap>();
+    auto right = ConvertComparisonNode(flatmap.Input(), argument, ctx, pos, allowApply);
+    if (right.empty()) {
+        return NullNode;
+    }
+
+    auto predicate = flatmap.Lambda().Body().Cast<TCoJust>().Input().Cast<TCoCompare>();
+
+    std::vector<std::pair<TExprBase, TExprBase>> parameters;
+    if (left.size() != right.size()) {
+        return NullNode;
+    }
+
+    for (ui32 i = 0; i < left.size(); ++i) {
+        parameters.emplace_back(std::move(std::make_pair(left[i], right[i])));
+    }
+
+    return ComparisonPushdown(parameters, predicate, ctx, pos);
+}
+
+
+std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, bool allowApply)
+{
+    const auto convertNode = [&ctx, &pos, &argument, allowApply](const TExprBase& node) -> TMaybeNode<TExprBase> {
         if (node.Maybe<TCoNull>()) {
             return node;
         }
@@ -197,74 +357,90 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, TExprConte
             return builder.Done();
         }
 
-        if constexpr (NKikimr::NSsa::RuntimeVersion >= 4U) {
-            if (const auto maybeArithmetic = node.Maybe<TCoBinaryArithmetic>()) {
-                const auto arithmetic = maybeArithmetic.Cast();
-                if (const auto params = ExtractBinaryFunctionParameters(arithmetic, ctx, pos)) {
-                    return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
-                            .Operator().Value(arithmetic.Ref().Content(), TNodeFlags::Default).Build()
-                            .Left(params->first)
-                            .Right(params->second)
-                            .Done();
-                }
-            }
+        if (auto maybeJsonExists = node.Maybe<TCoJsonExists>()) {
+            return JsonExistsPushdown(maybeJsonExists.Cast(), ctx, pos);
+        }
 
-            if (const auto maybeArithmetic = node.Maybe<TCoUnaryArithmetic>()) {
-                const auto arithmetic = maybeArithmetic.Cast();
-                if (const auto params = ConvertComparisonNode(arithmetic.Arg(), ctx, pos); 1U == params.size()) {
-                    TString oper(arithmetic.Ref().Content());
-                    YQL_ENSURE(oper.to_lower());
-                    return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
-                            .Operator().Value(oper, TNodeFlags::Default).Build()
-                            .Arg(params.front())
-                            .Done();
-                }
-            }
-
-            if (const auto maybeCoalesce = node.Maybe<TCoCoalesce>()) {
-                return YqlCoalescePushdown(maybeCoalesce.Cast(), ctx);
+        if (const auto maybeJust = node.Maybe<TCoJust>()) {
+            if (const auto params = ConvertComparisonNode(maybeJust.Cast().Input(), argument, ctx, pos, allowApply); 1U == params.size()) {
+                return Build<TKqpOlapFilterUnaryOp>(ctx, node.Pos())
+                    .Operator().Value("just", TNodeFlags::Default).Build()
+                    .Arg(params.front())
+                    .Done();
             }
         }
 
+        if (const auto maybeIf = node.Maybe<TCoIf>()) {
+            return YqlIfPushdown(maybeIf.Cast(), argument, ctx, allowApply);
+        }
+
+        if (const auto maybeArithmetic = node.Maybe<TCoBinaryArithmetic>()) {
+            const auto arithmetic = maybeArithmetic.Cast();
+            if (const auto params = ExtractBinaryFunctionParameters(arithmetic, argument, ctx, pos, allowApply)) {
+                return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
+                        .Operator().Value(arithmetic.Ref().Content(), TNodeFlags::Default).Build()
+                        .Left(params->first)
+                        .Right(params->second)
+                        .Done();
+            }
+        }
+
+        if (const auto maybeArithmetic = node.Maybe<TCoUnaryArithmetic>()) {
+            const auto arithmetic = maybeArithmetic.Cast();
+            if (const auto params = ConvertComparisonNode(arithmetic.Arg(), argument, ctx, pos, allowApply); 1U == params.size()) {
+                TString oper(arithmetic.Ref().Content());
+                YQL_ENSURE(oper.to_lower());
+                return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
+                        .Operator().Value(oper, TNodeFlags::Default).Build()
+                        .Arg(params.front())
+                        .Done();
+            }
+        }
+
+        if (const auto maybeCoalesce = node.Maybe<TCoCoalesce>()) {
+            return CoalescePushdown(maybeCoalesce.Cast(), argument, ctx, allowApply);
+        }
+
         if (const auto maybeCompare = node.Maybe<TCoCompare>()) {
-            if (const auto params = ExtractComparisonParameters(maybeCompare.Cast(), ctx, pos); !params.empty()) {
+            if (const auto params = ExtractComparisonParameters(maybeCompare.Cast(), argument, ctx, pos, allowApply); !params.empty()) {
                 return ComparisonPushdown(params, maybeCompare.Cast(), ctx, pos);
             }
         }
 
-        return NullNode;
-    };
-
-    // Columns & values may be single element
-    TMaybeNode<TExprBase> node = convertNode(nodeIn);
-
-    if (node.IsValid()) {
-        out.emplace_back(std::move(node.Cast()));
-        return out;
-    }
-
-    // Or columns and values can be Tuple
-    if (!nodeIn.Maybe<TExprList>()) {
-        // something unusual found, return empty vector
-        return out;
-    }
-
-    auto tuple = nodeIn.Cast<TExprList>();
-
-    out.reserve(tuple.Size());
-
-    for (ui32 i = 0; i < tuple.Size(); ++i) {
-        TMaybeNode<TExprBase> node = convertNode(tuple.Item(i));
-
-        if (!node.IsValid()) {
-            // Return empty vector
-            return TVector<TExprBase>();
+        if (const auto maybeFlatmap = node.Maybe<TCoFlatMap>()) {
+            return SafeCastPredicatePushdown(maybeFlatmap.Cast(), argument, ctx, pos, allowApply);
+        } else if (auto maybePredicate = node.Maybe<TCoCompare>()) {
+            return SimplePredicatePushdown(maybePredicate.Cast(), argument, ctx, pos, allowApply);
         }
 
-        out.emplace_back(node.Cast());
-    }
+        if (allowApply) {
+            return YqlApplyPushdown(node, argument, ctx);
+        } else {
+            return NullNode;
+        }
+    };
 
-    return out;
+    if (const auto& list = nodeIn.Maybe<TExprList>()) {
+        const auto& tuple = list.Cast();
+        std::vector<TExprBase> out;
+
+        out.reserve(tuple.Size());
+        for (ui32 i = 0; i < tuple.Size(); ++i) {
+            TMaybeNode<TExprBase> node = convertNode(tuple.Item(i));
+
+            if (!node.IsValid()) {
+                // Return empty vector
+                return TVector<TExprBase>();
+            }
+
+            out.emplace_back(node.Cast());
+        }
+        return out;
+    } else if (const auto& node = convertNode(nodeIn); node.IsValid()) {
+        return {node.Cast()};
+    } else {
+        return {};
+    }
 }
 
 TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& parameter, const TCoCompare& predicate,
@@ -291,6 +467,32 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
             .Done();
     }
 
+    if (const auto* stringUdfFunction = IgnoreCaseSubstringMatchFunctions.FindPtr(predicate.CallableName())) {
+        const auto& leftArg = ctx.NewArgument(pos, "left");
+        const auto& rightArg = ctx.NewArgument(pos, "right");
+
+        const auto& callUdfLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {leftArg, rightArg}),
+            ctx.Builder(pos)
+                .Callable("Apply")
+                    .Callable(0, "Udf")
+                        .Atom(0, *stringUdfFunction)
+                    .Seal()
+                    .Add(1, leftArg)
+                    .Add(2, rightArg)
+                .Seal()
+            .Build()
+        );
+
+        return Build<TKqpOlapApply>(ctx, pos)
+            .Lambda(callUdfLambda)
+            .Args()
+                .Add(parameter.first)
+                .Add(parameter.second)
+            .Build()
+            .KernelName(ctx.NewAtom(pos, *stringUdfFunction))
+        .Done();
+    }
+
     std::string compareOperator = "";
 
     if (predicate.Maybe<TCoCmpEqual>()) {
@@ -305,7 +507,7 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
         compareOperator = "gt";
     } else if (predicate.Maybe<TCoCmpGreaterOrEqual>() && !forceStrictComparison) {
         compareOperator = "gte";
-    } else if (NKikimr::NSsa::RuntimeVersion >= 2U) {
+    } else {
         // We introduced LIKE pushdown in v2 of SSA program
         if (predicate.Maybe<TCoCmpStringContains>()) {
             compareOperator = "string_contains";
@@ -399,16 +601,6 @@ TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, 
         .Done();
 }
 
-TMaybeNode<TExprBase> SimplePredicatePushdown(const TCoCompare& predicate, TExprContext& ctx, TPositionHandle pos)
-{
-    auto parameters = ExtractComparisonParameters(predicate, ctx, pos);
-    if (parameters.empty()) {
-        return NullNode;
-    }
-
-    return ComparisonPushdown(parameters, predicate, ctx, pos);
-}
-
 // TODO: Check how to reduce columns if they are not needed. Unfortunately columnshard need columns list
 // for every column present in program even if it is not used in result set.
 //#define ENABLE_COLUMNS_PRUNING
@@ -441,89 +633,16 @@ template<bool Empty>
 TMaybeNode<TExprBase> ExistsPushdown(const TCoExists& exists, TExprContext& ctx, TPositionHandle pos)
 {
     const auto columnName = exists.Optional().Cast<TCoMember>().Name();
-    if constexpr (NSsa::RuntimeVersion >= 4U) {
-        return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
-                .Operator().Value(Empty ? "empty" : "exists", TNodeFlags::Default).Build()
-                .Arg(columnName)
-                .Done();
-    } else {
-        return Build<TKqpOlapFilterExists>(ctx, pos)
-            .Column(columnName)
+    return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
+            .Operator().Value(Empty ? "empty" : "exists", TNodeFlags::Default).Build()
+            .Arg(columnName)
             .Done();
-    }
 }
 
-TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
-{
-    auto columnName = jsonExists.Json().Cast<TCoMember>().Name();
-    return Build<TKqpOlapJsonExists>(ctx, pos)
-        .Column(columnName)
-        .Path(jsonExists.JsonPath().Cast<TCoUtf8>())
-        .Done();
-}
-
-TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap,
-    TExprContext& ctx, TPositionHandle pos)
-{
-    /*
-     * There are three ways of comparison in following format:
-     *
-     * FlatMap (LeftArgument, FlatMap(RightArgument(), Just(Predicate))
-     *
-     * Examples:
-     * FlatMap (SafeCast(), FlatMap(Member(), Just(Comparison))
-     * FlatMap (Member(), FlatMap(SafeCast(), Just(Comparison))
-     * FlatMap (SafeCast(), FlatMap(SafeCast(), Just(Comparison))
-     */
-    auto left = ConvertComparisonNode(inputFlatmap.Input(), ctx, pos);
-    if (left.empty()) {
-        return NullNode;
-    }
-
-    auto flatmap = inputFlatmap.Lambda().Body().Cast<TCoFlatMap>();
-    auto right = ConvertComparisonNode(flatmap.Input(), ctx, pos);
-    if (right.empty()) {
-        return NullNode;
-    }
-
-    auto predicate = flatmap.Lambda().Body().Cast<TCoJust>().Input().Cast<TCoCompare>();
-
-    std::vector<std::pair<TExprBase, TExprBase>> parameters;
-    if (left.size() != right.size()) {
-        return NullNode;
-    }
-
-    for (ui32 i = 0; i < left.size(); ++i) {
-        parameters.emplace_back(std::move(std::make_pair(left[i], right[i])));
-    }
-
-    return ComparisonPushdown(parameters, predicate, ctx, pos);
-}
-
-TMaybeNode<TExprBase> CoalescePushdown(const TCoCoalesce& coalesce, TExprContext& ctx, TPositionHandle pos)
-{
-    if constexpr (NSsa::RuntimeVersion >= 4U) {
-        if (const auto node = YqlCoalescePushdown(coalesce, ctx)) {
-            return node;
-        }
-    }
-
-    auto predicate = coalesce.Predicate();
-    if (auto maybeFlatmap = predicate.Maybe<TCoFlatMap>()) {
-        return SafeCastPredicatePushdown(maybeFlatmap.Cast(), ctx, pos);
-    } else if (auto maybePredicate = predicate.Maybe<TCoCompare>()) {
-        return SimplePredicatePushdown(maybePredicate.Cast(), ctx, pos);
-    } else if (auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
-        return JsonExistsPushdown(maybeJsonExists.Cast(), ctx, pos);
-    }
-
-    return NullNode;
-}
-
-TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, TExprContext& ctx, TPositionHandle pos)
+TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, bool allowApply)
 {
     if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {
-        auto coalescePred = CoalescePushdown(maybeCoalesce.Cast(), ctx, pos);
+        auto coalescePred = CoalescePushdown(maybeCoalesce.Cast(), argument, ctx, allowApply);
         return TFilterOpsLevels(coalescePred);
     }
 
@@ -538,185 +657,111 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, TExprContext& ctx
     }
 
     if (const auto maybePredicate = predicate.Maybe<TCoCompare>()) {
-        auto pred = SimplePredicatePushdown(maybePredicate.Cast(), ctx, pos);
+        auto pred = SimplePredicatePushdown(maybePredicate.Cast(), argument, ctx, pos, allowApply);
         return TFilterOpsLevels(pred);
+    }
+
+    if (const auto maybeIf = predicate.Maybe<TCoIf>()) {
+        return YqlIfPushdown(maybeIf.Cast(), argument, ctx, allowApply);
     }
 
     if (const auto maybeNot = predicate.Maybe<TCoNot>()) {
         const auto notNode = maybeNot.Cast();
-        if constexpr (NSsa::RuntimeVersion >= 4U) {
-            if (const auto maybeExists = notNode.Value().Maybe<TCoExists>()) {
-                return TFilterOpsLevels(ExistsPushdown<true>(maybeExists.Cast(), ctx, pos));
-            }
+        if (const auto maybeExists = notNode.Value().Maybe<TCoExists>()) {
+            return TFilterOpsLevels(ExistsPushdown<true>(maybeExists.Cast(), ctx, pos));
         }
-        auto pushedFilters = PredicatePushdown(notNode.Value(), ctx, pos);
+        auto pushedFilters = PredicatePushdown(notNode.Value(), argument, ctx, pos, allowApply);
         pushedFilters.WrapToNotOp(ctx, pos);
         return pushedFilters;
     }
 
-    if (!predicate.Maybe<TCoAnd>() && !predicate.Maybe<TCoOr>() && !predicate.Maybe<TCoXor>()) {
-        return NullFilterOpsLevels;
-    }
+    if (predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {
+        TVector<TExprBase> firstLvlOps;
+        TVector<TExprBase> secondLvlOps;
+        firstLvlOps.reserve(predicate.Ptr()->ChildrenSize());
+        secondLvlOps.reserve(predicate.Ptr()->ChildrenSize());
 
-    TVector<TExprBase> firstLvlOps;
-    TVector<TExprBase> secondLvlOps;
-    firstLvlOps.reserve(predicate.Ptr()->ChildrenSize());
-    secondLvlOps.reserve(predicate.Ptr()->ChildrenSize());
+        for (auto& child: predicate.Ptr()->Children()) {
+            auto pushedChild = PredicatePushdown(TExprBase(child), argument, ctx, pos, allowApply);
 
-    for (auto& child: predicate.Ptr()->Children()) {
-        auto pushedChild = PredicatePushdown(TExprBase(child), ctx, pos);
+            if (!pushedChild.IsValid()) {
+                return NullFilterOpsLevels;
+            }
 
-        if (!pushedChild.IsValid()) {
-            return NullFilterOpsLevels;
+            if (pushedChild.FirstLevelOps.IsValid()) {
+                firstLvlOps.emplace_back(pushedChild.FirstLevelOps.Cast());
+            }
+            if (pushedChild.SecondLevelOps.IsValid()) {
+                secondLvlOps.emplace_back(pushedChild.SecondLevelOps.Cast());
+            }
         }
 
-        if (pushedChild.FirstLevelOps.IsValid()) {
-            firstLvlOps.emplace_back(pushedChild.FirstLevelOps.Cast());
+        if (predicate.Maybe<TCoAnd>()) {
+            auto firstLvl = NullNode;
+            if (!firstLvlOps.empty()) {
+                firstLvl = Build<TKqpOlapAnd>(ctx, pos)
+                    .Add(firstLvlOps)
+                    .Done();
+            }
+            auto secondLvl = NullNode;
+            if (!secondLvlOps.empty()) {
+                secondLvl = Build<TKqpOlapAnd>(ctx, pos)
+                    .Add(secondLvlOps)
+                    .Done();
+            }
+            return TFilterOpsLevels(firstLvl, secondLvl);
         }
-        if (pushedChild.SecondLevelOps.IsValid()) {
-            secondLvlOps.emplace_back(pushedChild.SecondLevelOps.Cast());
-        }
-    }
 
-    if (predicate.Maybe<TCoAnd>()) {
-        auto firstLvl = NullNode;
-        if (!firstLvlOps.empty()) {
-            firstLvl = Build<TKqpOlapAnd>(ctx, pos)
+        if (predicate.Maybe<TCoOr>()) {
+            auto ops = Build<TKqpOlapOr>(ctx, pos)
                 .Add(firstLvlOps)
-                .Done();
-        }
-        auto secondLvl = NullNode;
-        if (!secondLvlOps.empty()) {
-            secondLvl = Build<TKqpOlapAnd>(ctx, pos)
                 .Add(secondLvlOps)
                 .Done();
+            return TFilterOpsLevels(ops, NullNode);
         }
-        return TFilterOpsLevels(firstLvl, secondLvl);
-    }
 
-    if (predicate.Maybe<TCoOr>()) {
-        auto ops = Build<TKqpOlapOr>(ctx, pos)
+        Y_DEBUG_ABORT_UNLESS(predicate.Maybe<TCoXor>());
+
+        auto ops = Build<TKqpOlapXor>(ctx, pos)
             .Add(firstLvlOps)
             .Add(secondLvlOps)
             .Done();
         return TFilterOpsLevels(ops, NullNode);
     }
 
-    Y_DEBUG_ABORT_UNLESS(predicate.Maybe<TCoXor>());
-
-    auto ops = Build<TKqpOlapXor>(ctx, pos)
-        .Add(firstLvlOps)
-        .Add(secondLvlOps)
-        .Done();
-    return TFilterOpsLevels(ops, NullNode);
+    return YqlApplyPushdown(predicate, argument, ctx);
 }
 
-void SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, NPushdown::TPredicateNode& predicatesToPush, NPushdown::TPredicateNode& remainingPredicates,
-    TExprContext& ctx, TPositionHandle pos)
+std::pair<TVector<TOLAPPredicateNode>, TVector<TOLAPPredicateNode>> SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree, bool allowApply)
 {
-    if (predicateTree.CanBePushed) {
-        predicatesToPush = predicateTree;
-        remainingPredicates.ExprNode = Build<TCoBool>(ctx, pos).Literal().Build("true").Done();
-        return;
+    bool canBePushed =  (predicateTree.CanBePushed || predicateTree.CanBePushedApply && allowApply);
+
+    if (canBePushed) {
+        return {{predicateTree}, {}};
     }
 
-    if (predicateTree.Op != NPushdown::EBoolOp::And) {
+    if (!TCoAnd::Match(predicateTree.ExprNode.Get())) {
         // We can partially pushdown predicates from AND operator only.
         // For OR operator we would need to have several read operators which is not acceptable.
         // TODO: Add support for NOT(op1 OR op2), because it expands to (!op1 AND !op2).
-        remainingPredicates = predicateTree;
-        return;
+        return {{}, {predicateTree}};
     }
 
     bool isFoundNotStrictOp = false;
-    std::vector<NPushdown::TPredicateNode> pushable;
-    std::vector<NPushdown::TPredicateNode> remaining;
-    for (auto& predicate : predicateTree.Children) {
-        if (predicate.CanBePushed && !isFoundNotStrictOp) {
+    TVector<TOLAPPredicateNode> pushable;
+    TVector<TOLAPPredicateNode> remaining;
+    for (const auto& predicate : predicateTree.Children) {
+        canBePushed =  (predicate.CanBePushed || predicate.CanBePushedApply && allowApply);
+        if (canBePushed && !isFoundNotStrictOp) {
             pushable.emplace_back(predicate);
         } else {
-            if (!IsStrict(predicate.ExprNode.Cast().Ptr())) {
+            if (!IsStrict(predicate.ExprNode)) {
                 isFoundNotStrictOp = true;
             }
             remaining.emplace_back(predicate);
         }
     }
-    predicatesToPush.SetPredicates(pushable, ctx, pos);
-    remainingPredicates.SetPredicates(remaining, ctx, pos);
-}
-
-bool IsGoodTypeForPushdown(const TTypeAnnotationNode& type) {
-    return NUdf::EDataTypeFeatures::NumericType & NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-}
-
-bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTypeAnnotationNode& typeTwo) {
-    const auto& rawOne = RemoveOptionality(typeOne);
-    const auto& rawTwo = RemoveOptionality(typeTwo);
-    if (IsSameAnnotation(rawOne, rawTwo))
-        return true;
-
-    const auto kindOne = rawOne.GetKind();
-    const auto kindTwo = rawTwo.GetKind();
-    if (ETypeAnnotationKind::Null == kindOne || ETypeAnnotationKind::Null == kindTwo)
-        return true;
-
-    if (kindTwo != kindOne)
-        return false;
-
-    switch (kindOne) {
-        case ETypeAnnotationKind::Tuple: {
-            const auto& itemsOne = rawOne.Cast<TTupleExprType>()->GetItems();
-            const auto& itemsTwo = rawTwo.Cast<TTupleExprType>()->GetItems();
-            const auto size = itemsOne.size();
-            if (size != itemsTwo.size())
-                return false;
-            for (auto i = 0U; i < size; ++i) {
-                if (!IsGoodTypesForPushdownCompare(*itemsOne[i], *itemsTwo[i])) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        case ETypeAnnotationKind::Data: {
-            const auto fOne = NUdf::GetDataTypeInfo(rawOne.Cast<TDataExprType>()->GetSlot()).Features;
-            const auto fTwo = NUdf::GetDataTypeInfo(rawTwo.Cast<TDataExprType>()->GetSlot()).Features;
-            return ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fOne) && (NUdf::EDataTypeFeatures::CanCompare  & fOne)
-                && ((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fTwo) && (NUdf::EDataTypeFeatures::CanCompare  & fTwo);
-        }
-        default: break;
-    }
-    return false;
-}
-
-bool IsGoodNodeForPushdown(const TExprBase& node) {
-    if (const auto maybeCompare = node.Maybe<TCoCompare>()) {
-        const auto compare = maybeCompare.Cast();
-        return IsGoodTypesForPushdownCompare(*compare.Left().Ref().GetTypeAnn(), *compare.Right().Ref().GetTypeAnn())
-            && IsGoodNodeForPushdown(compare.Left()) && IsGoodNodeForPushdown(compare.Right());
-    } else if (const auto maybeUnaryOp = node.Maybe<TCoUnaryArithmetic>()) {
-        return IsGoodTypeForPushdown(*node.Ref().GetTypeAnn()) && IsGoodNodeForPushdown(maybeUnaryOp.Cast().Arg());
-    } else if (const auto maybeBinaryOp = node.Maybe<TCoBinaryArithmetic>()) {
-        const auto binaryOp = maybeBinaryOp.Cast();
-        return IsGoodTypeForPushdown(*binaryOp.Ref().GetTypeAnn()) && !binaryOp.Maybe<TCoAggrAdd>()
-            && IsGoodNodeForPushdown(binaryOp.Left()) && IsGoodNodeForPushdown(binaryOp.Right());
-    } else if (const auto maybeCoalesce = node.Maybe<TCoCoalesce>()) {
-        const auto coalesce = maybeCoalesce.Cast();
-        return IsGoodNodeForPushdown(coalesce.Predicate()) && IsGoodNodeForPushdown(coalesce.Value());
-    }
-
-    return true;
-}
-
-void UpdatePushableFlagWithOlapSpecific(NPushdown::TPredicateNode& tree) {
-    if constexpr (NSsa::RuntimeVersion < 4U)
-        return;
-
-    std::for_each(tree.Children.begin(), tree.Children.end(), std::bind(&UpdatePushableFlagWithOlapSpecific, std::placeholders::_1));
-    tree.CanBePushed = tree.CanBePushed && std::all_of(tree.Children.cbegin(), tree.Children.cend(), [](const NPushdown::TPredicateNode& node) { return node.CanBePushed; });
-
-    if (tree.CanBePushed && NPushdown::EBoolOp::Undefined == tree.Op) {
-        tree.CanBePushed = IsGoodNodeForPushdown(tree.ExprNode.Cast());
-    }
+    return {pushable, remaining};
 }
 
 } // anonymous namespace end
@@ -724,8 +769,10 @@ void UpdatePushableFlagWithOlapSpecific(NPushdown::TPredicateNode& tree) {
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx)
 {
-    Y_UNUSED(typesCtx);
-
+    const auto pushdownOptions = TPushdownOptions{
+        kqpCtx.Config->EnableOlapScalarApply,
+        kqpCtx.Config->EnableOlapSubstringPushdown
+    };
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
@@ -742,46 +789,90 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     const auto& lambda = flatmap.Lambda();
-    auto lambdaArg = lambda.Args().Arg(0).Raw();
+    const auto& lambdaArg = lambda.Args().Arg(0).Ref();
 
     YQL_CLOG(TRACE, ProviderKqp) << "Initial OLAP lambda: " << KqpExprToPrettyString(lambda, ctx);
 
-    auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
+    const auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
     if (!maybeOptionalIf.IsValid()) {
         return node;
     }
 
-    const auto optionalIf = maybeOptionalIf.Cast();
-    NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
-    CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg, read.Process().Body(), TPushdownSettings());
-    YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
-    UpdatePushableFlagWithOlapSpecific(predicateTree);
+    const auto& optionaIf = maybeOptionalIf.Cast();
+    auto predicate = optionaIf.Predicate();
+    auto value = optionaIf.Value();
 
-    NPushdown::TPredicateNode predicatesToPush;
-    NPushdown::TPredicateNode remainingPredicates;
-    SplitForPartialPushdown(predicateTree, predicatesToPush, remainingPredicates, ctx, node.Pos());
-    if (!predicatesToPush.IsValid()) {
+    TOLAPPredicateNode predicateTree;
+    predicateTree.ExprNode = predicate.Ptr();
+    CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), pushdownOptions);
+    YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
+
+    auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, false);
+    TVector<TFilterOpsLevels> pushedPredicates;
+    for (const auto& p: pushable) {
+        pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos(), pushdownOptions.AllowOlapApply));
+    }
+
+    if (pushdownOptions.AllowOlapApply) {
+        TVector<TOLAPPredicateNode> remainingAfterApply;
+        for(const auto& p: remaining) {
+            const auto recoveredOptinalIfForNonPushedDownPredicates = Build<TCoOptionalIf>(ctx, node.Pos())
+                .Predicate(p.ExprNode)
+                .Value(value)
+            .Build();
+            TExprNode::TPtr afterPeephole;
+            bool hasNonDeterministicFunctions;
+            if (const auto status = PeepHoleOptimizeNode(recoveredOptinalIfForNonPushedDownPredicates.Value().Ptr(), afterPeephole, ctx, typesCtx, nullptr, hasNonDeterministicFunctions);
+                status != IGraphTransformer::TStatus::Ok) {
+                YQL_CLOG(ERROR, ProviderKqp) << "Peephole OLAP failed." << Endl << ctx.IssueManager.GetIssues().ToString();
+                return node;
+            }
+            const TCoIf simplified(std::move(afterPeephole));
+            predicate = simplified.Predicate();
+            value = simplified.ThenValue().Cast<TCoJust>().Input();
+
+            TOLAPPredicateNode predicateTree;
+            predicateTree.ExprNode = predicate.Ptr();
+            CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), {true, pushdownOptions.PushdownSubstring});
+
+            YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
+            auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);
+            for (const auto& p: pushable) {
+                if (p.CanBePushed) {
+                    auto pred = PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos(), pushdownOptions.AllowOlapApply);
+                    pushedPredicates.emplace_back(pred);
+                }
+                else {
+                    auto expr = YqlApplyPushdown(TExprBase(p.ExprNode), lambdaArg, ctx);
+                    TFilterOpsLevels pred(expr);
+                    pushedPredicates.emplace_back(pred);
+                }
+            }
+            remainingAfterApply.insert(remainingAfterApply.end(), remaining.begin(), remaining.end());
+        }
+        remaining = std::move(remainingAfterApply);
+    }
+
+    if (pushedPredicates.empty()) {
         return node;
     }
 
-    YQL_ENSURE(predicatesToPush.IsValid(), "Predicates to push is invalid");
-    YQL_ENSURE(remainingPredicates.IsValid(), "Remaining predicates is invalid");
+    const auto& pushedFilter = TFilterOpsLevels::Merge(pushedPredicates, ctx, node.Pos());
 
-    const auto pushedFilters = PredicatePushdown(predicatesToPush.ExprNode.Cast(), ctx, node.Pos());
-    YQL_ENSURE(pushedFilters.IsValid(), "Pushed predicate should be always valid!");
+    const auto remainingFilter = CombinePredicatesWithAnd(remaining, ctx, node.Pos(), false, true);
 
     TMaybeNode<TExprBase> olapFilter;
-    if (pushedFilters.FirstLevelOps.IsValid()) {
+    if (pushedFilter.FirstLevelOps.IsValid()) {
         olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
             .Input(read.Process().Body())
-            .Condition(pushedFilters.FirstLevelOps.Cast())
+            .Condition(pushedFilter.FirstLevelOps.Cast())
             .Done();
     }
 
-    if (pushedFilters.SecondLevelOps.IsValid()) {
+    if (pushedFilter.SecondLevelOps.IsValid()) {
         olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
             .Input(olapFilter.IsValid() ? olapFilter.Cast() : read.Process().Body())
-            .Condition(pushedFilters.SecondLevelOps.Cast())
+            .Condition(pushedFilter.SecondLevelOps.Cast())
             .Done();
     }
 
@@ -825,11 +916,11 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .Args({"new_arg"})
             .Body<TCoOptionalIf>()
                 .Predicate<TExprApplier>()
-                    .Apply(remainingPredicates.ExprNode.Cast())
+                    .Apply(remainingFilter.Cast())
                     .With(lambda.Args().Arg(0), "new_arg")
                     .Build()
                 .Value<TExprApplier>()
-                    .Apply(optionalIf.Value())
+                    .Apply(value)
                     .With(lambda.Args().Arg(0), "new_arg")
                     .Build()
                 .Build()
@@ -838,6 +929,34 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
     return newFlatmap;
 #endif
+}
+
+TExprBase KqpAddColumnForEmptyColumnsOlapRead(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TKqpReadOlapTableRanges>()) {
+        return node;
+    }
+
+    auto readOlap = node.Cast<TKqpReadOlapTableRanges>();
+    if (readOlap.Columns().Size()!=0) {
+        return node;
+    }
+
+    const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readOlap.Table().Path().Value());
+    auto keyColumns = tableData.Metadata->KeyColumnNames;
+
+    TVector<TExprNode::TPtr> newColumns;
+    newColumns.push_back(ctx.NewAtom(node.Pos(), keyColumns[0]));
+
+    return Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
+        .Table(readOlap.Table())
+        .Ranges(readOlap.Ranges())
+        .Columns()
+            .Add(newColumns)
+            .Build()
+        .Settings(readOlap.Settings())
+        .ExplainPrompt(readOlap.ExplainPrompt())
+        .Process(readOlap.Process())
+        .Done();
 }
 
 } // namespace NKikimr::NKqp::NOpt

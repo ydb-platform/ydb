@@ -1,5 +1,104 @@
 OpenLDAP 2.6 Change Log
 
+OpenLDAP 2.6.9 Release (2024/11/26)
+	Fixed libldap TLS connection timeout handling (ITS#8047)
+	Fixed libldap GnuTLS incompatible pointer type (ITS#10253)
+	Fixed libldap OpenSSL set_ciphersuite error handling (ITS#10223)
+	Fixed libldap to check for OpenSSL EVP_Digest* failure (ITS#10224)
+	Fixed slapd cn=config disallowed modification of cn=schema (ITS#10256)
+	Fixed slapd syncrepl assert during refresh at shutdown (ITS#10232)
+	Fixed slapd syncrepl retry state during refreshDone (ITS#10234)
+	Fixed slapd-ldap use of multi-precision add for op counters (ITS#10237)
+	Fixed slapd-mdb idl intersection (ITS#10233)
+	Fixed slapd-wt idl intersection (ITS#10233)
+	Fixed slapo-memberof to omit dynamic values (ITS#10230)
+	Fixed slapo-nestgroup leak in nestgroup_memberFilter (ITS#10249)
+	Fixed slapo-translucent regression with subordinate databases (ITS#10248)
+	Fixed slapo-translucent regression when requesting attributes (ITS#10272)
+	Fixed slappw-argon2 defaults to be more secure (ITS#9827)
+	Minor Cleanup
+		ITS#10155
+		ITS#10218
+		ITS#10219
+		ITS#10227
+		ITS#10231
+		ITS#10235
+		ITS#10263
+		ITS#10264
+
+OpenLDAP 2.6.8 Release (2024/05/21)
+	Fixed libldap exit handling with OpenSSL3 again (ITS#9952)
+	Fixed libldap OpenSSL channel binding digest (ITS#10216)
+	Fixed slapd handling of large uid/gids peercred auth (ITS#10211)
+	Fixed slapd-asyncmeta/meta target structure allocations (ITS#10197)
+	Fixed slapd-meta with dynlist (ITS#10164)
+	Fixed slapd-meta binds when proxying internal op (ITS#10165)
+	Added slapo-nestgroup overlay (ITS#10161)
+	Added slapo-memberof 'addcheck' option (ITS#10167)
+	Fixed slapo-accesslog startup initialization (ITS#10170)
+	Fixed slapo-constraint double free on invalid attr (ITS#10204)
+	Fixed slapo-dynlist with abandoned operations (ITS#10044)
+	Build
+		Fixed build with gcc14.x (ITS#10166)
+		Fixed back-perl with clang15 (ITS#10177)
+		Fixed to reduce systemd dependencies (ITS#10214)
+	Contrib
+		Added slapo-alias contrib module (ITS#10104, ITS#10182)
+		Fixed slapo-autogroup to work with slapo-dynlist (ITS#10185)
+		Fixed smbk5pwd implicit function declaration (ITS#10206)
+	Documentation
+		Fixed slapo-memberof exattr requirements (ITS#7400)
+		Fixed slapo-memberof is no longer deprecated (ITS#7400)
+	Minor Cleanup
+		ITS#9921
+		ITS#10103
+		ITS#10171
+		ITS#10172
+		ITS#10173
+		ITS#10179
+		ITS#10183
+		ITS#10186
+		ITS#10188
+		ITS#10193
+		ITS#10209
+
+OpenLDAP 2.6.7 Release (2024/01/29)
+	Added slapo-dynlist option to disable filter support (ITS#10025)
+	Fixed liblber missing newline on long msg (ITS#10105)
+	Fixed libldap exit handling with OpenSSL3 (ITS#9952)
+	Fixed libldap with TLS and multiple ldap URIs (ITS#10101)
+	Fixed libldap OpenSSL cipher suite handling (ITS#10094)
+	Fixed libldap OpenSSL 3.0 and Diffie-Hellman param files (ITS#10124)
+	Fixed libldap timestamps on Windows (ITS#10100)
+	Fixed lloadd to work when resolv.conf is missing (ITS#10070)
+	Fixed lloadd handling of closing connection (ITS#10083)
+	Fixed lloadd tiers to be correctly linked on startup (ITS#10142)
+	Fixed slapd to honour disclose in matchedDN handling (ITS#10139)
+	Fixed slapd handling of regex testing in ACLs (ITS#10089)
+	Fixed slapd sync replication with glued database (ITS#10080)
+	Fixed slapd local logging on Windows (ITS#10092)
+	Fixed slapd-asyncmeta when remote suffix is empty (ITS#10076)
+	Fixed slapo-dynlist so it can't be global (ITS#10091)
+	Build
+		Fixed lloadd type mismatches (ITS#10074)
+		Fixed builds for Windows (ITS#10117)
+		Fixed build with clang16 (ITS#10123)
+	Documentation
+		Fixed slapo-homedir(5) attribute name for olcHomedirArchivePath (ITS#10057)
+	Minor Cleanup
+		ITS#10059
+		ITS#10068
+		ITS#10098
+		ITS#10109
+		ITS#10110
+		ITS#10129
+		ITS#10130
+		ITS#10135
+		ITS#10143
+		ITS#10144
+		ITS#10145
+		ITS#10153
+
 OpenLDAP 2.6.6 Release (2023/07/31)
 	Fixed slapd cn=config incorrect handling of paused (ITS#10045)
 	Fixed slapd-meta to account for MOD ops being optional (ITS#10067)
@@ -115,6 +214,7 @@ OpenLDAP 2.6.3 Release (2022/07/14)
 	Fixed slapo-unique to not release NULL entry (ITS#8245)
 	Build Environment
 		Added slapd-watcher -c contextDN option (ITS#9865)
+		Fixed tests to use SCRAM-SHA-256 instead of DIGEST-MD5 (ITS#10208)
 		Fixed librewrite declaration of calloc (ITS#9841)
 		Fixed parallel builds (ITS#9840)
 		Fixed test020 to skip back-wt (ITS#9859)

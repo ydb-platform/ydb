@@ -18,7 +18,6 @@
   # - pcap/pcap.h
   # - sasl/sasl.h
   # - sasl/saslutil.h
-  # - uuid/uuid.h
   # - zconf.h
 
   - Availability.h
@@ -38,12 +37,15 @@
   - MacTypes.h
   - TargetConditionals.h
   - architecture/byte_order.h
+  - arm/cpu_capabilities_public.h
   - asl.h
   - copyfile.h
   - crt_externs.h
   - curses.h
   - dispatch/dispatch.h
+  - dns_sd.h
   - editline/readline.h
+  - Files.h
   - ffi/ffi.h
   - form.h
   - gssapi.h
@@ -56,6 +58,7 @@
   - libkern/OSAtomic.h
   - libkern/OSByteOrder.h
   - libkern/OSCacheControl.h
+  - libkern/version.h
   - libproc.h
   - mach-o/dyld.h
   - mach-o/fixup-chains.h
@@ -114,6 +117,7 @@
   - netinet/udp_var.h
   - netinet6/in6.h
   - nlist.h
+  - notify.h
   - objc/objc-sync.h
   - objc/runtime.h
   - os/availability.h
@@ -122,6 +126,7 @@
   - os/proc.h
   - os/signpost.h
   - os/trace.h
+  - os/trace_base.h
   - panel.h
   - pthread/introspection.h
   - pthread/qos.h
@@ -133,6 +138,7 @@
   - simd/simd.h
   - strhash.h
   - sys/_types.h
+  - sys/_types/_mbstate_t.h
   - sys/acl.h
   - sys/aio.h
   - sys/attr.h
@@ -144,6 +150,7 @@
   - sys/filio.h
   - sys/ioccom.h
   - sys/kauth.h
+  - sys/kdebug_signpost.h
   - sys/kern_control.h
   - sys/lock.h
   - sys/malloc.h
@@ -169,21 +176,31 @@
   - timeconv.h
   - tzfile.h
   - util.h
+  - uuid/uuid.h
   - vis.h
+  - xpc/connection.h
   - xpc/xpc.h
 
   # OSX frameworks
+  - AEObjects.h
+  - AEPackObject.h
+  - AERegistry.h
+  - AVFoundation/AVFoundation.h
   - Accelerate/Accelerate.h
   - AppKit/AppKit.h
   - AppKit/NSView.h
+  - AppleEvents.h
   - ApplicationServices/ApplicationServices.h
   - AudioToolbox/AudioToolbox.h
-  - AVFoundation/AVFoundation.h
   - CFNetwork/CFNetwork.h
+  - Carbon/Carbon.h
   - Cocoa/Cocoa.h
+  - CoreBluetooth/CoreBluetooth.h
+  - CoreData/CoreData.h
   - CoreFoundation/CFArray.h
   - CoreFoundation/CFBase.h
   - CoreFoundation/CFBundle.h
+  - CoreFoundation/CFByteOrder.h
   - CoreFoundation/CFData.h
   - CoreFoundation/CFDictionary.h
   - CoreFoundation/CFLocale.h
@@ -201,18 +218,30 @@
   - CoreServices/CoreServices.h
   - CoreTelephony/CTCarrier.h
   - CoreTelephony/CTTelephonyNetworkInfo.h
+  - CoreText/CTFontManager.h
   - CoreText/CoreText.h
   - CoreVideo/CoreVideo.h
+  - CoreWLAN/CoreWLAN.h
   - DeviceCheck/DCAppAttestService.h
+  - Files.h
   - Foundation/Foundation.h
   - Foundation/NSException.h
-  - Foundation/NSString.h
   - Foundation/NSKeyValueObserving.h
   - Foundation/NSObject.h
+  - Foundation/NSString.h
   - GLKit/GLKit.h
+  - Gestalt.h
   - IOKit/IOBSD.h
+  - IOKit/IOCFPlugIn.h
   - IOKit/IOKitLib.h
+  - IOKit/graphics/IOGraphicsLib.h
+  - IOKit/hid/IOHIDKeys.h
+  - IOKit/hid/IOHIDLib.h
   - IOKit/kext/KextManager.h
+  - IOKit/network/IOEthernetController.h
+  - IOKit/network/IOEthernetInterface.h
+  - IOKit/network/IONetworkInterface.h
+  - IOKit/network/IONetworkMedium.h
   - IOKit/ps/IOPSKeys.h
   - IOKit/ps/IOPSKeys.h
   - IOKit/ps/IOPowerSources.h
@@ -221,8 +250,10 @@
   - IOKit/storage/IOBlockStorageDriver.h
   - IOKit/storage/IOMedia.h
   - IOSurface/IOSurfaceRef.h
+  - ImageCompression.h
+  - Kernel/IOKit/hidsystem/IOHIDUsageTables.h
   - Metal/Metal.h
-  - metal_stdlib
+  - Network/Network.h
   - OpenCL/cl.h
   - OpenCL/cl_gl.h
   - OpenCL/opencl.h
@@ -230,26 +261,36 @@
   - OpenGLES/ES2/glext.h
   - OpenGLES/ES3/gl.h
   - OpenGLES/ES3/glext.h
-  - Speech/Speech.h
-  - QuartzCore/QuartzCore.h
+  - Palettes.h
+  - PictUtils.h
+  - Processes.h
+  - QDOffscreen.h
   - QuartzCore/CAEAGLLayer.h
   - QuartzCore/CAMetalLayer.h
+  - QuartzCore/QuartzCore.h
+  - QuickDraw.h
   - Security/SecCertificate.h
-  - Security/SecItem.h
   - Security/SecImportExport.h
+  - Security/SecItem.h
   - Security/SecKey.h
   - Security/SecRandom.h
   - Security/SecSignVerifyTransform.h
   - Security/SecureTransport.h
   - Security/Security.h
-  - SystemConfiguration/SystemConfiguration.h
+  - Speech/Speech.h
   - SystemConfiguration/SCDynamicStoreCopySpecific.h
+  - SystemConfiguration/SCNetworkConfiguration.h
+  - SystemConfiguration/SystemConfiguration.h
+  - TextUtils.h
+  - Types.h
+  - UIKit/UIDevice.h
   - UIKit/UIImage.h
   - UIKit/UIKit.h
   - UIKit/UIScreen.h
-  - UIKit/UIWebView.h
   - UIKit/UIView.h
+  - UIKit/UIWebView.h
+  - UserNotifications/UserNotifications.h
   - VideoDecodeAcceleration/VDADecoder.h
   - VideoToolbox/VideoToolbox.h
   - XCTest/XCTest.h
-  - CoreFoundation/CFByteOrder.h
+  - metal_stdlib

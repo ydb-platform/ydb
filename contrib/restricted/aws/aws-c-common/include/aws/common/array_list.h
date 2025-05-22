@@ -10,7 +10,9 @@
 
 #include <stdlib.h>
 
-#define AWS_ARRAY_LIST_DEBUG_FILL 0xDD
+AWS_PUSH_SANE_WARNING_LEVEL
+
+enum { AWS_ARRAY_LIST_DEBUG_FILL = 0xDD };
 
 struct aws_array_list {
     struct aws_allocator *alloc;
@@ -52,6 +54,21 @@ int aws_array_list_init_dynamic(
  */
 AWS_STATIC_IMPL
 void aws_array_list_init_static(
+    struct aws_array_list *AWS_RESTRICT list,
+    void *raw_array,
+    size_t item_count,
+    size_t item_size);
+
+/**
+ * Initializes an array list with a preallocated array of *already-initialized* elements. item_count is the number of
+ * elements in the array, and item_size is the size in bytes of each element.
+ *
+ * Once initialized, nothing further can be added to the list, since it will be full and cannot resize.
+ *
+ * Primary use case is to treat an already-initialized C array as an array list.
+ */
+AWS_STATIC_IMPL
+void aws_array_list_init_static_from_initialized(
     struct aws_array_list *AWS_RESTRICT list,
     void *raw_array,
     size_t item_count,
@@ -211,13 +228,14 @@ void aws_array_list_swap(struct aws_array_list *AWS_RESTRICT list, size_t a, siz
 /**
  * Sort elements in the list in-place according to the comparator function.
  */
-AWS_STATIC_IMPL
+AWS_COMMON_API
 void aws_array_list_sort(struct aws_array_list *AWS_RESTRICT list, aws_array_list_comparator_fn *compare_fn);
 
+AWS_EXTERN_C_END
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/array_list.inl>
 #endif /* AWS_NO_STATIC_IMPL */
 
-AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_ARRAY_LIST_H */

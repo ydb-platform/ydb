@@ -14,6 +14,7 @@ struct TListenerSettings {
     TString PrivateKeyFile;
     TString SslCertificatePem;
     TString Address = "::";
+    bool TcpNotDelay = false;
 };
 
 enum EErrorAction {

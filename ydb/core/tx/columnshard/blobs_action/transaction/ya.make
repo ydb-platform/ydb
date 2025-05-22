@@ -6,6 +6,8 @@ SRCS(
     tx_write_index.cpp
     tx_gc_insert_table.cpp
     tx_gc_indexed.cpp
+    tx_remove_blobs.cpp
+    tx_blobs_written.cpp
 )
 
 PEERDIR(
@@ -13,6 +15,8 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/tablet_flat
     ydb/core/tx/tiering
+    ydb/core/tx/columnshard/data_sharing/protos
+    ydb/core/tx/columnshard/blobs_action/events
 )
 
 END()

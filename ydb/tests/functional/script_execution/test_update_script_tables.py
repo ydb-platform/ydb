@@ -3,7 +3,7 @@
 
 import pytest
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -26,7 +26,7 @@ class TestUpdateScriptTablesYdb(object):
     @classmethod
     def setup_class(cls):
         cls.config = KikimrConfigGenerator(extra_feature_flags=["enable_script_execution_operations"])
-        cls.cluster = kikimr_cluster_factory(configurator=cls.config)
+        cls.cluster = KiKiMR(configurator=cls.config)
         cls.cluster.start()
         cls.driver = ydb.Driver(ydb.DriverConfig(
             database="/Root",

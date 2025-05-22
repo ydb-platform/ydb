@@ -39,8 +39,9 @@ struct TSchemeLimits {
 
     // table
     ui64 MaxTableColumns = 200;
+    ui64 MaxColumnTableColumns = 10000;
     ui64 MaxTableColumnNameLength = 255;
-    ui64 MaxTableKeyColumns = 20;
+    ui64 MaxTableKeyColumns = 30;
     ui64 MaxTableIndices = 20;
     ui64 MaxTableCdcStreams = 5;
     ui64 MaxShards = 200*1000; // In each database
@@ -137,5 +138,36 @@ enum class EAttachChildResult : ui32 {
 };
 
 using EServerlessComputeResourcesMode = NKikimrSubDomains::EServerlessComputeResourcesMode;
+
+struct TTempDirsState {
+
+    struct TRetryState {
+        bool IsScheduled = false;
+        NMonotonic::TMonotonic LastRetryAt = TMonotonic::Zero();
+        TDuration CurrentDelay = TDuration::Zero();
+        ui32 RetryNumber = 0;
+    };
+
+    struct TNodeState {
+        THashSet<TActorId> Owners;
+        TRetryState RetryState;
+    };
+
+    THashMap<TActorId, THashSet<TPathId>> TempDirsByOwner; // OwnerActorId -> [ TPathId ]
+    THashMap<ui32, TNodeState> NodeStates; // NodeId -> TNodeState
+};
+
+struct TTempDirInfo {
+    TString WorkingDir;
+    TString Name;
+    TActorId TempDirOwnerActorId;
+};
+
+enum class EDataErasureStatus : ui32 {
+    UNSPECIFIED = 0,
+    COMPLETED = 1,
+    IN_PROGRESS = 2,
+    IN_PROGRESS_BSC = 3,
+};
 
 }

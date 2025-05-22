@@ -1,14 +1,17 @@
 #include "yql_pq_provider_impl.h"
+#include "yql_pq_helpers.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/pushdown/type_ann.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -28,6 +31,38 @@ public:
         AddHandler({TPqTopic::CallableName()}, Hndl(&TSelf::HandleTopic));
         AddHandler({TDqPqTopicSource::CallableName()}, Hndl(&TSelf::HandleDqTopicSource));
         AddHandler({TCoSystemMetadata::CallableName()}, Hndl(&TSelf::HandleMetadata));
+        AddHandler({TDqPqFederatedCluster::CallableName()}, Hndl(&TSelf::HandleFederatedCluster));
+    }
+
+    TStatus HandleFederatedCluster(TExprBase input, TExprContext& ctx) {
+        const auto cluster = input.Cast<NNodes::TDqPqFederatedCluster>();
+        if (!EnsureMinMaxArgsCount(input.Ref(), 3, 4, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(cluster.Name().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(cluster.Endpoint().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(cluster.Database().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (TDqPqFederatedCluster::idx_PartitionsCount < input.Ref().ChildrenSize()) {
+            if (!EnsureAtom(cluster.PartitionsCount().Ref(), ctx)) {
+                return TStatus::Error;
+            }
+            if (!TryFromString<ui32>(cluster.PartitionsCount().Cast().StringValue())) {
+                ctx.AddError(TIssue(ctx.GetPosition(cluster.PartitionsCount().Cast().Pos()), TStringBuilder() << "Expected integer, but got: " << cluster.PartitionsCount().Cast().StringValue()));
+                return TStatus::Error;
+            }
+        }
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+        return TStatus::Ok;
     }
 
     TStatus HandleConfigure(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -47,7 +82,7 @@ public:
         return TStatus::Ok;
     }
 
-    const TTypeAnnotationNode* GetReadTopicSchema(TPqTopic topic, TMaybeNode<TCoAtomList> columns, TExprContext& ctx, TVector<TString>& columnOrder) {
+    const TTypeAnnotationNode* GetReadTopicSchema(TPqTopic topic, TMaybeNode<TCoAtomList> columns, TExprContext& ctx, TColumnOrder& columnOrder) {
         TVector<const TItemExprType*> items;
         items.reserve((columns ? columns.Cast().Ref().ChildrenSize() : 0) + topic.Metadata().Size());
 
@@ -56,7 +91,7 @@ public:
 
         std::unordered_set<TString> addedFields;
         if (columns) {
-            columnOrder.reserve(items.capacity());
+            columnOrder.Reserve(items.capacity());
 
             for (auto c : columns.Cast().Ref().ChildrenList()) {
                 if (!EnsureAtom(*c, ctx)) {
@@ -67,7 +102,7 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(topic.Pos()), TStringBuilder() << "Unable to find column: " << c->Content()));
                     return nullptr;
                 }
-                columnOrder.push_back(TString(c->Content()));
+                columnOrder.AddColumn(TString(c->Content()));
                 items.push_back(itemSchema->GetItems()[*index]);
                 addedFields.emplace(c->Content());
             }
@@ -85,7 +120,7 @@ public:
     }
 
     TStatus HandleReadTopic(TExprBase input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(input.Ref(), 6, 8, ctx)) {
+        if (!EnsureMinMaxArgsCount(input.Ref(), 6, 9, ctx)) {
             return TStatus::Error;
         }
 
@@ -99,23 +134,27 @@ public:
             return TStatus::Error;
         }
 
-        auto format = read.Format().Ref().Content();
-        if (!NCommon::ValidateFormatForInput(format, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!NCommon::ValidateCompressionForInput(format, read.Compression().Ref().Content(), ctx)) {
-            return TStatus::Error;
-        }
-
         TPqTopic topic = read.Topic();
         if (!EnsureCallable(topic.Ref(), ctx)) {
             return TStatus::Error;
         }
 
-        TVector<TString> columnOrder;
+        TColumnOrder columnOrder;
         auto schema = GetReadTopicSchema(topic, read.Columns().Maybe<TCoAtomList>(), ctx, columnOrder);
         if (!schema) {
+            return TStatus::Error;
+        }
+
+        auto format = read.Format().Ref().Content();
+        if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
+            format,
+            schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
+            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)); },
+            ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!NCommon::ValidateCompressionForInput(format, read.Compression().Ref().Content(), ctx)) {
             return TStatus::Error;
         }
 
@@ -127,11 +166,16 @@ public:
     }
 
     TStatus HandleDqTopicSource(TExprBase input, TExprContext& ctx) {
-        if (!EnsureArgsCount(input.Ref(), 4, ctx)) {
+        if (!EnsureArgsCount(input.Ref(), 7, ctx)) {
             return TStatus::Error;
         }
 
         TDqPqTopicSource topicSource = input.Cast<TDqPqTopicSource>();
+
+        if (!EnsureWorldType(topicSource.World().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
         TPqTopic topic = topicSource.Topic();
 
         if (!EnsureCallable(topic.Ref(), ctx)) {
@@ -144,6 +188,14 @@ public:
         if (!meta) {
             ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unknown topic `" << cluster << "`.`" << topicPath << "`"));
             return TStatus::Error;
+        }
+
+        if (const auto maybeSharedReadingSetting = FindSetting(topicSource.Settings().Ptr(), SharedReading)) {
+            const TExprNode& value = maybeSharedReadingSetting.Cast().Ref();
+            if (value.IsAtom() && FromString<bool>(value.Content())) {
+                input.Ptr()->SetTypeAnn(ctx.MakeType<TStreamExprType>(topicSource.RowType().Ref().GetTypeAnn()));
+                return TStatus::Ok;
+            }
         }
 
         if (topic.Metadata().Empty()) {

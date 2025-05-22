@@ -8,21 +8,26 @@ additional features:
   * options set attributes of a passed-in object
 """
 
-import sys
-import string
-import re
+from __future__ import annotations
+
 import getopt
-from .errors import DistutilsGetoptError, DistutilsArgError
+import re
+import string
+import sys
+from collections.abc import Sequence
+from typing import Any
+
+from .errors import DistutilsArgError, DistutilsGetoptError
 
 # Much like command_re in distutils.core, this is close to but not quite
 # the same as a Python NAME -- except, in the spirit of most GNU
 # utilities, we use '-' in place of '_'.  (The spirit of LISP lives on!)
 # The similarities to NAME are again not a coincidence...
 longopt_pat = r'[a-zA-Z](?:[a-zA-Z0-9-]*)'
-longopt_re = re.compile(r'^%s$' % longopt_pat)
+longopt_re = re.compile(rf'^{longopt_pat}$')
 
 # For recognizing "negative alias" options, eg. "quiet=!verbose"
-neg_alias_re = re.compile("^({})=!({})$".format(longopt_pat, longopt_pat))
+neg_alias_re = re.compile(f"^({longopt_pat})=!({longopt_pat})$")
 
 # This is used to translate long options to legitimate Python identifiers
 # (for use as attributes of some object).
@@ -93,7 +98,7 @@ class FancyGetopt:
     def add_option(self, long_option, short_option=None, help_string=None):
         if long_option in self.option_index:
             raise DistutilsGetoptError(
-                "option conflict: already an option '%s'" % long_option
+                f"option conflict: already an option '{long_option}'"
             )
         else:
             option = (long_option, short_option, help_string)
@@ -116,13 +121,11 @@ class FancyGetopt:
         for alias, opt in aliases.items():
             if alias not in self.option_index:
                 raise DistutilsGetoptError(
-                    ("invalid %s '%s': " "option '%s' not defined")
-                    % (what, alias, alias)
+                    f"invalid {what} '{alias}': option '{alias}' not defined"
                 )
             if opt not in self.option_index:
                 raise DistutilsGetoptError(
-                    ("invalid %s '%s': " "aliased option '%s' not defined")
-                    % (what, alias, opt)
+                    f"invalid {what} '{alias}': aliased option '{opt}' not defined"
                 )
 
     def set_aliases(self, alias):
@@ -157,19 +160,17 @@ class FancyGetopt:
             else:
                 # the option table is part of the code, so simply
                 # assert that it is correct
-                raise ValueError("invalid option tuple: {!r}".format(option))
+                raise ValueError(f"invalid option tuple: {option!r}")
 
             # Type- and value-check the option names
             if not isinstance(long, str) or len(long) < 2:
                 raise DistutilsGetoptError(
-                    ("invalid long option '%s': " "must be a string of length >= 2")
-                    % long
+                    f"invalid long option '{long}': must be a string of length >= 2"
                 )
 
             if not ((short is None) or (isinstance(short, str) and len(short) == 1)):
                 raise DistutilsGetoptError(
-                    "invalid short option '%s': "
-                    "must a single character or None" % short
+                    f"invalid short option '{short}': must a single character or None"
                 )
 
             self.repeat[long] = repeat
@@ -179,7 +180,7 @@ class FancyGetopt:
                 if short:
                     short = short + ':'
                 long = long[0:-1]
-                self.takes_arg[long] = 1
+                self.takes_arg[long] = True
             else:
                 # Is option is a "negative alias" for some other option (eg.
                 # "quiet" == "!verbose")?
@@ -187,12 +188,12 @@ class FancyGetopt:
                 if alias_to is not None:
                     if self.takes_arg[alias_to]:
                         raise DistutilsGetoptError(
-                            "invalid negative alias '%s': "
-                            "aliased option '%s' takes a value" % (long, alias_to)
+                            f"invalid negative alias '{long}': "
+                            f"aliased option '{alias_to}' takes a value"
                         )
 
                     self.long_opts[-1] = long  # XXX redundant?!
-                self.takes_arg[long] = 0
+                self.takes_arg[long] = False
 
             # If this is an alias option, make sure its "takes arg" flag is
             # the same as the option it's aliased to.
@@ -200,9 +201,9 @@ class FancyGetopt:
             if alias_to is not None:
                 if self.takes_arg[long] != self.takes_arg[alias_to]:
                     raise DistutilsGetoptError(
-                        "invalid alias '%s': inconsistent with "
-                        "aliased option '%s' (one of them takes a value, "
-                        "the other doesn't" % (long, alias_to)
+                        f"invalid alias '{long}': inconsistent with "
+                        f"aliased option '{alias_to}' (one of them takes a value, "
+                        "the other doesn't"
                     )
 
             # Now enforce some bondage on the long option name, so we can
@@ -211,8 +212,8 @@ class FancyGetopt:
             # '='.
             if not longopt_re.match(long):
                 raise DistutilsGetoptError(
-                    "invalid long option name '%s' "
-                    "(must be letters, numbers, hyphens only" % long
+                    f"invalid long option name '{long}' "
+                    "(must be letters, numbers, hyphens only"
                 )
 
             self.attr_name[long] = self.get_attr_name(long)
@@ -220,7 +221,7 @@ class FancyGetopt:
                 self.short_opts.append(short)
                 self.short2long[short[0]] = long
 
-    def getopt(self, args=None, object=None):  # noqa: C901
+    def getopt(self, args: Sequence[str] | None = None, object=None):  # noqa: C901
         """Parse command-line options in args. Store as attributes on object.
 
         If 'args' is None or not supplied, uses 'sys.argv[1:]'.  If
@@ -269,7 +270,7 @@ class FancyGetopt:
 
             attr = self.attr_name[opt]
             # The only repeating option at the moment is 'verbose'.
-            # It has a negative option -q quiet, which should set verbose = 0.
+            # It has a negative option -q quiet, which should set verbose = False.
             if val and self.repeat.get(attr) is not None:
                 val = getattr(object, attr, 0) + 1
             setattr(object, attr, val)
@@ -352,18 +353,18 @@ class FancyGetopt:
             # Case 1: no short option at all (makes life easy)
             if short is None:
                 if text:
-                    lines.append("  --%-*s  %s" % (max_opt, long, text[0]))
+                    lines.append(f"  --{long:<{max_opt}}  {text[0]}")
                 else:
-                    lines.append("  --%-*s  " % (max_opt, long))
+                    lines.append(f"  --{long:<{max_opt}}")
 
             # Case 2: we have a short option, so we have to include it
             # just after the long option
             else:
-                opt_names = "{} (-{})".format(long, short)
+                opt_names = f"{long} (-{short})"
                 if text:
-                    lines.append("  --%-*s  %s" % (max_opt, opt_names, text[0]))
+                    lines.append(f"  --{opt_names:<{max_opt}}  {text[0]}")
                 else:
-                    lines.append("  --%-*s" % opt_names)
+                    lines.append(f"  --{opt_names:<{max_opt}}")
 
             for ell in text[1:]:
                 lines.append(big_indent + ell)
@@ -376,7 +377,7 @@ class FancyGetopt:
             file.write(line + "\n")
 
 
-def fancy_getopt(options, negative_opt, object, args):
+def fancy_getopt(options, negative_opt, object, args: Sequence[str] | None):
     parser = FancyGetopt(options)
     parser.set_negative_aliases(negative_opt)
     return parser.getopt(args, object)
@@ -450,7 +451,7 @@ class OptionDummy:
     """Dummy class just used as a place to hold command-line option
     values as instance attributes."""
 
-    def __init__(self, options=[]):
+    def __init__(self, options: Sequence[Any] = []):
         """Create a new OptionDummy instance.  The attributes listed in
         'options' will be initialized to None."""
         for opt in options:
@@ -465,6 +466,6 @@ How *do* you spell that odd word, anyways?
 say, "How should I know?"].)"""
 
     for w in (10, 20, 30, 40):
-        print("width: %d" % w)
+        print(f"width: {w}")
         print("\n".join(wrap_text(text, w)))
         print()

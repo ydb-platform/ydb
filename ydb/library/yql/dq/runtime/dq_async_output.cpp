@@ -1,7 +1,7 @@
 #include "dq_async_output.h"
 #include "dq_transport.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <deque>
 #include <variant>

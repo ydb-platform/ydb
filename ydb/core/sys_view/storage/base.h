@@ -42,14 +42,9 @@ namespace NKikimr::NSysView {
         }
 
         void StartScan() {
-            ui64 bsControllerId = TBase::GetBSControllerId();
-            if (!bsControllerId) {
-                return;
-            }
-
-            auto pipeCache = MakePipePeNodeCacheID(false);
+            auto pipeCache = MakePipePerNodeCacheID(false);
             TBase::Send(pipeCache, new TEvPipeCache::TEvForward(static_cast<TDerived&>(*this).CreateQuery(),
-                bsControllerId, true), IEventHandle::FlagTrackDelivery);
+                MakeBSControllerID(), true), IEventHandle::FlagTrackDelivery);
         }
 
         void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
@@ -184,7 +179,7 @@ namespace NKikimr::NSysView {
         }
 
         void PassAway() override {
-            TBase::Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+            TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
             TBase::PassAway();
         }
 

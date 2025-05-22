@@ -2,6 +2,7 @@
 
 #include "hive.h"
 #include <ydb/core/protos/hive.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/base/location.h>
 
 namespace NKikimr {
@@ -63,6 +64,17 @@ struct TFollowerGroup {
             return FollowerCount * dataCenters;
         } else {
             return FollowerCount;
+        }
+    }
+
+    ui32 GetFollowerCountForDataCenter(const TDataCenterId& dc) const {
+        if (!FollowerCountPerDataCenter) {
+            return 0;
+        }
+        if (NodeFilter.IsAllowedDataCenter(dc)) {
+            return FollowerCount;
+        } else {
+            return 0;
         }
     }
 

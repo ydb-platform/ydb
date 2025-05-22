@@ -13,6 +13,8 @@ SRCS(
     prepare.cpp
     prepare.h
     setup.h
+    test_bad_blobid.cpp
+    test_bad_blobid.h
     test_brokendevice.cpp
     test_brokendevice.h
     test_dbstat.cpp

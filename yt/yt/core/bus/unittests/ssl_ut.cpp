@@ -50,8 +50,9 @@ class TSslTest
 {
 public:
     NTesting::TPortHolder Port;
-    TString Address;
-    TString AddressWithIp;
+    TString AddressWithHostName;
+    TString AddressWithIpV4;
+    TString AddressWithIpV6;
 
     const char* CA = R"foo(-----BEGIN CERTIFICATE-----
 MIIFWjCCA0KgAwIBAgIBATANBgkqhkiG9w0BAQsFADBGMQswCQYDVQQGEwJSVTEP
@@ -170,11 +171,128 @@ qrpW/AReSwhvwVugcMFUgMXaDx/3SAY75B808wX1tizv76omWZAQ774FeGQGyP4C
 rPl77gAcribJm3TzBVHm2m6jBGtb
 -----END PRIVATE KEY-----)foo";
 
+    const char* CAWithIpInSAN = R"foo(-----BEGIN CERTIFICATE-----
+MIIFHzCCAwegAwIBAgIUQEt4xnHWGulMGzqad434c4Mw+cAwDQYJKoZIhvcNAQEL
+BQAwJjERMA8GA1UECgwIWVRzYXVydXMxETAPBgNVBAMMCFlUc2F1cnVzMB4XDTI0
+MDIyOTEwMTIzM1oXDTM0MDIyNjEwMTIzM1owJjERMA8GA1UECgwIWVRzYXVydXMx
+ETAPBgNVBAMMCFlUc2F1cnVzMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKC
+AgEAwUS9deIwfMNeicFqw7/fDslSb7sSiPbYfYUxwuELBR8nVomaL/a7IpQx5dOw
+nB2CSUiTDsLczNaBvQyNkjJ8VIX4fEPtgfHCuoUaCg4NwcaHfY0TSssbCKh8U92z
+fM/iSCjjkMdp9pTzZL93yam72dqfFbHmBvO6XiGjYeR9BL6AqoZMBnIjmxsU9JCW
+SM7B0l+Sf8dsH8DmnzqtLUXKIZJyVK6LOVb7MtSw0iAYatrIt3t7IytqZMOe+dEZ
+V0C0YzTecOgCWKS+rA8X1h7zHW5vXLDYU6RR+qw3gFsRK0oHmECuo+4Ui2nMzkx1
+jf2nK8L0Z2MHP0YFI9cGCBfSZMv6eocbYZI1DmhNKZNFhSLL8lmfzv4uR7WPyNL6
+Ml+2xgp03r1QFx93cRNW5bjjFytzYQkEVwbvLsABHDFm056PpNXKh6eoXGkUfaWf
+iXxUWhAFJRxggkTrPawCr+YQtVbBFe/YcdrTkdvFengFLm4wE20RiJUZWvG4oXmV
+JdKvDMsR1RFoQQfSqKL3mERMvVBBO1CXqymdPW6K+S2r367ryXGCG6kRDGpfmu7R
+vYZcA9BJqNvGcowf5fBe2VZf3cqZwdZKjCYOR3dCVDbXClraeStzy0VXKgxukHyT
+g3XfPqptaUKtpy413b/AVG2YupEn+SoOGMP0NKMyj9XAr20CAwEAAaNFMEMwDgYD
+VR0PAQH/BAQDAgLkMBIGA1UdEwEB/wQIMAYBAf8CAQEwHQYDVR0OBBYEFAYGwcRb
+cWnfIkC1Mozkzm0CDcFbMA0GCSqGSIb3DQEBCwUAA4ICAQCztlZxgJNdhebicTkT
+B4iXXntoOzlnusua1lCBKRUowHAocw2ylXb32Ahh/fENmHyt/jYTlcFu/qK6Q1T8
+/pN14hnyF2pB+ZJjyAr3vNnZtHGJ2xz3wPqFRzD00YUqvvLi9xD2nhsfn4xex/OK
+KUx/dbV6FkJ60Fpg97zeOmO+5Kh9srIEGEczPb+y9meiMGB91tm+ZUcd9cGShTRH
+krFkuCySJuNgrAZCxqvdsUPvPDd12lPyqmfmuVjauON9ENYUYwNoxQc8MxEx0x6j
+QolYDmc2A2VP29rTLQhyjf8TvwXfq8z+zNoeQZCNCON5jg7zH67XarXxK1AZOePc
+ZqHtjfTLTqmmKkkG7IRt1h9dtGsROMaRfXf0t4M9mvqx/1Cx6abA6LfcOkp7OG8S
+0tx0IzIRnQh2iN4zR1MihS3hn3s9ayviiaopIPVyCKEKRZpsL3QzhzydnQM/Wb+r
+UTe546vZV3q2irHH/x4SZFWoFhDwepAyUMI4qo1REd+cM/MakLP5x4nFzzDmPjyf
+FiuyqHTlkMtjveytSblzpzWE1/Sum3RcMh4s9ECq8XaUl/8FerUYvIJfRDq1j79J
+w/cDyD142joRYwQG0HQkmE4ph4mYFwKhmYOv11Wik9zvEt156VPFaExu6rkjmLia
+nTkPBMUXiU3GIb4H7k78sEjv1g==
+-----END CERTIFICATE-----)foo";
+
+    const char* CertChainWithIpInSAN = R"foo(-----BEGIN CERTIFICATE-----
+MIIFVTCCAz2gAwIBAgIBATANBgkqhkiG9w0BAQsFADAmMREwDwYDVQQKDAhZVHNh
+dXJ1czERMA8GA1UEAwwIWVRzYXVydXMwHhcNMjQwMjI5MTAxMjMzWhcNMzQwMjI2
+MTAxMjMzWjATMREwDwYDVQQKDAhZVHNhdXJ1czCCAiIwDQYJKoZIhvcNAQEBBQAD
+ggIPADCCAgoCggIBAJ4BhT+WpWpkEEgaqcbZoV5/JOeAkFj2iZL08nIjkDRVhDBh
+dQoop47vB1lpLD/1i5+2YEackPrfeJawbNu32s/belvxHpTc1ljndCJlilMiR5B+
+MccP00fUZRsFhkzznANz++31PI4wamHJ1kdJOgD/4civ0mpWgd5s1hityqsypXI3
+RFbi689+mnBp2sGCD6l3QVbMj+8ORvXOVC1h1W3tExiivabjFILgXwb6WG6ZNgg8
+T20zdH4uEc4d2v6XKY4nz4AqYDHax9oqs3XTOTo0Bld6m7oipjGjToMqqpJD32pb
+nxSNT/XECpsNqZ/UMtcQf3HoA2LEOZOg/Knf1mosEww2svb0CqMGfsxxHehCaFJT
+CWkdd8GTQ/3t85xtrd5Ccdqb78o+5039H4GkfkcxAIZQe7siNLbUJ+dR6wRMzJw2
+GMcAHEIozOYVDgwyOT/Q3gaKMg4A3Ki2x7tkCie1KmmAcnECWDRhzG/Hg/RdnYqA
+L6g/m7Z3bw93rUbwXNudVj1ls5MPoyYtTACtZAXnv/PBBd+KR+RZ//T6dD7B9zzC
+MiIsIHemPzE3XsWB6I1AqXv2B8THELgJ8foN6Rho4YQ0t0wjhcM0higfSaiHwqhf
+Cgoc5xxOGa8PlEETWQvcT3ORAukpjM22QbZmA3uLN/MR1DJbwNHqiYPiFZ1zAgMB
+AAGjgaAwgZ0wDgYDVR0PAQH/BAQDAgWgMB0GA1UdJQQWMBQGCCsGAQUFBwMBBggr
+BgEFBQcDAjAsBgNVHREEJTAjgglsb2NhbGhvc3SHBH8AAAGHEAAAAAAAAAAAAAAA
+AAAAAAEwHQYDVR0OBBYEFDyAfXqSAoKxK/sCyFs3d2yUpSntMB8GA1UdIwQYMBaA
+FAYGwcRbcWnfIkC1Mozkzm0CDcFbMA0GCSqGSIb3DQEBCwUAA4ICAQCHRuHI5XaS
+PIK3JKzA6l01z7YDHROGn5Xf9hqo5QKHv/aUD01UUhxCbx5z/YZMFDc6iRvu4xQw
+HMl8BCvTo3gHSS8JRcgRn1ov5m50NZMl0Ws9xvvy1j5rZWd3HkBTQSpzr4eSHAZp
+dUWXN2JEW7QIaIxtoiLwMZVjo3Lfr2Qv4uIn9lbIR0F7s39+qFlzvDx+6JbstJsv
+5wPjTS9og3WfpBDaOecHM/nP8v1H9ilx8/EW0nM3jlS0q0Gj9whkha0Pcl156Bga
+biLDoQk7uTccO8Wiyddwfq6tlYy1OAIMqDy0vmoz4L/3FHJUqrzO/fdI9VQLlug+
+M2G6qTJHKzmDkvmtxPfTjRFMu+g7L3QEdYCBogfIHS+VoB9a9K/XmoWBg85cWIPw
+Kfjjf7OouqksfOQopxY2+PCQ66nnkN7y13RjoU2heAme8Fexiowkjhzc1lq0Zn0Q
+XPlnvCHAQMNRNmvBLwNEkW+KN4no0TCImOOTuInBrlKGTaBkinUNS39AF9lZWwAE
+hd1kK5zzF6XvZnKXdVIn4MjcW81hcbrnulq5GHz7XY+lwmORYumYo3Gykjj/+G93
+K9HRlSRV1+BNXmPYtI8hvbAYw05+AWKCk0J5r1GQtPx+Tx3sug/2qks26oURgEHc
+ySl4OPJLp2lhKCUkKVP24Tzg/iS1xT/uHQ==
+-----END CERTIFICATE-----)foo";
+
+    const char* PrivateKeyWithIpInSAN = R"foo(-----BEGIN PRIVATE KEY-----
+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
+AbE/BnHl1tAmZXLMrHq/4r0wYUjBsA==
+-----END PRIVATE KEY-----)foo";
+
     TSslTest()
     {
         Port = NTesting::GetFreePort();
-        Address = Format("localhost:%v", Port);
-        AddressWithIp = Format("127.0.0.1:%v", Port);
+        AddressWithHostName = Format("localhost:%v", Port);
+        AddressWithIpV4 = Format("127.0.0.1:%v", Port);
+        AddressWithIpV6 = Format("[::1]:%v", Port);
     }
 };
 
@@ -191,7 +309,7 @@ TEST_F(TSslTest, RequiredAndRequiredEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     auto client = CreateBusClient(clientConfig);
 
@@ -219,7 +337,7 @@ TEST_F(TSslTest, RequiredAndOptionalEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Optional;
     auto client = CreateBusClient(clientConfig);
 
@@ -247,7 +365,7 @@ TEST_F(TSslTest, OptionalAndRequiredEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     auto client = CreateBusClient(clientConfig);
 
@@ -275,7 +393,7 @@ TEST_F(TSslTest, OptionalAndOptionalEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Optional;
     auto client = CreateBusClient(clientConfig);
 
@@ -299,7 +417,7 @@ TEST_F(TSslTest, DisabledAndDisabledEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Disabled;
     auto client = CreateBusClient(clientConfig);
 
@@ -327,7 +445,7 @@ TEST_F(TSslTest, RequiredAndDisabledEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Disabled;
     auto client = CreateBusClient(clientConfig);
 
@@ -346,7 +464,7 @@ TEST_F(TSslTest, DisabledAndRequiredEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     auto client = CreateBusClient(clientConfig);
 
@@ -365,7 +483,7 @@ TEST_F(TSslTest, DisabledAndOptionalEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Optional;
     auto client = CreateBusClient(clientConfig);
 
@@ -389,7 +507,7 @@ TEST_F(TSslTest, OptionalAndDisabledEncryptionMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Disabled;
     auto client = CreateBusClient(clientConfig);
 
@@ -421,7 +539,7 @@ TEST_F(TSslTest, CAVerificationModeFailure)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     clientConfig->VerificationMode = EVerificationMode::Ca;
     auto client = CreateBusClient(clientConfig);
@@ -449,7 +567,7 @@ TEST_F(TSslTest, CAVerificationModeSuccess)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->CA = New<NCrypto::TPemBlobConfig>();
     clientConfig->CA->Value = CA;
     clientConfig->EncryptionMode = EEncryptionMode::Required;
@@ -472,7 +590,7 @@ TEST_F(TSslTest, CAVerificationModeSuccess)
         .ThrowOnError();
 }
 
-TEST_F(TSslTest, FullVerificationMode)
+TEST_F(TSslTest, FullVerificationModeByHostName)
 {
     // Reset ctx in order to unload possibly loaded CA.
     TSslContext::Get()->Reset();
@@ -487,7 +605,7 @@ TEST_F(TSslTest, FullVerificationMode)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     clientConfig->VerificationMode = EVerificationMode::Full;
     clientConfig->CA = New<NCrypto::TPemBlobConfig>();
@@ -508,54 +626,95 @@ TEST_F(TSslTest, FullVerificationMode)
         .ThrowOnError();
 }
 
-TEST_F(TSslTest, FullVerificationAlternativeHostName)
+TEST_F(TSslTest, FullVerificationModeByIpAddress)
 {
     // Reset ctx in order to unload possibly loaded CA.
     TSslContext::Get()->Reset();
 
-    auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->EncryptionMode = EEncryptionMode::Required;
-    serverConfig->VerificationMode = EVerificationMode::None;
-    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
-    serverConfig->CertificateChain->Value = CertChain;
-    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
-    serverConfig->PrivateKey->Value = PrivateKey;
-    auto server = CreateBusServer(serverConfig);
-    server->Start(New<TEmptyBusHandler>());
+    // Connect via ipv4 and ipv6 addresses.
+    for (const auto& address : {AddressWithIpV4, AddressWithIpV6}) {
+        auto serverConfig = TBusServerConfig::CreateTcp(Port);
+        serverConfig->EncryptionMode = EEncryptionMode::Required;
+        serverConfig->VerificationMode = EVerificationMode::None;
+        serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+        serverConfig->CertificateChain->Value = CertChainWithIpInSAN;
+        serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+        serverConfig->PrivateKey->Value = PrivateKeyWithIpInSAN;
+        auto server = CreateBusServer(serverConfig);
+        server->Start(New<TEmptyBusHandler>());
 
-    // Connect via IP.
-    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithIp);
-    clientConfig->EncryptionMode = EEncryptionMode::Required;
-    clientConfig->VerificationMode = EVerificationMode::Full;
-    clientConfig->CA = New<NCrypto::TPemBlobConfig>();
-    clientConfig->CA->Value = CA;
-
-    {
+        auto clientConfig = TBusClientConfig::CreateTcp(address);
+        clientConfig->EncryptionMode = EEncryptionMode::Required;
+        clientConfig->VerificationMode = EVerificationMode::Full;
+        clientConfig->CA = New<NCrypto::TPemBlobConfig>();
+        clientConfig->CA->Value = CAWithIpInSAN;
         auto client = CreateBusClient(clientConfig);
+
         auto bus = client->CreateBus(New<TEmptyBusHandler>());
-        // This test should fail since 127.0.0.1 != localhost.
-        EXPECT_THROW_MESSAGE_HAS_SUBSTR(
-            bus->GetReadyFuture().Get().ThrowOnError(),
-            NYT::TErrorException,
-            "Failed to establish TLS/SSL session");
+        // This test should pass since (127.0.0.1 | [::1]) is in SAN.
+        EXPECT_TRUE(bus->GetReadyFuture().Get().IsOK());
+        EXPECT_TRUE(bus->IsEncrypted());
+
+        auto message = CreateMessage(1);
+        auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
+        EXPECT_TRUE(sendFuture.Get().IsOK());
+
+        server->Stop()
+            .Get()
+            .ThrowOnError();
     }
+}
 
-    // Connect via IP with Alt Hostname.
-    clientConfig->PeerAlternativeHostName = "localhost";
-    auto client = CreateBusClient(clientConfig);
+TEST_F(TSslTest, FullVerificationByAlternativeHostName)
+{
+    // Reset ctx in order to unload possibly loaded CA.
+    TSslContext::Get()->Reset();
 
-    auto bus = client->CreateBus(New<TEmptyBusHandler>());
-    // This test should pass since key pair is issued for CN=localhost.
-    EXPECT_NO_THROW(bus->GetReadyFuture().Get().ThrowOnError());
-    EXPECT_TRUE(bus->IsEncrypted());
+    for (const auto& address : {AddressWithIpV4, AddressWithIpV6}) {
+        auto serverConfig = TBusServerConfig::CreateTcp(Port);
+        serverConfig->EncryptionMode = EEncryptionMode::Required;
+        serverConfig->VerificationMode = EVerificationMode::None;
+        serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+        serverConfig->CertificateChain->Value = CertChain;
+        serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+        serverConfig->PrivateKey->Value = PrivateKey;
+        auto server = CreateBusServer(serverConfig);
+        server->Start(New<TEmptyBusHandler>());
 
-    auto message = CreateMessage(1);
-    auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
-    EXPECT_NO_THROW(sendFuture.Get().ThrowOnError());
+        // Connect via IP.
+        auto clientConfig = TBusClientConfig::CreateTcp(address);
+        clientConfig->EncryptionMode = EEncryptionMode::Required;
+        clientConfig->VerificationMode = EVerificationMode::Full;
+        clientConfig->CA = New<NCrypto::TPemBlobConfig>();
+        clientConfig->CA->Value = CA;
 
-    server->Stop()
-        .Get()
-        .ThrowOnError();
+        {
+            auto client = CreateBusClient(clientConfig);
+            auto bus = client->CreateBus(New<TEmptyBusHandler>());
+            // This test should fail since (127.0.0.1 | [::1]) != localhost.
+            EXPECT_THROW_MESSAGE_HAS_SUBSTR(
+                bus->GetReadyFuture().Get().ThrowOnError(),
+                NYT::TErrorException,
+                "Failed to establish TLS/SSL session");
+        }
+
+        // Connect via IP with Alt Hostname.
+        clientConfig->PeerAlternativeHostName = "localhost";
+        auto client = CreateBusClient(clientConfig);
+
+        auto bus = client->CreateBus(New<TEmptyBusHandler>());
+        // This test should pass since key pair is issued for CN=localhost.
+        EXPECT_NO_THROW(bus->GetReadyFuture().Get().ThrowOnError());
+        EXPECT_TRUE(bus->IsEncrypted());
+
+        auto message = CreateMessage(1);
+        auto sendFuture = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
+        EXPECT_NO_THROW(sendFuture.Get().ThrowOnError());
+
+        server->Stop()
+            .Get()
+            .ThrowOnError();
+    }
 }
 
 TEST_F(TSslTest, ServerCipherList)
@@ -571,7 +730,7 @@ TEST_F(TSslTest, ServerCipherList)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     clientConfig->VerificationMode = EVerificationMode::None;
     auto client = CreateBusClient(clientConfig);
@@ -605,7 +764,7 @@ TEST_F(TSslTest, DifferentCipherLists)
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
-    auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    auto clientConfig = TBusClientConfig::CreateTcp(AddressWithHostName);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     clientConfig->VerificationMode = EVerificationMode::None;
     clientConfig->CipherList = "AES128-GCM-SHA256";

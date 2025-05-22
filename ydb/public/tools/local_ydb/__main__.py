@@ -9,7 +9,7 @@ if __name__ == '__main__':
 \033[94m
 To deploy the local YDB cluster:
 
-   {prog} deploy --ydb-working-dir /absolute/path/to/working/directory --ydb-binary-path /path/to/kikimr/driver
+  {prog} deploy --ydb-working-dir /absolute/path/to/working/directory --ydb-binary-path /path/to/kikimr/driver
 
 To cleanup the deployed YDB cluster (this includes removal of working directory, all configuration files, disks and so on):
 
@@ -25,7 +25,7 @@ To start already deployed, but stopped cluster:
 
 To update cluster (stop + start):
 
-  {prog} start --ydb-working-dir /absolute/path/to/working/directory --ydb-binary-path /path/to/kikimr/driver
+  {prog} update --ydb-working-dir /absolute/path/to/working/directory --ydb-binary-path /path/to/kikimr/driver
 \x1b[0m
 """
     program_name = 'local_ydb'
@@ -131,7 +131,12 @@ To update cluster (stop + start):
             default=False,
             action='store_true',
         )
-
+        sub_parser.add_argument(
+            '--base-port-offset',
+            type=int,
+            default=0,
+            action='store',
+        )
         sub_parser.add_argument(
             '--ydb-binary-path', required=True,
             help='Path to binary file'
@@ -139,10 +144,6 @@ To update cluster (stop + start):
         sub_parser.add_argument(
             '--enable-pq', default=False, action='store_true',
             help='Enable pqv1 service in kikimr'
-        )
-        sub_parser.add_argument(
-            '--enable-datastreams', default=False, action='store_true',
-            help='Enable datastreams service'
         )
         sub_parser.add_argument(
             '--public-http-config-path', default=None,

@@ -53,6 +53,14 @@ void TLogDigestConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TFairShareHierarchicalSchedulerDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("window_size", &TThis::WindowSize)
+        .Default(TDuration::Minutes(5));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void THistogramDigestConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("absolute_precision", &TThis::AbsolutePrecision)
@@ -92,22 +100,6 @@ void THistogramDigestConfig::Register(TRegistrar registrar)
                 << TErrorAttribute("upper_bound", config->UpperBound);
         }
     });
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void THistoricUsageConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("aggregation_mode", &TThis::AggregationMode)
-        .Default(EHistoricUsageAggregationMode::None);
-
-    registrar.Parameter("ema_alpha", &TThis::EmaAlpha)
-        // TODO(eshcherbin): Adjust.
-        .Default(1.0 / (24.0 * 60.0 * 60.0))
-        .GreaterThanOrEqual(0.0);
-
-    registrar.Parameter("reset_on_new_parameters", &TThis::ResetOnNewParameters)
-        .Default(true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -161,6 +153,12 @@ void TExponentialBackoffOptionsSerializer::Register(TRegistrar registrar)
 
     registrar.ExternalClassParameter("backoff_jitter", &TThat::BackoffJitter)
         .Default(TThat::DefaultBackoffJitter);
+
+    registrar.ExternalPostprocessor([] (TThat* config) {
+        if(config->MinBackoff > config->MaxBackoff) {
+            THROW_ERROR_EXCEPTION("\"min_backoff\" must be less or equal than \"max_backoff\"");
+        }
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

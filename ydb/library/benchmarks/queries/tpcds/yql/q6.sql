@@ -4,8 +4,8 @@
 
 $sub1 = (select distinct (d_month_seq)
  	      from {{date_dim}}
-               where d_year = 2002
- 	        and d_moy = 3 );
+               where d_year = 2001
+ 	        and d_moy = 1 );
 
 $sub2 = (select AVG(j.i_current_price) as i_current_price, j.i_category as i_category
  	            from {{item}} as j
@@ -25,7 +25,7 @@ select  a.ca_state state, count(*) cnt
  	and s.ss_item_sk = i.i_item_sk
  	and d.d_month_seq = $sub1
 
- 	and i.i_current_price > 1.2 * j.i_current_price
+ 	and i.i_current_price > $z1_2 * j.i_current_price
  group by a.ca_state
  having count(*) >= 10
  order by cnt, state

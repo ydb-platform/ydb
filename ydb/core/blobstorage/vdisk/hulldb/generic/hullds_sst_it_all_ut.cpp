@@ -1,47 +1,6 @@
-#include "hullds_sstvec_it.h"
-#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
-#include <library/cpp/testing/unittest/registar.h>
-
+#include "hullds_sst_it_all_ut.h"
 
 namespace NKikimr {
-
-    namespace NBlobStorageHullSstItHelpers {
-        using TLogoBlobSst = TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
-        using TLogoBlobSstPtr = TIntrusivePtr<TLogoBlobSst>;
-        using TLogoBlobOrderedSsts = TOrderedLevelSegments<TKeyLogoBlob, TMemRecLogoBlob>;
-        using TLogoBlobOrderedSstsPtr = TIntrusivePtr<TLogoBlobOrderedSsts>;
-        using TSegments = TVector<TLogoBlobSstPtr>;
-
-        static const ui32 ChunkSize = 8u << 20u;
-        static const ui32 CompWorthReadSize = 2u << 20u;
-
-        TLogoBlobSstPtr GenerateSst(ui32 step, ui32 recs, ui32 plus, ui64 tabletId = 0, ui32 generation = 0,
-                                    ui32 channel = 0, ui32 cookie = 0) {
-            using TRec = TLogoBlobSst::TRec;
-            Y_UNUSED(step);
-            TLogoBlobSstPtr ptr(new TLogoBlobSst(TTestContexts().GetVCtx()));
-            for (ui32 i = 0; i < recs; i++) {
-                TLogoBlobID id(tabletId, generation, step + i * plus, channel, 0, cookie);
-                TRec rec {TKeyLogoBlob(id), TMemRecLogoBlob()};
-                ptr->LoadedIndex.push_back(rec);
-            }
-            return ptr;
-        }
-
-        TLogoBlobOrderedSstsPtr GenerateOrderedSsts(ui32 step, ui32 recs, ui32 plus, ui32 ssts, ui64 tabletId = 0,
-                                                    ui32 generation = 0, ui32 channel = 0, ui32 cookie = 0) {
-            TSegments vec;
-            for (ui32 i = 0; i < ssts; i++) {
-                vec.push_back(GenerateSst(step, recs, plus, tabletId, generation, channel, cookie));
-                step += recs * plus;
-            }
-
-            return TLogoBlobOrderedSstsPtr(new TLogoBlobOrderedSsts(vec.begin(), vec.end()));
-
-        }
-
-    } // NBlobStorageHullSstItHelpers
 
     Y_UNIT_TEST_SUITE(TBlobStorageHullSstIt) {
 
@@ -155,6 +114,151 @@ namespace NKikimr {
             id = TLogoBlobID(0, 0, 15, 0, 0, 0);
             it.Seek(id);
             UNIT_ASSERT(it.GetCurKey().ToString() == "[0:0:16:0:0:0:0]");
+        }
+
+        Y_UNIT_TEST(TestSstIndexSeekAndIterate) {
+            TTestContexts ctxs;
+            TTrackableVector<TLogoBlobSst::TRec> index(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
+
+            auto addRecord = [&index](ui64 tabletId, ui32 step) {
+                TLogoBlobID id(tabletId, 0, step, 0, 0, 0);
+                index.emplace_back(TKeyLogoBlob(id), TMemRecLogoBlob());
+            };
+
+            addRecord(10, 0);
+            addRecord(10, 10);
+            addRecord(20, 0);
+            addRecord(20, 10);
+            addRecord(20, 300);
+
+            TLogoBlobSstPtr ptr(new TLogoBlobSst(ctxs.GetVCtx()));
+            ptr->LoadLinearIndex(index);
+
+            TMemIterator it(ptr.Get());
+
+            it.Seek(TLogoBlobID(5, 0, 0, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[10:0:0:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(10, 0, 0, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[10:0:0:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(10, 0, 5, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[10:0:10:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(10, 0, 10, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[10:0:10:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(10, 0, 15, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[20:0:0:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(15, 0, 0, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[20:0:0:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(20, 0, 0, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[20:0:0:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(20, 0, 5, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[20:0:10:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(20, 0, 10, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[20:0:10:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(20, 0, 15, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[20:0:300:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(20, 0, 300, 0, 0, 0));
+            UNIT_ASSERT(it.GetCurKey().ToString() == "[20:0:300:0:0:0:0]");
+
+            it.Seek(TLogoBlobID(20, 0, 400, 0, 0, 0));
+            UNIT_ASSERT(!it.Valid());
+
+            it.Seek(TLogoBlobID(25, 0, 0, 0, 0, 0));
+            UNIT_ASSERT(!it.Valid());
+
+            it.SeekToFirst();
+            it.Prev();
+            UNIT_ASSERT(!it.Valid());
+
+            it.SeekToLast();
+            it.Next();
+            UNIT_ASSERT(!it.Valid());
+
+            it.SeekToFirst();
+            TStringStream str1;
+            while (it.Valid()) {
+                str1 << it.GetCurKey().ToString();
+                it.Next();
+            }
+            UNIT_ASSERT(str1.Str()
+                == "[10:0:0:0:0:0:0][10:0:10:0:0:0:0][20:0:0:0:0:0:0][20:0:10:0:0:0:0][20:0:300:0:0:0:0]");
+
+            it.SeekToLast();
+            TStringStream str2;
+            while (it.Valid()) {
+                str2 << it.GetCurKey().ToString();
+                it.Prev();
+            }
+            UNIT_ASSERT(str2.Str()
+                == "[20:0:300:0:0:0:0][20:0:10:0:0:0:0][20:0:0:0:0:0:0][10:0:10:0:0:0:0][10:0:0:0:0:0:0]");
+        }
+
+        Y_UNIT_TEST(TestSstIndexSaveLoad) {
+            TTestContexts ctxs;
+            TTrackableVector<TLogoBlobSst::TRec> index(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
+
+            auto addRecord = [&index](ui64 tabletId, ui32 step, ui32 blobSize) {
+                TLogoBlobID id(tabletId, 0, step, 0, blobSize, 0);
+                index.emplace_back(TKeyLogoBlob(id), TMemRecLogoBlob());
+            };
+
+            addRecord(10, 0, 1);
+            addRecord(10, 10, 2);
+            addRecord(20, 0, 3);
+            addRecord(20, 10, 4);
+            addRecord(20, 300, 5);
+
+            TLogoBlobSstPtr ptr(new TLogoBlobSst(ctxs.GetVCtx()));
+            ptr->LoadLinearIndex(index);
+
+            const auto& indexHigh = ptr->IndexHigh;
+            auto high = indexHigh.begin();
+
+            using TLogoBlobIdHigh = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdHigh;
+
+            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(10, 0, 0, 0));
+            UNIT_ASSERT(high->LowRangeEndIndex == 2);
+            ++high;
+            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(20, 0, 0, 0));
+            UNIT_ASSERT(high->LowRangeEndIndex == 4);
+            ++high;
+            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(20, 0, 300, 0));
+            UNIT_ASSERT(high->LowRangeEndIndex == 5);
+            ++high;
+            UNIT_ASSERT(high == indexHigh.end());
+
+            const auto& indexLow = ptr->IndexLow;
+            auto low = indexLow.begin();
+
+            using TLogoBlobIdLow = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdLow;
+
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(0, 0, 0, 1, 0));
+            ++low;
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(10, 0, 0, 2, 0));
+            ++low;
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(0, 0, 0, 3, 0));
+            ++low;
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(10, 0, 0, 4, 0));
+            ++low;
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(300, 0, 0, 5, 0));
+            ++low;
+            UNIT_ASSERT(low == indexLow.end());
+
+            TTrackableVector<TLogoBlobSst::TRec> checkIndex(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
+            ptr->SaveLinearIndex(&checkIndex);
+
+            for (auto i = index.begin(), c = checkIndex.begin(); i != index.end(); ++i, ++c) {
+                UNIT_ASSERT(i->Key == c->Key);
+            }
         }
     } // TBlobStorageHullSstIt
 

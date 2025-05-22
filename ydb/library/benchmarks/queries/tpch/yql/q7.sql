@@ -5,17 +5,16 @@
 -- using 1680793381 as a seed to the RNG
 
 $n = select n_name, n_nationkey from {{nation}} as n
-    where n_name = 'PERU' or n_name = 'MOZAMBIQUE';
+    where n_name = 'FRANCE' or n_name = 'GERMANY';
 
 $l = select 
     l_orderkey, l_suppkey,
     DateTime::GetYear(cast(l_shipdate as timestamp)) as l_year,
-    l_extendedprice * (1 - l_discount) as volume
+    l_extendedprice * ($z1_12 - l_discount) as volume
 from 
     {{lineitem}} as l
 where 
-    cast(cast(l.l_shipdate as Timestamp) as Date) 
-    between Date('1995-01-01') and Date('1996-12-31');
+    l.l_shipdate between Date('1995-01-01') and Date('1996-12-31');
 
 $j1 = select 
     n_name as supp_nation,
@@ -67,8 +66,8 @@ join
     $j1 as supplier
 on 
     lineitem.l_suppkey = supplier.s_suppkey
-where (supp_nation = 'PERU' and cust_nation = 'MOZAMBIQUE')
-    OR (supp_nation = 'MOZAMBIQUE' and cust_nation = 'PERU');
+where (supp_nation = 'FRANCE' and cust_nation = 'GERMANY')
+    OR (supp_nation = 'GERMANY' and cust_nation = 'FRANCE');
 
 select
     supp_nation,

@@ -5,7 +5,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/ycloud/api/events.h>
-#include <ydb/library/ycloud/impl/grpc_service_client.h>
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
@@ -35,7 +35,7 @@ class TComputeDatabasesCacheActor : public NActors::TActorBootstrapped<TComputeD
 
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
-        { 
+        {
             Register();
         }
 
@@ -55,7 +55,7 @@ class TComputeDatabasesCacheActor : public NActors::TActorBootstrapped<TComputeD
         }
 
         static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
-            return ::NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
+            return ::NMonitoring::ExplicitHistogram({0, 10, 100, 1000, 10000});
         }
     };
 

@@ -15,8 +15,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/local.h>
+#include <ydb/core/util/random.h>
 
-#include <util/random/entropy.h>
 #include <util/stream/file.h>
 #include <util/string/printf.h>
 #include <util/string/subst.h>
@@ -74,12 +74,12 @@ void FormatPDisk(TString path, ui64 diskSize, ui32 chunkSize, ui64 guid, bool is
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
-    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
     if (!isGuidValid) {
-        EntropyPool().Read(&guid, sizeof(guid));
+        SafeEntropyPoolRead(&guid, sizeof(guid));
     }
 
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize, guid,
@@ -125,7 +125,7 @@ void SetupServices(TTestActorRuntime &runtime) {
     { // setup domain info
         app.ClearDomainsAndHive();
         app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1", domainId).Release());
-        app.AddHive(domainId, MakeDefaultHiveID(stateStorageGroup));
+        app.AddHive(MakeDefaultHiveID());
     }
     { // setup channel profiles
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
@@ -229,8 +229,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         runtime.DispatchEvents(options);
     }
 
-    ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(defaultStateStorageGroup),
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(),
         TTabletTypes::BSController, TBlobStorageGroupType::ErasureMirror3, groupId),
         &CreateFlatBsController);
 }
@@ -247,10 +246,8 @@ void Setup(TTestActorRuntime& runtime) {
 
 
 Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
-    ui64 GetBsc(TTestActorRuntime &runtime) {
-        ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
-        ui64 bsController = MakeBSControllerID(defaultStateStorageGroup);
-        return bsController;
+    ui64 GetBsc(TTestActorRuntime& /*runtime*/) {
+        return MakeBSControllerID();
     }
 
     void CreatePDiskInBox(TTestActorRuntime& runtime, const TActorId& sender, ui32 nodeId, ui64 boxId, TString pdiskPath,

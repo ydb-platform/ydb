@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/protos/whiteboard_flags.pb.h>
 
 namespace NKikimr {
 
@@ -28,6 +28,7 @@ namespace NKikimr {
             DbMainPageBlocks = 15,
             DbMainPageBarriers = 16,
             Defrag = 17,
+            Shred = 18,
         };
 
         static const char *SubRequestIDToStr(int val) {
@@ -48,6 +49,7 @@ namespace NKikimr {
                 case DbMainPageBlocks:         return "DbMainPageBlocks";
                 case DbMainPageBarriers:       return "DbMainPageBarriers";
                 case Defrag:                   return "Defrag";
+                case Shred:                    return "Shred";
             }
             return "Unknown";
         }

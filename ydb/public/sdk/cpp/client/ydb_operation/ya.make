@@ -12,6 +12,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_export
     ydb/public/sdk/cpp/client/ydb_import
+    ydb/public/sdk/cpp/client/ydb_ss_tasks
     ydb/public/sdk/cpp/client/ydb_types/operation
 )
 

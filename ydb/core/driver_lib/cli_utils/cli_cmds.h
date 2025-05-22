@@ -46,5 +46,10 @@ public:
     TClientCommandCms();
 };
 
+class TClientCommandConfig : public TClientCommandTree {
+public:
+    TClientCommandConfig();
+};
+
 }
 }

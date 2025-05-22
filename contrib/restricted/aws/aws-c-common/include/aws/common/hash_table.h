@@ -10,9 +10,13 @@
 
 #include <stddef.h>
 
-#define AWS_COMMON_HASH_TABLE_ITER_CONTINUE (1 << 0)
-#define AWS_COMMON_HASH_TABLE_ITER_DELETE (1 << 1)
-#define AWS_COMMON_HASH_TABLE_ITER_ERROR (1 << 2)
+AWS_PUSH_SANE_WARNING_LEVEL
+
+enum {
+    AWS_COMMON_HASH_TABLE_ITER_CONTINUE = (1 << 0),
+    AWS_COMMON_HASH_TABLE_ITER_DELETE = (1 << 1),
+    AWS_COMMON_HASH_TABLE_ITER_ERROR = (1 << 2),
+};
 
 /**
  * Hash table data structure. This module provides an automatically resizing
@@ -99,8 +103,9 @@ typedef uint64_t(aws_hash_fn)(const void *key);
  * keys, but note that the same type is used for a function that compares
  * two hash table values in aws_hash_table_eq.
  *
- * Equality functions used in a hash table must be reflexive (i.e., a == b if
- * and only if b == a), and must be consistent with the hash function in use.
+ * Equality functions used in a hash table must be be reflexive (a == a),
+ * symmetric (a == b => b == a), transitive (a == b, b == c => a == c)
+ * and consistent (result does not change with time).
  */
 typedef bool(aws_hash_callback_eq_fn)(const void *a, const void *b);
 
@@ -271,6 +276,7 @@ int aws_hash_table_create(
  *
  * Returns AWS_OP_SUCCESS if an item was found or created.
  * Raises AWS_ERROR_OOM if hash table expansion was required and memory
+ * allocation failed.
  */
 AWS_COMMON_API
 int aws_hash_table_put(struct aws_hash_table *map, const void *key, void *value, int *was_created);
@@ -428,6 +434,21 @@ bool aws_hash_table_is_valid(const struct aws_hash_table *map);
 AWS_COMMON_API
 bool aws_hash_iter_is_valid(const struct aws_hash_iter *iter);
 
+/**
+ * Helper function to hash keys that are uint64_t values.
+ *
+ * The function is not a strong hash function in any sense; it merely reflects
+ * the uint64 value back.  Do not use this function as a hash if you need
+ * the properties of a strong hash function.
+ */
+AWS_COMMON_API uint64_t aws_hash_uint64_t_by_identity(const void *item);
+
+/**
+ * Helper function to compare hash keys that are uint64_t values.
+ */
+AWS_COMMON_API bool aws_hash_compare_uint64_t_eq(const void *a, const void *b);
+
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_HASH_TABLE_H */

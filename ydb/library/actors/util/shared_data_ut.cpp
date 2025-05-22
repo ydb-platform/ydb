@@ -80,8 +80,7 @@ namespace NActors {
             TSharedData Allocate(size_t size) {
                 char* raw = reinterpret_cast<char*>(y_allocate(sizeof(THeader) + size));
                 THeader* header = reinterpret_cast<THeader*>(raw);
-                header->RefCount = 1;
-                header->Owner = this;
+                new (header) THeader(this);
                 char* data = raw + sizeof(THeader);
                 Y_ABORT_UNLESS(Allocated_.insert(data).second);
                 return TSharedData::AttachUnsafe(data, size);
@@ -90,6 +89,8 @@ namespace NActors {
             void Deallocate(char* data) noexcept {
                 Y_ABORT_UNLESS(Allocated_.erase(data) > 0);
                 char* raw = data - sizeof(THeader);
+                THeader* header = reinterpret_cast<THeader*>(raw);
+                header->~THeader();
                 y_deallocate(raw);
                 Deallocated_.push_back(data);
             }
@@ -190,6 +191,7 @@ namespace NActors {
             // Test Detach copies correctly and doesn't affect owned data
             {
                 auto data = owner.Allocate(42);
+                ptr = data.data();
                 auto disowned = data;
                 disowned.Detach();
                 UNIT_ASSERT(owner.NextDeallocated() == nullptr);

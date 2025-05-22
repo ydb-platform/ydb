@@ -45,34 +45,28 @@ PyObject *
 psutil_disk_usage(PyObject *self, PyObject *args) {
     BOOL retval;
     ULARGE_INTEGER _, total, free;
-    char *path;
+    PyObject *py_path;
+    wchar_t *path;
 
-    if (PyArg_ParseTuple(args, "u", &path)) {
-        Py_BEGIN_ALLOW_THREADS
-        retval = GetDiskFreeSpaceExW((LPCWSTR)path, &_, &total, &free);
-        Py_END_ALLOW_THREADS
-        goto return_;
+    if (!PyArg_ParseTuple(args, "U", &py_path)) {
+        return NULL;
     }
 
-    // on Python 2 we also want to accept plain strings other
-    // than Unicode
-#if PY_MAJOR_VERSION <= 2
-    PyErr_Clear();  // drop the argument parsing error
-    if (PyArg_ParseTuple(args, "s", &path)) {
-        Py_BEGIN_ALLOW_THREADS
-        retval = GetDiskFreeSpaceEx(path, &_, &total, &free);
-        Py_END_ALLOW_THREADS
-        goto return_;
+    path = PyUnicode_AsWideCharString(py_path, NULL);
+    if (path == NULL) {
+        return NULL;
     }
-#endif
 
-    return NULL;
+    Py_BEGIN_ALLOW_THREADS
+    retval = GetDiskFreeSpaceExW(path, &_, &total, &free);
+    Py_END_ALLOW_THREADS
 
-return_:
+    PyMem_Free(path);
+
     if (retval == 0)
-        return PyErr_SetFromWindowsErrWithFilename(0, path);
-    else
-        return Py_BuildValue("(LL)", total.QuadPart, free.QuadPart);
+        return PyErr_SetExcFromWindowsErrWithFilenameObject(PyExc_OSError, 0, py_path);
+
+    return Py_BuildValue("(LL)", total.QuadPart, free.QuadPart);
 }
 
 
@@ -202,7 +196,7 @@ psutil_disk_partitions(PyObject *self, PyObject *args) {
     int type;
     int ret;
     unsigned int old_mode = 0;
-    char opts[20];
+    char opts[50];
     HANDLE mp_h;
     BOOL mp_flag= TRUE;
     LPTSTR fs_type[MAX_PATH + 1] = { 0 };
@@ -291,19 +285,18 @@ psutil_disk_partitions(PyObject *self, PyObject *args) {
                 mp_h = FindFirstVolumeMountPoint(
                     drive_letter, mp_buf, MAX_PATH);
                 if (mp_h != INVALID_HANDLE_VALUE) {
+                    mp_flag = TRUE;
                     while (mp_flag) {
                         // Append full mount path with drive letter
                         strcpy_s(mp_path, _countof(mp_path), drive_letter);
                         strcat_s(mp_path, _countof(mp_path), mp_buf);
 
                         py_tuple = Py_BuildValue(
-                            "(ssssIi)",
+                            "(ssss)",
                             drive_letter,
                             mp_path,
                             fs_type,                   // typically "NTFS"
-                            opts,
-                            lpMaximumComponentLength,  // max file length
-                            MAX_PATH                   // max path length
+                            opts
                         );
 
                         if (!py_tuple ||
@@ -329,13 +322,11 @@ psutil_disk_partitions(PyObject *self, PyObject *args) {
         strcat_s(opts, _countof(opts), psutil_get_drive_type(type));
 
         py_tuple = Py_BuildValue(
-            "(ssssIi)",
+            "(ssss)",
             drive_letter,
             drive_letter,
             fs_type,  // either FAT, FAT32, NTFS, HPFS, CDFS, UDF or NWFS
-            opts,
-            lpMaximumComponentLength,  // max file length
-            MAX_PATH                   // max path length
+            opts
         );
         if (!py_tuple)
             goto error;
@@ -365,7 +356,7 @@ error:
  If no match is found return an empty string.
 */
 PyObject *
-psutil_win32_QueryDosDevice(PyObject *self, PyObject *args) {
+psutil_QueryDosDevice(PyObject *self, PyObject *args) {
     LPCTSTR lpDevicePath;
     TCHAR d = TEXT('A');
     TCHAR szBuff[5];

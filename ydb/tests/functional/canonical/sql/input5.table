@@ -1,0 +1,10 @@
+path: "/local/Input5"
+columns {
+  name: "Login"
+  type { optional_type { item { type_id: STRING } } }
+}
+columns {
+  name: "HashPassword"
+  type { optional_type { item { type_id: STRING } } }
+}
+primary_key: "HashPassword"

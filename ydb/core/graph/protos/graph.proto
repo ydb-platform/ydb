@@ -4,13 +4,34 @@ package NKikimrGraph;
 
 option java_package = "ru.yandex.kikimr.proto";
 
+message THistogramMetric {
+    string Name = 1;
+    repeated uint64 HistogramBounds = 2 [packed = true];
+    repeated uint64 HistogramValues = 3 [packed = true];
+}
+
 message TMetric {
     string Name = 1;
-    double Value = 2;
+    optional double Value = 2;
+}
+
+message TArithmeticMetric {
+    enum EOP {
+        EOP_UNKNOWN = 0;
+        EOP_DIVISION = 1;
+    }
+
+    string Name = 1;
+    EOP Op = 2;
+    double ValueA = 3;
+    double ValueB = 4;
 }
 
 message TEvSendMetrics {
     repeated TMetric Metrics = 1;
+    optional uint64 Time = 2; // for testing purposes only
+    repeated THistogramMetric HistogramMetrics = 3;
+    repeated TArithmeticMetric ArithmeticMetrics = 4;
 }
 
 message TEvGetMetrics {
@@ -18,6 +39,7 @@ message TEvGetMetrics {
     optional uint64 TimeTo = 2;
     repeated string Metrics = 3;
     optional uint32 MaxPoints = 4;
+    bool SkipBorders = 5; // don't return points for TimeFrom / TimeTo when there are no values for them
 }
 
 message TMetricData {

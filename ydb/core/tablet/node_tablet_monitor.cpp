@@ -44,8 +44,8 @@ public:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
-        NodesInfo = ev->Release();
-        if (!NodesInfo->Nodes.empty()) {
+        Nodes = ev->Get()->Nodes;
+        if (!Nodes.empty()) {
             RenderResponse(ctx);
         } else {
             NoData(ctx);
@@ -53,7 +53,7 @@ public:
     }
 
     void RenderResponse(const TActorContext &ctx) {
-        Sort(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end());
+        Sort(Nodes.begin(), Nodes.end());
         TStringStream str;
         HTML(str) {
             TAG(TH3) {
@@ -69,7 +69,7 @@ public:
                     }
                 }
                 TABLEBODY() {
-                for (const auto& ni : NodesInfo->Nodes) {
+                for (const auto& ni : Nodes) {
                     const TEvInterconnect::TNodeInfo &nodeInfo = ni;
                     TABLER() {
                         TABLED() {str << "<a href=\"nodetabmon?action=browse_tablets&node_id=" << nodeInfo.NodeId << "\">"
@@ -83,30 +83,6 @@ public:
                 }
             }
             HTML_TAG() {str << "<a href=\"nodetabmon?action=browse_tablets\">All tablets of the cluster</a>";}
-            TAG(TH3) {
-                str << "State Storages";
-            }
-            TABLE_SORTABLE_CLASS("table") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "StateStorageId";}
-                        TABLEH() {str << "Domain";}
-                    }
-                }
-                TABLEBODY() {
-
-                    for (const auto& ni : AppData(ctx)->DomainsInfo->Domains) {
-                        const TDomainsInfo::TDomain &domain = *ni.second;
-                        for (const auto ssId : domain.StateStorageGroups) {
-                            TABLER() {
-                                TABLED() {str << "<a href=\"nodetabmon?action=browse_ss&ss_id=" << ssId << "\">"
-                                        << ssId << "</a>";}
-                                TABLED() {str << domain.Name;}
-                            }
-                        }
-                    }
-                }
-            }
         }
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(str.Str()));
         Die(ctx);
@@ -128,7 +104,7 @@ public:
 
 protected:
     TActorId Sender;
-    TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
+    TVector<TEvInterconnect::TNodeInfo> Nodes;
 };
 
 class TTabletList : public TActorBootstrapped<TTabletList> {
@@ -171,14 +147,14 @@ public:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
-        NodesInfo = ev->Release();
-        if (!NodesInfo->Nodes.empty()) {
+        Nodes = ev->Get()->Nodes;
+        if (!Nodes.empty()) {
             if (FilterNodeId) {
                 TActorId tabletStateActorId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(FilterNodeId);
                 ctx.Send(tabletStateActorId, new TEvWhiteboard::TEvTabletStateRequest(), IEventHandle::FlagTrackDelivery, FilterNodeId);
                 ++NodesRequested;
             } else {
-                for (const auto& ni : NodesInfo->Nodes) {
+                for (const auto& ni : Nodes) {
                     TActorId tabletStateActorId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ni.NodeId);
                     ctx.Send(tabletStateActorId, new TEvWhiteboard::TEvTabletStateRequest(), IEventHandle::FlagTrackDelivery, ni.NodeId);
                     ++NodesRequested;
@@ -217,8 +193,8 @@ public:
         for (const auto& ni : PerNodeTabletInfo) {
             if (FilterNodeId != 0 && FilterNodeId != ni.first)
                 continue;
-            auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), ni.first);
-            if (eq_it.first != NodesInfo->Nodes.end() && ni.second) {
+            auto eq_it = EqualRange(Nodes.begin(), Nodes.end(), ni.first);
+            if (eq_it.first != Nodes.end() && ni.second) {
                 for (const auto& ti : ni.second->Record.GetTabletStateInfo()) {
                     if (filter(ti)) {
                         tabletIdIndex.push_back(ti.GetTabletId());
@@ -232,8 +208,8 @@ public:
         for (const auto& ni : PerNodeTabletInfo) {
             if (FilterNodeId != 0 && FilterNodeId != ni.first)
                 continue;
-            auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), ni.first);
-            if (eq_it.first != NodesInfo->Nodes.end() && ni.second) {
+            auto eq_it = EqualRange(Nodes.begin(), Nodes.end(), ni.first);
+            if (eq_it.first != Nodes.end() && ni.second) {
                 const TEvInterconnect::TNodeInfo& nodeInfo = *eq_it.first;
                 for (const auto& ti : ni.second->Record.GetTabletStateInfo()) {
                     if (filter(ti)) {
@@ -246,11 +222,11 @@ public:
     }
 
     void RenderResponse(const TActorContext &ctx) {
-        Sort(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end());
+        Sort(Nodes.begin(), Nodes.end());
         TString filterNodeHost;
         if (FilterNodeId != 0) {
-            auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), FilterNodeId);
-            if (eq_it.first != NodesInfo->Nodes.end()) {
+            auto eq_it = EqualRange(Nodes.begin(), Nodes.end(), FilterNodeId);
+            if (eq_it.first != Nodes.end()) {
                 filterNodeHost = eq_it.first->Host;
             }
         }
@@ -286,7 +262,7 @@ public:
 
 protected:
     TActorId Sender;
-    TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
+    TVector<TEvInterconnect::TNodeInfo> Nodes;
     TMap<ui64, TAutoPtr<TEvWhiteboard::TEvTabletStateResponse>> PerNodeTabletInfo;
     size_t NodesRequested;
     size_t NodesReceived;
@@ -302,9 +278,8 @@ public:
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
 
-    TStateStorageTabletList(const TActorId &sender, ui32 stateStorageId)
+    TStateStorageTabletList(const TActorId &sender)
         : Sender(sender)
-        , StateStorageId(stateStorageId)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -323,13 +298,13 @@ public:
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
-        NodesInfo = ev->Release();
-        const TActorId proxyActorID = MakeStateStorageProxyID(StateStorageId);
+        Nodes = ev->Get()->Nodes;
+        const TActorId proxyActorID = MakeStateStorageProxyID();
         ctx.Send(proxyActorID, new TEvStateStorage::TEvRequestReplicasDumps());
     }
 
     void Handle(TEvStateStorage::TEvResponseReplicasDumps::TPtr &ev, const TActorContext &ctx) {
-        Sort(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end());
+        Sort(Nodes.begin(), Nodes.end());
         TEvStateStorage::TEvResponseReplicasDumps &event = *ev->Get();
         TMap<ui64, TVector<std::pair<ui32, const NKikimrStateStorage::TEvInfo*>>> indexByTabletId;
         for (const auto& rdi : event.ReplicasDumps) {
@@ -341,7 +316,7 @@ public:
         TStringStream str;
         HTML(str) {
             TAG(TH3) {
-                str << "Tablets of StateStorage " << StateStorageId;
+                str << "Tablets of StateStorage";
             }
             TABLE_CLASS("table table-bordered") {
                 TABLEHEAD() {
@@ -367,16 +342,16 @@ public:
                                      }
                                      TABLED() {
                                          str << replicaNodeId;
-                                         auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), replicaNodeId);
-                                         if (eq_it.first != NodesInfo->Nodes.end() && eq_it.first->Host) str << " / " << eq_it.first->Host;
+                                         auto eq_it = EqualRange(Nodes.begin(), Nodes.end(), replicaNodeId);
+                                         if (eq_it.first != Nodes.end() && eq_it.first->Host) str << " / " << eq_it.first->Host;
                                      }
                                      TABLED() {str << ei.GetCurrentGeneration();}
                                      TABLED() {if (ei.HasLockedFor()) str << TDuration::MicroSeconds(ei.GetLockedFor()).Seconds();}
                                      TABLED() {
                                          ui32 nodeId = ActorIdFromProto(ei.GetCurrentLeader()).NodeId();
                                          str << nodeId;
-                                         auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), nodeId);
-                                         if (eq_it.first != NodesInfo->Nodes.end() && eq_it.first->Host) str << " / " << eq_it.first->Host;
+                                         auto eq_it = EqualRange(Nodes.begin(), Nodes.end(), nodeId);
+                                         if (eq_it.first != Nodes.end() && eq_it.first->Host) str << " / " << eq_it.first->Host;
                                      }
                                      TABLED() {if (ActorIdFromProto(ei.GetCurrentLeaderTablet())) str << "<span class='glyphicon glyphicon-ok' title='User Actor present'/>";}
                                  }
@@ -406,8 +381,7 @@ public:
 
 protected:
     TActorId Sender;
-    ui32 StateStorageId;
-    TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
+    TVector<TEvInterconnect::TNodeInfo> Nodes;
 };
 
 class TNodeTabletMonitor : public TActorBootstrapped<TNodeTabletMonitor> {
@@ -433,7 +407,7 @@ public:
         NActors::TMon* mon = AppData(ctx)->Mon;
 
         if (mon) {
-            mon->RegisterActorPage(nullptr, "nodetabmon", "Node Tablet Monitor", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+            mon->RegisterActorPage(nullptr, "nodetabmon", "Node Tablet Monitor", false, ctx.ActorSystem(), ctx.SelfID);
         }
     }
 
@@ -450,7 +424,7 @@ private:
         if (cgi.Has("action")) {
             const TString &actionParam = cgi.Get("action");
             if (actionParam == "browse_nodes") {
-                ctx.ExecutorThread.RegisterActor(new TNodeList(ev->Sender));
+                ctx.Register(new TNodeList(ev->Sender));
                 return;
             } else if (actionParam == "kill_tablet") {
                 if (cgi.Has("tablet_id")) {
@@ -466,14 +440,14 @@ private:
                 ui32 filterNodeId = 0;
                 if (cgi.Has("node_id"))
                     filterNodeId = FromStringWithDefault<ui32>(cgi.Get("node_id"));
-                ctx.ExecutorThread.RegisterActor(new TTabletList(ev->Sender, filterNodeId, StateClassifier, TableRenderer));
+                ctx.Register(new TTabletList(ev->Sender, filterNodeId, StateClassifier, TableRenderer));
                 return;
-            } else if (actionParam == "browse_ss" && cgi.Has("ss_id")) {
-                ctx.ExecutorThread.RegisterActor(new TStateStorageTabletList(ev->Sender, FromStringWithDefault<ui32>(cgi.Get("ss_id"))));
+            } else if (actionParam == "browse_ss") {
+                ctx.Register(new TStateStorageTabletList(ev->Sender));
                 return;
             }
         }
-        ctx.ExecutorThread.RegisterActor(new TNodeList(ev->Sender));
+        ctx.Register(new TNodeList(ev->Sender));
     }
 };
 

@@ -12,9 +12,9 @@ SRCS(
     concurrent_rw_hash.h
     console.cpp
     console.h
-    count_min_sketch.cpp
-    count_min_sketch.h
     counted_leaky_bucket.h
+    cpuinfo.cpp
+    cpuinfo.h
     defs.h
     event_priority_queue.h
     failure_injection.cpp
@@ -24,6 +24,8 @@ SRCS(
     format.h
     fragmented_buffer.cpp
     fragmented_buffer.h
+    gen_step.cpp
+    gen_step.h
     hazard.cpp
     hyperlog_counter.cpp
     hyperlog_counter.h
@@ -41,14 +43,11 @@ SRCS(
     proto_duration.h
     queue_inplace.h
     queue_oneone_inplace.h
+    random.cpp
     simple_cache.h
-    single_thread_ic_mock.cpp
-    single_thread_ic_mock.h
+    source_location.cpp
     stlog.cpp
     stlog.h
-    templates.h
-    testactorsys.cpp
-    testactorsys.h
     text.cpp
     text.h
     token_bucket.h
@@ -60,12 +59,14 @@ SRCS(
     ui64id.cpp
     ui64id.h
     wildcard.h
+    wilson.h
 )
 
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect/mock
     ydb/library/actors/util
+    ydb/library/actors/wilson
     library/cpp/containers/stack_vector
     library/cpp/html/escape
     library/cpp/ipmath
@@ -75,9 +76,27 @@ PEERDIR(
     library/cpp/random_provider
     ydb/core/base
     ydb/core/protos
+    ydb/core/mon
     library/cpp/deprecated/atomic
     ydb/library/yverify_stream
 )
+
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+    SRCS(
+        aws_windows_stub.cpp
+    )
+ELSE()
+    PEERDIR(
+        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
+        contrib/libs/curl
+    )
+    SRCS(
+        aws.cpp
+    )
+ENDIF()
 
 END()
 

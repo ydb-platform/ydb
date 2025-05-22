@@ -10,8 +10,6 @@
 #include <util/generic/ptr.h>
 #include <util/system/thread.h>
 
-#include <atomic>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -22,6 +20,7 @@ public:
     //
     // Start a new transaction.
     TPingableTransaction(
+        const IRawClientPtr& rawClient,
         const IClientRetryPolicyPtr& retryPolicy,
         const TClientContext& context,
         const TTransactionId& parentId,
@@ -31,6 +30,7 @@ public:
     //
     // Attach to an existing transaction.
     TPingableTransaction(
+        const IRawClientPtr& rawClient,
         const IClientRetryPolicyPtr& retryPolicy,
         const TClientContext& context,
         const TTransactionId& transactionId,
@@ -44,6 +44,7 @@ public:
     const std::pair<TDuration, TDuration> GetPingInterval() const;
     const TClientContext GetContext() const;
 
+    void Ping() const;
     void Commit();
     void Abort();
     void Detach();
@@ -58,6 +59,8 @@ private:
     };
 
 private:
+    const IRawClientPtr RawClient_;
+
     IClientRetryPolicyPtr ClientRetryPolicy_;
     TClientContext Context_;
     TTransactionId TransactionId_;
@@ -75,6 +78,7 @@ private:
 
 private:
     void Init(
+        const IRawClientPtr& rawClient,
         const TClientContext& context,
         const TTransactionId& transactionId,
         TDuration timeout);
@@ -85,8 +89,8 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TYPath Snapshot(
+    const IRawClientPtr& rawClient,
     const IClientRetryPolicyPtr& clientRetryPolicy,
-    const TClientContext& context,
     const TTransactionId& transactionId,
     const TYPath& path);
 

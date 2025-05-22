@@ -3,15 +3,12 @@
 #include "federated_read_session.h"
 #include "federated_write_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/write_session.h>
-
-namespace NYdb::NFederatedTopic {
+namespace NYdb::inline V2::NFederatedTopic {
 
 std::shared_ptr<IFederatedReadSession>
 TFederatedTopicClient::TImpl::CreateReadSession(const TFederatedReadSessionSettings& settings) {
     InitObserver();
-    auto session = std::make_shared<TFederatedReadSession>(settings, Connections, ClientSettings, GetObserver());
+    auto session = std::make_shared<TFederatedReadSession>(settings, Connections, ClientSettings, GetObserver(), ProvidedCodecs);
     session->Start();
     return std::move(session);
 }
@@ -33,10 +30,15 @@ TFederatedTopicClient::TImpl::CreateWriteSession(const TFederatedWriteSessionSet
     TFederatedWriteSessionSettings splitSettings = settings;
     splitSettings.MaxMemoryUsage(splitSize);
     InitObserver();
-    auto session = std::make_shared<TFederatedWriteSession>(splitSettings, Connections, ClientSettings, GetObserver());
+    with_lock(Lock) {
+        if (!splitSettings.EventHandlers_.HandlersExecutor_) {
+            splitSettings.EventHandlers_.HandlersExecutor(ClientSettings.DefaultHandlersExecutor_);
+        }
+    }
+    auto session = std::make_shared<TFederatedWriteSession>(
+        splitSettings, Connections, ClientSettings, GetObserver(), ProvidedCodecs, GetSubsessionHandlersExecutor());
     session->Start();
     return std::move(session);
-
 }
 
 void TFederatedTopicClient::TImpl::InitObserver() {
@@ -45,6 +47,15 @@ void TFederatedTopicClient::TImpl::InitObserver() {
             Observer = std::make_shared<TFederatedDbObserver>(Connections, ClientSettings);
             Observer->Start();
         }
+    }
+}
+
+auto TFederatedTopicClient::TImpl::GetSubsessionHandlersExecutor() -> NTopic::IExecutor::TPtr {
+    with_lock (Lock) {
+        if (!SubsessionHandlersExecutor) {
+            SubsessionHandlersExecutor = NTopic::CreateThreadPoolExecutor(1);
+        }
+        return SubsessionHandlersExecutor;
     }
 }
 

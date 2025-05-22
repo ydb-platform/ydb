@@ -14,7 +14,7 @@ $sr_items =
 	where d_week_seq in
 		(select d_week_seq
 		from {{date_dim}} as date_dim
-	  where d_date in (cast('2000-06-17' as date),cast('2000-08-22' as date),cast('2000-11-17' as date))))
+	  where cast(d_date as date) in (cast('2000-06-30' as date),cast('2000-09-27' as date),cast('2000-11-17' as date))))
  and   sr_returned_date_sk   = d_date_sk
  group by item.i_item_id);
  $cr_items =
@@ -30,7 +30,7 @@ $sr_items =
 	where d_week_seq in
 		(select d_week_seq
 		from {{date_dim}} as date_dim
-	  where d_date in (cast('2000-06-17' as date),cast('2000-08-22' as date),cast('2000-11-17' as date))))
+	  where cast(d_date as date) in (cast('2000-06-30' as date),cast('2000-09-27' as date),cast('2000-11-17' as date))))
  and   cr_returned_date_sk   = d_date_sk
  group by item.i_item_id);
 $wr_items =
@@ -46,17 +46,17 @@ $wr_items =
 	where d_week_seq in
 		(select d_week_seq
 		from {{date_dim}} as date_dim
-		where d_date in (cast('2000-06-17' as date),cast('2000-08-22' as date),cast('2000-11-17' as date))))
+		where cast(d_date as date) in (cast('2000-06-30' as date),cast('2000-09-27' as date),cast('2000-11-17' as date))))
  and   wr_returned_date_sk   = d_date_sk
  group by item.i_item_id);
 -- start query 1 in stream 0 using template query83.tpl and seed 1930872976
   select  sr_items.item_id
        ,sr_item_qty
-       ,sr_item_qty/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 sr_dev
+       ,cast(sr_item_qty as double)/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 sr_dev
        ,cr_item_qty
-       ,cr_item_qty/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 cr_dev
+       ,cast(cr_item_qty as double)/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 cr_dev
        ,wr_item_qty
-       ,wr_item_qty/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 wr_dev
+       ,cast(wr_item_qty as double)/(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 * 100 wr_dev
        ,(sr_item_qty+cr_item_qty+wr_item_qty)/3.0 average
  from $sr_items sr_items
       cross join $cr_items cr_items

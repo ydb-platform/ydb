@@ -31,6 +31,10 @@ NRpc::IChannelPtr CreateCredentialsInjectingChannel(
         return CreateServiceTicketInjectingChannel(
             underlyingChannel,
             options);
+    } else if (options.UserTicket) {
+        return CreateUserTicketInjectingChannel(
+            underlyingChannel,
+            options);
     } else {
         return CreateUserInjectingChannel(underlyingChannel, options);
     }
@@ -80,8 +84,8 @@ protected:
     }
 
 private:
-    const std::optional<TString> User_;
-    const std::optional<TString> UserTag_;
+    const std::optional<std::string> User_;
+    const std::optional<std::string> UserTag_;
 };
 
 IChannelPtr CreateUserInjectingChannel(
@@ -208,6 +212,43 @@ NRpc::IChannelPtr CreateServiceTicketInjectingChannel(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TUserTicketInjectingChannel
+    : public TUserInjectingChannel
+{
+public:
+    TUserTicketInjectingChannel(
+        IChannelPtr underlyingChannel,
+        const TAuthenticationOptions& options)
+        : TUserInjectingChannel(std::move(underlyingChannel), options)
+        , UserTicket_(*options.UserTicket)
+    { }
+
+protected:
+    void DoInject(const IClientRequestPtr& request) override
+    {
+        TUserInjectingChannel::DoInject(request);
+
+        auto* ext = request->Header().MutableExtension(NRpc::NProto::TCredentialsExt::credentials_ext);
+        ext->set_user_ticket(UserTicket_);
+    }
+
+private:
+    const TString UserTicket_;
+};
+
+NRpc::IChannelPtr CreateUserTicketInjectingChannel(
+    NRpc::IChannelPtr underlyingChannel,
+    const TAuthenticationOptions& options)
+{
+    YT_VERIFY(underlyingChannel);
+    YT_VERIFY(!options.UserTicket->empty() && !options.UserTicket->empty());
+    return New<TUserTicketInjectingChannel>(
+        std::move(underlyingChannel),
+        options);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TServiceTicketInjectingChannelFactory
     : public IChannelFactory
 {
@@ -219,7 +260,7 @@ public:
         , ServiceTicketAuth_(std::move(serviceTicketAuth))
     { }
 
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto channel = UnderlyingFactory_->CreateChannel(address);
         if (!ServiceTicketAuth_) {
@@ -227,12 +268,12 @@ public:
         }
         return CreateServiceTicketInjectingChannel(
             std::move(channel),
-            TAuthenticationOptions::FromServiceTicketAuth(ServiceTicketAuth_));
+            {.ServiceTicketAuth = ServiceTicketAuth_});
     }
 
 private:
-    IChannelFactoryPtr UnderlyingFactory_;
-    IServiceTicketAuthPtr ServiceTicketAuth_;
+    const IChannelFactoryPtr UnderlyingFactory_;
+    const IServiceTicketAuthPtr ServiceTicketAuth_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

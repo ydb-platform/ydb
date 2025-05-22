@@ -20,6 +20,7 @@ TSchemaSnapshotManager::TSchemaSnapshotManager(const TDataShard* self)
 
 void TSchemaSnapshotManager::Reset() {
     Snapshots.clear();
+    References.clear();
 }
 
 bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
@@ -40,14 +41,14 @@ bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
 
         NKikimrSchemeOp::TTableDescription desc;
         const bool ok = ParseFromStringNoSizeLimit(desc, schema);
-        Y_ABORT_UNLESS(ok);
+        Y_ENSURE(ok);
 
         const auto res = Snapshots.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(oid, tid, version),
             std::forward_as_tuple(new TUserTable(0, desc, 0), step, txId)
         );
-        Y_VERIFY_S(res.second, "Duplicate schema snapshot: " << res.first->first);
+        Y_ENSURE(res.second, "Duplicate schema snapshot: " << res.first->first);
 
         if (!rowset.Next()) {
             return false;
@@ -64,10 +65,10 @@ bool TSchemaSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSchemaSna
     }
 
     auto it = Self->GetUserTables().find(key.PathId);
-    Y_VERIFY_S(it != Self->GetUserTables().end(), "Cannot find table: " << key.PathId);
+    Y_ENSURE(it != Self->GetUserTables().end(), "Cannot find table: " << key.PathId);
 
     const auto res = Snapshots.emplace(key, snapshot);
-    Y_VERIFY_S(res.second, "Duplicate schema snapshot: " << key);
+    Y_ENSURE(res.second, "Duplicate schema snapshot: " << key);
 
     NIceDb::TNiceDb nicedb(db);
     PersistAddSnapshot(nicedb, key, snapshot);
@@ -79,20 +80,22 @@ const TSchemaSnapshot* TSchemaSnapshotManager::FindSnapshot(const TSchemaSnapsho
     return Snapshots.FindPtr(key);
 }
 
-void TSchemaSnapshotManager::RemoveShapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key) {
+void TSchemaSnapshotManager::RemoveShapshot(NTable::TDatabase& db, const TSchemaSnapshotKey& key) {
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
         return;
     }
 
     Snapshots.erase(it);
-    PersistRemoveSnapshot(db, key);
+
+    NIceDb::TNiceDb nicedb(db);
+    PersistRemoveSnapshot(nicedb, key);
 }
 
 void TSchemaSnapshotManager::RenameSnapshots(NTable::TDatabase& db,
         const TPathId& prevTableId, const TPathId& newTableId)
 {
-    Y_VERIFY_S(prevTableId < newTableId, "New table id should be greater than previous"
+    Y_ENSURE(prevTableId < newTableId, "New table id should be greater than previous"
         << ": prev# " << prevTableId
         << ", new# " << newTableId);
 
@@ -119,6 +122,10 @@ void TSchemaSnapshotManager::RenameSnapshots(NTable::TDatabase& db,
     }
 }
 
+const TSchemaSnapshotManager::TSnapshots& TSchemaSnapshotManager::GetSnapshots() const {
+    return Snapshots;
+}
+
 bool TSchemaSnapshotManager::AcquireReference(const TSchemaSnapshotKey& key) {
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
@@ -133,7 +140,7 @@ bool TSchemaSnapshotManager::ReleaseReference(const TSchemaSnapshotKey& key) {
     auto refIt = References.find(key);
 
     if (refIt == References.end() || refIt->second <= 0) {
-        Y_DEBUG_ABORT_UNLESS(false, "ReleaseReference underflow, check acquire/release pairs");
+        Y_DEBUG_ABORT("ReleaseReference underflow, check acquire/release pairs");
         return false;
     }
 
@@ -145,11 +152,20 @@ bool TSchemaSnapshotManager::ReleaseReference(const TSchemaSnapshotKey& key) {
 
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {
-        Y_DEBUG_ABORT_UNLESS(false, "ReleaseReference on an already removed snapshot");
+        Y_DEBUG_ABORT("ReleaseReference on an already removed snapshot");
         return false;
     }
 
     return true;
+}
+
+bool TSchemaSnapshotManager::HasReference(const TSchemaSnapshotKey& key) const {
+    auto refIt = References.find(key);
+    if (refIt != References.end()) {
+        return refIt->second;
+    } else {
+        return false;
+    }
 }
 
 void TSchemaSnapshotManager::PersistAddSnapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key, const TSchemaSnapshot& snapshot) {

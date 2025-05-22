@@ -8,38 +8,39 @@ from ydb.tests.library.nemesis.safety_warden import GrepLogFileForMarkers, GrepD
 # noinspection PyUnresolvedReferences
 from ydb.tests.library.nemesis.safety_warden import GrepGzippedLogFilesForMarkersSafetyWarden
 
-from ydb.tests.library.harness import param_constants
-
 
 def kikimr_start_logs_safety_warden_factory(
-        list_of_host_names, deploy_path="/Berkanavt/kikimr/logs/"
+        list_of_host_names, ssh_username, deploy_path, lines_after=5, cut=True, modification_days=1
 ):
-    start_markers = ['VERIFY', 'FAIL', 'signal 11', 'signal 6', 'signal 15', 'uncaught exception']
-    username = param_constants.ssh_username
+    start_markers = ['VERIFY', 'FAIL ', 'signal 11', 'signal 6', 'signal 15', 'uncaught exception', 'ERROR: AddressSanitizer', 'SIG']
+    username = ssh_username
     return [
         GrepLogFileForMarkers(
             list_of_host_names,
             log_file_name=os.path.join(deploy_path, 'kikimr.start'),
             list_of_markers=start_markers,
             username=username,
-            lines_after=5
+            lines_after=lines_after,
+            cut=cut
         ),
         GrepGzippedLogFilesForMarkersSafetyWarden(
             list_of_host_names,
             log_file_pattern=os.path.join(deploy_path, 'kikimr.start.*gz'),
             list_of_markers=start_markers,
+            modification_days=modification_days,
             username=username,
-            lines_after=5
+            lines_after=lines_after,
+            cut=cut
         ),
     ]
 
 
 def kikimr_crit_and_alert_logs_safety_warden_factory(
-        list_of_host_names, deploy_path="/Berkanavt/kikimr/logs/"
+        list_of_host_names, ssh_username, deploy_path="/Berkanavt/kikimr/logs/"
 ):
     crit_markers = [':BS_HULLRECS CRIT:', ':BS_LOGCUTTER CRIT:', 'ALERT', ':BS_LOCALRECOVERY CRIT:']
     alert_markers = ['ALERT']
-    username = param_constants.ssh_username
+    username = ssh_username
     return [
         GrepLogFileForMarkers(
             list_of_host_names,
@@ -68,13 +69,14 @@ def kikimr_crit_and_alert_logs_safety_warden_factory(
     ]
 
 
-def kikimr_grep_dmesg_safety_warden_factory(list_of_host_names):
+def kikimr_grep_dmesg_safety_warden_factory(list_of_host_names, ssh_username, lines_after=5):
     markers = ['Out of memory: Kill process']
 
     return [
         GrepDMesgForPatternsSafetyWarden(
             list_of_host_names,
             list_of_markers=markers,
-            username=param_constants.ssh_username
+            username=ssh_username,
+            lines_after=lines_after
         )
     ]

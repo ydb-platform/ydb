@@ -1,7 +1,6 @@
 #include "mkql_compile_service.h"
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/client/scheme_cache_lib/yql_db_scheme_resolver.h>
@@ -83,8 +82,8 @@ public:
 
     NYql::IDbSchemeResolver* MakeDbSchemeResolver(const TActorContext& ctx) {
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), Counters);
-        SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
-        return NSchCache::CreateDbSchemeResolver(ctx.ExecutorThread.ActorSystem, SchemeCache);
+        SchemeCache = ctx.Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
+        return NSchCache::CreateDbSchemeResolver(ctx.ActorSystem(), SchemeCache);
     }
 
     STFUNC(StateWork) {
@@ -120,7 +119,7 @@ private:
         if (!hasErrors || cptr->Retried || cptr->ForceRefresh) {
             auto* compileStatusEv = new TMiniKQLCompileServiceEvents::TEvCompileStatus(cptr->Program, msg->Result);
             compileStatusEv->CompileResolveCookies = std::move(msg->CompileResolveCookies);
-            ctx.ExecutorThread.Send(new IEventHandle(cptr->ResponseTo, ctx.SelfID, compileStatusEv,
+            ctx.Send(new IEventHandle(cptr->ResponseTo, ctx.SelfID, compileStatusEv,
                 0, cptr->Cookie));
             Compile(ctx);
         } else {
@@ -131,7 +130,7 @@ private:
             c->Retried = true;
 
             auto *compileActor = NYql::CreateCompileActor(c->Program, &c->TypeEnv, DbSchemeResolver.Get(), ctx.SelfID, std::move(msg->CompileResolveCookies), false);
-            const TActorId actId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap, appData->UserPoolId);
+            const TActorId actId = ctx.Register(compileActor, TMailboxType::HTSwap, appData->UserPoolId);
             Compiling.insert(TCompilingMap::value_type(actId, c));
         }
     }
@@ -149,7 +148,7 @@ private:
             std::move(next->CompileResolveCookies),
             next->ForceRefresh);
         auto *appData = AppData(ctx);
-        auto actId = ctx.ExecutorThread.RegisterActor(act, TMailboxType::HTSwap, appData->UserPoolId);
+        auto actId = ctx.Register(act, TMailboxType::HTSwap, appData->UserPoolId);
         Compiling.insert(TCompilingMap::value_type(actId, next));
         CompileQueue.pop();
     }

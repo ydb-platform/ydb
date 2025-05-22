@@ -1,6 +1,6 @@
 # List of objects
 
-The `scheme ls` command lets you get a list of objects in the database:
+The `scheme ls` command lets you get a list of [scheme objects](../../../../concepts/glossary.md#scheme-object) in the database:
 
 ```bash
 {{ ydb-cli }} [connection options] scheme ls [path] [-lR1]
@@ -18,7 +18,7 @@ The following options are available for the command:
 * `-R`: Recursive traversal of all subdirectories.
 * `-1`: Output a single schema object per row (for example, to be later handled in a script).
 
-**Examples**
+## Examples
 
 {% include [ydb-cli-profile.md](../../../../_includes/ydb-cli-profile.md) %}
 

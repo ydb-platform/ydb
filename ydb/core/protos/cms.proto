@@ -77,6 +77,7 @@ message THostState {
   optional uint32        InterconnectPort = 7;
   repeated EMarker       Markers = 8;
   optional NActorsInterconnect.TNodeLocation Location = 9;
+  optional uint32        StartTimeSeconds = 10;
 }
 
 message TClusterState {
@@ -109,13 +110,29 @@ message TAction {
     REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
   }
 
-  optional EType     Type = 1;
-  optional string    Host = 2;
-  repeated string    Services = 3;
-  repeated string    Devices = 4;
-  optional uint64    Duration = 5;
+  message TIssue {
+    enum EType {
+      UNKNOWN = 0;
+      GENERIC = 1;
+      TOO_MANY_UNAVAILABLE_VDISKS = 2;
+      TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS = 3;
+      DISABLED_NODES_LIMIT_REACHED = 4;
+      TENANT_DISABLED_NODES_LIMIT_REACHED = 5;
+      SYS_TABLETS_NODE_LIMIT_REACHED = 6;
+    }
+
+    optional EType Type = 1;
+    optional string Message = 2;
+  }
+
+  optional EType Type = 1;
+  optional string Host = 2;
+  repeated string Services = 3;
+  repeated string Devices = 4;
+  optional uint64 Duration = 5;
   // If specified will be expanded to list of hosts.
-  optional string    Tenant = 6;
+  optional string Tenant = 6;
+  optional TIssue Issue = 7;
 }
 
 enum ETenantPolicy {
@@ -163,6 +180,7 @@ message TPermissionRequest {
   optional string MaintenanceTaskId = 10;
   // Evit vdisks before granting permission
   optional bool EvictVDisks = 11 [default = false];
+  optional int32 Priority = 12;
 }
 
 enum EExtensionType {
@@ -210,6 +228,7 @@ message TManageRequestResponse {
     optional bool    PartialPermissionAllowed = 4;
     optional string  Reason = 5;
     optional EAvailabilityMode AvailabilityMode = 6;
+    optional int32 Priority = 7;
   }
 
   optional TStatus           Status = 1;
@@ -381,7 +400,7 @@ message TLimits {
     optional uint32 DisabledNodesLimit = 1;
     // Works similarly to DisabledNodesLimit but specify
     // limit in percents of cluster/tenant nodes count.
-    optional uint32 DisabledNodesRatioLimit = 2 [default = 10];
+    optional uint32 DisabledNodesRatioLimit = 2 [default = 13]; // 1/8 rounded up
 }
 
 message TCmsConfig {
@@ -411,6 +430,12 @@ message TCmsConfig {
             optional uint32 Limit = 2;
         }
 
+        enum EEvictVDisksStatus {
+            UNKNOWN = 0;
+            DISABLED = 1;
+            FAULTY = 2;
+        }
+
         optional bool Enable = 1 [default = true];
         // Updater's config
         optional uint64 UpdateConfigInterval = 2 [default = 3600000000];
@@ -427,9 +452,20 @@ message TCmsConfig {
         optional uint32 DataCenterRatio = 10 [default = 50];
         optional uint32 RoomRatio = 11 [default = 70];
         optional uint32 RackRatio = 12 [default = 90];
+        // Similar to *Ratio settings, but specified in absolute numbers and applied per storage node.
+        // This limit helps prevent cascading overreaction when many disks go offline on a single host
+        // (due to disk shelf disconnection).
+        // If the number of FAULTY PDisks on a node — including those already FAULTY or about to be marked FAULTY —
+        // exceeds this threshold, no additional disks on the same node will be marked as FAULTY,
+        // except for those explicitly marked as FAULTY by the user via the replace devices command.
+        // If set to 0, this check is disabled.
+        optional uint32 FaultyPDisksThresholdPerNode = 17 [default = 0];
 
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
+        optional EEvictVDisksStatus EvictVDisksStatus = 15;
+        
+        optional uint32 GoodStateLimit = 16 [default = 5];
     }
 
     message TLogConfig {
@@ -618,6 +654,7 @@ message TPDiskInfo {
         RATIO_BY_DATACENTER = 3;
         RATIO_BY_ROOM = 4;
         RATIO_BY_RACK = 5;
+        TOO_MANY_FAULTY_PER_NODE = 6;
     }
 
     optional uint32 State = 1; // EPDiskState

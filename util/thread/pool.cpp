@@ -57,7 +57,7 @@ namespace {
         bool EnumerateThreads = false;
         std::atomic<ui64> Index{0};
     };
-}
+} // namespace
 
 TThreadFactoryHolder::TThreadFactoryHolder() noexcept
     : Pool_(SystemThreadFactory())
@@ -80,8 +80,11 @@ public:
         , ThreadCountExpected(0)
         , ThreadCountReal(0)
         , Forked(false)
+        , IsForkAware_(params.IsForkAware_)
     {
-        TAtforkQueueRestarter::Get().RegisterObject(this);
+        if (IsForkAware_) {
+            TAtforkQueueRestarter::Get().RegisterObject(this);
+        }
         Start(thrnum, maxqueue);
     }
 
@@ -92,7 +95,9 @@ public:
             // ¯\_(ツ)_/¯
         }
 
-        TAtforkQueueRestarter::Get().UnregisterObject(this);
+        if (IsForkAware_) {
+            TAtforkQueueRestarter::Get().UnregisterObject(this);
+        }
         Y_ASSERT(Tharr.empty());
     }
 
@@ -268,6 +273,7 @@ private:
     size_t ThreadCountExpected;
     size_t ThreadCountReal;
     bool Forked;
+    bool IsForkAware_;
 
     class TAtforkQueueRestarter {
     public:
@@ -310,7 +316,7 @@ private:
     public:
         inline TAtforkQueueRestarter() {
 #if defined(_bionic_)
-//no pthread_atfork on android libc
+// no pthread_atfork on android libc
 #elif defined(_unix_)
             pthread_atfork(nullptr, nullptr, ProcessChildAction);
 #endif
@@ -660,7 +666,7 @@ namespace {
             Owned->Process(data);
         }
     };
-}
+} // namespace
 
 void IThreadPool::SafeAdd(IObjectInQueue* obj) {
     Y_ENSURE_EX(Add(obj), TThreadPoolException() << TStringBuf("can not add object to queue"));
@@ -757,7 +763,7 @@ namespace {
         IThreadPool* Parent_;
         TThreadImplRef Impl_;
     };
-}
+} // namespace
 
 IThread* IThreadPool::DoCreate() {
     return new TPoolThread(this);

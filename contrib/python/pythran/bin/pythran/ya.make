@@ -1,0 +1,128 @@
+PY3_PROGRAM(pythran)
+
+VERSION(Service-proxy-version)
+
+LICENSE(BSD-3-Clause)
+
+PEERDIR(
+    contrib/python/pythran
+)
+
+PY_MAIN(pythran.run:run)
+
+INDUCED_DEPS(h+cpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/builtins/assert.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/builtins/getattr.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/builtins/int_.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/builtins/max.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/builtins/range.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/builtins/tuple.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/core.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/builtins/assert.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/builtins/getattr.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/builtins/int_.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/builtins/max.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/builtins/min.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/builtins/range.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/builtins/tuple.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/numpy/empty_like.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/numpy/float64.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/numpy/square.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/add.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/div.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/eq.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/floordiv.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/gt.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/iadd.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/le.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/lt.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/mod.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/mul.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/neg.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/operator_/sub.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/types/float.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/types/float64.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/types/int.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/types/ndarray.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/types/numpy_texpr.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/include/types/str.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/numpy/empty_like.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/numpy/float64.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/numpy/square.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/add.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/div.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/eq.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/floordiv.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/gt.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/iadd.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/le.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/lt.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/mod.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/mul.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/neg.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/operator_/sub.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/python/exception_handler.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/NoneType.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/array.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/assignable.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/attr.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/bool.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/cfun.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/clongdouble.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/combined.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/complex.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/complex128.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/complex256.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/complex64.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/dict.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/dynamic_tuple.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/empty_iterator.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/exceptions.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/file.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/finfo.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/float.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/float128.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/float32.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/float64.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/generator.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/int.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/int16.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/int32.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/int64.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/int8.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/intc.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/intp.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/list.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/longdouble.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/ndarray.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/nditerator.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_binary_op.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_broadcast.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_expr.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_gexpr.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_iexpr.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_nary_expr.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_op_helper.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_operators.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_texpr.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_unary_op.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/numpy_vexpr.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/pointer.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/raw_array.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/set.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/slice.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/static_if.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/str.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/traits.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/tuple.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/uint16.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/uint32.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/uint64.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/uint8.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/uintc.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/uintp.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/variant_functor.hpp
+    ${ARCADIA_ROOT}/contrib/python/pythran/pythran/pythonic/types/vectorizable_type.hpp
+)
+
+END()

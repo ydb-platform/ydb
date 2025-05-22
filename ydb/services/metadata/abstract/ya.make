@@ -17,9 +17,9 @@ PEERDIR(
     ydb/core/base
     ydb/library/accessor
     ydb/library/actors/core
-    ydb/library/yql/core/expr_nodes
+    yql/essentials/core/expr_nodes
     ydb/public/api/protos
-    ydb/services/metadata/request
+    ydb/public/sdk/cpp/src/client/resources
 )
 
 END()

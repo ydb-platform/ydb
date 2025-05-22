@@ -16,19 +16,16 @@ class TThreadPoolBase
 public:
     static constexpr int MaxThreadCount = 64;
 
-    explicit TThreadPoolBase(
-        TString threadNamePrefix,
-        NThreading::EThreadPriority threadPriority = NThreading::EThreadPriority::Normal);
+    explicit TThreadPoolBase(std::string threadNamePrefix);
 
-    void Configure(int threadCount);
+    void SetThreadCount(int threadCount);
     void Shutdown();
     void EnsureStarted();
 
     int GetThreadCount();
 
 protected:
-    const TString ThreadNamePrefix_;
-    const NThreading::EThreadPriority ThreadPriority_;
+    const std::string ThreadNamePrefix_;
 
     const TShutdownCookie ShutdownCookie_;
 
@@ -37,18 +34,17 @@ protected:
     std::atomic<bool> ShutdownFlag_ = false;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    std::vector<TSchedulerThreadBasePtr> Threads_;
+    std::vector<TSchedulerThreadPtr> Threads_;
 
     void Resize();
 
-    TString MakeThreadName(int index);
+    std::string MakeThreadName(int index);
 
     virtual void DoStart();
     virtual void DoShutdown();
-    virtual TClosure MakeFinalizerCallback();
-    virtual void DoConfigure(int threadCount);
+    virtual void DoSetThreadCount(int threadCount);
 
-    virtual TSchedulerThreadBasePtr SpawnThread(int index) = 0;
+    virtual TSchedulerThreadPtr SpawnThread(int index) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

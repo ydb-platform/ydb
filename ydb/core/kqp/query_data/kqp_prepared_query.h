@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
 #include <util/generic/vector.h>
 
@@ -36,6 +37,7 @@ class TPreparedQueryAllocHolder;
 struct TPhyTxResultMetadata {
     NKikimr::NMiniKQL::TType* MkqlItemType;
     TVector<ui32> ColumnOrder;
+    TVector<TString> ColumnHints;
 };
 
 struct TTableConstInfoMap : public TAtomicRefCount<TTableConstInfoMap> {
@@ -57,6 +59,10 @@ public:
     const TStagePredictor& GetCalculationPredictor(const size_t stageIdx) const;
 
     const TVector<TPhyTxResultMetadata>& GetTxResultsMeta() const { return TxResultsMeta; }
+
+    bool EnableShuffleElimination() const {
+        return Proto->GetEnableShuffleElimination();
+    }
 
     const NKqpProto::TKqpPhyStage& GetStages(size_t index) const {
         return Proto->GetStages(index);
@@ -142,7 +148,10 @@ private:
 
 public:
 
-    TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry);
+    TPreparedQueryHolder(
+        NKikimrKqp::TPreparedQuery* proto,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        bool noFillTables = false);
     ~TPreparedQueryHolder();
 
     using TConstPtr = std::shared_ptr<const TPreparedQueryHolder>;

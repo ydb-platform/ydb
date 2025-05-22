@@ -16,6 +16,7 @@
 
 namespace NActors {
     class TPollerToken;
+    struct TInterconnectProxyCommon;
 }
 
 namespace NInterconnect {
@@ -58,6 +59,11 @@ namespace NInterconnect {
         virtual ssize_t WriteV(const struct iovec* iov, int iovcnt) const;
         virtual ssize_t ReadV(const struct iovec* iov, int iovcnt) const;
 
+        ssize_t SendWithFlags(const void* msg, size_t len, int flags) const;
+#if defined(__linux__)
+        ssize_t RecvErrQueue(struct msghdr* msg) const;
+#endif
+
         int Connect(const TAddress& addr) const;
         int Connect(const NAddr::IRemoteAddr* addr) const;
         int Listen(int backlog) const;
@@ -82,8 +88,7 @@ namespace NInterconnect {
         friend class TSecureSocket;
 
     public:
-        TSecureSocketContext(const TString& certificate, const TString& privateKey, const TString& caFilePath,
-            const TString& ciphers);
+        TSecureSocketContext(TIntrusivePtr<NActors::TInterconnectProxyCommon> common);
         ~TSecureSocketContext();
 
     public:
@@ -121,6 +126,7 @@ namespace NInterconnect {
         int GetCipherBits() const;
         TString GetProtocolName() const;
         TString GetPeerCommonName() const;
+        TString GetSignatureAlgorithm() const;
 
         bool WantRead() const;
         bool WantWrite() const;

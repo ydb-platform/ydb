@@ -62,11 +62,6 @@ struct TEvStateStorage {
         EvReplicaBoardInfo,
         EvReplicaBoardInfoUpdate,
 
-        EvReplicaProbeSubscribe = EvLock + 6 * 512,
-        EvReplicaProbeUnsubscribe,
-        EvReplicaProbeConnected,
-        EvReplicaProbeDisconnected,
-
         EvEnd
     };
 
@@ -385,10 +380,6 @@ struct TEvStateStorage {
     struct TEvListStateStorageResult;
     struct TEvPublishActorGone;
     struct TEvUpdateGroupConfig;
-    struct TEvReplicaProbeSubscribe;
-    struct TEvReplicaProbeUnsubscribe;
-    struct TEvReplicaProbeConnected;
-    struct TEvReplicaProbeDisconnected;
 
     struct TEvReplicaShutdown : public TEventPB<TEvStateStorage::TEvReplicaShutdown, NKikimrStateStorage::TEvReplicaShutdown, TEvStateStorage::EvReplicaShutdown> {
     };
@@ -445,19 +436,16 @@ struct TEvStateStorage {
 
         const EStatus Status;
         const TString Path;
-        const ui32 StateStorageGroupId;
         TMap<TActorId, TBoardInfoEntry> InfoEntries;
 
-        TEvBoardInfo(EStatus status, const TString &path, ui32 stateStorageGroupId)
+        TEvBoardInfo(EStatus status, const TString &path)
             : Status(status)
             , Path(path)
-            , StateStorageGroupId(stateStorageGroupId)
         {}
 
         TEvBoardInfo(const TEvBoardInfo &x)
             : Status(x.Status)
             , Path(x.Path)
-            , StateStorageGroupId(x.StateStorageGroupId)
             , InfoEntries(x.InfoEntries)
         {}
     };
@@ -466,13 +454,11 @@ struct TEvStateStorage {
 
         const TEvBoardInfo::EStatus Status;
         const TString Path;
-        const ui32 StateStorageGroupId;
         TMap<TActorId, TBoardInfoEntry> Updates;
 
-        TEvBoardInfoUpdate(TEvBoardInfo::EStatus status, const TString &path, ui32 stateStorageGroupId)
+        TEvBoardInfoUpdate(TEvBoardInfo::EStatus status, const TString &path)
             : Status(status)
             , Path(path)
-            , StateStorageGroupId(stateStorageGroupId)
         {}
     };
 };
@@ -484,6 +470,7 @@ struct TStateStorageInfo : public TThrRefBase {
             StatusOk,
             StatusNoInfo,
             StatusOutdated,
+            StatusUnavailable,
         };
 
         ui32 Sz;
@@ -509,7 +496,6 @@ struct TStateStorageInfo : public TThrRefBase {
         ui32 ContentHash() const;
     };
 
-    ui32 StateStorageGroup;
     ui32 NToSelect;
     TVector<TRing> Rings;
 
@@ -521,10 +507,11 @@ struct TStateStorageInfo : public TThrRefBase {
     ui32 ContentHash() const;
 
     TStateStorageInfo()
-        : StateStorageGroup(Max<ui32>())
-        , NToSelect(0)
+        : NToSelect(0)
         , Hash(Max<ui64>())
     {}
+
+    TString ToString() const;
 
 private:
     mutable ui64 Hash;
@@ -551,8 +538,6 @@ void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& 
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo);
 
-IActor* CreateStateStorageWarden(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &board, const TIntrusivePtr<TStateStorageInfo> &schemeBoard);
-
 IActor* CreateStateStorageProxy(const TIntrusivePtr<TStateStorageInfo> &info, const TIntrusivePtr<TStateStorageInfo> &board, const TIntrusivePtr<TStateStorageInfo> &schemeBoard);
 IActor* CreateStateStorageProxyStub();
 IActor* CreateStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex);
@@ -562,10 +547,10 @@ IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follow
 IActor* CreateStateStorageBoardReplica(const TIntrusivePtr<TStateStorageInfo> &, ui32);
 IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32);
 IActor* CreateBoardLookupActor(
-    const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode,
-    TBoardRetrySettings boardRetrySettings = {});
+    const TString &path, const TActorId &owner, EBoardLookupMode mode,
+    TBoardRetrySettings boardRetrySettings = {}, ui64 cookie = 0);
 IActor* CreateBoardPublishActor(
-    const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg,
+    const TString &path, const TString &payload, const TActorId &owner, ui32 ttlMs, bool reg,
     TBoardRetrySettings boardRetrySettings = {});
 
 TString MakeEndpointsBoardPath(const TString &database);

@@ -2,10 +2,10 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-SRCS(stringer.go)
+VERSION(v1.36.5)
 
-GO_TEST_SRCS(desc_test.go)
+SRCS(
+    stringer.go
+)
 
 END()
-
-RECURSE(gotest)

@@ -79,7 +79,7 @@ void SetupServices(TTestBasicRuntime& runtime) {
 
     runtime.Initialize(app.Unwrap());
 
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(0), TTabletTypes::BSController), &CreateFlatBsController);
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController), &CreateFlatBsController);
 
     // setup box and storage pool for testing
     {
@@ -116,7 +116,7 @@ void SetupServices(TTestBasicRuntime& runtime) {
         ds->SetNumGroups(1);
         ds->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::ROT);
 
-        runtime.SendToPipe(MakeBSControllerID(0), edge, ev.release());
+        runtime.SendToPipe(MakeBSControllerID(), edge, ev.release());
         auto resp = runtime.GrabEdgeEvent<TEvBlobStorage::TEvControllerConfigResponse>(edge);
         const auto& record = resp->Get()->Record;
         UNIT_ASSERT(record.GetResponse().GetSuccess());
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
         TTestBasicRuntime runtime(1);
 
         const ui32 groupId = 0x80000000;
-        const ui64 tabletId = MakeBSControllerID(0);
+        const ui64 tabletId = MakeBSControllerID();
         bool allowConfiguring = false;
 
         TActorId nodeWardenId;

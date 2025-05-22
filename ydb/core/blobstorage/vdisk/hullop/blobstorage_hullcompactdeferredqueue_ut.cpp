@@ -6,9 +6,11 @@
 
 #include <util/system/sanitizers.h>
 
+#include <bit>
+
 using namespace NKikimr;
 
-const TBlobStorageGroupType GType(TBlobStorageGroupType::ErasureNone);
+const TBlobStorageGroupType GType(TBlobStorageGroupType::Erasure4Plus2Block);
 std::unordered_map<TString, size_t> StringToId;
 std::deque<TRope> IdToRope;
 
@@ -29,7 +31,7 @@ class TTestDeferredQueue : public TDeferredItemQueueBase<TTestDeferredQueue> {
     void StartImpl() {
     }
 
-    void ProcessItemImpl(const TDiskPart& /*preallocatedLocation*/, const TRope& buffer) {
+    void ProcessItemImpl(const TDiskPart& /*preallocatedLocation*/, const TRope& buffer, bool /*isInline*/) {
         Results.push_back(GetResMapId(buffer));
     }
 
@@ -40,30 +42,23 @@ public:
     TVector<size_t> Results;
 
     TTestDeferredQueue(TRopeArena& arena)
-        : TDeferredItemQueueBase<TTestDeferredQueue>(arena, ::GType)
+        : TDeferredItemQueueBase<TTestDeferredQueue>("", arena, ::GType, true)
     {}
 };
 
 Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
 
     Y_UNIT_TEST(Basic) {
-        TRope parts[6] = {
-            TRope(TString("AAAAAA")),
-            TRope(TString("BBBBBB")),
-            TRope(TString("CCCCCC")),
-            TRope(TString("DDDDDD")),
-            TRope(TString("EEEEEE")),
-            TRope(TString("FFFFFF")),
-        };
-
-        ui32 fullDataSize = 32;
+        TString data = "AAABBBCCCDDDEEEFFF";
+        TLogoBlobID blobId(0, 0, 0, 0, data.size(), 0);
+        std::array<TRope, 6> parts;
+        ErasureSplit(static_cast<TErasureType::ECrcMode>(blobId.CrcMode()), GType, TRope(data), parts);
 
         std::unordered_map<TString, size_t> resm;
 
         struct TItem {
             ssize_t BlobId;
             NMatrix::TVectorType BlobParts;
-            NMatrix::TVectorType PartsToStore;
             TVector<std::pair<size_t, NMatrix::TVectorType>> DiskData;
             size_t Expected;
         };
@@ -72,17 +67,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
         TRopeArena arena(&TRopeArenaBackend::Allocate);
 
         auto process = [&](ui32 mem, ui32 masks0, ui32 masks1, ui32 numDiskParts) {
-            ui32 masks[3] = {masks0, masks1, 0};
+            ui32 masks[2] = {masks0, masks1};
 
             TItem item;
             TDiskBlobMerger expm;
 
             // create initial memory merger
-            for (ui8 i = 0; i < 6; ++i) {
+            for (ui8 i = 0; i < GType.TotalPartCount(); ++i) {
                 if (mem >> i & 1) {
-                    TRope buf = TDiskBlob::Create(fullDataSize, i + 1, 6, TRope(parts[i]), arena);
-                    TDiskBlob blob(&buf, NMatrix::TVectorType::MakeOneHot(i, 6), GType, TLogoBlobID(0, 0, 0, 0, parts[i].GetSize(), 0));
-                    expm.Add(blob);
+                    expm.AddPart(TRope(parts[i]), GType, TLogoBlobID(blobId, i + 1));
                 }
             }
 
@@ -90,52 +83,33 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
             if (expm.Empty()) {
                 item.BlobId = -1;
             } else {
-                item.BlobId = GetResMapId(expm.CreateDiskBlob(arena));
+                item.BlobId = GetResMapId(expm.CreateDiskBlob(arena, true));
             }
             item.BlobParts = expm.GetDiskBlob().GetParts();
 
             // generate disk parts
-            ui64 wholeMask = mem;
             for (ui32 i = 0; i < numDiskParts; ++i) {
                 const ui32 mask = masks[i];
 
                 Y_ABORT_UNLESS(mask);
 
                 TDiskBlobMerger m;
-                for (ui8 i = 0; i < 6; ++i) {
+                for (ui8 i = 0; i < GType.TotalPartCount(); ++i) {
                     if (mask >> i & 1) {
-                        TRope buf = TDiskBlob::Create(fullDataSize, i + 1, 6, TRope(parts[i]), arena);
-                        TDiskBlob blob(&buf, NMatrix::TVectorType::MakeOneHot(i, 6), GType, TLogoBlobID(0, 0, 0, 0, parts[i].GetSize(), 0));
-                        m.Add(blob);
-                        expm.Add(blob);
+                        m.AddPart(TRope(parts[i]), GType, TLogoBlobID(blobId, i + 1));
+                        expm.AddPart(TRope(parts[i]), GType, TLogoBlobID(blobId, i + 1));
                     }
                 }
 
-                TRope buf = m.CreateDiskBlob(arena);
+                TRope buf = m.CreateDiskBlob(arena, true);
                 Y_ABORT_UNLESS(buf);
                 item.DiskData.emplace_back(GetResMapId(buf), m.GetDiskBlob().GetParts());
-
-                wholeMask |= mask;
             }
 
             // generate parts to store vector and store item
-            for (ui32 p = 1; p < 64; ++p) {
-                if ((p & wholeMask) == p) {
-                    NMatrix::TVectorType v(0, 6);
-                    for (ui8 i = 0; i < 6; ++i) {
-                        if (p >> i & 1) {
-                            v.Set(i);
-                        }
-                    }
-                    item.PartsToStore = v;
-
-                    TDiskBlobMergerWithMask mx;
-                    mx.SetFilterMask(v);
-                    mx.Add(expm.GetDiskBlob());
-                    item.Expected = GetResMapId(mx.CreateDiskBlob(arena));
-
-                    items.push_back(item);
-                }
+            if (!expm.Empty()) {
+                item.Expected = GetResMapId(expm.CreateDiskBlob(arena, true));
+                items.push_back(item);
             }
         };
 
@@ -143,7 +117,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
 
         TVector<ui32> maskopts;
         for (ui32 mask = 0; mask < 64; ++mask) {
-            ui32 num = PopCount(mask);
+            ui32 num = std::popcount(mask);
             if (1 <= num && num <= 3) {
                 maskopts.push_back(mask);
             }
@@ -173,22 +147,28 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
             // prepare item merger for this sample item
             TDiskBlobMerger merger;
             if (item.BlobId != -1) {
-                merger.Add(TDiskBlob(&IdToRope[item.BlobId], item.BlobParts, GType, TLogoBlobID(0, 0, 0, 0, 6, 0)));
+                merger.Add(TDiskBlob(&IdToRope[item.BlobId], item.BlobParts, GType, blobId));
             }
 
             // put the item to queue
-            q.Put(id, item.DiskData.size(), TDiskPart(0, 0, 0), std::move(merger), item.PartsToStore, TLogoBlobID(0, 0, 0, 0, 6, 0));
-            for (auto& p : item.DiskData) {
-                itemQueue.emplace(id, IdToRope[p.first], p.second);
+            ui32 numReads = 0;
+            for (auto& [ropeId, parts] : item.DiskData) {
+                itemQueue.emplace(id, IdToRope[ropeId], parts);
+                numReads += parts.CountBits();
             }
+            q.Put(id, numReads, TDiskPart(0, 0, 0), std::move(merger), blobId, true);
             referenceResults.push_back(item.Expected);
             ++id;
         }
 
         q.Start();
         while (itemQueue) {
-            auto& front = itemQueue.front();
-            q.AddReadDiskBlob(std::get<0>(front), std::move(std::get<1>(front)), std::get<2>(front));
+            auto& [id, buffer, parts] = itemQueue.front();
+            TDiskBlob blob(&buffer, parts, GType, blobId);
+            for (ui8 partIdx : parts) {
+                TRope holder;
+                q.AddReadDiskBlob(id, TRope(blob.GetPart(partIdx, &holder)), partIdx);
+            }
             itemQueue.pop();
             UNIT_ASSERT_VALUES_EQUAL(q.AllProcessed(), itemQueue.empty());
         }
@@ -196,7 +176,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(referenceResults.size(), q.Results.size());
         for (ui32 i = 0; i < referenceResults.size(); ++i) {
-            UNIT_ASSERT_EQUAL(referenceResults[i], q.Results[i]);
+            UNIT_ASSERT_VALUES_EQUAL(IdToRope[referenceResults[i]].ConvertToString(), IdToRope[q.Results[i]].ConvertToString());
         }
     }
 

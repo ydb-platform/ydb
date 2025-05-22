@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER(g:devtools-contrib)
+SUBSCRIBER(g:devtools-contrib)
 
 NO_UTIL()
 
 PEERDIR(
-    contrib/libs/clang${CLANG_VER}-rt/lib/lsan
+    contrib/libs/clang${COMPILER_VERSION}-rt/lib/lsan
 )
 
 END()

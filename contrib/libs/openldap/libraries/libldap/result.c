@@ -2,7 +2,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2022 The OpenLDAP Foundation.
+ * Copyright 1998-2024 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -898,6 +898,13 @@ nextresp2:
 
 				if ( lr != &dummy_lr ) {
 					ldap_return_request( ld, lr, 1 );
+				} else {
+					if ( lr->lr_res_matched ) {
+						LDAP_FREE( lr->lr_res_matched );
+					}
+					if ( lr->lr_res_error ) {
+						LDAP_FREE( lr->lr_res_error );
+					}
 				}
 				lr = NULL;
 			}

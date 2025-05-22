@@ -59,8 +59,6 @@ void TTestEnv::Setup() {
     SetupLogging();
     TAppPrepare app;
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds("dc-1", domainId, 0,
-                                                                              domainId, domainId, TVector<ui32>{domainId},
-                                                                              domainId, TVector<ui32>{domainId},
                                                                               100500,
                                                                               TVector<ui64>{},
                                                                               TVector<ui64>{},

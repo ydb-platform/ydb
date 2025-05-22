@@ -3,7 +3,6 @@
 #include "dispatcher.h"
 #include "helpers.h"
 
-#include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/rpc/channel.h>
@@ -20,6 +19,8 @@
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
+
 #include <array>
 
 namespace NYT::NRpc::NGrpc {
@@ -30,6 +31,8 @@ using namespace NYTree;
 using namespace NYson;
 using namespace NConcurrency;
 using namespace NBus;
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -95,7 +98,7 @@ public:
             statusDetail = "Unknown error";
         }
 
-        return TError(StatusCodeToErrorCode(static_cast<grpc_status_code>(statusCode)), statusDetail)
+        return TError(StatusCodeToErrorCode(static_cast<grpc_status_code>(statusCode)), std::move(statusDetail), TError::DisableFormat)
             << TErrorAttribute("status_code", statusCode);
     }
 
@@ -126,7 +129,7 @@ DEFINE_ENUM(EClientCallStage,
 );
 
 class TChannel
-    : public IChannel
+    : public NRpc::NGrpc::IGrpcChannel
 {
 public:
     explicit TChannel(TChannelConfigPtr config)
@@ -149,7 +152,7 @@ public:
     }
 
     // IChannel implementation.
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointAddress_;
     }
@@ -168,14 +171,16 @@ public:
         if (!TerminationError_.IsOK()) {
             auto error = TerminationError_;
             guard.Release();
-            responseHandler->HandleError(error);
+            responseHandler->HandleError(std::move(error));
             return nullptr;
         }
-        return New<TCallHandler>(
+        auto callHandler = New<TCallHandler>(
             this,
             options,
             std::move(request),
             std::move(responseHandler));
+        callHandler->Initialize();
+        return callHandler;
     }
 
     void Terminate(const TError& error) override
@@ -206,7 +211,7 @@ public:
     }
 
     // Custom methods.
-    const TString& GetEndpointAddress() const
+    const std::string& GetEndpointAddress() const
     {
         return EndpointAddress_;
     }
@@ -216,10 +221,21 @@ public:
         YT_UNIMPLEMENTED();
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return MemoryUsageTracker_;
+    }
+
+    grpc_connectivity_state CheckConnectivityState(bool tryToConnect) override
+    {
+        return grpc_channel_check_connectivity_state(Channel_.Unwrap(), tryToConnect);
+    }
+
 private:
     const TChannelConfigPtr Config_;
-    const TString EndpointAddress_;
+    const std::string EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
@@ -246,7 +262,9 @@ private:
             , Request_(std::move(request))
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
-            , Logger(GrpcLogger)
+        { }
+
+        void Initialize()
         {
             YT_LOG_DEBUG("Sending request (RequestId: %v, Method: %v.%v, Timeout: %v)",
                 Request_->GetRequestId(),
@@ -264,13 +282,13 @@ private:
                 auto methodSlice = BuildGrpcMethodString();
                 Call_ = TGrpcCallPtr(grpc_channel_create_call(
                     Owner_->Channel_.Unwrap(),
-                    nullptr,
-                    0,
+                    /*parent_call*/ nullptr,
+                    /*propagation_mask*/ 0,
                     completionQueueGuard->Unwrap(),
                     methodSlice,
-                    nullptr,
+                    /*host*/ nullptr,
                     GetDeadline(),
-                    nullptr));
+                    /*reserved*/ nullptr));
                 grpc_slice_unref(methodSlice);
 
                 Tracer_ = New<TGrpcCallTracer>();
@@ -281,7 +299,7 @@ private:
             }
             InitialMetadataBuilder_.Add(RequestIdMetadataKey, ToString(Request_->GetRequestId()));
             InitialMetadataBuilder_.Add(UserMetadataKey, Request_->GetUser());
-            if (Request_->GetUserTag()) {
+            if (!Request_->GetUserTag().empty()) {
                 InitialMetadataBuilder_.Add(UserTagMetadataKey, Request_->GetUserTag());
             }
 
@@ -311,7 +329,7 @@ private:
                 }
             }
 
-            if (const auto traceContext = NTracing::TryGetCurrentTraceContext()) {
+            if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
                 InitialMetadataBuilder_.Add(TracingTraceIdMetadataKey, ToString(traceContext->GetTraceId()));
                 InitialMetadataBuilder_.Add(TracingSpanIdMetadataKey, ToString(traceContext->GetSpanId()));
                 if (traceContext->IsSampled()) {
@@ -330,6 +348,9 @@ private:
             }
 
             try {
+                THROW_ERROR_EXCEPTION_IF(
+                    Request_->IsAttachmentCompressionEnabled(),
+                    "Compression codecs are not supported in RPC over GRPC");
                 RequestBody_ = Request_->Serialize();
             } catch (const std::exception& ex) {
                 auto responseHandler = TryAcquireResponseHandler();
@@ -337,6 +358,13 @@ private:
                 responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
                     << ex);
                 return;
+            }
+
+            if (Request_->Header().has_request_codec()) {
+                InitialMetadataBuilder_.Add(RequestCodecKey, ToString(Request_->Header().request_codec()));
+            }
+            if (Request_->Header().has_response_codec()) {
+                InitialMetadataBuilder_.Add(ResponseCodecKey, ToString(Request_->Header().response_codec()));
             }
 
             YT_VERIFY(RequestBody_.Size() >= 2);
@@ -435,16 +463,15 @@ private:
         const TSendOptions Options_;
         const IClientRequestPtr Request_;
 
+        const NLogging::TLogger& Logger = GrpcLogger();
+
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ResponseHandlerLock_);
         IClientResponseHandlerPtr ResponseHandler_;
 
         // Completion queue must be accessed under read lock
         // in order to prohibit creating new requests after shutting completion queue down.
         TGuardedGrpcCompletionQueue* GuardedCompletionQueue_;
-        const NLogging::TLogger& Logger;
-
         NYT::NTracing::TTraceContextHandler TraceContext_;
-
         TGrpcCallPtr Call_;
         TGrpcCallTracerPtr Tracer_;
         TSharedRefArray RequestBody_;
@@ -582,7 +609,7 @@ private:
                 if (serializedError) {
                     error = DeserializeError(serializedError);
                 } else {
-                    error = TError(StatusCodeToErrorCode(ResponseStatusCode_), ResponseStatusDetails_.AsString())
+                    error = TError(StatusCodeToErrorCode(ResponseStatusCode_), ResponseStatusDetails_.AsString(), TError::DisableFormat)
                         << TErrorAttribute("status_code", ResponseStatusCode_);
                 }
                 NotifyError(TStringBuf("Request failed"), error);
@@ -609,19 +636,25 @@ private:
                 }
             }
 
+            NRpc::NProto::TResponseHeader responseHeader;
+            ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
+            ToProto(responseHeader.mutable_service(), Request_->GetService());
+            ToProto(responseHeader.mutable_method(), Request_->GetMethod());
+            if (Request_->Header().has_response_codec()) {
+                responseHeader.set_codec(Request_->Header().response_codec());
+            }
+
             TMessageWithAttachments messageWithAttachments;
             try {
                 messageWithAttachments = ByteBufferToMessageWithAttachments(
                     ResponseBodyBuffer_.Unwrap(),
-                    messageBodySize);
+                    messageBodySize,
+                    !responseHeader.has_codec());
             } catch (const std::exception& ex) {
                 auto error = TError(NRpc::EErrorCode::TransportError, "Failed to receive request body") << ex;
                 NotifyError(TStringBuf("Failed to receive request body"), error);
                 return;
             }
-
-            NRpc::NProto::TResponseHeader responseHeader;
-            ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
 
             auto responseMessage = CreateResponseMessage(
                 responseHeader,
@@ -675,7 +708,7 @@ private:
                 reason,
                 Request_->GetRequestId());
 
-            responseHandler->HandleError(detailedError);
+            responseHandler->HandleError(std::move(detailedError));
         }
 
         void NotifyResponse(TSharedRefArray message)
@@ -707,7 +740,7 @@ class TChannelFactory
     : public IChannelFactory
 {
 public:
-    IChannelPtr CreateChannel(const TString& address) override
+    IChannelPtr CreateChannel(const std::string& address) override
     {
         auto config = New<TChannelConfig>();
         config->Address = address;
@@ -719,7 +752,7 @@ public:
 
 } // namespace
 
-IChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
+IGrpcChannelPtr CreateGrpcChannel(TChannelConfigPtr config)
 {
     return New<TChannel>(std::move(config));
 }

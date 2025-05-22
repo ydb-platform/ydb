@@ -33,6 +33,7 @@ END()
 RECURSE(
     actors
     events
+    utils
 )
 
 RECURSE_FOR_TESTS(

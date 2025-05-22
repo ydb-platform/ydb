@@ -1,0 +1,173 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/ydb/v1/database_service.proto";
+
+service ConsoleService {
+    rpc ListOperations (ListOperationsRequest) returns (ListOperationsResponse);
+    rpc Simulate(yandex.cloud.priv.ydb.v1.CreateDatabaseRequest) returns (SimulateResponse);
+    rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+    rpc GetUsedResources (GetUsedResourcesRequest) returns (GetUsedResourcesResponse);
+}
+
+
+message ListOperationsRequest {
+    string folder_id = 1;  // required
+    string resource_id = 2;  // additional filter by resource id
+    string page_token = 3;
+    int64 page_size = 4;
+}
+
+
+message YdbMetricTags {
+    int64 cores = 1;
+    int64 memory = 2;
+    int64 online = 3;
+    int64 public_ip = 4;
+    int64 ydb_storage_size = 5;
+    string ydb_storage_type_id = 6;
+    string platform_id = 7;
+}
+
+
+message Usage {
+    int64 start = 1;
+    int64 finish = 2;
+    string type = 3;
+    string unit = 4;
+    int64 quantity = 5;
+}
+
+
+message YdbMetric {
+    string folder_id = 1;
+    string schema = 3;
+    Usage usage = 4;
+    YdbMetricTags tags = 5;
+}
+
+
+message SimulateResponse {
+    repeated YdbMetric metrics = 1;
+}
+
+
+message ListOperationsResponse {
+    repeated .ydb.yc.priv.operation.Operation operations = 1;
+    string next_page_token = 2;
+}
+
+message GetConfigRequest {
+    string folder_id = 1; // to select network candidates
+}
+
+message NameConfig {
+    string pattern = 1;
+}
+
+message NetworkSelectionPolicy {
+    oneof selection_policy {
+        bool exactly_one_per_zone = 1;
+    }
+}
+
+message HostCountLimits {
+    int64 min_host_count = 1;
+    int64 max_host_count = 2;
+}
+
+message RegionalDatabaseConfig {
+    string name = 1;
+    HostCountLimits host_count_limits = 2;
+    repeated string storage_types = 3;
+    NetworkSelectionPolicy network_selection_policy = 4;
+    repeated string zones = 5;
+    repeated TemplateConfig alert_template_configs = 6;
+    bool supports_stage = 7;
+}
+
+message ServerlessStorageSizeLimits {
+    int64 default_value = 1;
+}
+
+
+message ServerlessThrottlingLimits {
+    int64 default_value = 1;
+}
+
+message ServerlessDatabaseConfig {
+    string name = 1;
+    ServerlessStorageSizeLimits serverless_storage_size_limits = 2;
+    ServerlessThrottlingLimits serverless_throttling_limits= 3;
+    repeated TemplateConfig alert_template_configs = 6;
+    bool supports_stage = 7;
+}
+
+message DedicatedDatabaseConfig {
+    string name = 1;
+    HostCountLimits host_count_limits = 2;
+    repeated string storage_types = 3;
+    NetworkSelectionPolicy network_selection_policy = 4;
+    repeated string zones = 5;
+    repeated TemplateConfig alert_template_configs = 6;
+    bool supports_stage = 7;
+}
+
+message AlertParameterConfig {
+    string type = 1;
+    string name = 2;
+    int64 upper_bound = 3;
+    int64 lower_bound = 4;
+}
+
+message TemplateConfig {
+    string alert_template_id = 1;
+    repeated AlertParameterConfig allowed_params = 2;
+    repeated AlertParameterConfig allowed_thresholds = 3;
+}
+
+message LocationsConfig {
+    repeated RegionalDatabaseConfig regional_databases_configs = 1;
+    repeated DedicatedDatabaseConfig dedicated_databases_configs = 2;
+    repeated ServerlessDatabaseConfig serverless_databases_configs = 3;
+}
+
+message Subnet {
+    string subnet_id = 1;
+    string name = 2;
+    string zone_id = 3;
+}
+
+message Network {
+    string network_id = 1;
+    repeated Subnet subnets = 2;
+}
+
+message GetConfigResponse {
+    NameConfig name_config = 1;
+    LocationsConfig locations_configs = 2;
+    repeated Network networks = 3;
+    bool supports_stage = 7;
+}
+
+message GetUsedResourcesRequest {
+    repeated string cloud_ids = 1;
+}
+
+message GetUsedResourcesResponse {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+      DEDICATED = 1;
+    }
+
+    message UsedResourcesInCloud {
+        string cloud_id = 1;
+        Type database_type = 2;
+        int64 cores = 3;
+        int64 memory = 4;
+    }
+
+    repeated UsedResourcesInCloud resources = 1;
+}

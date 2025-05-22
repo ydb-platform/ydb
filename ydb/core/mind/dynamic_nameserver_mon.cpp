@@ -92,6 +92,19 @@ void OutputNodeInfo(ui32 nodeId,
     str << "</tr>" << Endl;
 }
 
+void OutputExpiredNodeInfo(ui32 nodeId,IOutputStream &str, const TString &cl = "")
+{
+    str << "<tr class='" << cl << "'>" << Endl
+    << "  <td>" << nodeId << "</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl;
+    str << "<td>N/A</td>" << Endl;
+    str << "</tr>" << Endl;
+}
+
 void OutputStaticNodes(const TTableNameserverSetup &setup,
                        IOutputStream &str)
 {
@@ -146,11 +159,10 @@ void OutputDynamicNodes(const TString &domain,
     }
 
     ids.clear();
-    for (auto &pr : config->ExpiredNodes)
-        ids.insert(pr.first);
+    for (auto id : config->ExpiredNodes)
+        ids.insert(id);
     for (auto id : ids) {
-        auto &node = config->ExpiredNodes.at(id);
-        OutputNodeInfo(id, node, str, node.Expire, "gray");
+        OutputExpiredNodeInfo(id, str, "gray");
     }
 
     str << "  </tbody>" << Endl
@@ -187,11 +199,8 @@ void TDynamicNameserver::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext
 
         OutputStaticNodes(*StaticConfig, str);
 
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        for (auto &pr : dinfo->Domains) {
-            auto name = pr.second->Name;
-            auto config = DynamicConfigs[pr.first];
-            OutputDynamicNodes(name, config, str);
+        if (const auto& domain = AppData(ctx)->DomainsInfo->Domain) {
+            OutputDynamicNodes(domain->Name, DynamicConfigs[domain->DomainUid], str);
         }
     }
     ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

@@ -42,7 +42,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
                                            const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     const auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasCreateTable())
@@ -52,7 +52,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
 
     TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
     if (createTableTx.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
         tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
     }
 
@@ -71,22 +71,17 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     TUserTable::TPtr info = DataShard.CreateUserTable(txc, schemeTx.GetCreateTable());
     DataShard.AddUserTable(tableId, info);
 
-    for (const auto& [indexPathId, indexInfo] : info->Indexes) {
-        if (indexInfo.Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
-            AddSenders.emplace_back(new TEvChangeExchange::TEvAddSender(
-                tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
-            ));
-        }
-    }
+    info->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {
+        AddSenders.emplace_back(new TEvChangeExchange::TEvAddSender(
+            tableId, TEvChangeExchange::ESenderType::AsyncIndex, indexPathId
+        ));
+    });
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-    if (DataShard.GetState() == TShardState::WaitScheme) {
-        txc.DB.NoMoreReadsForTx();
-        DataShard.SetPersistState(TShardState::Ready, txc);
-        DataShard.CheckMvccStateChangeCanStart(ctx); // Recheck
-    }
+    txc.DB.NoMoreReadsForTx();
+    DataShard.OnTableCreated(txc, ctx);
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }

@@ -2,10 +2,10 @@
 #include "yql_clickhouse_util.h"
 
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 #include <library/cpp/json/json_writer.h>
 

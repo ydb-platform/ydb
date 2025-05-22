@@ -1,0 +1,191 @@
+name: Build-YDB-CLI
+run-name: Build YDB CLI
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        type: string
+        default: ""
+      build-linux-amd:
+        type: boolean
+        description: Build YDB CLI for Linux (amd64)
+        default: true
+      build-linux-arm:
+        type: boolean
+        description: Build YDB CLI for Linux (arm64)
+        default: true
+      build-darwin-amd:
+        type: boolean
+        description: Build YDB CLI for MacOS (amd64)
+        default: true
+      build-darwin-arm:
+        type: boolean
+        description: Build YDB CLI for MacOS (arm64)
+        default: true
+      build-windows-amd:
+        type: boolean
+        description: Build YDB CLI for Windows (amd64)
+        default: true
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build-matrix:
+    name: Build platform matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Create file with future platform list
+        id: set-matrix
+        run: |
+          MATRIX='{"include":[]}'
+          if [ "${{ inputs.build-linux-amd }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "linux-amd", "runner": "ubuntu-latest", "shell": "bash", "binary": "ydb", "platform": "DEFAULT-LINUX-X86_64"}]')
+            echo "Matrix after adding linux-amd: $MATRIX"
+          fi
+          if [ "${{ inputs.build-linux-arm }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "linux-arm", "runner": "ubuntu-latest", "shell": "bash", "binary": "ydb", "platform": "DEFAULT-LINUX-AARCH64"}]')
+            echo "Matrix after adding linux-arm: $MATRIX"
+          fi
+          if [ "${{ inputs.build-darwin-amd }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-amd", "runner": "macos-13", "shell": "bash", "binary": "ydb", "platform": "DEFAULT-DARWIN-X86_64"}]')
+            echo "Matrix after adding darwin-amd: $MATRIX"
+          fi
+          if [ "${{ inputs.build-darwin-arm }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "darwin-arm", "runner": "macos-13", "shell": "bash", "binary": "ydb", "platform": "DEFAULT-DARWIN-ARM64"}]')
+            echo "Matrix after adding darwin-arm: $MATRIX"
+          fi
+          if [ "${{ inputs.build-windows-amd }}" == "true" ]; then
+            MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "windows-amd", "runner": "windows-latest", "shell": "bash", "binary": "ydb.exe", "platform": "DEFAULT-WIN-X86_64"}]')
+            echo "Matrix after adding windows-amd: $MATRIX"
+          fi
+
+          echo "Final output matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          MATRIX=$(echo $MATRIX | jq '.')
+          echo "Final pretty printed matrix: $MATRIX"
+          echo "Platform matrix: $MATRIX" >> "$GITHUB_STEP_SUMMARY"
+
+  build-platform-specific-binary:
+    strategy:
+      matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
+    name: Build ${{ matrix.os }} binary
+    needs: build-matrix
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.commit_sha }}
+
+    - name: Print debug information
+      run: |
+        uname -a
+        echo "YDB CLI version: $(cat ydb/apps/ydb/version.txt) (read from ydb/apps/ydb/version.txt)"
+
+    # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
+    - name: Prepare Visual Studio environment and build windows binary with ya make
+      if: ${{ matrix.os == 'windows-amd' }}
+      shell: cmd
+      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
+    
+    - name: Build unix binary with ya make
+      if: ${{ matrix.os != 'windows-amd' }}
+      run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
+
+    - name: Upload binary to artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.os }}-binary
+        path: ydb/apps/ydb/${{ matrix.binary }}
+        if-no-files-found: error
+        retention-days: 1
+
+  gather-and-push-to-s3:
+    name: Gather built binaries and push to s3
+    needs: build-platform-specific-binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+      - name: Get YDB CLI version from ydb/apps/ydb/version.txt
+        id: getver
+        run: echo "cli_version=$(cat ydb/apps/ydb/version.txt)" >> $GITHUB_OUTPUT
+      - name: Print YDB CLI version ${{ steps.getver.outputs.cli_version }}
+        run: echo ${{ steps.getver.outputs.cli_version }}
+
+      - name: Prepare directory for linux-amd binary
+        if: ${{ inputs.build-linux-amd }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/linux/amd64
+      - name: Prepare directory for linux-arm binary
+        if: ${{ inputs.build-linux-arm }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/linux/arm64
+      - name: Prepare directory for darwin-amd binary
+        if: ${{ inputs.build-darwin-amd }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/amd64
+      - name: Prepare directory for darwin-arm binary
+        if: ${{ inputs.build-darwin-arm }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/arm64
+      - name: Prepare directory for windows-amd binary
+        if: ${{ inputs.build-windows-amd }}
+        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
+
+      - name: Copy linux-amd binary
+        if: ${{ inputs.build-linux-amd }}
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-amd-binary
+          path: ${{ steps.getver.outputs.cli_version }}/linux/amd64/
+      - name: Copy linux-arm binary
+        if: ${{ inputs.build-linux-arm }}
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-arm-binary
+          path: ${{ steps.getver.outputs.cli_version }}/linux/arm64/
+      - name: Copy darwin amd64 binary
+        if: ${{ inputs.build-darwin-amd }}
+        uses: actions/download-artifact@v4
+        with:
+          name: darwin-amd-binary
+          path: ${{ steps.getver.outputs.cli_version }}/darwin/amd64/
+      - name: Copy darwin arm64 binary
+        if: ${{ inputs.build-darwin-arm }}
+        uses: actions/download-artifact@v4
+        with:
+          name: darwin-arm-binary
+          path: ${{ steps.getver.outputs.cli_version }}/darwin/arm64/
+      - name: Copy windows-amd binary (unsigned)
+        if: ${{ inputs.build-windows-amd }}
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-amd-binary
+          path: ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned/
+
+      - name: Print resulting file hierarchy
+        run: find ${{ steps.getver.outputs.cli_version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
+
+      - name: Download s3
+        run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
+      - name: Unzip s3
+        run: tar -xf s3cmd-2.4.0.tar.gz
+      - name: Install s3
+        run: |
+          cd s3cmd-2.4.0
+          sudo python3 setup.py install
+          cd ..
+
+      - name: Upload to S3
+        env:
+          S3_HOST: "storage.yandexcloud.net"
+          S3_BUCKET: "yandexcloud-ydb"
+          S3_DNS_HOST_BUCKET: "%(bucket)s.storage.yandexcloud.net"
+          S3_REGION: ru-central1
+        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${{ steps.getver.outputs.cli_version }} "s3://$S3_BUCKET/release/"
+      

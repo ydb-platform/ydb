@@ -125,10 +125,12 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         return true;
     }
 
-    void RestoreVolatileSteps() {
+    TStepId RestoreVolatileSteps() {
+        TStepId maxStep = 0;
         for (auto &pr : Self->VolatileTransactions) {
             auto txId = pr.first;
             auto &tx = pr.second;
+            maxStep = Max(maxStep, tx.PlanOnStep);
             for (auto &prmed : tx.UnconfirmedAffectedSet) {
                 auto medId = prmed.first;
                 auto &medTx = GetMediatorTx(medId, tx.PlanOnStep, txId);
@@ -137,6 +139,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                 }
             }
         }
+        return maxStep;
     }
 
     TTxType GetTxType() const override { return TXTYPE_INIT; }
@@ -146,15 +149,24 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         bool result = Restore(transactions, txc, ctx);
         if (!result)
             return false;
-        RestoreVolatileSteps();
+        TStepId maxVolatileStep = RestoreVolatileSteps();
         i64 txCounter = transactions.size() + Self->VolatileTransactions.size();
         Self->Transactions.swap(transactions);
         *Self->MonCounters.TxInFly += txCounter;
         Self->MonCounters.CurrentTxInFly = txCounter;
 
-        if (Self->PrevStateActorId) {
-            NIceDb::TNiceDb db(txc.DB);
+        NIceDb::TNiceDb db(txc.DB);
 
+        // Previous coordinator might have had transactions that were after
+        // its persistent blocked range, but before LastPlanned was updated.
+        // Since we pick them up as planned and send to mediators we also need
+        // to make sure LastPlanned reflects that.
+        if (Self->VolatileState.LastPlanned < maxVolatileStep) {
+            Self->VolatileState.LastPlanned = maxVolatileStep;
+            Schema::SaveState(db, Schema::State::KeyLastPlanned, maxVolatileStep);
+        }
+
+        if (Self->PrevStateActorId) {
             ui64 volatileLeaseMs = Self->VolatilePlanLeaseMs;
             if (volatileLeaseMs > 0) {
                 // Make sure we start and persist new state actor before allowing clients to acquire new read steps

@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "flat_row_nulls.h"
 #include "flat_row_celled.h"
-#include "flat_part_iter_multi.h"
+#include "flat_part_iter.h"
 #include "flat_part_screen.h"
 #include "flat_part_laid.h"
 #include "flat_stat_part.h"
@@ -38,15 +38,15 @@ namespace NTable {
         TShrink& Put(TArrayRef<const TPartView> all, TCells from, TCells to)
         {
             for (auto &partView: all) {
-                Y_ABORT_UNLESS(partView.Slices, "Shrink attempt on a part without slices");
+                Y_ENSURE(partView.Slices, "Shrink attempt on a part without slices");
 
                 if (!from && !to) /* [-inf, +inf) */ {
                     PartView.emplace_back(partView);
                 } else {
-                    TPartSimpleIt first(partView.Part.Get(), { }, KeyCellDefaults, Env);
+                    TPartIter first(partView.Part.Get(), { }, KeyCellDefaults, Env);
                     Skipped += EReady::Page == first.Seek(from, ESeek::Lower);
 
-                    TPartSimpleIt last(partView.Part.Get(), { }, KeyCellDefaults, Env);
+                    TPartIter last(partView.Part.Get(), { }, KeyCellDefaults, Env);
                     Skipped += EReady::Page == last.Seek(to, to ? ESeek::Lower : ESeek::Upper);
 
                     auto firstRowId = first.GetRowId();

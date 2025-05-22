@@ -19,12 +19,12 @@ class TAttributeFilter;
 
 struct TAttributeFilter;
 
-class TYsonSerializableLite;
-class TYsonSerializable;
-
 struct IYsonStructMeta;
 class TYsonStructBase;
 class TYsonStructLite;
+
+template <class T>
+concept CYsonStructDerived = std::derived_from<T, TYsonStructBase>;
 
 DECLARE_REFCOUNTED_STRUCT(INode)
 using IConstNodePtr = TIntrusivePtr<const INode>;
@@ -43,6 +43,7 @@ struct INodeFactory;
 struct ITransactionalNodeFactory;
 
 DECLARE_REFCOUNTED_STRUCT(IAttributeDictionary)
+using IConstAttributeDictionaryPtr = TIntrusivePtr<const IAttributeDictionary>;
 
 struct IAttributeOwner;
 
@@ -65,6 +66,7 @@ class TTypedYPathResponse;
 DECLARE_REFCOUNTED_CLASS(TServiceCombiner)
 
 using NYPath::TYPath;
+using NYPath::TYPathBuf;
 
 //! Default limit for List and Get requests to virtual nodes.
 constexpr i64 DefaultVirtualChildLimit = 1000;
@@ -76,7 +78,6 @@ constexpr i64 DefaultVirtualChildLimit = 1000;
 //! NB: Changing this value will invalidate all changelogs!
 constexpr int MaxYPathResolveIterations = 256;
 
-DECLARE_REFCOUNTED_CLASS(TYsonSerializable)
 DECLARE_REFCOUNTED_CLASS(TYsonStruct)
 
 DECLARE_REFCOUNTED_CLASS(TYPathServiceContextWrapper)
@@ -120,6 +121,7 @@ YT_DEFINE_ERROR_ENUM(
     ((MaxStringLengthViolation)            (503))
     ((MaxAttributeSizeViolation)           (504))
     ((MaxKeyLengthViolation)               (505))
+    ((CannotRemoveNonemptyCompositeNode)   (506))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -128,6 +130,10 @@ struct TReadRequestComplexity;
 struct TReadRequestComplexityOverrides;
 
 DECLARE_REFCOUNTED_CLASS(TReadRequestComplexityLimiter)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSize;
 
 ////////////////////////////////////////////////////////////////////////////////
 

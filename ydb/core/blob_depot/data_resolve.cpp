@@ -132,7 +132,7 @@ namespace NKikimr::NBlobDepot {
                         break;
 
                     case NKikimrBlobDepot::TEvResolve::TItem::KEYDESIGNATOR_NOT_SET:
-                        Y_DEBUG_ABORT_UNLESS(false, "incorrect query field");
+                        Y_DEBUG_ABORT("incorrect query field");
                         break;
                 }
                 if (status) {
@@ -215,17 +215,23 @@ namespace NKikimr::NBlobDepot {
                 LogoBlobIDFromLogoBlobID(key.GetBlobId(), out->MutableBlobId());
                 item.SetReliablyWritten(reliablyWritten);
             } else {
-                EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](const TLogoBlobID& id, ui32 begin, ui32 end) {
-                    if (begin != end) {
+                EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded {
+                    [&](TLogoBlobID id, ui32 begin, ui32 end) {
+                        if (begin != end) {
+                            auto *out = item.AddValueChain();
+                            out->SetGroupId(Self->Info()->GroupFor(id.Channel(), id.Generation()));
+                            LogoBlobIDFromLogoBlobID(id, out->MutableBlobId());
+                            if (begin) {
+                                out->SetSubrangeBegin(begin);
+                            }
+                            if (end != id.BlobSize()) {
+                                out->SetSubrangeEnd(end);
+                            }
+                        }
+                    },
+                    [&](TS3Locator locator) {
                         auto *out = item.AddValueChain();
-                        out->SetGroupId(Self->Info()->GroupFor(id.Channel(), id.Generation()));
-                        LogoBlobIDFromLogoBlobID(id, out->MutableBlobId());
-                        if (begin) {
-                            out->SetSubrangeBegin(begin);
-                        }
-                        if (end != id.BlobSize()) {
-                            out->SetSubrangeEnd(end);
-                        }
+                        locator.ToProto(out->MutableS3Locator());
                     }
                 });
                 item.SetReliablyWritten(true);

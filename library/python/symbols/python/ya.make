@@ -1,4 +1,4 @@
-LIBRARY()
+PY23_NATIVE_LIBRARY()
 
 PEERDIR(
     library/python/symbols/registry

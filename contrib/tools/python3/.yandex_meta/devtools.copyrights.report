@@ -1,0 +1,1210 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 09219c9df5193f9826fd7b10de1db54e
+BELONGS Lib/ya.make
+    License text:
+        Copyright (C) 2001-2021 Vinay Sajip. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/logging/handlers.py [21:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0c09f167caf8737eb2e04b997c368e00
+BELONGS ya.make
+    License text:
+           Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
+           All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_randommodule.c [31:32]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d8533e860a7ec9ae6a2972d44e63f24
+BELONGS Lib/ya.make
+    License text:
+            Copyright (C) 2000  Bastian Kleineidam
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/urllib/robotparser.py [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 135ed74fd2b9c407102e439e80a9689d
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2004-2005 Elemental Security, Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/lib2to3/pgen2/__init__.py [1:1]
+        Lib/lib2to3/pgen2/conv.py [1:1]
+        Lib/lib2to3/pgen2/driver.py [1:1]
+        Lib/lib2to3/pgen2/grammar.py [1:1]
+        Lib/lib2to3/pgen2/literals.py [1:1]
+        Lib/lib2to3/pgen2/parse.py [1:1]
+        Lib/lib2to3/pgen2/pgen.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1efebd8207a0c0e452c1e893fab844aa
+BELONGS Lib/ya.make
+    License text:
+        \# SPDX-FileCopyrightText: 2021 Taneli Hukkinen
+        \# Licensed to PSF under a Contributor Agreement.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/tomllib/__init__.py [2:3]
+        Lib/tomllib/_parser.py [2:3]
+        Lib/tomllib/_re.py [2:3]
+        Lib/tomllib/_types.py [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1f0b75b0fa5f5914f30890b0882d008c
+BELONGS ya.make
+    License text:
+        Copyright © 2001-2024 Python Software Foundation.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.rst [17:17]
+        README.rst [215:215]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1f14a98f6d5884f76bc096957af8f3f0
+BELONGS Modules/_sqlite/ya.make
+    License text:
+         * Copyright (C) 2003-2004 Federico Di Gregorio <fog@debian.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_sqlite/microprotocols.c [3:3]
+        Modules/_sqlite/microprotocols.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1fb03c253e8cc4fe35277faad38f1a80
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2001-2021 by Vinay Sajip. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/logging/handlers.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29be00457f74dcf5f2b494d41d6a6c10
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2007 Google Inc.
+        \#  Licensed to PSF under a Contributor Agreement.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/ipaddress.py [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2a5904f49b21496df34a680f82f81ae3
+BELONGS ya.make
+    License text:
+           Copyright (c) 2005 Don Owens
+           All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Python/hashtable.c [11:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 31a99035c0feae994abfc37a475fbbef
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2000, Mojam Media, Inc., all rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/trace.py [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 374934340515645093389939a0d8cc3f
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 1999, Bioreason, Inc., all rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/trace.py [13:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 379ce529d97c6f0c1d5b2c590d72ab94
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (C) 2002 Lars Gustaebel <lars@gustaebel.de>
+        \# All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/tarfile.py [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 396dca1478bd3bc96270423a5a74dd64
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (c) 1999-2008 by Fredrik Lundh
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/xml/etree/ElementInclude.py [19:19]
+        Lib/xml/etree/ElementTree.py [41:41]
+        Lib/xml/etree/ElementTree.py [48:48]
+        Lib/xml/etree/__init__.py [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e7433540350211522094018ece177f1
+BELONGS Lib/ya.make
+    License text:
+        (c) Copyright CNRI, All Rights Reserved. NO WARRANTY.
+        (c) Copyright 2000 Guido van Rossum.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/encodings/mac_latin2.py [5:6]
+        Lib/encodings/ptcp154.py [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 401131eb289c6558c0fdd39d268bc252
+BELONGS ya.make
+    License text:
+        /* Copyright (c) INRIA and Microsoft Corporation. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_hacl/include/krml/FStar_UInt128_Verified.h [2:2]
+        Modules/_hacl/include/krml/FStar_UInt_8_16_32_64.h [2:2]
+        Modules/_hacl/include/krml/fstar_uint128_struct_endianness.h [1:1]
+        Modules/_hacl/include/krml/internal/target.h [1:1]
+        Modules/_hacl/include/krml/lowstar_endianness.h [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4029f823929ef9be0c8cd2415ce85b75
+BELONGS ya.make
+    License text:
+         * Copyright 1992-1994, David Gottner
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Python/getopt.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4498b7f2343e003d766b85b1da7deede
+BELONGS ya.make
+    License text:
+        Copyright (c) Corporation for National Research Initiatives.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Include/unicodeobject.h [13:13]
+        Objects/unicodeobject.c [9:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4730c6cc3207e49296b1422babd08c84
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2000 Doug White, 2006 James Knight, 2007 Christian Heimes
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/selectmodule.c [1721:1722]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4c4db466ec49df90501b3efa15b48115
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2008-2009, Google Inc.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Include/dynamic_annotations.h [1:2]
+        Python/dynamic_annotations.c [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4fc65a8188990e66248423d703d59e19
+BELONGS Lib/ya.make
+    License text:
+        Copyright (c) 2002-2006 Python Software Foundation.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/optparse.py [46:46]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 580d027c8eb21e35afd7d7d59c8714f0
+BELONGS ya.make
+    License text:
+           Copyright (C) 2005-2007   Gregory P. Smith (greg@krypto.org)
+           Licensed to PSF under a Contributor Agreement.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/md5module.c [12:13]
+        Modules/sha1module.c [12:13]
+        Modules/sha2module.c [13:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a28c2be68c8f7c7293494e0fc9fd673
+BELONGS Lib/ya.make ya.make
+    License text:
+        \# Copyright (c) 2006-2008, R Oudkerk
+        \# Licensed to PSF under a Contributor Agreement.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/multiprocessing/__init__.py [11:12]
+        Lib/multiprocessing/connection.py [6:7]
+        Lib/multiprocessing/dummy/__init__.py [6:7]
+        Lib/multiprocessing/dummy/connection.py [6:7]
+        Lib/multiprocessing/heap.py [6:7]
+        Lib/multiprocessing/managers.py [7:8]
+        Lib/multiprocessing/pool.py [6:7]
+        Lib/multiprocessing/process.py [6:7]
+        Lib/multiprocessing/queues.py [6:7]
+        Lib/multiprocessing/reduction.py [6:7]
+        Lib/multiprocessing/sharedctypes.py [6:7]
+        Lib/multiprocessing/spawn.py [7:8]
+        Lib/multiprocessing/synchronize.py [6:7]
+        Lib/multiprocessing/util.py [6:7]
+        Modules/_multiprocessing/multiprocessing.c [6:7]
+        Modules/_multiprocessing/semaphore.c [6:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6d727687fcc95ba4d2aac674e9c30f19
+BELONGS ya.make
+    License text:
+         Copyright (C) 1986 Gary S. Brown.  You may use this program, or
+         code or tables extracted from it, as desired without restriction.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/binascii.c [646:647]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6df801c8be98b70cf1e1bd99eee48534
+BELONGS Lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/trace.py [3:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6fdebb96ecfaf342e9db1f4e0b8207f9
+BELONGS Modules/_sqlite/ya.make
+    License text:
+         * Copyright (C) 2004-2010 Gerhard Häring <gh@ghaering.de>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_sqlite/connection.c [3:3]
+        Modules/_sqlite/connection.h [3:3]
+        Modules/_sqlite/cursor.c [3:3]
+        Modules/_sqlite/cursor.h [3:3]
+        Modules/_sqlite/module.c [3:3]
+        Modules/_sqlite/module.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 701bf87896cc45747f630279603da7cf
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999 by Secret Labs AB.
+         * Copyright (c) 1999 by Fredrik Lundh.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Include/unicodeobject.h [24:25]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 726a23fbbe59fd1c0168b2deaa565438
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2001-2022 by Vinay Sajip. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/logging/__init__.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 73e2032fb59ef98f2ef3f7f0b76663b6
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2012-2022  Christian Heimes (christian@python.org)
+         * Licensed to PSF under a Contributor Agreement.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/sha3module.c [13:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 74a3845ea3fd7f181b0230f947df5bb6
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (C) 2006 - 2010  Gregor Lingl
+        \# email: glingl@aon.at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/turtle.py [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 750f78dea8dcaa5f52cd83e5be0a8d76
+BELONGS Lib/ya.make
+    License text:
+        __copyright__ = """
+            Copyright (c) 1999-2000, Marc-Andre Lemburg; mailto:mal@lemburg.com
+            Copyright (c) 2000-2010, eGenix.com Software GmbH; mailto:info@egenix.com
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/platform.py [93:95]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 75333d2beb2a41511677b756b5168ee6
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
+         * Copyright (c) 2022-2023 HACL* Contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_hacl/Hacl_Hash_MD5.c [3:4]
+        Modules/_hacl/Hacl_Hash_MD5.h [3:4]
+        Modules/_hacl/Hacl_Hash_SHA1.c [3:4]
+        Modules/_hacl/Hacl_Hash_SHA1.h [3:4]
+        Modules/_hacl/Hacl_Hash_SHA2.c [3:4]
+        Modules/_hacl/Hacl_Hash_SHA2.h [3:4]
+        Modules/_hacl/Hacl_Hash_SHA3.c [3:4]
+        Modules/_hacl/Hacl_Hash_SHA3.h [3:4]
+        Modules/_hacl/Hacl_Streaming_Types.h [3:4]
+        Modules/_hacl/internal/Hacl_Hash_MD5.h [3:4]
+        Modules/_hacl/internal/Hacl_Hash_SHA1.h [3:4]
+        Modules/_hacl/internal/Hacl_Hash_SHA2.h [3:4]
+        Modules/_hacl/internal/Hacl_Hash_SHA3.h [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 75752712a29a547dda63faf232d0b41f
+BELONGS ya.make
+    License text:
+        static const char copyright[] =
+            " SRE 2.2.2 Copyright (c) 1997-2002 by Secret Labs AB ";
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_sre/sre.c [38:39]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 772d70e950c69b1a32c0a0047f47ee2d
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/getaddrinfo.c [2:3]
+        Modules/getnameinfo.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7a086131b819503e48761f89e8b27f0f
+BELONGS ya.make
+    License text:
+        Copyright (C) 1997, 2002, 2003, 2007, 2008 Martin von Loewis
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_localemodule.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e56748c501f6717eeccf9386af7b32e
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (c) 2003-2004 by Fredrik Lundh.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/xml/etree/ElementInclude.py [11:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8600cd4ce6ae06bf59303d5400806dd6
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004 by Fredrik Lundh <fredrik@pythonware.com>
+         * Copyright (c) 2004 by Secret Labs AB, http://www.pythonware.com
+         * Copyright (c) 2004 by Peter Astrand <astrand@lysator.liu.se>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_winapi.c [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8934cac92d475d44b8d28ca8aec6cc75
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (C) 2005 Gerhard Häring <gh@ghaering.de>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/sqlite3/__init__.py [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 899627115d890c4e4189c19a62ec287a
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2008 Armin Ronacher.
+        \# Licensed to PSF under a Contributor Agreement.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/lib2to3/fixes/fix_isinstance.py [1:2]
+        Lib/lib2to3/fixes/fix_reduce.py [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 91abf9fc93588e766c31cefc6cb04c69
+BELONGS Lib/ya.make
+    License text:
+        (c) Copyright CNRI, All Rights Reserved. NO WARRANTY.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/codecs.py [6:6]
+        Lib/encodings/__init__.py [27:27]
+        Lib/encodings/ascii.py [6:6]
+        Lib/encodings/charmap.py [9:9]
+        Lib/encodings/latin_1.py [6:6]
+        Lib/encodings/mac_latin2.py [5:6]
+        Lib/encodings/mbcs.py [7:7]
+        Lib/encodings/ptcp154.py [5:6]
+        Lib/encodings/raw_unicode_escape.py [6:6]
+        Lib/encodings/undefined.py [9:9]
+        Lib/encodings/unicode_escape.py [6:6]
+        Lib/encodings/utf_16.py [6:6]
+        Lib/encodings/utf_16_be.py [6:6]
+        Lib/encodings/utf_16_le.py [6:6]
+        Lib/encodings/utf_8.py [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9339102d999681fe61fece1d14b15b07
+BELONGS ya.make
+    License text:
+        Copyright © 1991-1995 Stichting Mathematisch Centrum.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.rst [222:222]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93670f683508a451216895afb3ae4125
+BELONGS Lib/ya.make
+    License text:
+        Copyright (C) 2001-2022 Vinay Sajip. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/logging/__init__.py [21:21]
+        Lib/logging/config.py [22:22]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 95559300d1605708c2968b971327d506
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (c) 1999-2002 by Secret Labs AB.
+        \# Copyright (c) 1999-2002 by Fredrik Lundh.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/xmlrpc/client.py [54:55]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 991f1cf54277f38daf31d4e85f553db3
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (C) 2004-2005 Gerhard Häring <gh@ghaering.de>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/sqlite3/dbapi2.py [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9b9c3232a6eb88f36ceb8ed3b4143ed0
+BELONGS ya.make
+    License text:
+         Copyright (c) 2013  Marek Majkowski <marek@popcount.org>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Python/pyhash.c [297:297]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9f04c8fd6f5602c4c86d36d247e2d5a7
+BELONGS Lib/ya.make ya.make
+    License text:
+        \# Copyright (c) 1999-2009 by Fredrik Lundh
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/xml/etree/ElementPath.py [25:25]
+        Modules/_elementtree.c [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a0e9e0cad486cf18dfb7a79b542560ec
+BELONGS ya.make
+    License text:
+         * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/addrinfo.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a27fa7feff9ad0b1fe51d1be3085699f
+BELONGS Lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/wsgiref/validate.py [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a2b06d735de2c112ff877c256568ba97
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 1994 by Lance Ellinghouse
+        \# Cathedral City, California Republic, United States of America.
+        \#                        All Rights Reserved
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/uu.py [3:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a33893018247ff1b3c48917d6748d15a
+BELONGS Lib/ya.make
+    License text:
+        \# SPDX-FileCopyrightText: Copyright (c) 2015-2021 MagicStack Inc.  http://magic.io
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/asyncio/constants.py [3:3]
+        Lib/asyncio/events.py [5:5]
+        Lib/asyncio/sslproto.py [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a725c39fa41f3df8b3f43edfa17b6f83
+BELONGS ya.make
+    License text:
+        Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam,
+        The Netherlands.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [247:248]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a984b43b8fe410b55c1b870c44551dd8
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (c) 2003-2005 by Peter Astrand <astrand@lysator.liu.se>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/subprocess.py [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab4f0bd28e86cb9960eb833cfe15d0f4
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1997-2001 by Secret Labs AB.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_sre/sre.c [27:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ad87e72c4d9631a4deb526a93103f14d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004 by Fredrik Lundh <fredrik@pythonware.com>
+         * Copyright (c) 2004 by Secret Labs AB, http://www.pythonware.com
+         * Copyright (c) 2004 by Peter Astrand <astrand@lysator.liu.se>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_winapi.c [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b25d3d6ba0c424ca7838bf2bb06c0b6e
+BELONGS Lib/ya.make
+    License text:
+        Copyright (C) 2011-2014 Vinay Sajip.
+        Licensed to the PSF under a contributor agreement.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/venv/__init__.py [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b32a81633821b421d8644f10115b1b7f
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (c) 1999-2002 by Secret Labs AB
+        \# Copyright (c) 1999-2002 by Fredrik Lundh
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/xmlrpc/client.py [63:64]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b6c2ed86f7948fd4c28ea9e3ec55be52
+BELONGS ya.make
+    License text:
+        Copyright 1994 by Lance Ellinghouse,
+        Cathedral City, California Republic, United States of America.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/syslogmodule.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b802fa8220d5ccd1f12cde78278773c0
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright Disney Enterprises, Inc.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/profile.py [11:11]
+        Lib/pstats.py [7:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bfc8838d0a6fb65ac57c3f523b66bd9a
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 1991-1995, Stichting Mathematisch Centrum, all rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/trace.py [19:19]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c06241e14ef12ae35c8c06a6c5908e14
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2001-2023 by Vinay Sajip. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/logging/config.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c1c87dc78f7e7b2de76d0b82bed5025b
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (c) 2003-2009 by Fredrik Lundh.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/xml/etree/ElementPath.py [17:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c5fb9397fe74e236fd1b4618056f115b
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (c) 1999-2002 by Secret Labs AB.
+        \# Copyright (c) 1999-2002 by Fredrik Lundh.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/xmlrpc/client.py [54:55]
+        Lib/xmlrpc/client.py [63:64]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c6707507f63e0741c863ec5284232224
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2009 Brian Quinlan. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/concurrent/futures/__init__.py [1:1]
+        Lib/concurrent/futures/_base.py [1:1]
+        Lib/concurrent/futures/process.py [1:1]
+        Lib/concurrent/futures/thread.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9840b23152aadd27a62cd4838286ea9
+BELONGS Lib/ya.make
+    License text:
+        __copyright__ = """
+            Copyright (c) 1999-2000, Marc-Andre Lemburg; mailto:mal@lemburg.com
+            Copyright (c) 2000-2010, eGenix.com Software GmbH; mailto:info@egenix.com
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/platform.py [93:95]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca890d69bc2476f4e1be39cfb6dbac12
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1991, 2000, 2001 by Lucent Technologies.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Python/dtoa.c [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cb35e7077c450be2dbd78d2c87085d86
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 1995-1997, Automatrix, Inc., all rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/trace.py [16:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cb8ec424ee4208dda6ce1f0904d25941
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2006 Georg Brandl.
+        \# Licensed to PSF under a Contributor Agreement.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/lib2to3/fixes/fix_intern.py [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce95a9dd8bc334eae3ea12a182c73d8e
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (c) 1998-2001 by Secret Labs AB.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/re/__init__.py [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf754dd1feb5795618b51c03164bfe5f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999-2009 by Secret Labs AB.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_elementtree.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d027e5d82394475d1f291983c558b25d
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2000 by Timothy O'Malley <timo@alum.mit.edu>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/http/cookies.py [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d0fc9324be65f2f184bc90e91cb34ffa
+BELONGS Lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/unittest/__init__.py [29:33]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d14d74e4b258749a1ee446bc1c8c9f0b
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2007 Google, Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/_collections_abc.py [1:1]
+        Lib/abc.py [1:1]
+        Lib/lib2to3/fixes/fix_buffer.py [1:1]
+        Lib/lib2to3/fixes/fix_dict.py [1:1]
+        Lib/lib2to3/fixes/fix_filter.py [1:1]
+        Lib/lib2to3/fixes/fix_map.py [1:1]
+        Lib/lib2to3/fixes/fix_standarderror.py [1:1]
+        Lib/lib2to3/fixes/fix_types.py [1:1]
+        Lib/lib2to3/fixes/fix_xrange.py [1:1]
+        Lib/numbers.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4ad3ffd972b79301d6beee7c8154f7b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008-2020 Stefan Krah. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_decimal/libmpdec/basearith.c [2:2]
+        Modules/_decimal/libmpdec/basearith.h [2:2]
+        Modules/_decimal/libmpdec/bits.h [2:2]
+        Modules/_decimal/libmpdec/constants.c [2:2]
+        Modules/_decimal/libmpdec/constants.h [2:2]
+        Modules/_decimal/libmpdec/context.c [2:2]
+        Modules/_decimal/libmpdec/convolute.c [2:2]
+        Modules/_decimal/libmpdec/convolute.h [2:2]
+        Modules/_decimal/libmpdec/crt.c [2:2]
+        Modules/_decimal/libmpdec/crt.h [2:2]
+        Modules/_decimal/libmpdec/difradix2.c [2:2]
+        Modules/_decimal/libmpdec/difradix2.h [2:2]
+        Modules/_decimal/libmpdec/fnt.c [2:2]
+        Modules/_decimal/libmpdec/fnt.h [2:2]
+        Modules/_decimal/libmpdec/fourstep.c [2:2]
+        Modules/_decimal/libmpdec/fourstep.h [2:2]
+        Modules/_decimal/libmpdec/io.c [2:2]
+        Modules/_decimal/libmpdec/mpalloc.c [2:2]
+        Modules/_decimal/libmpdec/mpalloc.h [2:2]
+        Modules/_decimal/libmpdec/mpd_io.h [2:2]
+        Modules/_decimal/libmpdec/mpdecimal.c [2:2]
+        Modules/_decimal/libmpdec/mpdecimal.h [2:2]
+        Modules/_decimal/libmpdec/mpsignal.c [2:2]
+        Modules/_decimal/libmpdec/numbertheory.c [2:2]
+        Modules/_decimal/libmpdec/numbertheory.h [2:2]
+        Modules/_decimal/libmpdec/sixstep.c [2:2]
+        Modules/_decimal/libmpdec/sixstep.h [2:2]
+        Modules/_decimal/libmpdec/transpose.c [2:2]
+        Modules/_decimal/libmpdec/transpose.h [2:2]
+        Modules/_decimal/libmpdec/typearith.h [2:2]
+        Modules/_decimal/libmpdec/umodarith.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d515e0443b2f49784a4fd369c10de4d0
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2006 Google, Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/lib2to3/fixer_base.py [1:1]
+        Lib/lib2to3/fixes/fix_apply.py [1:1]
+        Lib/lib2to3/fixes/fix_exec.py [1:1]
+        Lib/lib2to3/fixes/fix_execfile.py [1:1]
+        Lib/lib2to3/fixes/fix_has_key.py [1:1]
+        Lib/lib2to3/fixes/fix_long.py [1:1]
+        Lib/lib2to3/fixes/fix_ne.py [1:1]
+        Lib/lib2to3/fixes/fix_print.py [1:1]
+        Lib/lib2to3/fixes/fix_repr.py [1:1]
+        Lib/lib2to3/patcomp.py [1:1]
+        Lib/lib2to3/pgen2/driver.py [5:5]
+        Lib/lib2to3/pygram.py [1:1]
+        Lib/lib2to3/pytree.py [1:1]
+        Lib/lib2to3/refactor.py [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d68bbe46e0726dcca7e0d5f66734920d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016-2022 INRIA, CMU and Microsoft Corporation
+         * Copyright (c) 2022-2023 HACL* Contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_hacl/Hacl_Hash_MD5.c [3:4]
+        Modules/_hacl/Hacl_Hash_MD5.h [3:4]
+        Modules/_hacl/Hacl_Hash_SHA1.c [3:4]
+        Modules/_hacl/Hacl_Hash_SHA1.h [3:4]
+        Modules/_hacl/Hacl_Hash_SHA2.c [3:4]
+        Modules/_hacl/Hacl_Hash_SHA2.h [3:4]
+        Modules/_hacl/Hacl_Hash_SHA3.c [3:4]
+        Modules/_hacl/Hacl_Hash_SHA3.h [3:4]
+        Modules/_hacl/Hacl_Streaming_Types.h [3:4]
+        Modules/_hacl/internal/Hacl_Hash_MD5.h [3:4]
+        Modules/_hacl/internal/Hacl_Hash_SHA1.h [3:4]
+        Modules/_hacl/internal/Hacl_Hash_SHA2.h [3:4]
+        Modules/_hacl/internal/Hacl_Hash_SHA3.h [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d76f3fa52c9037f225692d791400281e
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2004 by Fredrik Lundh <fredrik@pythonware.com>
+         * Copyright (c) 2004 by Secret Labs AB, http://www.pythonware.com
+         * Copyright (c) 2004 by Peter Astrand <astrand@lysator.liu.se>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_winapi.c [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL deaf0ed8b84337a5249581c2f2f9b48b
+BELONGS Lib/ya.make
+    License text:
+        __copyright__ = """
+        Copyright (c) 2001-2006 Gregory P. Ward.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/optparse.py [44:45]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e27726446f471a232c54b5b938c2856d
+BELONGS Lib/ya.make ya.make
+    License text:
+        \#.  Copyright (C) 2005-2010   Gregory P. Smith (greg@krypto.org)
+        \#  Licensed to PSF under a Contributor Agreement.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/hashlib.py [1:2]
+        Modules/_hashopenssl.c [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e75fa2c7318e971f6f17f194667f8514
+BELONGS Modules/_sqlite/ya.make
+    License text:
+         * Copyright (C) 2005-2010 Gerhard Häring <gh@ghaering.de>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_sqlite/prepare_protocol.c [3:3]
+        Modules/_sqlite/prepare_protocol.h [3:3]
+        Modules/_sqlite/row.c [3:3]
+        Modules/_sqlite/row.h [3:3]
+        Modules/_sqlite/statement.c [3:3]
+        Modules/_sqlite/statement.h [3:3]
+        Modules/_sqlite/util.c [3:3]
+        Modules/_sqlite/util.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ebda03a35d7f204391be70b31a955347
+BELONGS ya.make
+    License text:
+        Copyright © 2000 BeOpen.com.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.rst [217:217]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ed5c60b5b3f284c2919fc59429142b23
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [85:89]
+
+KEEP     COPYRIGHT_SERVICE_LABEL edeb8cc9f75ca4f57d69b895279ff0bf
+BELONGS Lib/ya.make
+    License text:
+            :copyright: Copyright 2008 by Armin Ronacher.
+            :license: Python License.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/ast.py [24:25]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f34d2138926a953a957f6eb5488166b2
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999 by Secret Labs AB
+         * Copyright (c) 1999 by Fredrik Lundh
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Include/unicodeobject.h [33:34]
+        Objects/unicodeobject.c [14:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f509d1b17b86fe3de44d634c21ec6b47
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright 2007 Georg Brandl.
+        \# Licensed to PSF under a Contributor Agreement.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/lib2to3/fixes/fix_numliterals.py [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL faff3bcadeb1b00048b846bfd4192de6
+BELONGS Lib/ya.make
+    License text:
+        \# Copyright (C) 2005 Martin v. Löwis
+        \# Licensed to PSF under a Contributor Agreement.
+        from _msi import *
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/msilib/__init__.py [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb1938002c07378e3df6cabaa8791691
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1999 by Secret Labs AB.
+         * Copyright (c) 1999 by Fredrik Lundh.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Include/unicodeobject.h [24:25]
+        Include/unicodeobject.h [33:34]
+        Objects/unicodeobject.c [14:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fdc070f8bc87235256d9738f6e2cebb6
+BELONGS Lib/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Lib/unittest/__init__.py [29:33]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fdf3600da58d263a3646ea3a01c618b6
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008-2012 Stefan Krah. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Modules/_decimal/_decimal.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ffa0e70185ef5e29a38a46da6ff126fc
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [187:192]
+        README.rst [219:220]

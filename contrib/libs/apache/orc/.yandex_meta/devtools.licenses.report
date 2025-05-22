@@ -1,0 +1,258 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           44dc743c95835a9e71d7b3cca63dcc7c
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: c++/include/orc/BloomFilter.hh at line 3, c++/include/orc/ColumnPrinter.hh at line 3, c++/include/orc/Common.hh at line 3, c++/include/orc/Exceptions.hh at line 3, c++/include/orc/Int128.hh at line 3, c++/include/orc/MemoryPool.hh at line 3, c++/include/orc/OrcFile.hh at line 3, c++/include/orc/Reader.hh at line 3, c++/include/orc/Statistics.hh at line 3, c++/include/orc/Type.hh at line 3, c++/include/orc/Vector.hh at line 3, c++/include/orc/Writer.hh at line 3, c++/include/orc/orc-config.hh at line 3, c++/include/orc/sargs/Literal.hh at line 3, c++/include/orc/sargs/SearchArgument.hh at line 3, c++/include/orc/sargs/TruthValue.hh at line 3, c++/src/Adaptor-linux.hh at line 3, c++/src/Adaptor.cc at line 3, c++/src/BlockBuffer.cc at line 3, c++/src/BlockBuffer.hh at line 3, c++/src/BloomFilter.cc at line 3, c++/src/BloomFilter.hh at line 3, c++/src/Bpacking.hh at line 3, c++/src/BpackingDefault.cc at line 3, c++/src/BpackingDefault.hh at line 3, c++/src/ByteRLE.cc at line 3, c++/src/ByteRLE.hh at line 3, c++/src/ColumnPrinter.cc at line 3, c++/src/ColumnReader.cc at line 3, c++/src/ColumnReader.hh at line 3, c++/src/ColumnWriter.cc at line 3, c++/src/ColumnWriter.hh at line 3, c++/src/Common.cc at line 3, c++/src/Compression.cc at line 3, c++/src/Compression.hh at line 3, c++/src/ConvertColumnReader.cc at line 3, c++/src/ConvertColumnReader.hh at line 3, c++/src/CpuInfoUtil.cc at line 3, c++/src/CpuInfoUtil.hh at line 3, c++/src/Dispatch.hh at line 3, c++/src/Exceptions.cc at line 3, c++/src/Int128.cc at line 3, c++/src/LzoDecompressor.hh at line 3, c++/src/MemoryPool.cc at line 3, c++/src/Murmur3.cc at line 3, c++/src/Murmur3.hh at line 3, c++/src/Options.hh at line 3, c++/src/OrcFile.cc at line 3, c++/src/RLE.cc at line 3, c++/src/RLE.hh at line 3, c++/src/RLEV2Util.hh at line 3, c++/src/RLEv1.cc at line 3, c++/src/RLEv1.hh at line 3, c++/src/RLEv2.hh at line 3, c++/src/Reader.cc at line 3, c++/src/Reader.hh at line 3, c++/src/RleDecoderV2.cc at line 3, c++/src/SchemaEvolution.cc at line 3, c++/src/SchemaEvolution.hh at line 3, c++/src/Statistics.cc at line 3, c++/src/Statistics.hh at line 3, c++/src/StripeStream.cc at line 3, c++/src/StripeStream.hh at line 3, c++/src/Timezone.cc at line 3, c++/src/Timezone.hh at line 3, c++/src/TypeImpl.cc at line 3, c++/src/TypeImpl.hh at line 3, c++/src/Utils.hh at line 3, c++/src/Vector.cc at line 3, c++/src/Writer.cc at line 3, c++/src/io/Cache.cc at line 3, c++/src/io/Cache.hh at line 3, c++/src/io/InputStream.cc at line 3, c++/src/io/InputStream.hh at line 3, c++/src/io/OutputStream.cc at line 3, c++/src/io/OutputStream.hh at line 3, c++/src/sargs/ExpressionTree.cc at line 3, c++/src/sargs/ExpressionTree.hh at line 3, c++/src/sargs/Literal.cc at line 3, c++/src/sargs/PredicateLeaf.cc at line 3, c++/src/sargs/PredicateLeaf.hh at line 3, c++/src/sargs/SargsApplier.cc at line 3, c++/src/sargs/SargsApplier.hh at line 3, c++/src/sargs/SearchArgument.cc at line 3, c++/src/sargs/SearchArgument.hh at line 3, c++/src/sargs/TruthValue.cc at line 3
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        c++/include/orc/BloomFilter.hh [2:16]
+        c++/include/orc/ColumnPrinter.hh [2:16]
+        c++/include/orc/Common.hh [2:16]
+        c++/include/orc/Exceptions.hh [2:16]
+        c++/include/orc/Int128.hh [2:16]
+        c++/include/orc/MemoryPool.hh [2:16]
+        c++/include/orc/OrcFile.hh [2:16]
+        c++/include/orc/Reader.hh [2:16]
+        c++/include/orc/Statistics.hh [2:16]
+        c++/include/orc/Type.hh [2:16]
+        c++/include/orc/Vector.hh [2:16]
+        c++/include/orc/Writer.hh [2:16]
+        c++/include/orc/orc-config.hh [2:16]
+        c++/include/orc/sargs/Literal.hh [2:16]
+        c++/include/orc/sargs/SearchArgument.hh [2:16]
+        c++/include/orc/sargs/TruthValue.hh [2:16]
+        c++/src/Adaptor-linux.hh [2:16]
+        c++/src/Adaptor.cc [2:16]
+        c++/src/BlockBuffer.cc [2:16]
+        c++/src/BlockBuffer.hh [2:16]
+        c++/src/BloomFilter.cc [2:16]
+        c++/src/BloomFilter.hh [2:16]
+        c++/src/Bpacking.hh [2:16]
+        c++/src/BpackingDefault.cc [2:16]
+        c++/src/BpackingDefault.hh [2:16]
+        c++/src/ByteRLE.cc [2:16]
+        c++/src/ByteRLE.hh [2:16]
+        c++/src/ColumnPrinter.cc [2:16]
+        c++/src/ColumnReader.cc [2:16]
+        c++/src/ColumnReader.hh [2:16]
+        c++/src/ColumnWriter.cc [2:16]
+        c++/src/ColumnWriter.hh [2:16]
+        c++/src/Common.cc [2:16]
+        c++/src/Compression.cc [2:16]
+        c++/src/Compression.hh [2:16]
+        c++/src/ConvertColumnReader.cc [2:16]
+        c++/src/ConvertColumnReader.hh [2:16]
+        c++/src/CpuInfoUtil.cc [2:16]
+        c++/src/CpuInfoUtil.hh [2:16]
+        c++/src/Dispatch.hh [2:16]
+        c++/src/Exceptions.cc [2:16]
+        c++/src/Int128.cc [2:16]
+        c++/src/LzoDecompressor.hh [2:16]
+        c++/src/MemoryPool.cc [2:16]
+        c++/src/Murmur3.cc [2:16]
+        c++/src/Murmur3.hh [2:16]
+        c++/src/Options.hh [2:16]
+        c++/src/OrcFile.cc [2:16]
+        c++/src/RLE.cc [2:16]
+        c++/src/RLE.hh [2:16]
+        c++/src/RLEV2Util.hh [2:16]
+        c++/src/RLEv1.cc [2:16]
+        c++/src/RLEv1.hh [2:16]
+        c++/src/RLEv2.hh [2:16]
+        c++/src/Reader.cc [2:16]
+        c++/src/Reader.hh [2:16]
+        c++/src/RleDecoderV2.cc [2:16]
+        c++/src/SchemaEvolution.cc [2:16]
+        c++/src/SchemaEvolution.hh [2:16]
+        c++/src/Statistics.cc [2:16]
+        c++/src/Statistics.hh [2:16]
+        c++/src/StripeStream.cc [2:16]
+        c++/src/StripeStream.hh [2:16]
+        c++/src/Timezone.cc [2:16]
+        c++/src/Timezone.hh [2:16]
+        c++/src/TypeImpl.cc [2:16]
+        c++/src/TypeImpl.hh [2:16]
+        c++/src/Utils.hh [2:16]
+        c++/src/Vector.cc [2:16]
+        c++/src/Writer.cc [2:16]
+        c++/src/io/Cache.cc [2:16]
+        c++/src/io/Cache.hh [2:16]
+        c++/src/io/InputStream.cc [2:16]
+        c++/src/io/InputStream.hh [2:16]
+        c++/src/io/OutputStream.cc [2:16]
+        c++/src/io/OutputStream.hh [2:16]
+        c++/src/sargs/ExpressionTree.cc [2:16]
+        c++/src/sargs/ExpressionTree.hh [2:16]
+        c++/src/sargs/Literal.cc [2:16]
+        c++/src/sargs/PredicateLeaf.cc [2:16]
+        c++/src/sargs/PredicateLeaf.hh [2:16]
+        c++/src/sargs/SargsApplier.cc [2:16]
+        c++/src/sargs/SargsApplier.hh [2:16]
+        c++/src/sargs/SearchArgument.cc [2:16]
+        c++/src/sargs/SearchArgument.hh [2:16]
+        c++/src/sargs/TruthValue.cc [2:16]
+
+KEEP     Apache-2.0           56f47be3a4f3e06521dc21dd82e34569
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: c++/src/LzoDecompressor.cc at line 3, c++/src/RLEV2Util.cc at line 3, c++/src/RleEncoderV2.cc at line 3, c++/src/wrap/coded-stream-wrapper.h at line 3, c++/src/wrap/orc-proto-wrapper.hh at line 3, c++/src/wrap/snappy-wrapper.h at line 3, c++/src/wrap/zero-copy-stream-wrapper.h at line 3
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        c++/src/LzoDecompressor.cc [2:17]
+        c++/src/RLEV2Util.cc [2:17]
+        c++/src/RleEncoderV2.cc [2:17]
+        c++/src/wrap/coded-stream-wrapper.h [2:17]
+        c++/src/wrap/orc-proto-wrapper.hh [2:17]
+        c++/src/wrap/snappy-wrapper.h [2:17]
+        c++/src/wrap/zero-copy-stream-wrapper.h [2:17]
+
+KEEP     Apache-2.0           5b418c53658874b000953d47ee5ae1fb
+BELONGS ya.make
+    License text:
+        This product includes software developed by The Apache Software
+        Foundation (http://www.apache.org/).
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        NOTICE [4:5]
+
+SKIP     BSD-3-Clause         65f1885a6e62550129cec1b1c92228b7
+BELONGS ya.make
+# for snappy
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [277:301]
+
+SKIP     LicenseRef-scancode-unknown-license-reference 82b9c91a8f717463c6871d82aa2b1ff8
+BELONGS ya.make
+    # notice about sub-components that have other licenses 
+    License text:
+        notices and license terms. Your use of the source code for the these
+        subcomponents is subject to the terms and conditions of the following
+        licenses.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [208:210]
+
+SKIP     MIT                  8e611cb87fefb343bbd1b4b132671868
+BELONGS ya.make
+# for the site
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [254:270]
+
+SKIP     Zlib                 aa58f308323ed48be51ebc4b5d89fdbf
+BELONGS ya.make
+# for zlib
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Zlib
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
+    Files with this license:
+        LICENSE [307:324]
+
+KEEP     Apache-2.0           be1ae92e2816e00bcf72d9b9a768ac9d
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 99.94
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+SKIP     Protobuf-License     c6508a22f2888f82ca0962122f6bf026
+BELONGS ya.make
+# for protobuf
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-protobuf
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://protobuf.googlecode.com/svn/trunk/COPYING.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/protobuf.LICENSE
+    Files with this license:
+        LICENSE [216:245]
+
+SKIP     LicenseRef-scancode-bsd-3-clause-devine d62bead38797bd9e07e7e2167662d6b2
+BELONGS ya.make
+# for orc.threeten
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-bsd-3-clause-devine
+        Score           : 27.57
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-3-clause-devine.LICENSE
+    Files with this license:
+        LICENSE [361:366]
+
+SKIP     MIT                  ef6e2d996c0ee4ccd03144f93e445032
+BELONGS ya.make
+# for the site
+    License text:
+          that are licensed under the MIT License (MIT):
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [250:250]

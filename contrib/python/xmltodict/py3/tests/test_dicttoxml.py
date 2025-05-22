@@ -144,6 +144,26 @@ class DictToXMLTestCase(unittest.TestCase):
         self.assertEqual(xml, unparse(obj, pretty=True,
                                       newl=newl, indent=indent))
 
+    def test_pretty_print_with_int_indent(self):
+        obj = {'a': OrderedDict((
+            ('b', [{'c': [1, 2]}, 3]),
+            ('x', 'y'),
+        ))}
+        newl = '\n'
+        indent = 2
+        xml = dedent('''\
+        <?xml version="1.0" encoding="utf-8"?>
+        <a>
+          <b>
+            <c>1</c>
+            <c>2</c>
+          </b>
+          <b>3</b>
+          <x>y</x>
+        </a>''')
+        self.assertEqual(xml, unparse(obj, pretty=True,
+                                      newl=newl, indent=indent))
+
     def test_encoding(self):
         try:
             value = unichr(39321)
@@ -171,8 +191,6 @@ class DictToXMLTestCase(unittest.TestCase):
         self.assertEqual('<a attr="1"></a>', _strip(unparse(obj)))
 
     def test_short_empty_elements(self):
-        if sys.version_info[0] < 3:
-            return
         obj = {'a': None}
         self.assertEqual('<a/>', _strip(unparse(obj, short_empty_elements=True)))
 

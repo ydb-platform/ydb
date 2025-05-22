@@ -1,4 +1,7 @@
 # Sync content of this file with devtools/ya/core/error/__init__.py
+# Add some dummy lines to match the number of lines in devtools/ya/core/error/__init__.py
+# <dummy line>
+
 
 TEMPORARY_ERROR_MESSAGES = [
     'Connection reset by peer',
@@ -14,13 +17,19 @@ TEMPORARY_ERROR_MESSAGES = [
     'Temporary failure in name resolution',
     'The read operation timed out',
     'timeout: timed out',
+    'no response given after',  # sandbox.common.rest.Client.TimeoutExceeded
 ]
 
 
-# Node exit codes
 class ExitCodes(object):
+    GENERIC_ERROR = 1
+    # 2 is reserved not to be confused with bash's exit code
+    # For more info see https://www.gnu.org/software/bash/manual/html_node/Exit-Status.html
+    _ = 2
+    UNHANDLED_EXCEPTION = 3
+    CONFIGURE_ERROR = 8
+    NO_TESTS_COLLECTED = 9
     TEST_FAILED = 10
-    COMPILATION_FAILED = 11
     INFRASTRUCTURE_ERROR = 12
     NOT_RETRIABLE_ERROR = 13
     YT_STORE_FETCH_ERROR = 14
@@ -57,13 +66,16 @@ def is_temporary_error(exc):
         logger.debug("Getaddrinfo exception: %s", exc)
         return True
 
-    import urllib2
+    try:
+        import urllib2
+        import httplib
+    except ImportError:
+        import urllib.request as urllib2
+        import http.client as httplib
 
     if isinstance(exc, urllib2.HTTPError) and exc.code in (429,):
         logger.debug("urllib2.HTTPError: %s", exc)
         return True
-
-    import httplib
 
     if isinstance(exc, httplib.IncompleteRead):
         logger.debug("IncompleteRead exception: %s", exc)

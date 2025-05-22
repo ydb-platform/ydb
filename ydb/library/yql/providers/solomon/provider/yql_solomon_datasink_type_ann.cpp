@@ -1,6 +1,6 @@
 #include "yql_solomon_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 
@@ -115,7 +115,7 @@ private:
     TStatus HandleSoShard(TExprBase input, TExprContext& ctx) {
         YQL_ENSURE(!State_->IsRtmrMode(), "SoShard can't be used in rtmr mode");
 
-        if (!EnsureMinArgsCount(input.Ref(), 4, ctx) || !EnsureMaxArgsCount(input.Ref(), 5, ctx)) {
+        if (!EnsureMinMaxArgsCount(input.Ref(), 5, 6, ctx)) {
             return TStatus::Error;
         }
 
@@ -134,6 +134,10 @@ private:
         }
 
         if (!EnsureAtom(shard.Service().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureType(shard.RowType().Ref(), ctx)) {
             return TStatus::Error;
         }
 

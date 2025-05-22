@@ -21,6 +21,7 @@ public:
         : TabletId(tabletId)
         , WriteController(writeController)
         , Deadline(deadline) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "actor_created")("tablet_id", tabletId)("debug", writeController->DebugString());
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {
@@ -34,14 +35,16 @@ public:
             YellowStopChannels.insert(msg->Id.Channel());
         }
 
+        status = NYDBTest::TControllers::GetColumnShardController()->OverrideBlobPutResultOnWrite(status);
+
         if (status != NKikimrProto::OK) {
             ACFL_ERROR("event", "TEvPutResult")("blob_id", msg->Id.ToString())("status", status)("error", msg->ErrorReason);
-            WriteController->Abort();
+            WriteController->Abort("cannot write blob " + msg->Id.ToString() + ", status: " + ::ToString(status) + ". reason: " + msg->ErrorReason);
             return SendResultAndDie(ctx, status);
         }
 
         WriteController->OnBlobWriteResult(*msg);
-        if (WriteController->IsBlobActionsReady()) {
+        if (WriteController->IsReady()) {
             return SendResultAndDie(ctx, NKikimrProto::OK);
         }
     }
@@ -84,7 +87,7 @@ public:
             writeInfo->GetWriteOperator()->SendWriteBlobRequest(writeInfo->GetData(), writeInfo->GetBlobId());
         }
 
-        if (WriteController->IsBlobActionsReady()) {
+        if (WriteController->IsReady()) {
             return SendResultAndDie(ctx, NKikimrProto::OK);
         }
         Become(&TThis::StateWait);

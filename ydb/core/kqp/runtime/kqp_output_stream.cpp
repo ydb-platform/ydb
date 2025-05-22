@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NKikimr {
 namespace NKqp {

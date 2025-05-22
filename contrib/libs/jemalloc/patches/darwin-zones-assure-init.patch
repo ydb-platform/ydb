@@ -1,0 +1,17 @@
+--- a/include/jemalloc/internal/jemalloc_internal_inlines_c.h	(working tree)
++++ b/include/jemalloc/internal/jemalloc_internal_inlines_c.h	(index)
+@@ -254,8 +254,14 @@ malloc_initialized(void) {
+  * fastpath supports ticker and profiling, both of which will also
+  * tail-call to the slowpath if they fire.
+  */
++#if defined(JEMALLOC_ZONE)
++extern void je_assure_zone_register();
++#endif
+ JEMALLOC_ALWAYS_INLINE void *
+ imalloc_fastpath(size_t size, void *(fallback_alloc)(size_t)) {
++#if defined(JEMALLOC_ZONE)
++    je_assure_zone_register();
++#endif
+ 	LOG("core.malloc.entry", "size: %zu", size);
+ 	if (tsd_get_allocates() && unlikely(!malloc_initialized())) {
+ 		return fallback_alloc(size);

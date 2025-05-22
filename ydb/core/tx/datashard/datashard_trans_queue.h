@@ -26,6 +26,7 @@ class TTransQueue {
 public:
     friend class TPipeline;
     friend class TActiveTransaction;
+    friend class TWriteOperation;
 
     TTransQueue(TDataShard * self)
         : Self(self)
@@ -86,9 +87,8 @@ private: // for pipeline only
     void UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf& txBody);
     void ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& op);
     bool CancelPropose(NIceDb::TNiceDb& db, ui64 txId, std::vector<std::unique_ptr<IEventHandle>>& replies);
-    ECleanupStatus CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize,
-        TVector<ui64>& outdatedTxs, std::vector<std::unique_ptr<IEventHandle>>& replies);
-    bool CleanupVolatile(ui64 txId, std::vector<std::unique_ptr<IEventHandle>>& replies);
+    ECleanupStatus CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize, TVector<ui64>& outdatedTxs);
+    bool CleanupVolatile(ui64 txId);
 
     // Plan
 

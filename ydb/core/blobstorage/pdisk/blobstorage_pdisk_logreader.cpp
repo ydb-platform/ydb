@@ -24,7 +24,7 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
         }
 
         TStringStream str;
-        str << "PDiskId# " << PDiskId << " ProcessChunkOwnerMap; ";
+        str << PCtx->PDiskLogPrefix << "ProcessChunkOwnerMap; ";
         for (auto& [owner, chunks] : ownerToChunks) {
             std::sort(chunks.begin(), chunks.end());
             str << " Owner# " << owner << " [";
@@ -37,7 +37,7 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
         }
         return str.Str();
     };
-    LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, print());
+    P_LOG(PRI_INFO, BPD01, print());
 
     for (TMap<ui32, TChunkState>::iterator it = chunkOwnerMap.begin(); it != chunkOwnerMap.end(); ++it) {
         ui32 chunkIdx = it->first;
@@ -51,14 +51,15 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
             // OwnerMap states that the chunk is used by some user
 
             // Make sure the chunk is not really a part of syslog/format
-            Y_VERIFY_S(chunkIdx > Format.SystemChunkCount, "PDiskId# " << PDiskId << " chunkIdx# " << chunkIdx
+            Y_VERIFY_S(chunkIdx > Format.SystemChunkCount, PCtx->PDiskLogPrefix
+                    << "chunkIdx# " << chunkIdx
                     << " SystemChunkCount# " << Format.SystemChunkCount);
 
             // Make sure the chunk is not really a part of the log
             for (const auto& logChunk : LogChunks) {
                 if (logChunk.ChunkIdx == chunkIdx) {
                     TStringStream out;
-                    out << "PDiskId# " << PDiskId << " chunkIdx# " << chunkIdx;
+                    out << PCtx->PDiskLogPrefix << "chunkIdx# " << chunkIdx;
                     out << " is a part of the log and is owned by user, ownerIdx# " << ownerId;
                     out << " LogChunks# {";
                     for (const auto& chunk : LogChunks) {
@@ -74,10 +75,8 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
         if (state.OwnerId != OwnerSystem || state.OwnerId == ownerId) {
             if (IsOwnerUser(state.OwnerId) && state.CommitState == TChunkState::DATA_COMMITTED) {
                 Mon.CommitedDataChunks->Dec();
-                LOG_DEBUG(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32
-                    " Line# %" PRIu32 " --CommitedDataChunks# %" PRIi64 " chunkIdx# %" PRIu32 " prev ownerId# %" PRIu32,
-                    (ui32)PDiskId, (ui32)__LINE__, (i64)Mon.CommitedDataChunks->Val(), (ui32)chunkIdx,
-                    (ui32)state.OwnerId);
+                P_LOG(PRI_DEBUG, BPD01, "CommitedDataChunks is decremented", (CommitedDataChunks, Mon.CommitedDataChunks->Val()),
+                    (ChunkIdx, chunkIdx), (PrevOwnerId, (ui32)state.OwnerId));
             }
             state.OwnerId = ownerId;
             state.Nonce = chunkNonce;
@@ -85,10 +84,8 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
                 state.CommitState = TChunkState::DATA_COMMITTED;
                 if (IsOwnerUser(ownerId)) {
                     Mon.CommitedDataChunks->Inc();
-                    LOG_DEBUG(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32
-                        " Line# %" PRIu32 " ++CommitedDataChunks# %" PRIi64 " chunkIdx# %" PRIu32 " ownerId# %" PRIu32,
-                        (ui32)PDiskId, (ui32)__LINE__, (i64)Mon.CommitedDataChunks->Val(), (ui32)chunkIdx,
-                        (ui32)ownerId);
+                    P_LOG(PRI_DEBUG, BPD01, "CommitedDataChunks is incremented", (CommitedDataChunks, Mon.CommitedDataChunks->Val()),
+                        (ChunkIdx, chunkIdx), (PrevOwnerId, (ui32)state.OwnerId));
                 }
             } else {
                 state.CommitState = TChunkState::FREE;
@@ -105,7 +102,14 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
         if (header.Signature.HasCommitRecord()) {
             TCommitRecordFooter *footer = (TCommitRecordFooter*)
                 ((ui8*)data.data() + data.size() - sizeof(TCommitRecordFooter));
-            ui32 *deletes = (ui32*)((ui8*)footer - footer->DeleteCount * sizeof(ui32));
+    #ifdef ENABLE_PDISK_SHRED
+            ui32 *dirties = (ui32*)((ui8*)footer - footer->DirtyCount * sizeof(ui32));
+            ui32 dirtyCount = footer->DirtyCount;
+    #else
+            ui32 *dirties = nullptr;
+            ui32 dirtyCount = 0;
+    #endif
+            ui32 *deletes = (ui32*)((ui8*)footer - (footer->DeleteCount + dirtyCount) * sizeof(ui32));
             ui64 *commitNonces = (ui64*)((ui8*)deletes - footer->CommitCount * sizeof(ui64));
             ui32 *commits = (ui32*)((ui8*)commitNonces - footer->CommitCount * sizeof(ui32));
             {
@@ -113,9 +117,14 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                 TOwnerData &ownerData = OwnerData[header.OwnerId];
                 if (isInitial) {
                     if (parseCommitMessage) {
+                        for (ui32 i = 0; i < dirtyCount; ++i) {
+                            const ui32 chunkId = ReadUnaligned<ui32>(&dirties[i]);
+                            (*outChunkOwnerMap)[chunkId].IsDirty = true;
+                        }
                         for (ui32 i = 0; i < footer->DeleteCount; ++i) {
                             const ui32 chunkId = ReadUnaligned<ui32>(&deletes[i]);
                             (*outChunkOwnerMap)[chunkId].OwnerId = OwnerUnallocated;
+                            (*outChunkOwnerMap)[chunkId].IsDirty = true;
                         }
                         for (ui32 i = 0; i < footer->CommitCount; ++i) {
                             const ui32 chunkId = ReadUnaligned<ui32>(&commits[i]);
@@ -125,10 +134,10 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                     }
                     if (ownerData.VDiskId != TVDiskID::InvalidId) {
                         if (ownerData.CurrentFirstLsnToKeep < footer->FirstLsnToKeep) {
-                            LOG_INFO(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32
-                                    " ProcessReadLogRecord ownerId# %" PRIu32 " set FirstLsnToKeep# %" PRIu64
-                                    " caused by Lsn# %" PRIu64, (ui32)PDiskId, (ui32)header.OwnerId,
-                                    (ui64)footer->FirstLsnToKeep, (ui64)header.OwnerLsn);
+                            P_LOG(PRI_INFO, BPD01, "ProcessReadLogRecord set new FirstLsnToKeep for Owner caused by Lsn",
+                                    (OwnerId, (ui32)header.OwnerId),
+                                    (FirstLsnToKeep, footer->FirstLsnToKeep),
+                                    (Lsn, header.OwnerLsn));
                             ownerData.CurrentFirstLsnToKeep = footer->FirstLsnToKeep;
                         }
                         ownerData.LogRecordsInitiallyRead++;
@@ -169,7 +178,7 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                 if (ownerData.VDiskId != TVDiskID::InvalidId) {
                     if (!ownerData.IsNextLsnOk(header.OwnerLsn)) {
                         TStringStream str;
-                        str << "Lsn reversal! PDiskId# " << (ui32)PDiskId
+                        str << PCtx->PDiskLogPrefix << "Lsn reversal!"
                             << " ownerId# " << (ui32)owner
                             << " LogStartPosition# " << ownerData.LogStartPosition
                             << " LastSeenLsn# " << ownerData.LastSeenLsn
@@ -205,7 +214,10 @@ struct TLogReader::TSectorData {
         , PreparedOffset(0)
         , PreparedSize(0)
         , IsScheduled(false)
-    {}
+    {
+        Y_VERIFY_S(buffer && dataSize <= buffer->Size(), "buffer has size less than log reader's sector, dataSize# "
+                << dataSize << " bufferSize# " << (buffer ? (i64)buffer->Size() : -1));
+    }
 
     TString ToString() {
         TStringStream str;
@@ -256,15 +268,17 @@ struct TLogReader::TSectorData {
 };
 
 class TLogReader::TDoubleBuffer {
+    const ui64 PDiskSectorSize;
+    const ui32 BufferSizeSectors;
     THolder<TSectorData> SectorA;
     THolder<TSectorData> SectorB;
-    const ui64 PDiskSectorSize;
 
 public:
-    TDoubleBuffer(TPDisk *pdisk)
-        : SectorA(MakeHolder<TSectorData>(pdisk->BufferPool->Pop(), pdisk->Format.SectorSize * BufferSizeSectors))
-        , SectorB(MakeHolder<TSectorData>(pdisk->BufferPool->Pop(), pdisk->Format.SectorSize * BufferSizeSectors))
-        , PDiskSectorSize(pdisk->Format.SectorSize)
+    TDoubleBuffer(TPDisk *pdisk, ui32 bufferSizeSectors)
+        : PDiskSectorSize(pdisk->Format.SectorSize)
+        , BufferSizeSectors(bufferSizeSectors)
+        , SectorA(MakeHolder<TSectorData>(pdisk->BufferPool->Pop(), PDiskSectorSize * BufferSizeSectors))
+        , SectorB(MakeHolder<TSectorData>(pdisk->BufferPool->Pop(), PDiskSectorSize * BufferSizeSectors))
     {}
 
     ui64 BufferIdxFromOffset(ui64 innerOffset) const {
@@ -290,7 +304,7 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
         TVector<TLogChunkItem> &&chunksToRead, ui64 firstLsnToKeep, ui64 firstNonceToKeep, TVDiskID ownerVDiskId)
     : IsInitial(isInitial)
     , PDisk(pDisk)
-    , ActorSystem(actorSystem)
+    , PCtx(pDisk->PCtx)
     , ReplyTo(replyTo)
     , Owner(owner)
     , OwnerLogStartPosition(ownerLogStartPosition)
@@ -298,9 +312,10 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     , SizeLimit(sizeLimit)
     , Result(new NPDisk::TEvReadLogResult(
         NKikimrProto::ERROR, position, TLogPosition::Invalid(), false,
-        pDisk->GetStatusFlags(owner, ownerGroupType), nullptr, owner))
+        pDisk->GetStatusFlags(owner, ownerGroupType), "", owner))
     , ChunkInfo(nullptr)
-    , Sector(new TDoubleBuffer(pDisk))
+    , BufferSizeSectors(pDisk->BufferPool->GetBufferSize() / pDisk->Format.SectorSize)
+    , Sector(new TDoubleBuffer(pDisk, BufferSizeSectors))
     , ChunkOwnerMap(IsInitial ? new TMap<ui32, TChunkState>() : nullptr)
     , State(ELogReaderState::PrepareToRead)
     , IsReplied(false)
@@ -332,8 +347,10 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     , CurrentChunkToRead(ChunksToRead.end())
     , ParseCommits(false) // Actual only if IsInitial
 {
-    Y_ABORT_UNLESS(PDisk->PDiskThread.Id() == TThread::CurrentThreadId(), "Constructor of TLogReader must be called"
-            " from PDiskThread");
+    Y_VERIFY_DEBUG(PCtx);
+    Y_VERIFY_DEBUG_S(PCtx->ActorSystem == actorSystem, PCtx->PDiskLogPrefix);
+    Y_VERIFY_S(PDisk->PDiskThread.Id() == TThread::CurrentThreadId(),
+            PCtx->PDiskLogPrefix << "Constructor of TLogReader must be called from PDiskThread");
     Cypher.SetKey(PDisk->Format.LogKey);
     AtomicIncrement(PDisk->InFlightLogRead);
 
@@ -358,8 +375,7 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
         return ss.Str();
     };
 
-    LOG_INFO_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-            << " ChunksToRead# " << printChunks());
+    P_LOG(PRI_INFO, BPD01, SelfInfo(), (ChunksToRead, printChunks()));
 }
 
 TLogReader::~TLogReader() {
@@ -376,9 +392,8 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
     if (badOffsets.size()) {
         bool isOk = RegisterBadOffsets(badOffsets);
         if (!isOk) {
-            LOG_ERROR(*ActorSystem, NKikimrServices::BS_PDISK,
-                "PDiskId# %" PRIu32 " Log is damaged and unrevocerable!",
-                (ui32)PDisk->PDiskId);
+            P_LOG(PRI_ERROR, BPD01, "Log is damaged and unrevocerable");
+
             ReplyError();
             return;
         }
@@ -404,10 +419,9 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
         case ELogReaderState::NewLogChunk:
             if (ChunkIdx == 0) {
                 if (IsInitial) {
-                    LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                            << " In case ELogReaderState::NewLogChunk got ChunkIdx# " << ChunkIdx
-                            << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                            << " Marker# LR014");
+                    P_LOG(PRI_NOTICE, LR014, SelfInfo() << " In case ELogReaderState::NewLogChunk got new chunk",
+                            (ChunkIdx, ChunkIdx),
+                            (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
                 } else {
                     Y_FAIL_S(SelfInfo() << " File# " << __FILE__ << " Line# " << __LINE__);
                 }
@@ -424,11 +438,9 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
                     auto last = PDisk->LogChunks.rbegin();
                     // May be set in NonceJump record processing, and if so it should not be changed
                     if (!last->DesiredPrevChunkLastNonce) {
-                        LOG_INFO_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                                << " In case ELogReaderState::NewLogChunk strange."
+                        P_LOG(PRI_INFO, LR015, SelfInfo() << " In case ELogReaderState::NewLogChunk strange."
                                 << " changing last->DesiredPrevChunkLastNonce# " << last->DesiredPrevChunkLastNonce
-                                << " to std::next(last)->LastNonce# " << std::next(last)->LastNonce
-                                << " Marker# LR015");
+                                << " to std::next(last)->LastNonce# " << std::next(last)->LastNonce);
                         last->DesiredPrevChunkLastNonce = std::next(last)->LastNonce;
                     }
                 }
@@ -505,7 +517,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
         {
             ui64 sizeToProcess = (ui64)format.SectorSize;
             TSectorData *data = Sector->DataByIdx(idxRead);
-            Y_ABORT_UNLESS(data->IsAvailable(sizeToProcess));
+            Y_VERIFY_S(data->IsAvailable(sizeToProcess), PCtx->PDiskLogPrefix);
             bool isEndOfLog = ProcessSectorSet(data);
             data->SetOffset(data->Offset + sizeToProcess);
             if (isEndOfLog) {
@@ -533,7 +545,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
             break;
         }
         default:
-            Y_ABORT();
+            Y_ABORT("unexpected case");
             break;
         }
     }// while (true)
@@ -547,17 +559,15 @@ void TLogReader::NotifyError(ui64 offsetRead, TString& errorReason) {
 
     Result->ErrorReason = errorReason;
 
-    LOG_ERROR(*ActorSystem, NKikimrServices::BS_PDISK,
-        "PDiskId# %" PRIu32 " Error reading log with offset %" PRIu64,
-        (ui32)PDisk->PDiskId, offsetRead);
+    P_LOG(PRI_ERROR, BPD01, "Error reading log", (Offset, offsetRead));
 
     ReplyError();
 }
 
 TString TLogReader::SelfInfo() {
     TStringStream ss;
-    ss << "PDiskId# " << PDisk->PDiskId
-        << " LogReader"
+    ss << PCtx->PDiskLogPrefix
+        << "LogReader"
         << " IsInitial# " << IsInitial;
     if (!IsInitial) {
         ss << " Owner# " << ui32(Owner)
@@ -572,9 +582,7 @@ TString TLogReader::SelfInfo() {
 bool TLogReader::PrepareToRead() {
     TDiskFormat &format = PDisk->Format;
     if (Position == TLogPosition::Invalid()) {
-        if (IsInitial) {
-            Y_ABORT();
-        }
+        Y_VERIFY_S(!IsInitial, PCtx->PDiskLogPrefix);
         ReplyOk();
         return true;
     }
@@ -588,7 +596,7 @@ bool TLogReader::PrepareToRead() {
             }
             if (OwnerLogStartPosition != TLogPosition{0, 0}) {
                 ui32 startChunkIdx = OwnerLogStartPosition.ChunkIdx;
-                Y_ABORT_UNLESS(startChunkIdx == ChunksToRead[0].ChunkIdx);
+                Y_VERIFY_S(startChunkIdx == ChunksToRead[0].ChunkIdx, PCtx->PDiskLogPrefix);
                 Position = OwnerLogStartPosition;
             } else {
                 Position = PDisk->LogPosition(ChunksToRead[0].ChunkIdx, 0, 0);
@@ -605,9 +613,7 @@ bool TLogReader::PrepareToRead() {
             }
             ChunksToRead.erase(ChunksToRead.begin(), keepIt);
             if (ChunksToRead.size() == 0) {
-                LOG_ERROR(*ActorSystem, NKikimrServices::BS_PDISK,
-                    "PDiskId# %" PRIu32 " No chunks to read log from!",
-                    (ui32)PDisk->PDiskId);
+                P_LOG(PRI_ERROR, BPD01, "No chunks to read log from");
                 ReplyError();
                 return true;
             }
@@ -684,7 +690,7 @@ void TLogReader::ProcessLogPageTerminator(ui8 *data, ui32 sectorPayloadSize) {
     // The rest of the sector contains no data.
     auto *firstPageHeader = reinterpret_cast<TFirstLogPageHeader*>(data);
     ui32 sizeLeft = sectorPayloadSize - OffsetInSector;
-    Y_ABORT_UNLESS(firstPageHeader->Size + sizeof(TFirstLogPageHeader) == sizeLeft);
+    Y_VERIFY_S(firstPageHeader->Size + sizeof(TFirstLogPageHeader) == sizeLeft, PCtx->PDiskLogPrefix);
     OffsetInSector += sizeLeft;
     SetLastGoodToWritePosition = true;
 }
@@ -698,12 +704,10 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
 
 
         if (SectorIdx == 0) {
-            LOG_WARN_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                    << " nonce jump2 "
-                    << " IsEndOfSplice# " << ChunkInfo->IsEndOfSplice
-                    << " replacing ChunkInfo->DesiredPrevChunkLastNonce# " << ChunkInfo->DesiredPrevChunkLastNonce
-                    << " with nonceJumpLogPageHeader2->PreviousNonce# " << nonceJumpLogPageHeader2->PreviousNonce
-                    << " Marker# LR016");
+            P_LOG(PRI_WARN, LR016, SelfInfo() << " nonce jump2 ",
+                    (IsEndOfSplice, ChunkInfo->IsEndOfSplice),
+                    (" replacing ChunkInfo->DesiredPrevChunkLastNonce# ", ChunkInfo->DesiredPrevChunkLastNonce),
+                    (" with nonceJumpLogPageHeader2->PreviousNonce# ", nonceJumpLogPageHeader2->PreviousNonce));
 
 
             if (ChunkInfo->IsEndOfSplice) {
@@ -719,19 +723,18 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
         if (previousNonce > nonceJumpLogPageHeader2->PreviousNonce &&
                 previousDataNonce > nonceJumpLogPageHeader2->PreviousNonce) {
             // We just came across an outdated nonce jump. This means the end of the log.
-            LOG_WARN_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                    << " currentSectorIdx# " << SectorIdx
-                    << " previousNonce# " << previousNonce
-                    << " previousDataNonce# " << previousDataNonce
-                    << " nonceJumpLogPageHeader2->PreviousNonce# " << nonceJumpLogPageHeader2->PreviousNonce
-                    << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                    << " ReplyOk, marker LR001");
+            P_LOG(PRI_WARN, LR001, SelfInfo() << " ReplyOk",
+                    (currentSectorIdx, SectorIdx),
+                    (previousNonce, previousNonce),
+                    (previousDataNonce, previousDataNonce),
+                    (nonceJumpLogPageHeader2->PreviousNonce, nonceJumpLogPageHeader2->PreviousNonce),
+                    (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
             ReplyOk();
             return;
         } else if (previousNonce < nonceJumpLogPageHeader2->PreviousNonce &&
                 previousDataNonce < nonceJumpLogPageHeader2->PreviousNonce) {
             TStringStream str;
-            str << "PDiskId# " << PDisk->PDiskId
+            str << PCtx->PDiskLogPrefix
                 << "previousNonce# " << previousNonce
                 << " and previousDataNonce# " << previousDataNonce
                 << " != header->PreviousNonce# " << nonceJumpLogPageHeader2->PreviousNonce
@@ -744,7 +747,7 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
             Y_FAIL_S(str.Str());
         }
     } else if (ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx) {
-        LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
+        P_LOG(PRI_DEBUG, BPD01, SelfInfo()
                 << " ReplyOk, marker LR003"
                 << " LogEndChunkIdx# " << LogEndChunkIdx
                 << " LogEndSectorId# " << LogEndSectorIdx);
@@ -764,22 +767,21 @@ void TLogReader::ProcessLogPageNonceJump1(ui8 *data, const ui64 previousNonce) {
         // TODO: Investigate / process error the proper way here.
         if (previousNonce > nonceJumpLogPageHeader1->PreviousNonce) {
             // We just came across an outdated nonce jump. This means the end of the log.
-            LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                    << " In ProcessLogPageNonceJump1 got previousNonce > nonceJumpLogPageHeader1->PreviousNonce! "
-                    << " previousNonce# " << previousNonce
-                    << " nonceJumpLogPageHeader1->PreviousNonce# " << nonceJumpLogPageHeader1->PreviousNonce
-                    << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                    << " Marker# LR017");
+            P_LOG(PRI_NOTICE, LR017, SelfInfo()
+                    << " In ProcessLogPageNonceJump1 got previousNonce > nonceJumpLogPageHeader1->PreviousNonce",
+                    (previousNonce, previousNonce),
+                    (nonceJumpLogPageHeader1->PreviousNonce, nonceJumpLogPageHeader1->PreviousNonce),
+                    (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
             ReplyOk();
             return;
         }
-        Y_ABORT_UNLESS(previousNonce == nonceJumpLogPageHeader1->PreviousNonce,
-                "previousNonce# %" PRIu64 " != header->PreviousNonce# %" PRIu64
-                " OffsetInSector# %" PRIu64 " sizeof(TNonceJumpLogPageHeader1)# %" PRIu64
-                " chunkIdx# %" PRIu64 " sectorIdx# %" PRIu64, // " header->Flags# %" PRIu64,
-                (ui64)previousNonce, (ui64)nonceJumpLogPageHeader1->PreviousNonce,
-                (ui64)OffsetInSector, (ui64)sizeof(TNonceJumpLogPageHeader1),
-                (ui64)ChunkIdx, (ui64)SectorIdx); //, (ui64)pageHeader->Flags);
+        Y_VERIFY_S(previousNonce == nonceJumpLogPageHeader1->PreviousNonce, PCtx->PDiskLogPrefix
+                << "previousNonce# " << (ui64)previousNonce
+                << " != header->PreviousNonce# " << (ui64)nonceJumpLogPageHeader1->PreviousNonce
+                << " OffsetInSector# " << (ui64)OffsetInSector
+                << " sizeof(TNonceJumpLogPageHeader1)# " << (ui64)sizeof(TNonceJumpLogPageHeader1)
+                << " chunkIdx# " << (ui64)ChunkIdx
+                << " sectorIdx# " << (ui64)SectorIdx);
     }
 
     if (!IsInitial && ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx) {
@@ -798,29 +800,41 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
 
     const ui64 magic = format.MagicLogChunk;
     TSectorRestorator restorator(false, LogErasureDataParts, false, format,
-        PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
-    restorator.Restore(sector->GetData(), sector->Offset, magic, LastNonce, PDisk->Cfg->UseT1ha0HashInFooter, Owner);
+        PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get());
+    restorator.Restore(sector->GetData(), sector->Offset, magic, LastNonce, Owner);
 
     if (!restorator.GoodSectorFlags) {
         if (IsInitial) {
-            LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                    << " In ProcessSectorSet got !restorator.GoodSectorFlags !"
-                    << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                    << " Marker# LR018");
+            P_LOG(PRI_NOTICE, LR018, SelfInfo() << " In ProcessSectorSet got !restorator.GoodSectorFlags",
+                    (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
         } else {
-           Y_VERIFY_S(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx, SelfInfo()
-                   << " File# " << __FILE__
-                   << " Line# " << __LINE__
-                   << " LogEndChunkIdx# " << LogEndChunkIdx
-                   << " LogEndSectorIdx# " << LogEndSectorIdx);
-            if (!(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx)) {
-                LOG_WARN_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                        << " In ProcessSectorSet got !restorator.GoodSectorFlags outside the LogEndSector."
-                        << " File# " << __FILE__
-                        << " Line# " << __LINE__
-                        << " LogEndChunkIdx# " << LogEndChunkIdx
-                        << " LogEndSectorIdx# " << LogEndSectorIdx
-                        << " Marker# LR004");
+            bool outsideLogEnd = ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx;
+            
+            if (!outsideLogEnd) {
+                // If read invalid data from the log (but not outside this owner's log bounds), check if the owner is on quarantine.
+                TGuard<TMutex> guard(PDisk->StateMutex);
+                TOwnerData &ownerData = PDisk->OwnerData[Owner];
+
+                if (ownerData.OnQuarantine) {
+                    P_LOG(PRI_WARN, LR019, SelfInfo()
+                        << " In ProcessSectorSet got !restorator.GoodSectorFlags with owner on quarantine",
+                            (LogEndChunkIdx, LogEndChunkIdx), (LogEndSectorIdx, LogEndSectorIdx));
+                    ReplyOk();
+                    return true;
+                }
+            }
+
+            Y_VERIFY_S(outsideLogEnd, SelfInfo()
+                    << " File# " << __FILE__
+                    << " Line# " << __LINE__
+                    << " LogEndChunkIdx# " << LogEndChunkIdx
+                    << " LogEndSectorIdx# " << LogEndSectorIdx);
+
+            if (outsideLogEnd) {
+                // It's ok.
+                P_LOG(PRI_WARN, LR004, SelfInfo()
+                    << " In ProcessSectorSet got !restorator.GoodSectorFlags outside the LogEndSector",
+                        (LogEndChunkIdx, LogEndChunkIdx), (LogEndSectorIdx, LogEndSectorIdx));
             }
         }
 
@@ -831,15 +845,11 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
         UpdateLastGoodToWritePosition();
         if (!(restorator.GoodSectorFlags & 1)) {
             if (IsInitial) {
-                LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                        << " In ProcessSectorSet got !(restorator.GoodSectorFlags & 1) !"
-                        << " restorator.GoodSectorFlags# " << restorator.GoodSectorFlags
-                        << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                        << " Marker# LR005");
+                P_LOG(PRI_NOTICE, LR005, SelfInfo() << " In ProcessSectorSet got !(restorator.GoodSectorFlags & 1)",
+                        (restorator.GoodSectorFlags, restorator.GoodSectorFlags),
+                        (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
             } else {
                 Y_VERIFY_S(ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx, SelfInfo()
-                        << " File# " << __FILE__
-                        << " Line# " << __LINE__
                         << " LogEndChunkIdx# " << LogEndChunkIdx
                         << " LogEndSectorIdx# " << LogEndSectorIdx);
             }
@@ -851,10 +861,9 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
         TDataSectorFooter *sectorFooter = (TDataSectorFooter*)
             (rawSector + format.SectorSize - sizeof(TDataSectorFooter));
 
-        LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                << " currentSectorIdx# " << SectorIdx
-                << " sectorFooter->Nonce# " << sectorFooter->Nonce
-                << " Marker# LR020");
+        P_LOG(PRI_DEBUG, LR020, SelfInfo(),
+                (currentSectorIdx, SectorIdx),
+                (sectorFooter->Nonce, sectorFooter->Nonce));
 
         ui64 previousNonce = std::exchange(LastNonce, sectorFooter->Nonce);
         ui64 previousDataNonce = std::exchange(LastDataNonce, sectorFooter->Nonce);
@@ -877,12 +886,12 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
         ui32 maxOffsetInSector = format.SectorPayloadSize() - ui32(sizeof(TFirstLogPageHeader));
         while (OffsetInSector <= maxOffsetInSector) {
             TLogPageHeader *pageHeader = (TLogPageHeader*)(data + OffsetInSector);
-            Y_ABORT_UNLESS(pageHeader->Version == PDISK_DATA_VERSION, "PDiskId# %" PRIu32
-                " incompatible log page header version: %" PRIu32
-                " (expected: %" PRIu32 ") at chunk %" PRIu32 " SectorSet: %" PRIu32 " Sector: %" PRIu32
-                " Offset in sector: %" PRIu32 " A: %" PRIu32 " B: %" PRIu32, (ui32)PDisk->PDiskId,
-                (ui32)pageHeader->Version, (ui32)PDISK_DATA_VERSION, (ui32)ChunkIdx, (ui32)SectorIdx,
-                (ui32)0, (ui32)OffsetInSector, (ui32)pageHeader->A, (ui32)pageHeader->B);
+            Y_VERIFY_S(pageHeader->Version == PDISK_DATA_VERSION, PCtx->PDiskLogPrefix
+                << "incompatible log page header version: " << (ui32)pageHeader->Version
+                << " (expected: " << (ui32)PDISK_DATA_VERSION << ") at chunk " << (ui32)ChunkIdx
+                << " SectorIdx: " << (ui32)SectorIdx << " Sector: 0"
+                << " Offset in sector: " << (ui32)OffsetInSector
+                << " A: %" << (ui32)pageHeader->A << " B: %" << (ui32)pageHeader->B);
 
             if (pageHeader->Flags & LogPageTerminator) {
                 ProcessLogPageTerminator(data + OffsetInSector, format.SectorPayloadSize());
@@ -890,28 +899,24 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
             }
             if (pageHeader->Flags & LogPageNonceJump2) {
                 if (IsInitial) {
-                    LOG_INFO_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                            << " In ProcessSectorSet saw LogPageNonceJump2, before processing"
-                            << " LastNonce# " << LastNonce
-                            << " LastDataNonce# " << LastDataNonce
-                            << " previousNonce# " << previousNonce
-                            << " previousDataNonce# " << previousDataNonce
-                            << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                            << " ChunkInfo->LastNonce# " << ChunkInfo->LastNonce
-                            << " Marker# LR006");
+                    P_LOG(PRI_INFO, LR006, SelfInfo() << " In ProcessSectorSet saw LogPageNonceJump2, before processing",
+                            (LastNonce, LastNonce),
+                            (LastDataNonce, LastDataNonce),
+                            (previousNonce, previousNonce),
+                            (previousDataNonce, previousDataNonce),
+                            (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition),
+                            (ChunkInfo->LastNonce, ChunkInfo->LastNonce));
                 }
 
                 ProcessLogPageNonceJump2(data + OffsetInSector, previousNonce, previousDataNonce);
                 if (IsInitial) {
-                    LOG_INFO_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                            << " In ProcessSectorSet saw LogPageNonceJump2, afer  processing"
-                            << " LastNonce# " << LastNonce
-                            << " LastDataNonce# " << LastDataNonce
-                            << " previousNonce# " << previousNonce
-                            << " previousDataNonce# " << previousDataNonce
-                            << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                            << " ChunkInfo->LastNonce# " << ChunkInfo->LastNonce
-                            << " Marker# LR007");
+                    P_LOG(PRI_INFO, LR007, SelfInfo() << " In ProcessSectorSet saw LogPageNonceJump2, afer  processing",
+                            (LastNonce, LastNonce),
+                            (LastDataNonce, LastDataNonce),
+                            (previousNonce, previousNonce),
+                            (previousDataNonce, previousDataNonce),
+                            (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition),
+                            (ChunkInfo->LastNonce, ChunkInfo->LastNonce));
                 }
                 if (IsReplied.load()) {
                     return true;
@@ -934,16 +939,14 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     }
 
                     if (LastNonce != previousNonce + 1) {
-                        LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                                << " In ProcessSectorSet got LastNonce != previousNonce + 1 !"
-                                << " LastNonce# " << LastNonce
-                                << " previousNonce# " << previousNonce
-                                << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                                << " ChunkInfo->IsEndOfSplice# " << ChunkInfo->IsEndOfSplice
-                                << " Marker# LR008");
+                        P_LOG(PRI_NOTICE, LR008, SelfInfo() << " In ProcessSectorSet got LastNonce != previousNonce + 1",
+                                (LastNonce, LastNonce),
+                                (previousNonce, previousNonce),
+                                (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition),
+                                (ChunkInfo->IsEndOfSplice, ChunkInfo->IsEndOfSplice));
 
                         Y_VERIFY_S(!ChunkInfo->IsEndOfSplice, SelfInfo() <<
-                                " Unexpectedly got LastNonce != previosNonce + 1 at Sector0 at the EndOfSplice!"
+                                " Unexpectedly got LastNonce != previosNonce + 1 at Sector0 at the EndOfSplice"
                                 << " LastNonce# " << LastNonce
                                 << " previousNonce# " << previousNonce
                                 << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
@@ -955,16 +958,14 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     }
                 } else {
                     if (LastNonce != previousNonce + 1) {
-                        LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                                << " In ProcessSectorSet got LastNonce != previousNonce + 1 !"
-                                << " LastNonce# " << LastNonce
-                                << " previousNonce# " << previousNonce
-                                << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                                << " ChunkInfo->IsEndOfSplice# " << ChunkInfo->IsEndOfSplice
-                                << " Marker# LR010");
+                        P_LOG(PRI_NOTICE, LR010, SelfInfo() << " In ProcessSectorSet got LastNonce != previousNonce + 1",
+                                (LastNonce, LastNonce),
+                                (previousNonce, previousNonce),
+                                (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition),
+                                (ChunkInfo->IsEndOfSplice, ChunkInfo->IsEndOfSplice));
 
                         Y_VERIFY_S(!ChunkInfo->IsEndOfSplice, SelfInfo() <<
-                                " Unexpectedly got LastNonce != previosNonce + 1 at the EndOfSplice!"
+                                " Unexpectedly got LastNonce != previosNonce + 1 at the EndOfSplice"
                                 << " LastNonce# " << LastNonce
                                 << " previousNonce# " << previousNonce
                                 << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
@@ -1000,8 +1001,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                                 str << "(B) Initial ownerId# " << (ui32)recordOwnerId
                                     << " set LogStartPosition# " << ownerData.LogStartPosition
                                     << " FirstNonceToKeep# " << FirstNonceToKeep << Endl;
-                                LOG_DEBUG(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " %s",
-                                        (ui32)PDisk->PDiskId, str.Str().c_str());
+                                P_LOG(PRI_DEBUG, BPD01, SelfInfo() << str.Str());
                             }
                         }
                     }
@@ -1024,7 +1024,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     LastRecordHeaderNonce = sectorFooter->Nonce;
                     IsLastRecordHeaderValid = true;
                     LastRecordData = TString::Uninitialized(firstPageHeader->DataSize);
-                    Y_ABORT_UNLESS(firstPageHeader->Size <= LastRecordData.size());
+                    Y_VERIFY_S(firstPageHeader->Size <= LastRecordData.size(), PCtx->PDiskLogPrefix);
                     memcpy((void*)LastRecordData.data(), data + OffsetInSector, firstPageHeader->Size);
                     LastRecordDataWritePosition = firstPageHeader->Size;
                 } else {
@@ -1038,7 +1038,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     continue;
                 }
                 if (!IsLastRecordHeaderValid) {
-                    Y_FAIL_S(SelfInfo() << " Last record header is corrupted!"
+                    Y_FAIL_S(SelfInfo() << " Last record header is corrupted."
                             << " Invalid last record, then middle of record."
                             << " IsLastRecordSkipped# " << IsLastRecordSkipped
                             << " OffsetInSector# " << OffsetInSector
@@ -1117,7 +1117,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
 
 void TLogReader::ReplyOk() {
     {
-        TPDiskHashCalculator hasher(PDisk->Cfg->UseT1ha0HashInFooter);
+        TPDiskHashCalculator hasher;
         TGuard<TMutex> guard(PDisk->StateMutex);
         if (!IsInitial) {
             TOwnerData &ownerData = PDisk->OwnerData[Owner];
@@ -1125,7 +1125,8 @@ void TLogReader::ReplyOk() {
                     ownerData.LogRecordsInitiallyRead &&
                     !ownerData.LogRecordsConsequentlyRead) {
                 TStringStream str;
-                str << "LogRecordsConsequentlyRead# " << ownerData.LogRecordsConsequentlyRead
+                str << PCtx->PDiskLogPrefix
+                    << "LogRecordsConsequentlyRead# " << ownerData.LogRecordsConsequentlyRead
                     << " LogRecordsInitiallyRead# " << ownerData.LogRecordsInitiallyRead;
                 Y_FAIL_S(str.Str());
             }
@@ -1140,6 +1141,10 @@ void TLogReader::ReplyOk() {
     Result->Status = NKikimrProto::OK;
     Result->NextPosition = IsInitial ? LastGoodToWriteLogPosition : TLogPosition::Invalid();
     Result->IsEndOfLog = true;
+    if (IsInitial) {
+        Result->LastGoodChunkIdx = ChunkIdx; 
+        Result->LastGoodSectorIdx = SectorIdx; 
+    }
     Reply();
 }
 
@@ -1158,7 +1163,7 @@ void TLogReader::ReplyError() {
 }
 
 void TLogReader::Reply() {
-    Y_ABORT_UNLESS(!IsReplied.load());
+    Y_VERIFY_S(!IsReplied.load(), PCtx->PDiskLogPrefix);
     if (IsInitial) {
         PDisk->ProcessChunkOwnerMap(*ChunkOwnerMap.Get());
         ChunkOwnerMap.Destroy();
@@ -1168,9 +1173,8 @@ void TLogReader::Reply() {
             PDisk->Format.Offset(ChunkIdx + 1, 0)
         );
     }
-    LOG_DEBUG(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " To ownerId# %" PRIu32 " %s",
-        (ui32)PDisk->PDiskId, (ui32)Owner, Result->ToString().c_str());
-    ActorSystem->Send(ReplyTo, Result.Release());
+    P_LOG(PRI_NOTICE, BPD01, "Reply to owner", (OwnerId, (ui32)Owner), (Result, Result->ToString()));
+    PCtx->ActorSystem->Send(ReplyTo, Result.Release());
     if (!IsInitial) {
         PDisk->Mon.LogRead.CountResponse(ResultSize);
     }
@@ -1185,23 +1189,21 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
     TDiskFormat &format = PDisk->Format;
 
     TSectorRestorator restorator(true, 0, format.IsErasureEncodeNextChunkReference(),
-            PDisk->Format, PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon,
+            PDisk->Format, PCtx.get(), &PDisk->Mon,
             PDisk->BufferPool.Get());
     restorator.Restore(sector.GetData(), sector.Offset, format.MagicNextLogChunkReference, LastNonce,
-            PDisk->Cfg->UseT1ha0HashInFooter, Owner);
-    LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo() << " ProcessNextChunkReference");
+            Owner);
+    P_LOG(PRI_DEBUG, BPD01, SelfInfo() << " ProcessNextChunkReference");
 
     if (restorator.LastGoodIdx < ReplicationFactor) {
         ui8* const rawSector = sector.GetData() + restorator.LastGoodIdx * format.SectorSize;
         TDataSectorFooter *sectorFooter = (TDataSectorFooter*)
             (rawSector + format.SectorSize - sizeof(TDataSectorFooter));
         if (sectorFooter->Nonce < LastNonce) {
-            LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                    << " ProcessNextChunkReference, Nonce reordering"
-                    << " sectorFooter->Nonce# " << sectorFooter->Nonce
-                    << " LastNonce# " << LastNonce
-                    << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                    << " Marker# LR012");
+            P_LOG(PRI_NOTICE, LR012, SelfInfo() << " ProcessNextChunkReference, Nonce reordering",
+                    (sectorFooter->Nonce, sectorFooter->Nonce),
+                    (LastNonce, LastNonce),
+                    (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
             // This one came unexpectedly out of the blue!
             // TODO(cthulhu): Write a unit-test that hits this line.
             // Steps to reproduce:
@@ -1241,11 +1243,10 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
                 OnEndOfSplice = true;
 
                 if (IsInitial) {
-                    LOG_INFO_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                            << " ProcessNextChunkReference contains NextChunkFirstNonce. "
-                            << " nextRef->NextChunkFirstNonce# " << nextRef->NextChunkFirstNonce
-                            << " sectorFooter->Nonce# " << sectorFooter->Nonce
-                            << " LastNonce# " << LastNonce);
+                    P_LOG(PRI_INFO, BPD01, SelfInfo() << " ProcessNextChunkReference contains NextChunkFirstNonce. ",
+                            (nextRef->NextChunkFirstNonce, nextRef->NextChunkFirstNonce),
+                            (sectorFooter->Nonce, sectorFooter->Nonce),
+                            (LastNonce, LastNonce));
                 }
             } else {
                 LastNonce = sectorFooter->Nonce;
@@ -1256,7 +1257,7 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
                 TStringStream ss;
                 ss << SelfInfo() << " ReplyError: unexpected data version in TNextLogChunkReference, version# "
                     << (ui32)nextLogChunkReference->Version;
-                LOG_ERROR_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, ss.Str());
+                P_LOG(PRI_ERROR, BPD01, ss.Str());
                 Result->ErrorReason = ss.Str();
                 ReplyError();
                 return true;
@@ -1266,12 +1267,11 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
         MaxNonce = Max(MaxNonce, LastNonce);
 
         ui32 prevChunkIdx = ChunkIdx;
-        LOG_DEBUG_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                << " ProcessNextChunkReference, record is valid"
-                << " prevChunkIdx# " << prevChunkIdx
-                << " nextChunkIdx# " << nextLogChunkReference->NextChunk
-                << " LastNonce# " << LastNonce
-                << " OnEndOfSplice# " << OnEndOfSplice);
+        P_LOG(PRI_DEBUG, BPD01, SelfInfo() << " ProcessNextChunkReference, record is valid",
+                (prevChunkIdx, prevChunkIdx),
+                (nextChunkIdx, nextLogChunkReference->NextChunk),
+                (LastNonce, LastNonce),
+                (OnEndOfSplice, OnEndOfSplice));
         SwitchToChunk(nextLogChunkReference->NextChunk);
         if (IsInitial) {
             UpdateNewChunkInfo(ChunkIdx, prevChunkIdx);
@@ -1279,13 +1279,11 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
         return false;
     } else {
         // As we always write next chunk reference, the situation we are in is impossible.
-        LOG_NOTICE_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                << " ProcessNextChunkReference, nextLogChunkReference not in a valid state"
-                << " !(restorator.LastGoodIdx < ReplicationFactor) "
-                << " restorator.LastGoodIdx# " << restorator.LastGoodIdx
-                << " ReplicationFactor# " << ReplicationFactor
-                << " LastGoodToWriteLogPosition# " << LastGoodToWriteLogPosition
-                << " Marker# LR013");
+        P_LOG(PRI_NOTICE, LR013, SelfInfo() << " ProcessNextChunkReference, nextLogChunkReference not in a valid state"
+                << " !(restorator.LastGoodIdx < ReplicationFactor)",
+                (restorator.LastGoodIdx, restorator.LastGoodIdx),
+                (ReplicationFactor, ReplicationFactor),
+                (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
         ReplyOk();
         return true;
     }
@@ -1295,17 +1293,21 @@ void TLogReader::UpdateNewChunkInfo(ui32 currChunk, const TMaybe<ui32> prevChunk
     TGuard<TMutex> guard(PDisk->StateMutex);
     if (prevChunkIdx) {
         PDisk->ChunkState[*prevChunkIdx].CommitState = TChunkState::LOG_COMMITTED;
+        if (TPDisk::IS_SHRED_ENABLED) {
+            PDisk->ChunkState[*prevChunkIdx].IsDirty = true;
+        }
     }
 
     TChunkState& state = PDisk->ChunkState[currChunk];
     if (IsOwnerUser(state.OwnerId)) {
-        LOG_WARN_S(*PDisk->ActorSystem, NKikimrServices::BS_PDISK, SelfInfo()
-                << " chunk will be treated as log chunk, but in ChunkState is marked as owned by user"
-                << " ChunkState# " << state.ToString());
+        P_LOG(PRI_WARN, BPD01, SelfInfo() << " chunk will be treated as log chunk, but in ChunkState is marked as owned by user",
+                (ChunkState, state.ToString()));
     }
     state.CommitState = TChunkState::LOG_RESERVED;
-    LOG_INFO_S(*ActorSystem, NKikimrServices::BS_PDISK, SelfInfo() << " chunk is the next log chunk,"
-            << " prevOwnerId# " << ui32(state.OwnerId) << " -> newOwnerId# " << ui32(OwnerSystem));
+    state.IsDirty = true;
+    P_LOG(PRI_INFO, BPD01, SelfInfo() << " chunk is the next log chunk",
+            (prevOwnerId, ui32(state.OwnerId)),
+            (newOwnerId, ui32(OwnerSystem)));
     state.OwnerId = OwnerSystem;
     state.PreviousNonce = LastNonce;
 }

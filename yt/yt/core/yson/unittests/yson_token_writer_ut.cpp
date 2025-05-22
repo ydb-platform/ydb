@@ -191,7 +191,7 @@ TEST(TYsonTokenWriterTest, WriteRawNodeUnchecked)
 
     {
         TString out;
-        TFixedGrowthStringOutput outStream(&out, /* bufferSize */ 20);
+        TFixedGrowthStringOutput outStream(&out, /*bufferSize*/ 20);
         TCheckedYsonTokenWriter writer(&outStream);
 
         writer.WriteBeginMap();

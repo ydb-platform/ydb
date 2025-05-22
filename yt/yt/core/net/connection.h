@@ -65,54 +65,60 @@ DEFINE_REFCOUNTED_TYPE(IConnectionWriter)
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IConnection
-    : public IConnectionReader
-    , public IConnectionWriter
+    : public virtual IConnectionReader
+    , public virtual IConnectionWriter
 {
-    virtual const TNetworkAddress& LocalAddress() const = 0;
-    virtual const TNetworkAddress& RemoteAddress() const = 0;
+    virtual TConnectionId GetId() const = 0;
 
-    // Returns true if connection is not is failed state and has no
-    // active IO operations.
+    virtual const TNetworkAddress& GetLocalAddress() const = 0;
+    virtual const TNetworkAddress& GetRemoteAddress() const = 0;
+
+    //! Returns true if connection is not is failed state and has no
+    //! active IO operations.
     virtual bool IsIdle() const = 0;
+
+    //! Returns true if connection can be reused by a pool.
+    virtual bool IsReusable() const = 0;
 
     virtual bool SetNoDelay() = 0;
     virtual bool SetKeepAlive() = 0;
 
     TFuture<void> Abort() override = 0;
 
-    // SubscribePeerDisconnect is best effort and is not guaranteed to fire.
-    virtual void SubscribePeerDisconnect(TCallback<void()> cb) = 0;
+    //! This callback is best effort and is not guaranteed to fire.
+    virtual void SubscribePeerDisconnect(TCallback<void()> callback) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IConnection)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::pair<IConnectionPtr, IConnectionPtr> CreateConnectionPair(const NConcurrency::IPollerPtr& poller);
+std::pair<IConnectionPtr, IConnectionPtr> CreateConnectionPair(NConcurrency::IPollerPtr poller);
 
 //! File descriptor must be in nonblocking mode.
 IConnectionPtr CreateConnectionFromFD(
     TFileDescriptor fd,
     const TNetworkAddress& localAddress,
     const TNetworkAddress& remoteAddress,
-    const NConcurrency::IPollerPtr& poller);
+    NConcurrency::IPollerPtr poller);
 
 IConnectionReaderPtr CreateInputConnectionFromFD(
     TFileDescriptor fd,
-    const TString& pipePath,
-    const NConcurrency::IPollerPtr& poller,
+    const std::string& pipePath,
+    NConcurrency::IPollerPtr poller,
     const TRefCountedPtr& pipeHolder);
 
 IConnectionReaderPtr CreateInputConnectionFromPath(
-    const TString& pipePath,
-    const NConcurrency::IPollerPtr& poller,
-    const TRefCountedPtr& pipeHolder);
+    std::string pipePath,
+    NConcurrency::IPollerPtr poller,
+    TRefCountedPtr pipeHolder);
 
 IConnectionWriterPtr CreateOutputConnectionFromPath(
-    const TString& pipePath,
-    const NConcurrency::IPollerPtr& poller,
-    const TRefCountedPtr& pipeHolder,
-    std::optional<int> capacity = {});
+    std::string pipePath,
+    NConcurrency::IPollerPtr poller,
+    TRefCountedPtr pipeHolder,
+    std::optional<int> capacity = {},
+    EDeliveryFencedMode deliveryFencedMode = EDeliveryFencedMode::None);
 
 ////////////////////////////////////////////////////////////////////////////////
 

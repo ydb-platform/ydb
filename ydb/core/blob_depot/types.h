@@ -117,6 +117,86 @@ namespace NKikimr::NBlobDepot {
                 type == EBlobType::VG_FOOTER_BLOB || type == EBlobType::VG_GC_BLOB);
             return cookie >> typeBits;
         }
+
+        explicit operator TGenStep() const {
+            return {Generation, Step};
+        }
+    };
+
+    struct TS3Locator {
+        ui32 Len = 0;
+        ui32 Generation = 0;
+        ui64 KeyId = 0;
+
+        static TS3Locator FromProto(const NKikimrBlobDepot::TS3Locator& locator) {
+            return {
+                .Len = locator.GetLen(),
+                .Generation = locator.GetGeneration(),
+                .KeyId = locator.GetKeyId(),
+            };
+        }
+
+        void ToProto(NKikimrBlobDepot::TS3Locator *locator) const {
+            locator->SetLen(Len);
+            locator->SetGeneration(Generation);
+            locator->SetKeyId(KeyId);
+        }
+
+        void Output(IOutputStream& s) const {
+            s << '{' << Len << '@' << Generation << '.' << KeyId << '}';
+        }
+
+        TString ToString() const {
+            TStringStream s;
+            Output(s);
+            return s.Str();
+        }
+
+        TString MakeObjectName(const TString& basePath) const {
+            const size_t hash = MultiHash(Generation, KeyId);
+            const size_t a = hash % 36;
+            const size_t b = hash / 36 % 36;
+            static const char vec[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+            return TStringBuilder() << basePath
+                << '/' << Generation
+                << '/' << vec[a]
+                << '/' << vec[b]
+                << '/' << KeyId;
+        }
+
+        static std::optional<TS3Locator> FromObjectName(const TString& name, ui64 len, TString *error) {
+            try {
+                if (len > Max<ui32>()) {
+                    *error = "value is too long";
+                    return std::nullopt;
+                }
+                ui32 generation;
+                ui64 keyId;
+                TString a, b;
+                Split(name, '/', generation, a, b, keyId);
+                TS3Locator res{
+                    .Len = static_cast<ui32>(len),
+                    .Generation = generation,
+                    .KeyId = keyId,
+                };
+                if (res.MakeObjectName(TString()) != '/' + name) {
+                    *error = "object name does not match";
+                    return std::nullopt;
+                }
+                return res;
+            } catch (const std::exception& ex) {
+                *error = ex.what();
+                return std::nullopt;
+            }
+        }
+
+        struct THash {
+            size_t operator ()(const TS3Locator& x) const {
+                return MultiHash(x.Len, x.Generation, x.KeyId);
+            }
+        };
+
+        friend std::strong_ordering operator <=>(const TS3Locator&, const TS3Locator&) = default;
     };
 
     class TGivenIdRange {
@@ -161,16 +241,21 @@ namespace NKikimr::NBlobDepot {
     template<typename TCallback>
     void EnumerateBlobsForValueChain(const TValueChain& valueChain, ui64 tabletId, TCallback&& callback) {
         for (const auto& item : valueChain) {
-            const auto& locator = item.GetLocator();
-            const auto& blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
-            if (locator.GetFooterLen() == 0) {
-                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
-            } else if (locator.GetTotalDataLen() + locator.GetFooterLen() > MaxBlobSize) {
-                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
-                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_FOOTER_BLOB, 0, locator.GetFooterLen()), 0, 0);
-            } else {
-                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_COMPOSITE_BLOB, 0, locator.GetTotalDataLen() +
-                    locator.GetFooterLen()), 0, locator.GetTotalDataLen());
+            if (item.HasBlobLocator()) {
+                const auto& locator = item.GetBlobLocator();
+                const auto& blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
+                if (locator.GetFooterLen() == 0) {
+                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
+                } else if (locator.GetTotalDataLen() + locator.GetFooterLen() > MaxBlobSize) {
+                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
+                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_FOOTER_BLOB, 0, locator.GetFooterLen()), 0, 0);
+                } else {
+                    callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_COMPOSITE_BLOB, 0, locator.GetTotalDataLen() +
+                        locator.GetFooterLen()), 0, locator.GetTotalDataLen());
+                }
+            }
+            if (item.HasS3Locator()) {
+                callback(TS3Locator::FromProto(item.GetS3Locator()));
             }
         }
     }
@@ -195,65 +280,6 @@ namespace NKikimr::NBlobDepot {
         return true;
     }
 
-    class TGenStep {
-        ui64 Value = 0;
-
-    public:
-        TGenStep() = default;
-        TGenStep(const TGenStep&) = default;
-        TGenStep &operator=(const TGenStep& other) = default;
-
-        explicit TGenStep(ui64 value)
-            : Value(value)
-        {}
-
-        TGenStep(ui32 gen, ui32 step)
-            : Value(ui64(gen) << 32 | step)
-        {}
-
-        explicit TGenStep(const TLogoBlobID& id)
-            : TGenStep(id.Generation(), id.Step())
-        {}
-        
-        explicit TGenStep(const TBlobSeqId& id)
-            : TGenStep(id.Generation, id.Step)
-        {}
-
-        explicit operator ui64() const {
-            return Value;
-        }
-
-        ui32 Generation() const {
-            return Value >> 32;
-        }
-
-        ui32 Step() const {
-            return Value;
-        }
-
-        void Output(IOutputStream& s) const {
-            s << Generation() << ":" << Step();
-        }
-
-        TString ToString() const {
-            TStringStream s;
-            Output(s);
-            return s.Str();
-        }
-
-        TGenStep Previous() const {
-            Y_ABORT_UNLESS(Value);
-            return TGenStep(Value - 1);
-        }
-
-        friend bool operator ==(const TGenStep& x, const TGenStep& y) { return x.Value == y.Value; }
-        friend bool operator !=(const TGenStep& x, const TGenStep& y) { return x.Value != y.Value; }
-        friend bool operator < (const TGenStep& x, const TGenStep& y) { return x.Value <  y.Value; }
-        friend bool operator <=(const TGenStep& x, const TGenStep& y) { return x.Value <= y.Value; }
-        friend bool operator > (const TGenStep& x, const TGenStep& y) { return x.Value >  y.Value; }
-        friend bool operator >=(const TGenStep& x, const TGenStep& y) { return x.Value >= y.Value; }
-    };
-
 #define BDEV(MARKER, TEXT, ...) \
     do { \
         auto& ctx = *TlsActivationContext; \
@@ -266,8 +292,11 @@ namespace NKikimr::NBlobDepot {
                 NJson::TJsonWriter __json(&__stream, false); \
                 ::NKikimr::NStLog::TMessage<MARKER>("", 0, #MARKER)STLOG_PARAMS(__VA_ARGS__).WriteToJson(__json) << TEXT; \
             } \
-            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str()); \
+            ::NActors::MemLogAdapter(ctx, priority, component, __FILE_NAME__, __LINE__, __stream.Str()); \
         }; \
     } while (false)
 
 } // NKikimr::NBlobDepot
+
+template<> struct THash<NKikimr::NBlobDepot::TS3Locator> : NKikimr::NBlobDepot::TS3Locator::THash {};
+template<> struct std::hash<NKikimr::NBlobDepot::TS3Locator> : THash<NKikimr::NBlobDepot::TS3Locator> {};

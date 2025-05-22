@@ -137,5 +137,6 @@ message TEndpointBoardEntry {
     repeated string AddressesV4 = 8;
     repeated string AddressesV6 = 9;
     optional string TargetNameOverride = 10;
+    optional string EndpointId = 11;
 };
 

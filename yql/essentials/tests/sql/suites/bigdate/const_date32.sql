@@ -1,0 +1,10 @@
+select 1, date32("-144169-01-01"), cast(date32("-144169-01-01") as string);
+select 2, date32("-1-1-1"), cast(date32("-1-1-1") as string);
+select 3, date32("1-1-1"), cast(date32("1-1-1") as string);
+select 4, date32("1969-12-31"), cast(date32("1969-12-31") as string);
+select 5, date32("1970-01-01"), cast(date32("1970-01-01") as string);
+select 6, date32("2000-04-05"), cast(date32("2000-04-05") as string);
+select 7, date32("2100-03-01"), cast(date32("2100-03-01") as string);
+select 8, date32("2105-12-31"), cast(date32("2105-12-31") as string);
+select 9, date32("2106-01-01"), cast(date32("2106-01-01") as string);
+select 10, date32("148107-12-31"), cast(date32("148107-12-31") as string);

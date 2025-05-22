@@ -1,5 +1,6 @@
 #pragma once
-#include "chunk_meta.h"
+#include "abstract/chunk_meta.h"
+#include "abstract/chunks.h"
 
 #include <ydb/core/tx/columnshard/counters/splitter.h>
 #include <ydb/core/tx/columnshard/engines/portions/common.h>
@@ -7,106 +8,29 @@
 
 namespace NKikimr::NOlap {
 
-class IPortionDataChunk {
-private:
-    YDB_READONLY(ui32, EntityId, 0);
-
-    std::optional<ui32> ChunkIdx;
-
-protected:
-    ui64 DoGetPackedSize() const {
-        return GetData().size();
-    }
-    virtual const TString& DoGetData() const = 0;
-    virtual TString DoDebugString() const = 0;
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
-    virtual bool DoIsSplittable() const = 0;
-    virtual std::optional<ui32> DoGetRecordsCount() const = 0;
-    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const = 0;
-    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const = 0;
-    virtual void DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const = 0;
-public:
-    IPortionDataChunk(const ui32 entityId, const std::optional<ui16>& chunkIdx = {})
-        : EntityId(entityId)
-        , ChunkIdx(chunkIdx) {
-    }
-
-    virtual ~IPortionDataChunk() = default;
-
-    TString DebugString() const {
-        return DoDebugString();
-    }
-
-    const TString& GetData() const {
-        return DoGetData();
-    }
-
-    ui64 GetPackedSize() const {
-        return DoGetPackedSize();
-    }
-
-    std::optional<ui32> GetRecordsCount() const {
-        return DoGetRecordsCount();
-    }
-
-    ui32 GetRecordsCountVerified() const {
-        auto result = DoGetRecordsCount();
-        AFL_VERIFY(result);
-        return *result;
-    }
-
-    std::vector<std::shared_ptr<IPortionDataChunk>> InternalSplit(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const {
-        return DoInternalSplit(saver, counters, splitSizes);
-    }
-
-    bool IsSplittable() const {
-        return DoIsSplittable();
-    }
-
-    ui16 GetChunkIdx() const {
-        AFL_VERIFY(!!ChunkIdx);
-        return *ChunkIdx;
-    }
-
-    void SetChunkIdx(const ui16 value) {
-        ChunkIdx = value;
-    }
-
-    std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
-        auto result = DoGetFirstScalar();
-        Y_ABORT_UNLESS(result);
-        return result;
-    }
-    std::shared_ptr<arrow::Scalar> GetLastScalar() const {
-        auto result = DoGetLastScalar();
-        Y_ABORT_UNLESS(result);
-        return result;
-    }
-
-    TChunkAddress GetChunkAddress() const {
-        return TChunkAddress(GetEntityId(), GetChunkIdx());
-    }
-
-    void AddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const {
-        return DoAddIntoPortion(bRange, portionInfo);
-    }
-};
-
-class IPortionColumnChunk : public IPortionDataChunk {
+class IPortionColumnChunk: public IPortionDataChunk {
 private:
     using TBase = IPortionDataChunk;
 
 protected:
     virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const = 0;
     virtual ui32 DoGetRecordsCountImpl() const = 0;
+    virtual ui64 DoGetRawBytesImpl() const = 0;
+
+    virtual std::optional<ui64> DoGetRawBytes() const final {
+        return DoGetRawBytesImpl();
+    }
+
     virtual std::optional<ui32> DoGetRecordsCount() const override final {
         return DoGetRecordsCountImpl();
     }
 
-    virtual void DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const override;
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const override;
 
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
     virtual bool DoIsSplittable() const override {
         return GetRecordsCount() > 1;
     }
@@ -131,51 +55,60 @@ private:
     std::vector<std::shared_ptr<IPortionDataChunk>> Chunks;
     std::shared_ptr<TColumnLoader> Loader;
 
-    std::shared_ptr<arrow::Array> CurrentChunk;
-    ui32 CurrentChunkIndex = 0;
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> CurrentArray;
+    std::optional<NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress> CurrentChunkArray;
+    ui32 CurrentArrayIndex = 0;
     ui32 CurrentRecordIndex = 0;
+
 public:
+
     TChunkedColumnReader(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks, const std::shared_ptr<TColumnLoader>& loader)
-        : Chunks(chunks) 
-        , Loader(loader)
-    {
+        : Chunks(chunks)
+        , Loader(loader) {
         Start();
     }
 
     void Start() {
-        CurrentChunkIndex = 0;
+        CurrentArrayIndex = 0;
         CurrentRecordIndex = 0;
         if (Chunks.size()) {
-            CurrentChunk = Loader->ApplyVerifiedColumn(Chunks.front()->GetData());
+            CurrentArray = Loader->ApplyVerified(Chunks.front()->GetData(), Chunks.front()->GetRecordsCountVerified());
+            CurrentChunkArray.reset();
         }
     }
 
-    const std::shared_ptr<arrow::Array>& GetCurrentChunk() const {
-        return CurrentChunk;
-    }
-
-    ui32 GetCurrentRecordIndex() const {
-        return CurrentRecordIndex;
+    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& GetCurrentChunk() {
+        if (!CurrentChunkArray || !CurrentChunkArray->GetAddress().Contains(CurrentRecordIndex)) {
+            CurrentChunkArray = CurrentArray->GetArray(CurrentChunkArray, CurrentRecordIndex, CurrentArray);
+        }
+        AFL_VERIFY(CurrentChunkArray);
+        return CurrentChunkArray->GetArray();
     }
 
     bool IsCorrect() const {
-        return !!CurrentChunk;
+        return !!CurrentArray;
     }
 
-    bool ReadNext() {
-        AFL_VERIFY(!!CurrentChunk);
-        if (++CurrentRecordIndex < CurrentChunk->length()) {
-            return true;
-        } 
-        while (++CurrentChunkIndex < Chunks.size()) {
-            CurrentChunk = Loader->ApplyVerifiedColumn(Chunks[CurrentChunkIndex]->GetData());
+    bool ReadNextChunk() {
+        while (++CurrentArrayIndex < Chunks.size()) {
+            CurrentArray = Loader->ApplyVerified(Chunks[CurrentArrayIndex]->GetData(), Chunks[CurrentArrayIndex]->GetRecordsCountVerified());
+            CurrentChunkArray.reset();
             CurrentRecordIndex = 0;
-            if (CurrentRecordIndex < CurrentChunk->length()) {
+            if (CurrentRecordIndex < CurrentArray->GetRecordsCount()) {
                 return true;
             }
         }
-        CurrentChunk = nullptr;
+        CurrentChunkArray.reset();
+        CurrentArray = nullptr;
         return false;
+    }
+
+    bool ReadNext() {
+        AFL_VERIFY(!!CurrentArray);
+        if (++CurrentRecordIndex < CurrentArray->GetRecordsCount()) {
+            return true;
+        }
+        return ReadNextChunk();
     }
 };
 
@@ -183,10 +116,10 @@ class TChunkedBatchReader {
 private:
     std::vector<TChunkedColumnReader> Columns;
     bool IsCorrectFlag = true;
+
 public:
     TChunkedBatchReader(const std::vector<TChunkedColumnReader>& columnReaders)
-        : Columns(columnReaders)
-    {
+        : Columns(columnReaders) {
         AFL_VERIFY(Columns.size());
         for (auto&& i : Columns) {
             AFL_VERIFY(i.IsCorrect());
@@ -204,6 +137,16 @@ public:
         }
     }
 
+    bool ReadNext(const ui32 count) {
+        for (ui32 i = 0; i < count; ++i) {
+            if (!ReadNext()) {
+                AFL_VERIFY(i + 1 == count);
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool ReadNext() {
         std::optional<bool> result;
         for (auto&& i : Columns) {
@@ -219,6 +162,10 @@ public:
         return *result;
     }
 
+    ui32 GetColumnsCount() const {
+        return Columns.size();
+    }
+
     std::vector<TChunkedColumnReader>::const_iterator begin() const {
         return Columns.begin();
     }
@@ -226,6 +173,14 @@ public:
     std::vector<TChunkedColumnReader>::const_iterator end() const {
         return Columns.end();
     }
+
+    std::vector<TChunkedColumnReader>::iterator begin() {
+        return Columns.begin();
+    }
+
+    std::vector<TChunkedColumnReader>::iterator end() {
+        return Columns.end();
+    }
 };
 
-}
+}   // namespace NKikimr::NOlap

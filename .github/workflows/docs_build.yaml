@@ -1,19 +1,21 @@
 name: Build documentation
 
 on:
-  pull_request:
+  pull_request_target:
     paths: 
     - 'ydb/docs/**'
 
 jobs:
   build-docs:
     concurrency:
-      group: docs-build-${{ github.ref }}
+      group: docs-build-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:

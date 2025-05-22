@@ -53,7 +53,7 @@ struct TRestore {
         return TRUCalculator::BulkUpsert(bytes, rows);
     }
 
-    static void FinishStats(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
+    static void Finish(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
         if (txState.TxType != TTxState::TxRestore) {
             return;
         }
@@ -77,6 +77,9 @@ struct TRestore {
 
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistCompletedRestore(db, opId.GetTxId(), txState, restoreInfo);
+
+        table->IsRestore = false;
+        context.SS->PersistTableIsRestore(db, txState.TargetPathId, table);
     }
 
     static void PersistTask(const TPathId& pathId, const TTxTransaction& tx, TOperationContext& context) {

@@ -1,6 +1,6 @@
 #include "ydb_sdk_core_access.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 namespace NYdb {
 namespace NConsoleClient {

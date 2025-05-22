@@ -1,9 +1,10 @@
 #include "mkql_keys.h"
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>
@@ -42,21 +43,11 @@ bool ExtractKeyData(TRuntimeNode valueNode, bool isOptional, NUdf::TUnboxedValue
 NScheme::TTypeInfo UnpackTypeInfo(NKikimr::NMiniKQL::TType *type, bool &isOptional) {
     isOptional = false;
     if (type->GetKind() == TType::EKind::Pg) {
-        auto pgType = static_cast<TPgType*>(type);
-        auto pgTypeId = pgType->GetTypeId();
-        return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(pgTypeId));
+        return NScheme::TypeInfoFromMiniKQLType(type);
     } else {
-        auto dataType = UnpackOptionalData(type, isOptional);
-        return NScheme::TTypeInfo(dataType->GetSchemeType());
+        isOptional = type->IsOptional();
+        return NScheme::TypeInfoFromMiniKQLType(type);
     }
-}
-
-
-template<typename T>
-TCell MakeCell(const NUdf::TUnboxedValuePod& value) {
-    static_assert(TCell::CanInline(sizeof(T)), "Can't inline data in cell.");
-    const auto v = value.Get<T>();
-    return TCell(reinterpret_cast<const char*>(&v), sizeof(v));
 }
 
 THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
@@ -206,7 +197,7 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
         if (cmd.GetStaticType()->IsVoid()) {
             // erase
             op.Operation = TKeyDesc::EColumnOperation::Set;
-            op.ExpectedType = NScheme::TTypeInfo(0);
+            op.ExpectedType = NScheme::TTypeInfo();
         } else if (cmd.GetStaticType()->IsTuple()) {
             // inplace update
             TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, cmd);
@@ -260,8 +251,10 @@ THolder<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& e
 #define MAKE_PRIMITIVE_TYPE_CELL(type, layout) \
     case NUdf::TDataType<type>::Id: return MakeCell<layout>(value);
 
-TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
-    const TTypeEnvironment& env, bool copy,
+
+template<typename TStringBackend>
+TCell MakeCellImpl(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
+    const TStringBackend& env, bool copy,
     i32 typmod, TMaybe<TString>* error)
 {
     if (!value)
@@ -283,7 +276,7 @@ TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
     NYql::NUdf::TStringRef ref;
     bool isPg = (type.GetTypeId() == NScheme::NTypeIds::Pg);
     if (isPg) {
-        auto typeDesc = type.GetTypeDesc();
+        auto typeDesc = type.GetPgTypeDesc();
         if (typmod != -1 && NPg::TypeDescNeedsCoercion(typeDesc)) {
             TMaybe<TString> err;
             binary = NYql::NCommon::PgValueCoerce(value, NPg::PgTypeIdFromTypeDesc(typeDesc), typmod, &err);
@@ -308,6 +301,21 @@ TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
     std::memcpy(val.Data(), ref.Data(), ref.Size());
     return TCell(val.Data(), val.Size());
 }
+
+TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
+    const TTypeEnvironment& env, bool copy,
+    i32 typmod, TMaybe<TString>* error)
+{
+    return MakeCellImpl(type, value, env, copy, typmod, error);
+}
+
+TCell MakeCell(NScheme::TTypeInfo type, const NUdf::TUnboxedValuePod& value,
+    const TStringProviderBackend& env, bool copy,
+    i32 typmod, TMaybe<TString>* error)
+{
+    return MakeCellImpl(type, value, env, copy, typmod, error);
+}
+
 
 #undef MAKE_PRIMITIVE_TYPE_CELL
 

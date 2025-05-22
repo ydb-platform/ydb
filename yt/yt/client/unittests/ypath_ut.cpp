@@ -19,6 +19,7 @@
 #include <yt/yt/core/ytree/tree_visitor.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/ypath_service.h>
+#include <yt/yt/core/ytree/helpers.h>
 
 #include <util/string/vector.h>
 

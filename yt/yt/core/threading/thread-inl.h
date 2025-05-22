@@ -28,7 +28,7 @@ inline bool TThread::IsStarted() const
 
 inline bool TThread::IsStopping() const
 {
-    return Stopping_.load(std::memory_order::relaxed);
+    return Stopping_.load(std::memory_order::acquire);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

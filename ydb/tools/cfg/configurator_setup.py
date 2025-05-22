@@ -1,6 +1,8 @@
 import argparse
 import random
 
+from pathlib import Path
+
 
 def parse_optional_arguments(args):
     kwargs = {}
@@ -73,6 +75,19 @@ def get_parser(generate_func, extra_cfg_arguments=[]):
             help=v['help'],
         )
 
+    parser_cfg.add_argument(
+        "--hosts-provider-url",
+        type=str,
+        help="""URL from which information about hosts can be obtained.
+        Mutually exclusive with --hosts-provider-k8s""")
+
+    home_directory = str(Path.home())
+    defaultKubeconfigLocation = "{0}/.kube/config".format(home_directory)
+    parser_cfg.add_argument("--kubeconfig",
+                            type=str,
+                            help="path to the kubeconfig file. Default `$HOME/.kube/config`, also see --hosts-provider-k8s",
+                            default=defaultKubeconfigLocation)
+
     argument_group = parser_cfg.add_mutually_exclusive_group()
 
     argument_group.add_argument(
@@ -89,6 +104,10 @@ def get_parser(generate_func, extra_cfg_arguments=[]):
     argument_group.add_argument(
         '--nfs-control', action='store_true', help='Forces cfg command to generate NFS Control configuration'
     )
+
+    parser_cfg.add_argument('--backport-to-template',
+                            action='store_true',
+                            help='Backport blob_storage_config and similar sections to template after generation')
 
     parser_cfg.set_defaults(func=generate_func)
     return parser

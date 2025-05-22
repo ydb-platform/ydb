@@ -27,6 +27,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     ui32 RepliesToWait;
     TVector<ui32> YellowMoveChannels;
     TVector<ui32> YellowStopChannels;
+    THashMap<ui32, float> ApproximateFreeSpaceShareByChannel;
 
     NWilson::TSpan RequestSpan;
     TMap<TLogoBlobID, NWilson::TSpan> BlobSpans;
@@ -38,19 +39,22 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev, const TActorContext &ctx) {
         TEvBlobStorage::TEvPutResult *msg = ev->Get();
 
+        ui32 channel = msg->Id.Channel();
+
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
-            YellowMoveChannels.push_back(msg->Id.Channel());
+            YellowMoveChannels.push_back(channel);
         }
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
-            YellowStopChannels.push_back(msg->Id.Channel());
+            YellowStopChannels.push_back(channel);
         }
+        ApproximateFreeSpaceShareByChannel[channel] = msg->ApproximateFreeSpaceShare;
 
         switch (msg->Status) {
         case NKikimrProto::OK:
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_MAIN, "Put Result: " << msg->Print(false));
 
-            GroupWrittenBytes[std::make_pair(msg->Id.Channel(), msg->GroupId)] += msg->Id.BlobSize();
-            GroupWrittenOps[std::make_pair(msg->Id.Channel(), msg->GroupId)] += 1;
+            GroupWrittenBytes[std::make_pair(channel, msg->GroupId)] += msg->Id.BlobSize();
+            GroupWrittenOps[std::make_pair(channel, msg->GroupId)] += 1;
 
             ResponseCookies ^= ev->Cookie;
 
@@ -120,6 +124,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
             LogEntryID,
             std::move(YellowMoveChannels),
             std::move(YellowStopChannels),
+            std::move(ApproximateFreeSpaceShareByChannel),
             std::move(GroupWrittenBytes),
             std::move(GroupWrittenOps),
             reason));
@@ -154,7 +159,7 @@ public:
         , CommitTactic(commitTactic)
         , Info(info)
         , RepliesToWait(Max<ui32>())
-        , RequestSpan(TWilsonTablet::Tablet, std::move(traceId), "Tablet.WriteLog")
+        , RequestSpan(TWilsonTablet::TabletDetailed, std::move(traceId), "Tablet.WriteLog")
     {
         References.swap(refs);
         Y_ABORT_UNLESS(Info);
@@ -171,9 +176,9 @@ public:
             NWilson::TTraceId innerTraceId;
 
             if (RequestSpan) {
-                auto res = BlobSpans.try_emplace(ref.Id, TWilsonTablet::Tablet, RequestSpan.GetTraceId(), "Tablet.WriteLog.Reference");
+                auto res = BlobSpans.try_emplace(ref.Id, TWilsonTablet::TabletDetailed, RequestSpan.GetTraceId(), "Tablet.WriteLog.Reference");
 
-                innerTraceId = std::move(res.first->second.GetTraceId());
+                innerTraceId = res.first->second.GetTraceId();
             }
 
             SendToBS(ref.Id, ref.Buffer, ctx, handleClass, ref.Tactic ? *ref.Tactic : CommitTactic, std::move(innerTraceId));
@@ -191,7 +196,7 @@ public:
         NWilson::TTraceId traceId;
 
         if (RequestSpan) {
-            auto res = BlobSpans.try_emplace(actualLogEntryId, TWilsonTablet::Tablet, RequestSpan.GetTraceId(), "Tablet.WriteLog.LogEntry");
+            auto res = BlobSpans.try_emplace(actualLogEntryId, TWilsonTablet::TabletDetailed, RequestSpan.GetTraceId(), "Tablet.WriteLog.LogEntry");
 
             traceId = std::move(res.first->second.GetTraceId());
         }

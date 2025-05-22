@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.h>
@@ -19,6 +20,13 @@ namespace NKikimr {
     struct TNodeWardenConfig : public TThrRefBase {
         NKikimrConfig::TBlobStorageConfig BlobStorageConfig;
         NKikimrConfig::TStaticNameserviceConfig NameserviceConfig;
+        std::optional<NKikimrConfig::TDomainsConfig> DomainsConfig;
+        std::optional<NKikimrConfig::TSelfManagementConfig> SelfManagementConfig;
+        std::optional<NKikimrConfig::TBridgeConfig> BridgeConfig;
+        TString ConfigDirPath;
+        std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
+        TString StartupConfigYaml;
+        std::optional<TString> StartupStorageYaml;
         TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;
@@ -33,9 +41,14 @@ namespace NKikimr {
         bool CachePDisks = false;
         bool CacheVDisks = false;
         bool EnableVDiskCooldownTimeout = false;
+        TDuration RequestReportingThrottlerDelay = TDuration::Seconds(60);
+        TDuration LongRequestThreshold = TDuration::Seconds(50);
 
         // debugging options
         bool VDiskReplPausedAtStart = false;
+        bool UseActorSystemTimeInBSQueue = false;
+        std::optional<ui32> ReplMaxQuantumBytes = std::nullopt;
+        std::optional<ui32> ReplMaxDonorNotReadyCount = std::nullopt;
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)

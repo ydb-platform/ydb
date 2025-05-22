@@ -184,9 +184,12 @@ static void aws_array_list_mem_swap(void *AWS_RESTRICT item1, void *AWS_RESTRICT
     }
 
     size_t remainder = item_size & (SLICE - 1); /* item_size % SLICE */
-    memcpy((void *)temp, (void *)item1, remainder);
-    memcpy((void *)item1, (void *)item2, remainder);
-    memcpy((void *)item2, (void *)temp, remainder);
+
+    if (remainder) {
+        memcpy((void *)temp, (void *)item1, remainder);
+        memcpy((void *)item1, (void *)item2, remainder);
+        memcpy((void *)item2, (void *)temp, remainder);
+    }
 }
 
 void aws_array_list_swap(struct aws_array_list *AWS_RESTRICT list, size_t a, size_t b) {
@@ -204,5 +207,13 @@ void aws_array_list_swap(struct aws_array_list *AWS_RESTRICT list, size_t a, siz
     aws_array_list_get_at_ptr(list, &item1, a);
     aws_array_list_get_at_ptr(list, &item2, b);
     aws_array_list_mem_swap(item1, item2, list->item_size);
+    AWS_POSTCONDITION(aws_array_list_is_valid(list));
+}
+
+void aws_array_list_sort(struct aws_array_list *AWS_RESTRICT list, aws_array_list_comparator_fn *compare_fn) {
+    AWS_PRECONDITION(aws_array_list_is_valid(list));
+    if (list->data) {
+        qsort(list->data, aws_array_list_length(list), list->item_size, compare_fn);
+    }
     AWS_POSTCONDITION(aws_array_list_is_valid(list));
 }

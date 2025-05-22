@@ -1,5 +1,6 @@
 #pragma once
 
+#include "util_fmt_abort.h"
 #include "flat_row_column.h"
 #include "flat_row_nulls.h"
 #include "flat_table_column.h"
@@ -8,6 +9,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -28,7 +30,7 @@ namespace NTable {
                 Cells[idx] = cell;
             }
 
-            TIntrusiveConstPtr<TNullsType> operator*() const noexcept
+            TIntrusiveConstPtr<TNullsType> operator*() const
             {
                 return TNullsType::Make(Types, Cells);
             }
@@ -79,7 +81,7 @@ namespace NTable {
                 auto &col = *info.emplace(info.end());
 
                 auto familyIt = std::lower_bound(families.begin(), families.end(), meta.Family);
-                Y_ABORT_UNLESS(familyIt != families.end() && *familyIt == meta.Family);
+                Y_ENSURE(familyIt != families.end() && *familyIt == meta.Family);
 
                 col.Tag = meta.Id;
                 col.TypeInfo = meta.PType;
@@ -108,7 +110,7 @@ namespace NTable {
             return ci == ByTag.end() ? nullptr : &Cols[ci->second];
         }
 
-        TVector<ui32> Tags(bool keysOnly = false) const noexcept
+        TVector<ui32> Tags(bool keysOnly = false) const
         {
             TVector<ui32> tags; /* ordered by value tags */
 
@@ -119,19 +121,19 @@ namespace NTable {
             return tags;
         }
 
-        void CheckCompatability(const TRowScheme &scheme) const
+        void CheckCompatibility(const TString& tableName, const TRowScheme &scheme) const
         {
             for (auto &col: Cols) {
                 auto *other = scheme.ColInfo(col.Tag);
 
                 if (other == nullptr && col.IsKey()) {
-                    Y_ABORT("Key column dropping ins't supported");
+                    Y_TABLET_ERROR("Table " << tableName << " key column " << col.Tag << " cannot be dropped");
                 } else if (other == nullptr) {
                     /* It is ok to drop non-key columns */
                 } else if (col.TypeInfo != other->TypeInfo) {
-                    Y_ABORT("Column type alteration is not supproted");
+                    Y_TABLET_ERROR("Table " << tableName << " column " << col.Tag << " cannot be altered with type " << col.TypeInfo.GetTypeId() << " -> " << other->TypeInfo.GetTypeId());
                 } else if (col.Key != other->Key) {
-                    Y_ABORT("Cannot alter keys order or move col to keys");
+                    Y_TABLET_ERROR("Table " << tableName << " column " << col.Tag << " cannot be added to key or reordered " << col.Key << " -> " << other->Key);
 
                     /* Existing string columns can't be altered to keys as
                         they may hold external blobs references which is not
@@ -143,7 +145,7 @@ namespace NTable {
                 } else {
                     auto &null = (*scheme.RowCellDefaults)[other->Pos];
                     if (CompareTypedCells(null, (*RowCellDefaults)[col.Pos], col.TypeInfo))
-                        Y_ABORT("Cannot alter existing columnt default value");
+                        Y_TABLET_ERROR("Table " << tableName << " column " << col.Tag << " existing default value cannot be altered");
                 }
             }
         }

@@ -92,15 +92,23 @@ namespace NKikimr {
         TPairOfVectors HandoffParts(const TBlobStorageGroupInfo::TTopology *top,
                                     const TVDiskIdShort &vdisk,
                                     const TLogoBlobID &id) const;
+        NMatrix::TVectorType GetVDiskHandoffVec(const TBlobStorageGroupInfo::TTopology *top,
+                                           const TVDiskIdShort &vdisk,
+                                           const TLogoBlobID &id) const;
+        NMatrix::TVectorType GetVDiskHandoffDeletedVec(const TBlobStorageGroupInfo::TTopology *top,
+                                           const TVDiskIdShort &vdisk,
+                                           const TLogoBlobID &id) const;
         NMatrix::TVectorType LocalParts(TBlobStorageGroupType gtype) const;
         NMatrix::TVectorType KnownParts(TBlobStorageGroupType gtype, ui8 nodeId) const;
         // Returns main replica for this LogoBlob with PartId != 0
         static TVDiskIdShort GetMainReplica(const TBlobStorageGroupInfo::TTopology *top, const TLogoBlobID &id);
         // Make a copy of ingress w/o local bits
         TIngress CopyWithoutLocal(TBlobStorageGroupType gtype) const;
+        TIngress ReplaceLocal(TBlobStorageGroupType gtype, NMatrix::TVectorType parts) const;
         void DeleteHandoff(const TBlobStorageGroupInfo::TTopology *top,
                            const TVDiskIdShort &vdisk,
-                           const TLogoBlobID &id);
+                           const TLogoBlobID &id,
+                           bool deleteLocal=false);
         TString ToString(const TBlobStorageGroupInfo::TTopology *top,
                         const TVDiskIdShort &vdisk,
                         const TLogoBlobID &id) const;

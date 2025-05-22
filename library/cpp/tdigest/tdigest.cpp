@@ -3,45 +3,52 @@
 #include <library/cpp/tdigest/tdigest.pb.h>
 
 #include <cmath>
+#include <util/generic/yexception.h>
 
 // TODO: rewrite to https://github.com/tdunning/t-digest/blob/master/src/main/java/com/tdunning/math/stats/MergingDigest.java
 
-TDigest::TDigest(double delta, double k)
+TDigest::TDigest(double delta, double k, bool supportsNaN)
     : N(0)
     , Delta(delta)
     , K(k)
+    , SupportsNaN(supportsNaN)
 {
 }
 
-TDigest::TDigest(double delta, double k, double firstValue)
-    : TDigest(delta, k)
+TDigest::TDigest(double delta, double k, double firstValue, bool supportsNaN)
+    : TDigest(delta, k, supportsNaN)
 {
     AddValue(firstValue);
 }
 
-TDigest::TDigest(TStringBuf serializedDigest)
+TDigest::TDigest(TStringBuf serializedDigest, bool supportsNaN)
     : N(0)
+    , SupportsNaN(supportsNaN)
 {
     NTDigest::TDigest digest;
     Y_ABORT_UNLESS(digest.ParseFromArray(serializedDigest.data(), serializedDigest.size()));
-    Delta = digest.GetDelta();
-    K = digest.GetK();
+    Delta = digest.delta();
+    K = digest.k();
+    HasNaN = SupportsNaN && digest.nans();
     for (int i = 0; i < digest.centroids_size(); ++i) {
         const NTDigest::TDigest::TCentroid& centroid = digest.centroids(i);
-        Update(centroid.GetMean(), centroid.GetWeight());
+        Update(centroid.mean(), centroid.weight());
     }
 }
 
-TDigest::TDigest(const TDigest* digest1, const TDigest* digest2)
+TDigest::TDigest(const TDigest* digest1, const TDigest* digest2, bool supportsNaN)
     : N(0)
     , Delta(std::min(digest1->Delta, digest2->Delta))
     , K(std::max(digest1->K, digest2->K))
+    , SupportsNaN(supportsNaN)
+    , HasNaN(supportsNaN && (digest1->HasNaN || digest2->HasNaN))
 {
     Add(*digest1);
     Add(*digest2);
 }
 
 void TDigest::Add(const TDigest& otherDigest) {
+    Y_ENSURE(SupportsNaN == otherDigest.SupportsNaN);
     for (auto& it : otherDigest.Centroids)
         Update(it.Mean, it.Count);
     for (auto& it : otherDigest.Unmerged)
@@ -49,7 +56,8 @@ void TDigest::Add(const TDigest& otherDigest) {
 }
 
 TDigest TDigest::operator+(const TDigest& other) {
-    TDigest T(Delta, K);
+    Y_ENSURE(SupportsNaN == other.SupportsNaN);
+    TDigest T(Delta, K, SupportsNaN);
     T.Add(*this);
     T.Add(other);
     return T;
@@ -92,6 +100,12 @@ void TDigest::MergeCentroid(TVector<TCentroid>& merged, double& sum, const TCent
 }
 
 void TDigest::Update(double x, double w) {
+    if (SupportsNaN) {
+        if (std::isnan(x)) {
+            HasNaN = true;
+            return;
+        }
+    }
     AddCentroid(TCentroid(x, w));
     if (Unmerged.size() >= K / Delta) {
         Compress();
@@ -136,8 +150,17 @@ void TDigest::AddValue(double value) {
 
 double TDigest::GetPercentile(double percentile) {
     Compress();
-    if (Centroids.empty())
+    if (Centroids.empty()) {
+        if (HasNaN) {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
         return 0.0;
+    }
+
+    if (HasNaN && percentile >= 1.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
     // This algorithm uses C=1/2 with 0.5 optimized away
     // See https://en.wikipedia.org/wiki/Percentile#First_Variant.2C
     double x = percentile * N;
@@ -159,6 +182,9 @@ double TDigest::GetPercentile(double percentile) {
 
 double TDigest::GetRank(double value) {
     Compress();
+    if (SupportsNaN && std::isnan(value)) {
+        return 1.0;
+    }
     if (Centroids.empty()) {
         return 0.0;
     }
@@ -187,12 +213,16 @@ double TDigest::GetRank(double value) {
 TString TDigest::Serialize() {
     Compress();
     NTDigest::TDigest digest;
-    digest.SetDelta(Delta);
-    digest.SetK(K);
+    digest.set_delta(Delta);
+    digest.set_k(K);
+    if (HasNaN) {
+        digest.set_nans(HasNaN);
+    }
+
     for (const auto& it : Centroids) {
-        NTDigest::TDigest::TCentroid* centroid = digest.AddCentroids();
-        centroid->SetMean(it.Mean);
-        centroid->SetWeight(it.Count);
+        NTDigest::TDigest::TCentroid* centroid = digest.add_centroids();
+        centroid->set_mean(it.Mean);
+        centroid->set_weight(it.Count);
     }
     return digest.SerializeAsString();
 }

@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/core/protos/pdiskfit.pb.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <util/system/event.h>
@@ -60,7 +61,7 @@ public:
         CreatePDiskActor(ctx);
         TVector<TActorId> actors;
         for (ui32 i = 0; i < NumVDisks; ++i) {
-            TVDiskID vdiskId(i, 0, 0, 0, 0);
+            TVDiskID vdiskId(TGroupId::FromValue(i), 0, 0, 0, 0);
             TFakeVDiskParams params;
             if (InduceLogSplicing) {
                 params.LogCutProbability = 1e-3;
@@ -70,7 +71,7 @@ public:
                     params.LogsToBeSent = 100;
                 }
             }
-            TActorId actorId = ctx.ExecutorThread.ActorSystem->Register(CreateFakeVDisk(vdiskId, PDiskServiceId,
+            TActorId actorId = ctx.ActorSystem()->Register(CreateFakeVDisk(vdiskId, PDiskServiceId,
                     PDiskConfig->PDiskGuid, StateManager, params));
             actors.push_back(actorId);
         }
@@ -82,15 +83,15 @@ public:
 
     void CreatePDiskActor(const TActorContext& ctx) {
         Y_ABORT_UNLESS(Counters);
-        Y_ABORT_UNLESS(ctx.ExecutorThread.ActorSystem);
+        Y_ABORT_UNLESS(ctx.ActorSystem());
         Y_ABORT_UNLESS(PDiskConfig);
         Y_ABORT_UNLESS(AppData(ctx));
         std::unique_ptr<IActor> pdiskActor(CreatePDisk(PDiskConfig, NPDisk::TMainKey{ .Keys = { 1 }, .IsInitialized = true },
                 Counters->GetSubgroup("subsystem", "pdisk")));
-        const TActorId actorId = ctx.ExecutorThread.ActorSystem->Register(pdiskActor.release(), TMailboxType::Simple,
+        const TActorId actorId = ctx.ActorSystem()->Register(pdiskActor.release(), TMailboxType::Simple,
                 AppData(ctx)->SystemPoolId);
-        PDiskServiceId = MakeBlobStoragePDiskID(ctx.ExecutorThread.ActorSystem->NodeId, PDiskConfig->PDiskId);
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(PDiskServiceId, actorId);
+        PDiskServiceId = MakeBlobStoragePDiskID(ctx.ActorSystem()->NodeId, PDiskConfig->PDiskId);
+        ctx.ActorSystem()->RegisterLocalService(PDiskServiceId, actorId);
     }
 
     void Finish(const TActorContext& ctx) {

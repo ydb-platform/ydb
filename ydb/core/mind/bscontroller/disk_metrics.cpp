@@ -27,7 +27,8 @@ public:
 
         for (const auto& [vslotId, v] : Self->VSlots) {
             if (std::exchange(v->MetricsDirty, false)) {
-                auto&& key = std::tie(v->GroupId, v->GroupGeneration, v->RingIdx, v->FailDomainIdx, v->VDiskIdx);
+                auto groupId = v->GroupId.GetRawId();
+                auto&& key = std::tie(groupId, v->GroupGeneration, v->RingIdx, v->FailDomainIdx, v->VDiskIdx);
                 auto value = v->Metrics;
                 value.ClearVDiskId();
                 db.Table<Schema::VDiskMetrics>().Key(key).Update<Schema::VDiskMetrics::Metrics>(value);
@@ -36,10 +37,25 @@ public:
             }
         }
 
+        for (auto& [vslotId, v] : Self->StaticVSlots) {
+            if (std::exchange(v.MetricsDirty, false)) {
+                Self->SysViewChangedVSlots.insert(vslotId);
+                auto vdiskId = v.VDiskId;
+                auto groupId = vdiskId.GroupID.GetRawId();
+                auto&& key = std::tie(groupId, vdiskId.GroupGeneration, vdiskId.FailRealm, vdiskId.FailDomain, vdiskId.VDisk);
+                auto value = v.VDiskMetrics;
+                value->ClearVDiskId();
+                db.Table<Schema::VDiskMetrics>().Key(key).Update<Schema::VDiskMetrics::Metrics>(*value);
+                Self->SysViewChangedGroups.insert(vdiskId.GroupID);
+            }
+        }
         return true;
     }
 
-    void Complete(const TActorContext&) override {}
+    void Complete(const TActorContext&) override {
+        TActivationContext::Schedule(TDuration::Seconds(15), new IEventHandle(TEvPrivate::EvCommitMetrics, 0,
+            Self->SelfId(), TActorId(), nullptr, 0));
+    }
 };
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr &ev) {
@@ -68,6 +84,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
         } else if (const auto it = StaticVDiskMap.find(vdiskId); it != StaticVDiskMap.end()) {
             TStaticVSlotInfo& info = StaticVSlots.at(it->second);
             info.VDiskMetrics = m;
+            info.MetricsDirty = true;
         } else {
             STLOG(PRI_NOTICE, BS_CONTROLLER, BSCTXUDM02, "VDisk not found", (VDiskId, vdiskId));
         }
@@ -90,6 +107,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
                 }
             }
             pdisk->UpdateOperational(true);
+            SysViewChangedPDisks.insert(pdiskId);
         } else if (const auto it = StaticPDisks.find(pdiskId); it != StaticPDisks.end()) {
             it->second.PDiskMetrics = m;
         } else {
@@ -102,12 +120,10 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
 
     // process VDisk status
     ProcessVDiskStatus(record.GetVDiskStatus());
+}
 
-    // commit into database if enough time has passed
-    if (now - LastMetricsCommit >= TDuration::Seconds(15)) {
-        Execute(new TTxUpdateDiskMetrics(this));
-        LastMetricsCommit = now;
-    }
+void TBlobStorageController::CommitMetrics() {
+    Execute(new TTxUpdateDiskMetrics(this));
 }
 
 } // NKikimr::NBsController

@@ -9,12 +9,12 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/plain_status/status.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NLocalPgWire {
@@ -50,6 +50,12 @@ public:
         auto& record = ev->Record;
         record.SetPgWire(true);
         NKikimrKqp::TCreateSessionRequest& request = *record.MutableRequest();
+        if (ConnectionParams.count("application_name")) {
+            record.SetApplicationName(ConnectionParams["application_name"]);
+        }
+        if (ConnectionParams.count("user")) {
+            record.SetUserName(ConnectionParams["user"]);
+        }
         request.SetDatabase(database);
         BLOG_D("Sent CreateSessionRequest to kqpProxy " << ev->Record.ShortDebugString());
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
@@ -75,6 +81,7 @@ public:
             // TODO: report actuall error
             response->ErrorFields.push_back({'E', "ERROR"});
             response->ErrorFields.push_back({'M', record.GetError()});
+            //response->DropConnection = true; // it always closes connection on error on handshake
             Send(ConnectionEvent->Sender, response.Release(), 0, ev->Cookie);
             return PassAway();
         }

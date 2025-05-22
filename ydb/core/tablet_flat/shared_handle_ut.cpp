@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr {
+namespace NKikimr::NSharedCache {
 
 Y_UNIT_TEST_SUITE(TPageHandleTest) {
     class TTestHandle : public TSharedPageHandle {

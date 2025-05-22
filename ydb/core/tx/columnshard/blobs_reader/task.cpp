@@ -5,52 +5,53 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
-const std::vector<std::shared_ptr<IBlobsReadingAction>>& ITask::GetAgents() const {
-    Y_ABORT_UNLESS(!BlobsFetchingStarted);
-    return Agents;
-}
-
-bool ITask::AddError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
-    ++BlobErrorsCount;
+bool ITask::AddError(const TString& storageIdExt, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
+    const TString storageId = storageIdExt ? storageIdExt : IStoragesManager::DefaultStorageId;
+    AFL_VERIFY(--BlobsWaitingCount >= 0);
     if (TaskFinishedWithError || AbortFlag) {
-        ACFL_WARN("event", "SkipError")("blob_range", range)("message", status.GetErrorMessage())("status", status.GetStatus())("external_task_id", ExternalTaskId)("consumer", TaskCustomer)
+        ACFL_WARN("event", "SkipError")("storage_id", storageId)("blob_range", range)("message", status.GetErrorMessage())("status", status.GetStatus())("external_task_id", ExternalTaskId)("consumer", TaskCustomer)
             ("abort", AbortFlag)("finished_with_error", TaskFinishedWithError);
         return false;
     } else {
-        ACFL_ERROR("event", "NewError")("blob_range", range)("message", status.GetErrorMessage())("status", status.GetStatus())("external_task_id", ExternalTaskId)("consumer", TaskCustomer);
+        ACFL_ERROR("event", "NewError")("storage_id", storageId)("blob_range", range)("message", status.GetErrorMessage())("status", status.GetStatus())("external_task_id", ExternalTaskId)("consumer", TaskCustomer);
     }
     {
-        auto it = BlobsWaiting.find(range);
-        AFL_VERIFY(it != BlobsWaiting.end());
+        auto it = AgentsWaiting.find(storageId);
+        AFL_VERIFY(it != AgentsWaiting.end())("storage_id", storageId);
         it->second->OnReadError(range, status);
-        BlobsWaiting.erase(it);
+        if (it->second->IsFinished()) {
+            AgentsWaiting.erase(it);
+        }
     }
-    if (!OnError(range, status)) {
+    if (!OnError(storageId, range, status)) {
         TaskFinishedWithError = true;
         return false;
     }
-    if (BlobsWaiting.empty()) {
+    if (AgentsWaiting.empty()) {
         OnDataReady();
     }
     return true;
 }
 
-void ITask::AddData(const TBlobRange& range, const TString& data) {
-    ++BlobsDataCount;
+void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const TString& data) {
+    const TString storageId = storageIdExt ? storageIdExt : IStoragesManager::DefaultStorageId;
+    AFL_VERIFY(--BlobsWaitingCount >= 0);
     if (TaskFinishedWithError || AbortFlag) {
-        ACFL_WARN("event", "SkipDataAfterError")("external_task_id", ExternalTaskId)("abort", AbortFlag)("finished_with_error", TaskFinishedWithError);
+        ACFL_WARN("event", "SkipDataAfterError")("storage_id", storageId)("external_task_id", ExternalTaskId)("abort", AbortFlag)("finished_with_error", TaskFinishedWithError);
         return;
     } else {
-        ACFL_TRACE("event", "NewData")("range", range.ToString())("external_task_id", ExternalTaskId);
+        ACFL_TRACE("event", "NewData")("storage_id", storageId)("range", range.ToString())("external_task_id", ExternalTaskId);
     }
     Y_ABORT_UNLESS(BlobsFetchingStarted);
     {
-        auto it = BlobsWaiting.find(range);
-        AFL_VERIFY(it != BlobsWaiting.end());
+        auto it = AgentsWaiting.find(storageId);
+        AFL_VERIFY(it != AgentsWaiting.end())("storage_id", storageId);
         it->second->OnReadResult(range, data);
-        BlobsWaiting.erase(it);
+        if (it->second->IsFinished()) {
+            AgentsWaiting.erase(it);
+        }
     }
-    if (BlobsWaiting.empty()) {
+    if (AgentsWaiting.empty()) {
         OnDataReady();
     }
 }
@@ -59,24 +60,15 @@ void ITask::StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress) {
     ACFL_TRACE("task_id", ExternalTaskId)("event", "start");
     Y_ABORT_UNLESS(!BlobsFetchingStarted);
     BlobsFetchingStarted = true;
-    ui64 allRangesSize = 0;
-    ui64 allRangesCount = 0;
-    ui64 readRangesCount = 0;
+    AFL_VERIFY(BlobsWaitingCount == 0);
     for (auto&& agent : Agents) {
-        allRangesSize += agent->GetExpectedBlobsSize();
-        allRangesCount += agent->GetExpectedBlobsCount();
-        for (auto&& b : agent->GetRangesForRead()) {
-            for (auto&& r : b.second) {
-                BlobsWaiting.emplace(r, agent);
-                ++readRangesCount;
-            }
+        agent.second->Start(rangesInProgress);
+        if (!agent.second->IsFinished()) {
+            AgentsWaiting.emplace(agent.second->GetStorageId(), agent.second);
+            BlobsWaitingCount += agent.second->GetGroups().size();
         }
-        agent->Start(rangesInProgress);
     }
-    ReadRangesCount = readRangesCount;
-    AllRangesCount = allRangesCount;
-    AllRangesSize = allRangesSize;
-    if (BlobsWaiting.empty()) {
+    if (AgentsWaiting.empty()) {
         OnDataReady();
     }
 }
@@ -91,15 +83,15 @@ void ITask::TReadSubscriber::DoOnAllocationSuccess(const std::shared_ptr<NResour
     TActorContext::AsActorContext().Register(new NRead::TActor(Task));
 }
 
-ITask::ITask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions, const TString& taskCustomer, const TString& externalTaskId)
-    : Agents(actions)
-    , TaskIdentifier(TaskIdentifierBuilder.Inc())
+ITask::ITask(const TReadActionsCollection& actions, const TString& taskCustomer, const TString& externalTaskId)
+    : TaskIdentifier(TaskIdentifierBuilder.Inc())
     , ExternalTaskId(externalTaskId)
     , TaskCustomer(taskCustomer)
 {
-    AFL_VERIFY(Agents.size());
+    Agents = actions;
+//    AFL_VERIFY(!Agents.IsEmpty());
     for (auto&& i : Agents) {
-        AFL_VERIFY(i->GetExpectedBlobsCount());
+        AFL_VERIFY(i.second->GetExpectedBlobsCount());
     }
 }
 
@@ -108,11 +100,7 @@ TString ITask::DebugString() const {
     if (TaskFinishedWithError) {
         sb << "finished_with_error=" << TaskFinishedWithError << ";";
     }
-    if (BlobErrorsCount) {
-        sb << "blob_errors=" << BlobErrorsCount << ";";
-    }
-    sb << "data=" << BlobsDataCount << ";"
-        << "waiting=" << BlobsWaiting.size() << ";"
+    sb << "agents_waiting=" << AgentsWaiting.size() << ";"
         << "additional_info=(" << DoDebugString() << ");"
         ;
     return sb;
@@ -125,22 +113,22 @@ void ITask::OnDataReady() {
     DoOnDataReady(ResourcesGuard);
 }
 
-bool ITask::OnError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
+bool ITask::OnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
     ACFL_DEBUG("event", "OnError")("status", status.GetStatus())("task", DebugString());
-    return DoOnError(range, status);
+    return DoOnError(storageId, range, status);
 }
 
 ITask::~ITask() {
     AFL_VERIFY(!NActors::TlsActivationContext || DataIsReadyFlag || TaskFinishedWithError || AbortFlag || !BlobsFetchingStarted);
 }
 
-THashMap<NKikimr::NOlap::TBlobRange, TString> ITask::ExtractBlobsData() {
-    AFL_VERIFY(BlobsWaiting.empty());
+TCompositeReadBlobs ITask::ExtractBlobsData() {
+    AFL_VERIFY(AgentsWaiting.empty());
     AFL_VERIFY(!ResultsExtracted);
     ResultsExtracted = true;
-    THashMap<TBlobRange, TString> result;
+    TCompositeReadBlobs result;
     for (auto&& i : Agents) {
-        i->ExtractBlobsDataTo(result);
+        result.Add(i.second->GetStorageId(), i.second->ExtractBlobsData());
     }
     return std::move(result);
 }

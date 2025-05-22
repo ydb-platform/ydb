@@ -2,7 +2,7 @@
 
 #include "params.h"
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TParams::TImpl {
 public:

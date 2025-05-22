@@ -1,0 +1,13 @@
+{%- set tools = current_target.tools -%}
+{%- if tools|length %}
+
+if(NOT CMAKE_CROSSCOMPILING)
+  add_dependencies({{ name }}
+{%-    for tool in tools %}
+{%-         set path_and_name = rsplit(tool, "/", 2) -%}
+{%-         set toolName = path_and_name[1] %}
+    {{ toolName }}
+{%-    endfor %}
+  )
+endif()
+{%  endif -%}

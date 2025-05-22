@@ -1,0 +1,113 @@
+import "ydb/core/config/protos/marker.proto";
+
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message SomeComplexMessage {
+    option (NMarkers.CombinedType) = true;
+    optional string StringField = 1;
+    optional uint32 IntField = 2 [
+    (NMarkers.AdvancedCopyTo) = {
+        Target: "AnotherComplexMessage"
+        Rename: "StringField"
+        // Keep: true // currently not supported
+        Transform: true
+    },
+    (NMarkers.AdvancedCopyTo) = {
+        Target: "AnotherComplexMessage"
+        Transform: true
+    }];
+}
+
+message AnotherComplexMessage {
+    optional string StringField = 1;
+    optional uint32 IntField = 2;
+}
+
+message SourceMessage {
+    option (NMarkers.CombinedType) = true;
+    optional string StringField1 = 1;
+    optional string StringField2 = 2 [(NMarkers.CopyTo) = "FirstSinkMessage", (NMarkers.AdvancedCopyTo) = {
+        Target: "ThirdSinkMessage"
+    }];
+    optional string StringField3 = 3 [(NMarkers.CopyTo) = "SecondSinkMessage"];
+    optional string StringField4 = 4 [(NMarkers.CopyTo) = "FirstSinkMessage", (NMarkers.CopyTo) = "SecondSinkMessage",
+    (NMarkers.AdvancedCopyTo) = {
+        Target: "ThirdSinkMessage"
+        Keep: true
+    },
+    (NMarkers.AdvancedCopyTo) = {
+        Target: "FourthSinkMessage"
+    }];
+    repeated string StringField5 = 5;
+    repeated string StringField6 = 6 [(NMarkers.CopyTo) = "FirstSinkMessage", (NMarkers.AdvancedCopyTo) = {
+        Target: "ThirdSinkMessage"
+        Keep: true
+        Rename: "RenamedStringField1"
+    }];
+    repeated string StringField7 = 7 [(NMarkers.CopyTo) = "SecondSinkMessage", (NMarkers.AdvancedCopyTo) = {
+        Target: "ThirdSinkMessage"
+        Rename: "RenamedStringField2"
+    }];
+    repeated string StringField8 = 8 [(NMarkers.CopyTo) = "FirstSinkMessage", (NMarkers.CopyTo) = "SecondSinkMessage",  (NMarkers.AdvancedCopyTo) = {
+        Target: "ThirdSinkMessage"
+        Transform: true
+    }];
+    optional uint32 IntField = 9;
+    optional SomeComplexMessage ComplexMessage1 = 10;
+    optional SomeComplexMessage ComplexMessage2 = 11 [(NMarkers.CopyTo) = "FirstSinkMessage",
+    (NMarkers.AdvancedCopyTo) = {
+        Target: "ThirdSinkMessage"
+        Keep: true
+        Rename: "RenamedComplexField1"
+    },
+    (NMarkers.AdvancedCopyTo) = {
+        Target: "FourthSinkMessage"
+        Recurse: "AnotherComplexMessage"
+    }];
+    optional SomeComplexMessage ComplexMessage3 = 12 [(NMarkers.CopyTo) = "SecondSinkMessage"];
+    optional SomeComplexMessage ComplexMessage4 = 13 [(NMarkers.CopyTo) = "FirstSinkMessage", (NMarkers.CopyTo) = "SecondSinkMessage"];
+    repeated SomeComplexMessage ComplexMessage5 = 14;
+    repeated SomeComplexMessage ComplexMessage6 = 15 [(NMarkers.CopyTo) = "FirstSinkMessage"];
+    repeated SomeComplexMessage ComplexMessage7 = 16 [(NMarkers.CopyTo) = "SecondSinkMessage"];
+    repeated SomeComplexMessage ComplexMessage8 = 17 [(NMarkers.CopyTo) = "FirstSinkMessage", (NMarkers.CopyTo) = "SecondSinkMessage"];
+}
+
+message FirstSinkMessage {
+    optional string StringField2 = 1;
+    optional string StringField4 = 3;
+    repeated string StringField6 = 4;
+    repeated string StringField8 = 8;
+    optional uint32 IntField = 9;
+    optional SomeComplexMessage ComplexMessage2 = 101;
+    optional SomeComplexMessage ComplexMessage4 = 103;
+    repeated SomeComplexMessage ComplexMessage6 = 104;
+    repeated SomeComplexMessage ComplexMessage8 = 106;
+}
+
+message SecondSinkMessage {
+    optional string StringField3 = 2;
+    optional string StringField4 = 3;
+    repeated string StringField7 = 5;
+    repeated string StringField8 = 8;
+    optional uint32 IntField = 9;
+    optional SomeComplexMessage ComplexMessage3 = 102;
+    optional SomeComplexMessage ComplexMessage4 = 103;
+    repeated SomeComplexMessage ComplexMessage7 = 105;
+    repeated SomeComplexMessage ComplexMessage8 = 106;
+}
+
+message ThirdSinkMessage {
+    optional string StringField2 = 1;
+    optional string StringField4 = 2;
+    repeated string StringField8 = 3;
+    repeated string RenamedStringField1 = 4;
+    repeated string RenamedStringField2 = 5;
+    optional SomeComplexMessage ComplexMessage1 = 99;
+    optional SomeComplexMessage RenamedComplexField1 = 102;
+}
+
+message FourthSinkMessage {
+    optional string StringField4 = 1;
+    optional AnotherComplexMessage ComplexMessage2 = 2;
+}

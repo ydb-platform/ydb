@@ -66,8 +66,10 @@ void CSVReporter::ReportRuns(const std::vector<Run>& reports) {
     // save the names of all the user counters
     for (const auto& run : reports) {
       for (const auto& cnt : run.counters) {
-        if (cnt.first == "bytes_per_second" || cnt.first == "items_per_second")
+        if (cnt.first == "bytes_per_second" ||
+            cnt.first == "items_per_second") {
           continue;
+        }
         user_counter_names_.insert(cnt.first);
       }
     }
@@ -75,7 +77,9 @@ void CSVReporter::ReportRuns(const std::vector<Run>& reports) {
     // print the header
     for (auto B = elements.begin(); B != elements.end();) {
       Out << *B++;
-      if (B != elements.end()) Out << ",";
+      if (B != elements.end()) {
+        Out << ",";
+      }
     }
     for (auto B = user_counter_names_.begin();
          B != user_counter_names_.end();) {
@@ -88,8 +92,10 @@ void CSVReporter::ReportRuns(const std::vector<Run>& reports) {
     // check that all the current counters are saved in the name set
     for (const auto& run : reports) {
       for (const auto& cnt : run.counters) {
-        if (cnt.first == "bytes_per_second" || cnt.first == "items_per_second")
+        if (cnt.first == "bytes_per_second" ||
+            cnt.first == "items_per_second") {
           continue;
+        }
         BM_CHECK(user_counter_names_.find(cnt.first) !=
                  user_counter_names_.end())
             << "All counters must be present in each run. "
@@ -109,7 +115,7 @@ BENCHMARK_EXPORT
 void CSVReporter::PrintRunData(const Run& run) {
   std::ostream& Out = GetOutputStream();
   Out << CsvEscape(run.benchmark_name()) << ",";
-  if (run.skipped) {
+  if (run.skipped != 0u) {
     Out << std::string(elements.size() - 3, ',');
     Out << std::boolalpha << (internal::SkippedWithError == run.skipped) << ",";
     Out << CsvEscape(run.skip_message) << "\n";
@@ -122,13 +128,21 @@ void CSVReporter::PrintRunData(const Run& run) {
   }
   Out << ",";
 
-  Out << run.GetAdjustedRealTime() << ",";
-  Out << run.GetAdjustedCPUTime() << ",";
+  if (run.run_type != Run::RT_Aggregate ||
+      run.aggregate_unit == StatisticUnit::kTime) {
+    Out << run.GetAdjustedRealTime() << ",";
+    Out << run.GetAdjustedCPUTime() << ",";
+  } else {
+    assert(run.aggregate_unit == StatisticUnit::kPercentage);
+    Out << run.real_accumulated_time << ",";
+    Out << run.cpu_accumulated_time << ",";
+  }
 
   // Do not print timeLabel on bigO and RMS report
   if (run.report_big_o) {
     Out << GetBigOString(run.complexity);
-  } else if (!run.report_rms) {
+  } else if (!run.report_rms &&
+             run.aggregate_unit != StatisticUnit::kPercentage) {
     Out << GetTimeUnitString(run.time_unit);
   }
   Out << ",";

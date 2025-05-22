@@ -91,6 +91,7 @@ private:
     struct TProxyInfo {
         TActorId ActorID;
         ui64 Generation = 0;
+        TActorId InterconnectSession;
         THashSet<ui64> AttachedSessions;
     };
 

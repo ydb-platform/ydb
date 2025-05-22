@@ -6,6 +6,8 @@
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <bit>
+
 namespace NKikimr {
 
 template<typename TDerived>
@@ -76,8 +78,8 @@ public:
             auto layout = GetActualPartLayout(id);
             const ui32 disksWithData = layout.GetDisksWithPart(0) | layout.GetDisksWithPart(1);
             const ui32 disksWithMetadata = layout.GetDisksWithPart(2);
-            const ui32 numDisksWithData = PopCount(disksWithData);
-            const ui32 numDisksWithAny = PopCount(disksWithData | disksWithMetadata);
+            const ui32 numDisksWithData = std::popcount(disksWithData);
+            const ui32 numDisksWithAny = std::popcount(disksWithData | disksWithMetadata);
             UNIT_ASSERT(numDisksWithAny >= 5);
             auto printLayout = [&] {
                 TStringStream s;

@@ -16,10 +16,10 @@
  * limitations under the License.
  */
 
+#include "PredicateLeaf.hh"
 #include "orc/BloomFilter.hh"
 #include "orc/Common.hh"
 #include "orc/Type.hh"
-#include "PredicateLeaf.hh"
 
 #include <algorithm>
 #include <functional>
@@ -28,98 +28,79 @@
 
 namespace orc {
 
-  PredicateLeaf::PredicateLeaf(Operator op,
-                               PredicateDataType type,
-                               const std::string& colName,
+  PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName,
                                Literal literal)
-                              : mOperator(op)
-                              , mType(type)
-                              , mColumnName(colName)
-                              , mHasColumnName(true)
-                              , mColumnId(0) {
-    mLiterals.emplace_back(literal);
-    mHashCode = hashCode();
+      : operator_(op), type_(type), columnName_(colName), hasColumnName_(true), columnId_(0) {
+    literals_.emplace_back(literal);
+    hashCode_ = hashCode();
     validate();
   }
 
-  PredicateLeaf::PredicateLeaf(Operator op,
-                               PredicateDataType type,
-                               uint64_t columnId,
+  PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId,
                                Literal literal)
-                              : mOperator(op)
-                              , mType(type)
-                              , mHasColumnName(false)
-                              , mColumnId(columnId) {
-    mLiterals.emplace_back(literal);
-    mHashCode = hashCode();
+      : operator_(op), type_(type), hasColumnName_(false), columnId_(columnId) {
+    literals_.emplace_back(literal);
+    hashCode_ = hashCode();
     validate();
   }
 
-  PredicateLeaf::PredicateLeaf(Operator op,
-                               PredicateDataType type,
-                               const std::string& colName,
+  PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName,
                                const std::initializer_list<Literal>& literals)
-                              : mOperator(op)
-                              , mType(type)
-                              , mColumnName(colName)
-                              , mHasColumnName(true)
-                              , mLiterals(literals.begin(), literals.end()) {
-    mHashCode = hashCode();
+      : operator_(op),
+        type_(type),
+        columnName_(colName),
+        hasColumnName_(true),
+        literals_(literals.begin(), literals.end()) {
+    hashCode_ = hashCode();
     validate();
   }
 
-  PredicateLeaf::PredicateLeaf(Operator op,
-                               PredicateDataType type,
-                               uint64_t columnId,
+  PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId,
                                const std::initializer_list<Literal>& literals)
-                              : mOperator(op)
-                              , mType(type)
-                              , mHasColumnName(false)
-                              , mColumnId(columnId)
-                              , mLiterals(literals.begin(), literals.end()) {
-    mHashCode = hashCode();
+      : operator_(op),
+        type_(type),
+        hasColumnName_(false),
+        columnId_(columnId),
+        literals_(literals.begin(), literals.end()) {
+    hashCode_ = hashCode();
     validate();
   }
 
-  PredicateLeaf::PredicateLeaf(Operator op,
-                               PredicateDataType type,
-                               const std::string& colName,
+  PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName,
                                const std::vector<Literal>& literals)
-                              : mOperator(op)
-                              , mType(type)
-                              , mColumnName(colName)
-                              , mHasColumnName(true)
-                              , mLiterals(literals.begin(), literals.end()) {
-    mHashCode = hashCode();
+      : operator_(op),
+        type_(type),
+        columnName_(colName),
+        hasColumnName_(true),
+        literals_(literals.begin(), literals.end()) {
+    hashCode_ = hashCode();
     validate();
   }
 
-  PredicateLeaf::PredicateLeaf(Operator op,
-                               PredicateDataType type,
-                               uint64_t columnId,
+  PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId,
                                const std::vector<Literal>& literals)
-                              : mOperator(op)
-                              , mType(type)
-                              , mHasColumnName(false)
-                              , mColumnId(columnId)
-                              , mLiterals(literals.begin(), literals.end()) {
-    mHashCode = hashCode();
+      : operator_(op),
+        type_(type),
+        hasColumnName_(false),
+        columnId_(columnId),
+        literals_(literals.begin(), literals.end()) {
+    hashCode_ = hashCode();
     validate();
   }
 
   void PredicateLeaf::validateColumn() const {
-    if (mHasColumnName && mColumnName.empty()) {
+    if (hasColumnName_ && columnName_.empty()) {
       throw std::invalid_argument("column name should not be empty");
-    } else if (!mHasColumnName && mColumnId == INVALID_COLUMN_ID) {
+    } else if (!hasColumnName_ && columnId_ == INVALID_COLUMN_ID) {
       throw std::invalid_argument("invalid column id");
     }
   }
 
   void PredicateLeaf::validate() const {
-    switch (mOperator) {
+    switch (operator_) {
       case Operator::IS_NULL:
         validateColumn();
-        if (!mLiterals.empty()) {
+        if (!literals_.empty()) {
           throw std::invalid_argument("No literal is required!");
         }
         break;
@@ -128,29 +109,28 @@ namespace orc {
       case Operator::LESS_THAN:
       case Operator::LESS_THAN_EQUALS:
         validateColumn();
-        if (mLiterals.size() != 1) {
+        if (literals_.size() != 1) {
           throw std::invalid_argument("One literal is required!");
         }
-        if (static_cast<int>(mLiterals.at(0).getType()) !=
-            static_cast<int>(mType)) {
+        if (static_cast<int>(literals_.at(0).getType()) != static_cast<int>(type_)) {
           throw std::invalid_argument("leaf and literal types do not match!");
         }
         break;
       case Operator::IN:
         validateColumn();
-        if (mLiterals.size() < 2) {
+        if (literals_.size() < 2) {
           throw std::invalid_argument("At least two literals are required!");
         }
-        for (auto literal : mLiterals) {
-          if (static_cast<int>(literal.getType()) != static_cast<int>(mType)) {
+        for (auto literal : literals_) {
+          if (static_cast<int>(literal.getType()) != static_cast<int>(type_)) {
             throw std::invalid_argument("leaf and literal types do not match!");
           }
         }
         break;
       case Operator::BETWEEN:
         validateColumn();
-        for (auto literal : mLiterals) {
-          if (static_cast<int>(literal.getType()) != static_cast<int>(mType)) {
+        for (auto literal : literals_) {
+          if (static_cast<int>(literal.getType()) != static_cast<int>(type_)) {
             throw std::invalid_argument("leaf and literal types do not match!");
           }
         }
@@ -161,40 +141,40 @@ namespace orc {
   }
 
   PredicateLeaf::Operator PredicateLeaf::getOperator() const {
-    return mOperator;
+    return operator_;
   }
 
   PredicateDataType PredicateLeaf::getType() const {
-    return mType;
+    return type_;
   }
 
   bool PredicateLeaf::hasColumnName() const {
-    return mHasColumnName;
+    return hasColumnName_;
   }
 
   /**
    * Get the simple column name.
    */
   const std::string& PredicateLeaf::getColumnName() const {
-    return mColumnName;
+    return columnName_;
   }
 
   uint64_t PredicateLeaf::getColumnId() const {
-    return mColumnId;
+    return columnId_;
   }
 
   /**
    * Get the literal half of the predicate leaf.
    */
   Literal PredicateLeaf::getLiteral() const {
-    return mLiterals.at(0);
+    return literals_.at(0);
   }
 
   /**
    * For operators with multiple literals (IN and BETWEEN), get the literals.
    */
   const std::vector<Literal>& PredicateLeaf::getLiteralList() const {
-    return mLiterals;
+    return literals_;
   }
 
   static std::string getLiteralString(const std::vector<Literal>& literals) {
@@ -215,42 +195,40 @@ namespace orc {
   }
 
   std::string PredicateLeaf::columnDebugString() const {
-    if (mHasColumnName) return mColumnName;
+    if (hasColumnName_) return columnName_;
     std::ostringstream sstream;
-    sstream << "column(id=" << mColumnId << ')';
+    sstream << "column(id=" << columnId_ << ')';
     return sstream.str();
   }
 
   std::string PredicateLeaf::toString() const {
     std::ostringstream sstream;
     sstream << '(';
-    switch (mOperator) {
+    switch (operator_) {
       case Operator::IS_NULL:
         sstream << columnDebugString() << " is null";
         break;
       case Operator::EQUALS:
-        sstream << columnDebugString() << " = " << getLiteralString(mLiterals);
+        sstream << columnDebugString() << " = " << getLiteralString(literals_);
         break;
       case Operator::NULL_SAFE_EQUALS:
-        sstream << columnDebugString() << " null_safe_= "
-                << getLiteralString(mLiterals);
+        sstream << columnDebugString() << " null_safe_= " << getLiteralString(literals_);
         break;
       case Operator::LESS_THAN:
-        sstream << columnDebugString() << " < " << getLiteralString(mLiterals);
+        sstream << columnDebugString() << " < " << getLiteralString(literals_);
         break;
       case Operator::LESS_THAN_EQUALS:
-        sstream << columnDebugString() << " <= " << getLiteralString(mLiterals);
+        sstream << columnDebugString() << " <= " << getLiteralString(literals_);
         break;
       case Operator::IN:
-        sstream << columnDebugString() << " in " << getLiteralsString(mLiterals);
+        sstream << columnDebugString() << " in " << getLiteralsString(literals_);
         break;
       case Operator::BETWEEN:
-        sstream << columnDebugString() << " between " << getLiteralsString(mLiterals);
+        sstream << columnDebugString() << " between " << getLiteralsString(literals_);
         break;
       default:
-        sstream << "unknown operator, column: "
-                << columnDebugString() << ", literals: "
-                << getLiteralsString(mLiterals);
+        sstream << "unknown operator, column: " << columnDebugString()
+                << ", literals: " << getLiteralsString(literals_);
     }
     sstream << ')';
     return sstream.str();
@@ -258,30 +236,25 @@ namespace orc {
 
   size_t PredicateLeaf::hashCode() const {
     size_t value = 0;
-    std::for_each(mLiterals.cbegin(), mLiterals.cend(),
-      [&](const Literal& literal) {
-      value = value * 17 + literal.getHashCode();
-    });
-    auto colHash = mHasColumnName ?
-        std::hash<std::string>{}(mColumnName) :
-        std::hash<uint64_t>{}(mColumnId);
-    return value * 103 * 101 * 3 * 17 +
-      std::hash<int>{}(static_cast<int>(mOperator)) +
-      std::hash<int>{}(static_cast<int>(mType)) * 17 +
-      colHash * 3 * 17;
+    std::for_each(literals_.cbegin(), literals_.cend(),
+                  [&](const Literal& literal) { value = value * 17 + literal.getHashCode(); });
+    auto colHash =
+        hasColumnName_ ? std::hash<std::string>{}(columnName_) : std::hash<uint64_t>{}(columnId_);
+    return value * 103 * 101 * 3 * 17 + std::hash<int>{}(static_cast<int>(operator_)) +
+           std::hash<int>{}(static_cast<int>(type_)) * 17 + colHash * 3 * 17;
   }
 
   bool PredicateLeaf::operator==(const PredicateLeaf& r) const {
     if (this == &r) {
       return true;
     }
-    if (mHashCode != r.mHashCode || mType != r.mType || mOperator != r.mOperator ||
-        mHasColumnName != r.mHasColumnName || mColumnName != r.mColumnName ||
-        mColumnId != r.mColumnId || mLiterals.size() != r.mLiterals.size()) {
+    if (hashCode_ != r.hashCode_ || type_ != r.type_ || operator_ != r.operator_ ||
+        hasColumnName_ != r.hasColumnName_ || columnName_ != r.columnName_ ||
+        columnId_ != r.columnId_ || literals_.size() != r.literals_.size()) {
       return false;
     }
-    for (size_t i = 0; i != mLiterals.size(); ++i) {
-      if (mLiterals[i] != r.mLiterals[i]) {
+    for (size_t i = 0; i != literals_.size(); ++i) {
+      if (literals_[i] != r.literals_[i]) {
         return false;
       }
     }
@@ -289,9 +262,7 @@ namespace orc {
   }
 
   // enum to mark the position of predicate in the range
-  enum class Location {
-    BEFORE, MIN, MIDDLE, MAX, AFTER
-  };
+  enum class Location { BEFORE, MIN, MIDDLE, MAX, AFTER };
 
   DIAGNOSTIC_PUSH
   DIAGNOSTIC_IGNORE("-Wfloat-equal")
@@ -331,11 +302,8 @@ namespace orc {
    * @return the TruthValue result of the test
    */
   template <typename T>
-  TruthValue evaluatePredicateRange(const PredicateLeaf::Operator op,
-                                    const std::vector<T>& values,
-                                    const T& minValue,
-                                    const T& maxValue,
-                                    bool hasNull) {
+  TruthValue evaluatePredicateRange(const PredicateLeaf::Operator op, const std::vector<T>& values,
+                                    const T& minValue, const T& maxValue, bool hasNull) {
     Location loc;
     switch (op) {
       case PredicateLeaf::Operator::NULL_SAFE_EQUALS:
@@ -387,8 +355,7 @@ namespace orc {
           // are all of the values outside of the range?
           for (auto& value : values) {
             loc = compareToRange(value, minValue, maxValue);
-            if (loc == Location::MIN || loc == Location::MIDDLE ||
-                loc == Location::MAX) {
+            if (loc == Location::MIN || loc == Location::MIDDLE || loc == Location::MAX) {
               return hasNull ? TruthValue::YES_NO_NULL : TruthValue::YES_NO;
             }
           }
@@ -423,19 +390,17 @@ namespace orc {
 
   DIAGNOSTIC_POP
 
-  static TruthValue evaluateBoolPredicate(
-                                        const PredicateLeaf::Operator op,
-                                        const std::vector<Literal>& literals,
-                                        const proto::ColumnStatistics& stats) {
-    bool hasNull = stats.hasnull();
-    if (!stats.has_bucketstatistics() ||
-        stats.bucketstatistics().count_size() == 0) {
+  static TruthValue evaluateBoolPredicate(const PredicateLeaf::Operator op,
+                                          const std::vector<Literal>& literals,
+                                          const proto::ColumnStatistics& stats) {
+    bool hasNull = stats.has_null();
+    if (!stats.has_bucket_statistics() || stats.bucket_statistics().count_size() == 0) {
       // does not have bool stats
       return hasNull ? TruthValue::YES_NO_NULL : TruthValue::YES_NO;
     }
 
-    auto trueCount = stats.bucketstatistics().count(0);
-    auto falseCount = stats.numberofvalues() - trueCount;
+    auto trueCount = stats.bucket_statistics().count(0);
+    auto falseCount = stats.number_of_values() - trueCount;
     switch (op) {
       case PredicateLeaf::Operator::IS_NULL:
         return hasNull ? TruthValue::YES_NO : TruthValue::NO;
@@ -500,8 +465,7 @@ namespace orc {
     return result;
   }
 
-  static std::vector<Literal::Timestamp> literal2Timestamp(
-                                           const std::vector<Literal>& values) {
+  static std::vector<Literal::Timestamp> literal2Timestamp(const std::vector<Literal>& values) {
     std::vector<Literal::Timestamp> result;
     std::for_each(values.cbegin(), values.cend(), [&](const Literal& val) {
       if (!val.isNull()) {
@@ -511,8 +475,7 @@ namespace orc {
     return result;
   }
 
-  static std::vector<Decimal> literal2Decimal(
-                                           const std::vector<Literal>& values) {
+  static std::vector<Decimal> literal2Decimal(const std::vector<Literal>& values) {
     std::vector<Decimal> result;
     std::for_each(values.cbegin(), values.cend(), [&](const Literal& val) {
       if (!val.isNull()) {
@@ -522,8 +485,7 @@ namespace orc {
     return result;
   }
 
-  static std::vector<double> literal2Double(
-                                           const std::vector<Literal>& values) {
+  static std::vector<double> literal2Double(const std::vector<Literal>& values) {
     std::vector<double> result;
     std::for_each(values.cbegin(), values.cend(), [&](const Literal& val) {
       if (!val.isNull()) {
@@ -533,126 +495,95 @@ namespace orc {
     return result;
   }
 
-  static std::vector<TString> literal2String(
-                                           const std::vector<Literal>& values) {
-    std::vector<TString> result;
+  static std::vector<TProtobufString> literal2String(const std::vector<Literal>& values) {
+    std::vector<TProtobufString> result;
     std::for_each(values.cbegin(), values.cend(), [&](const Literal& val) {
       if (!val.isNull()) {
-        result.emplace_back(TString(val.getString()));
+        result.emplace_back(TProtobufString(val.getString()));
       }
     });
     return result;
   }
 
-  TruthValue PredicateLeaf::evaluatePredicateMinMax(
-                                const proto::ColumnStatistics& colStats) const {
+  TruthValue PredicateLeaf::evaluatePredicateMinMax(const proto::ColumnStatistics& colStats) const {
     TruthValue result = TruthValue::YES_NO_NULL;
-    switch (mType) {
+    switch (type_) {
       case PredicateDataType::LONG: {
-        if (colStats.has_intstatistics() &&
-            colStats.intstatistics().has_minimum() &&
-            colStats.intstatistics().has_maximum()) {
-          const auto& stats = colStats.intstatistics();
-          result = evaluatePredicateRange(
-            mOperator,
-            literal2Long(mLiterals),
-            stats.minimum(),
-            stats.maximum(),
-            colStats.hasnull());
+        if (colStats.has_int_statistics() && colStats.int_statistics().has_minimum() &&
+            colStats.int_statistics().has_maximum()) {
+          const auto& stats = colStats.int_statistics();
+          result = evaluatePredicateRange(operator_, literal2Long(literals_), stats.minimum(),
+                                          stats.maximum(), colStats.has_null());
         }
         break;
       }
       case PredicateDataType::FLOAT: {
-        if (colStats.has_doublestatistics() &&
-            colStats.doublestatistics().has_minimum() &&
-            colStats.doublestatistics().has_maximum()) {
-          const auto& stats = colStats.doublestatistics();
+        if (colStats.has_double_statistics() && colStats.double_statistics().has_minimum() &&
+            colStats.double_statistics().has_maximum()) {
+          const auto& stats = colStats.double_statistics();
           if (!std::isfinite(stats.sum())) {
-              result = colStats.hasnull() ?
-                      TruthValue::YES_NO_NULL : TruthValue::YES_NO;
+            result = colStats.has_null() ? TruthValue::YES_NO_NULL : TruthValue::YES_NO;
           } else {
-              result = evaluatePredicateRange(
-                      mOperator,
-                      literal2Double(mLiterals),
-                      stats.minimum(),
-                      stats.maximum(),
-                      colStats.hasnull());
+            result = evaluatePredicateRange(operator_, literal2Double(literals_), stats.minimum(),
+                                            stats.maximum(), colStats.has_null());
           }
         }
         break;
       }
       case PredicateDataType::STRING: {
-        ///TODO: check lowerBound and upperBound as well
-        if (colStats.has_stringstatistics() &&
-            colStats.stringstatistics().has_minimum() &&
-            colStats.stringstatistics().has_maximum()) {
-          const auto& stats = colStats.stringstatistics();
-          result = evaluatePredicateRange(
-            mOperator,
-            literal2String(mLiterals),
-            stats.minimum(),
-            stats.maximum(),
-            colStats.hasnull());
+        /// TODO: check lowerBound and upperBound as well
+        if (colStats.has_string_statistics() && colStats.string_statistics().has_minimum() &&
+            colStats.string_statistics().has_maximum()) {
+          const auto& stats = colStats.string_statistics();
+          result = evaluatePredicateRange(operator_, literal2String(literals_), stats.minimum(),
+                                          stats.maximum(), colStats.has_null());
         }
         break;
       }
       case PredicateDataType::DATE: {
-        if (colStats.has_datestatistics() &&
-            colStats.datestatistics().has_minimum() &&
-            colStats.datestatistics().has_maximum()) {
-          const auto& stats = colStats.datestatistics();
-          result = evaluatePredicateRange(
-            mOperator,
-            literal2Date(mLiterals),
-            stats.minimum(),
-            stats.maximum(),
-            colStats.hasnull());
+        if (colStats.has_date_statistics() && colStats.date_statistics().has_minimum() &&
+            colStats.date_statistics().has_maximum()) {
+          const auto& stats = colStats.date_statistics();
+          result = evaluatePredicateRange(operator_, literal2Date(literals_), stats.minimum(),
+                                          stats.maximum(), colStats.has_null());
         }
         break;
       }
       case PredicateDataType::TIMESTAMP: {
-        if (colStats.has_timestampstatistics() &&
-            colStats.timestampstatistics().has_minimumutc() &&
-            colStats.timestampstatistics().has_maximumutc()) {
-          const auto& stats = colStats.timestampstatistics();
+        if (colStats.has_timestamp_statistics() &&
+            colStats.timestamp_statistics().has_minimum_utc() &&
+            colStats.timestamp_statistics().has_maximum_utc()) {
+          const auto& stats = colStats.timestamp_statistics();
           constexpr int32_t DEFAULT_MIN_NANOS = 0;
           constexpr int32_t DEFAULT_MAX_NANOS = 999999;
-          int32_t minNano = stats.has_minimumnanos() ?
-            stats.minimumnanos() - 1 : DEFAULT_MIN_NANOS;
-          int32_t maxNano = stats.has_maximumnanos() ?
-            stats.maximumnanos() - 1 : DEFAULT_MAX_NANOS;
+          int32_t minNano =
+              stats.has_minimum_nanos() ? stats.minimum_nanos() - 1 : DEFAULT_MIN_NANOS;
+          int32_t maxNano =
+              stats.has_maximum_nanos() ? stats.maximum_nanos() - 1 : DEFAULT_MAX_NANOS;
           Literal::Timestamp minTimestamp(
-            stats.minimumutc() / 1000,
-            static_cast<int32_t>((stats.minimumutc() % 1000) * 1000000) + minNano);
+              stats.minimum_utc() / 1000,
+              static_cast<int32_t>((stats.minimum_utc() % 1000) * 1000000) + minNano);
           Literal::Timestamp maxTimestamp(
-            stats.maximumutc() / 1000,
-            static_cast<int32_t>((stats.maximumutc() % 1000) * 1000000) + maxNano);
-          result = evaluatePredicateRange(
-            mOperator,
-            literal2Timestamp(mLiterals),
-            minTimestamp,
-            maxTimestamp,
-            colStats.hasnull());
+              stats.maximum_utc() / 1000,
+              static_cast<int32_t>((stats.maximum_utc() % 1000) * 1000000) + maxNano);
+          result = evaluatePredicateRange(operator_, literal2Timestamp(literals_), minTimestamp,
+                                          maxTimestamp, colStats.has_null());
         }
         break;
       }
       case PredicateDataType::DECIMAL: {
-        if (colStats.has_decimalstatistics() &&
-            colStats.decimalstatistics().has_minimum() &&
-            colStats.decimalstatistics().has_maximum()) {
-          const auto& stats = colStats.decimalstatistics();
-          result = evaluatePredicateRange(
-            mOperator,
-            literal2Decimal(mLiterals),
-            Decimal(stats.minimum()),
-            Decimal(stats.maximum()),
-            colStats.hasnull());
+        if (colStats.has_decimal_statistics() && colStats.decimal_statistics().has_minimum() &&
+            colStats.decimal_statistics().has_maximum()) {
+          const auto& stats = colStats.decimal_statistics();
+          result = evaluatePredicateRange(operator_, literal2Decimal(literals_),
+                                          Decimal(stats.minimum()), Decimal(stats.maximum()),
+                                          colStats.has_null());
         }
         break;
       }
-      case PredicateDataType::BOOLEAN:  {
-        if (colStats.has_bucketstatistics()) {
-          result = evaluateBoolPredicate(mOperator, mLiterals, colStats);
+      case PredicateDataType::BOOLEAN: {
+        if (colStats.has_bucket_statistics()) {
+          result = evaluateBoolPredicate(operator_, literals_, colStats);
         }
         break;
       }
@@ -661,8 +592,8 @@ namespace orc {
     }
 
     // make sure null literal is respected for IN operator
-    if (mOperator == Operator::IN && colStats.hasnull()) {
-      for (const auto& literal : mLiterals) {
+    if (operator_ == Operator::IN && colStats.has_null()) {
+      for (const auto& literal : literals_) {
         if (literal.isNull()) {
           result = TruthValue::YES_NO_NULL;
           break;
@@ -673,29 +604,24 @@ namespace orc {
     return result;
   }
 
-  static bool shouldEvaluateBloomFilter(PredicateLeaf::Operator op,
-                                        TruthValue result,
-                                        const BloomFilter * bloomFilter) {
+  static bool shouldEvaluateBloomFilter(PredicateLeaf::Operator op, TruthValue result,
+                                        const BloomFilter* bloomFilter) {
     // evaluate bloom filter only when
     // 1) Bloom filter is available
     // 2) Min/Max evaluation yield YES or MAYBE
     // 3) Predicate is EQUALS or IN list
     // 4) Decimal type stores its string representation
     //    but has inconsistency in trailing zeros
-    if (bloomFilter != nullptr
-        && result != TruthValue::NO_NULL && result != TruthValue::NO
-        && (op == PredicateLeaf::Operator::EQUALS
-            || op == PredicateLeaf::Operator::NULL_SAFE_EQUALS
-            || op == PredicateLeaf::Operator::IN)) {
+    if (bloomFilter != nullptr && result != TruthValue::NO_NULL && result != TruthValue::NO &&
+        (op == PredicateLeaf::Operator::EQUALS || op == PredicateLeaf::Operator::NULL_SAFE_EQUALS ||
+         op == PredicateLeaf::Operator::IN)) {
       return true;
     }
     return false;
   }
 
-  static TruthValue checkInBloomFilter(PredicateLeaf::Operator,
-                                       PredicateDataType type,
-                                       const Literal& literal,
-                                       const BloomFilter * bf,
+  static TruthValue checkInBloomFilter(PredicateLeaf::Operator, PredicateDataType type,
+                                       const Literal& literal, const BloomFilter* bf,
                                        bool hasNull) {
     TruthValue result = hasNull ? TruthValue::NO_NULL : TruthValue::NO;
     if (literal.isNull()) {
@@ -715,7 +641,7 @@ namespace orc {
       }
     } else if (type == PredicateDataType::DECIMAL) {
       std::string decimal = literal.getDecimal().toString(true);
-      if (bf->testBytes(decimal.c_str(),  static_cast<int64_t>(decimal.size()))) {
+      if (bf->testBytes(decimal.c_str(), static_cast<int64_t>(decimal.size()))) {
         result = TruthValue::YES_NO_NULL;
       }
     } else if (type == PredicateDataType::TIMESTAMP) {
@@ -737,25 +663,20 @@ namespace orc {
     return result;
   }
 
-  TruthValue PredicateLeaf::evaluatePredicateBloomFiter(const BloomFilter * bf,
-                                                        bool hasNull) const {
-    switch (mOperator) {
+  TruthValue PredicateLeaf::evaluatePredicateBloomFiter(const BloomFilter* bf, bool hasNull) const {
+    switch (operator_) {
       case Operator::NULL_SAFE_EQUALS:
         // null safe equals does not return *_NULL variant.
         // So set hasNull to false
-        return checkInBloomFilter(
-          mOperator, mType, mLiterals.front(), bf, false);
+        return checkInBloomFilter(operator_, type_, literals_.front(), bf, false);
       case Operator::EQUALS:
-        return checkInBloomFilter(
-          mOperator, mType, mLiterals.front(), bf, hasNull);
+        return checkInBloomFilter(operator_, type_, literals_.front(), bf, hasNull);
       case Operator::IN:
-        for (const auto &literal : mLiterals) {
+        for (const auto& literal : literals_) {
           // if at least one value in IN list exist in bloom filter,
           // qualify the row group/stripe
-          TruthValue result = checkInBloomFilter(
-            mOperator, mType, literal, bf, hasNull);
-          if (result == TruthValue::YES_NO_NULL ||
-              result == TruthValue::YES_NO) {
+          TruthValue result = checkInBloomFilter(operator_, type_, literal, bf, hasNull);
+          if (result == TruthValue::YES_NO_NULL || result == TruthValue::YES_NO) {
             return result;
           }
         }
@@ -771,34 +692,36 @@ namespace orc {
 
   TruthValue PredicateLeaf::evaluate(const WriterVersion writerVersion,
                                      const proto::ColumnStatistics& colStats,
-                                     const BloomFilter * bloomFilter) const {
+                                     const BloomFilter* bloomFilter) const {
     // files written before ORC-135 stores timestamp wrt to local timezone
     // causing issues with PPD. disable PPD for timestamp for all old files
-    if (mType == PredicateDataType::TIMESTAMP) {
+    if (type_ == PredicateDataType::TIMESTAMP) {
       if (writerVersion < WriterVersion::WriterVersion_ORC_135) {
         return TruthValue::YES_NO_NULL;
       }
     }
 
-    bool allNull = colStats.hasnull() && colStats.numberofvalues() == 0;
-    if (mOperator == Operator::IS_NULL || ((
-        mOperator == Operator::EQUALS ||
-        mOperator == Operator::NULL_SAFE_EQUALS) &&
-        mLiterals.at(0).isNull())) {
+    // files written by trino may lack of hasnull field.
+    if (!colStats.has_has_null()) return TruthValue::YES_NO_NULL;
+
+    bool allNull = colStats.has_null() && colStats.number_of_values() == 0;
+    if (operator_ == Operator::IS_NULL ||
+        ((operator_ == Operator::EQUALS || operator_ == Operator::NULL_SAFE_EQUALS) &&
+         literals_.at(0).isNull())) {
       // IS_NULL operator does not need to check min/max stats and bloom filter
-      return allNull ? TruthValue::YES :
-             (colStats.hasnull() ? TruthValue::YES_NO : TruthValue::NO);
+      return allNull ? TruthValue::YES
+                     : (colStats.has_null() ? TruthValue::YES_NO : TruthValue::NO);
     } else if (allNull) {
       // if we don't have any value, everything must have been null
       return TruthValue::IS_NULL;
     }
 
     TruthValue result = evaluatePredicateMinMax(colStats);
-    if (shouldEvaluateBloomFilter(mOperator, result, bloomFilter)) {
-      return evaluatePredicateBloomFiter(bloomFilter, colStats.hasnull());
+    if (shouldEvaluateBloomFilter(operator_, result, bloomFilter)) {
+      return evaluatePredicateBloomFiter(bloomFilter, colStats.has_null());
     } else {
       return result;
     }
   }
 
-} // namespace orc
+}  // namespace orc

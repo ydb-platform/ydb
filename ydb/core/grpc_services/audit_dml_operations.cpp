@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/protos/draft/ydb_tablet.pb.h>
 
 #include "base/base.h"
 
@@ -24,7 +25,7 @@ namespace {
     }
 
     template <class TxControl>
-    void AddAuditLogTxControlPart(NKikimr::NGRpcService::IRequestCtx* ctx, const TxControl& tx_control)
+    void AddAuditLogTxControlPart(NKikimr::NGRpcService::IAuditCtx* ctx, const TxControl& tx_control)
     {
         switch (tx_control.tx_selector_case()) {
             case TxControl::kTxId:
@@ -60,9 +61,11 @@ namespace {
 
 namespace NKikimr::NGRpcService {
 
-void AuditContextStart(IRequestCtxBase* ctx, const TString& database, const TString& userSID, const std::vector<std::pair<TString, TString>>& databaseAttrs) {
+void AuditContextStart(IAuditCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken, const std::vector<std::pair<TString, TString>>& databaseAttrs) {
     ctx->AddAuditLogPart("remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName()));
     ctx->AddAuditLogPart("subject", userSID);
+    static const TString EMPTY_VALUE = "{none}";
+    ctx->AddAuditLogPart("sanitized_token", !sanitizedToken.empty() ? sanitizedToken : EMPTY_VALUE);
     ctx->AddAuditLogPart("database", database);
     ctx->AddAuditLogPart("operation", ctx->GetRequestName());
     ctx->AddAuditLogPart("start_time", TInstant::Now().ToString());
@@ -79,14 +82,14 @@ void AuditContextStart(IRequestCtxBase* ctx, const TString& database, const TStr
     }
 }
 
-void AuditContextEnd(IRequestCtxBase* ctx) {
+void AuditContextEnd(IAuditCtx* ctx) {
     ctx->AddAuditLogPart("end_time", TInstant::Now().ToString());
 }
 
 // ExecuteDataQuery
 //
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::ExecuteDataQueryRequest& request) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Table::ExecuteDataQueryRequest& request) {
     // query_text or prepared_query_id
     {
         auto query = request.query();
@@ -101,7 +104,7 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::ExecuteDataQueryRequ
     AddAuditLogTxControlPart(ctx, request.tx_control());
 }
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::ExecuteDataQueryRequest& request, const Ydb::Table::ExecuteQueryResult& result) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Table::ExecuteDataQueryRequest& request, const Ydb::Table::ExecuteQueryResult& result) {
     // tx_id, autocreated
     if (request.tx_control().tx_selector_case() == Ydb::Table::TransactionControl::kBeginTx) {
         ctx->AddAuditLogPart("tx_id", result.tx_meta().id());
@@ -112,11 +115,11 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::ExecuteDataQueryRequ
 // PrepareDataQuery
 //
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::PrepareDataQueryRequest& request) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Table::PrepareDataQueryRequest& request) {
     ctx->AddAuditLogPart("query_text", PrepareText(request.yql_text()));
 }
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::PrepareDataQueryRequest& request, const Ydb::Table::PrepareQueryResult& result) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Table::PrepareDataQueryRequest& request, const Ydb::Table::PrepareQueryResult& result) {
     Y_UNUSED(request);
     ctx->AddAuditLogPart("prepared_query_id", result.query_id());
 }
@@ -124,7 +127,7 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::PrepareDataQueryRequ
 // BeginTransaction
 //
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::BeginTransactionRequest& request, const Ydb::Table::BeginTransactionResult& result) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Table::BeginTransactionRequest& request, const Ydb::Table::BeginTransactionResult& result) {
     Y_UNUSED(request);
     ctx->AddAuditLogPart("tx_id", result.tx_meta().id());
 }
@@ -132,7 +135,7 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::BeginTransactionRequ
 // CommitTransaction
 //
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::CommitTransactionRequest& request) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Table::CommitTransactionRequest& request) {
     ctx->AddAuditLogPart("tx_id", request.tx_id());
 }
 // log updated_row_count collected from CommitTransactionResult.query_stats?
@@ -140,14 +143,14 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::CommitTransactionReq
 // RollbackTransaction
 //
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::RollbackTransactionRequest& request) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Table::RollbackTransactionRequest& request) {
     ctx->AddAuditLogPart("tx_id", request.tx_id());
 }
 
 // BulkUpsert
 //
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::BulkUpsertRequest& request) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Table::BulkUpsertRequest& request) {
     ctx->AddAuditLogPart("table", request.table());
     //NOTE: no type checking for the rows field (should be a list) --
     // -- there is no point in being more thorough than the actual implementation,
@@ -158,7 +161,7 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::BulkUpsertRequest& r
 // ExecuteYqlScript, StreamExecuteYqlScript
 //
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Scripting::ExecuteYqlRequest& request) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Scripting::ExecuteYqlRequest& request) {
     ctx->AddAuditLogPart("query_text", PrepareText(request.script()));
 }
 // log updated_row_count collected from ExecuteYqlResult.query_stats?
@@ -166,7 +169,7 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Scripting::ExecuteYqlReques
 // ExecuteQuery
 //
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Query::ExecuteQueryRequest& request) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Query::ExecuteQueryRequest& request) {
     if (request.exec_mode() != Ydb::Query::EXEC_MODE_EXECUTE) {
         return;
     }
@@ -188,12 +191,32 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Query::ExecuteQueryRequest&
 
 // ExecuteSrcipt
 template <>
-void AuditContextAppend(IRequestCtx* ctx, const Ydb::Query::ExecuteScriptRequest& request) {
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Query::ExecuteScriptRequest& request) {
     if (request.exec_mode() != Ydb::Query::EXEC_MODE_EXECUTE) {
         return;
     }
     ctx->AddAuditLogPart("query_text", PrepareText(request.script_content().text()));
 }
 // log updated_row_count collected from ExecuteScriptMetadata.exec_stats?
+
+// TabletService, ExecuteTabletMiniKQL
+template <>
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Tablet::ExecuteTabletMiniKQLRequest& request) {
+    if (request.dry_run()) {
+        return;
+    }
+    ctx->AddAuditLogPart("tablet_id", TStringBuilder() << request.tablet_id());
+    ctx->AddAuditLogPart("program_text", PrepareText(request.program()));
+}
+
+// TabletService, ChangeTabletSchema
+template <>
+void AuditContextAppend(IAuditCtx* ctx, const Ydb::Tablet::ChangeTabletSchemaRequest& request) {
+    if (request.dry_run()) {
+        return;
+    }
+    ctx->AddAuditLogPart("tablet_id", TStringBuilder() << request.tablet_id());
+    ctx->AddAuditLogPart("schema_changes", PrepareText(request.schema_changes()));
+}
 
 } // namespace NKikimr::NGRpcService

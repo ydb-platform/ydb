@@ -5,6 +5,7 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/core/base
+    ydb/core/tx/data_events/common
     ydb/core/tx/sharding
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/scheme_cache
@@ -27,6 +28,7 @@ SRCS(
     shard_writer.cpp
     shards_splitter.cpp
     write_data.cpp
+    columnshard_splitter.cpp
 )
 
 END()

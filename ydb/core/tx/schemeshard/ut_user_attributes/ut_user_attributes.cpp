@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
             {NLs::Finished});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-            {NLs::Finished, NLs::UserAttrsEqual(dirAAttrs), NLs::PathVersionEqual(5)});
+            {NLs::Finished, NLs::UserAttrsEqual(dirAAttrs), NLs::PathVersionEqual(6)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
             {NLs::Finished, NLs::UserAttrsEqual(dirBAttrs), NLs::PathVersionEqual(3)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/SubDirA"),

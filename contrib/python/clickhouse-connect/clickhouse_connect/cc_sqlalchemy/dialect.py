@@ -8,7 +8,7 @@ from clickhouse_connect.cc_sqlalchemy.sql import full_table
 from clickhouse_connect.cc_sqlalchemy.sql.ddlcompiler import ChDDLCompiler
 from clickhouse_connect.cc_sqlalchemy import ischema_names, dialect_name
 from clickhouse_connect.cc_sqlalchemy.sql.preparer import ChIdentifierPreparer
-from clickhouse_connect.driver.query import quote_identifier, format_str
+from clickhouse_connect.driver.binding import quote_identifier, format_str
 
 
 # pylint: disable=too-many-public-methods,no-self-use,unused-argument

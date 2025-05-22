@@ -6,6 +6,8 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+VERSION(20240722.1)
+
 PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/base
     contrib/restricted/abseil-cpp-tstring/y_absl/numeric
@@ -17,6 +19,12 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
+IF (Y_ABSL_DONT_USE_DEBUG)
+    CFLAGS(
+        -DY_ABSL_DONT_USE_DEBUG_LIBRARY=1
+    )
+ENDIF()
+
 SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl)
 
 SRCS(
@@ -25,7 +33,7 @@ SRCS(
     crc/internal/crc.cc
     crc/internal/crc_cord_state.cc
     crc/internal/crc_memcpy_fallback.cc
-    crc/internal/crc_memcpy_x86_64.cc
+    crc/internal/crc_memcpy_x86_arm_combined.cc
     crc/internal/crc_non_temporal_memcpy.cc
     crc/internal/crc_x86_arm_combined.cc
     status/statusor.cc
@@ -43,7 +51,6 @@ SRCS(
     strings/internal/cord_rep_btree_reader.cc
     strings/internal/cord_rep_consume.cc
     strings/internal/cord_rep_crc.cc
-    strings/internal/cord_rep_ring.cc
     strings/internal/cordz_functions.cc
     strings/internal/cordz_handle.cc
     strings/internal/cordz_info.cc

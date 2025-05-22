@@ -1,16 +1,22 @@
 #include "test_env.h"
 #include "helpers.h"
 
-#include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/filestore/core/filestore.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/filestore/core/filestore.h>
+#include <ydb/services/metadata/ds_table/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -21,6 +27,7 @@ static const bool ENABLE_COORDINATOR_MEDIATOR_LOG = false;
 static const bool ENABLE_SCHEMEBOARD_LOG = false;
 static const bool ENABLE_COLUMNSHARD_LOG = false;
 static const bool ENABLE_EXPORT_LOG = false;
+static const bool ENABLE_TOPIC_LOG = false;
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -126,8 +133,9 @@ private:
 
 class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {
 public:
-    TFakeConfigDispatcher()
+    TFakeConfigDispatcher(const NKikimrConfig::TAppConfig& config = NKikimrConfig::TAppConfig())
         : TActor<TFakeConfigDispatcher>(&TFakeConfigDispatcher::StateWork)
+        , Config(config)
     {
     }
 
@@ -139,8 +147,12 @@ public:
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationRequest(), 0, ev->Cookie);
+        auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *event->Record.MutableConfig() = Config;
+        ctx.Send(ev->Sender, event.Release(), 0, ev->Cookie);
     }
+private:
+    NKikimrConfig::TAppConfig Config;
 };
 
 // Automatically resend notification requests to Schemeshard if it gets restarted
@@ -501,6 +513,58 @@ NSchemeShardUT_Private::TTestWithReboots::TDatashardLogBatchingSwitch::~TDatasha
     NKikimr::NDataShard::gAllowLogBatchingDefaultValue = PrevVal;
 }
 
+void SetupMetadataProvider(TTestActorRuntime& runtime, ui32 nodeIdx) {
+    NKikimrConfig::TMetadataProviderConfig metadataProviderConfig;
+
+    NMetadata::NProvider::TConfig config;
+    config.DeserializeFromProto(metadataProviderConfig);
+    IActor* actor = NMetadata::NProvider::CreateService(config);
+
+    const ui32 userPoolId = runtime.GetAppData(nodeIdx).UserPoolId;
+    TActorId metadataServiceId = runtime.Register(actor, nodeIdx, userPoolId, TMailboxType::Revolving, 0);
+    runtime.RegisterService(NMetadata::NProvider::MakeServiceId(runtime.GetNodeId(nodeIdx)), metadataServiceId, nodeIdx);
+}
+
+void SetupKqpResourceManager(TTestActorRuntime& runtime,
+    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    ui32 nodeIdx
+) {
+    const ui32 nodeId = runtime.GetNodeId(nodeIdx);
+    auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
+
+    IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
+        tableServiceConfig.GetResourceManager(), nullptr, {}, kqpProxySharedResources, nodeId
+    );
+
+    const ui32 userPoolId = runtime.GetAppData(nodeIdx).UserPoolId;
+    TActorId kqpRmServiceId = runtime.Register(kqpRmService, nodeIdx, userPoolId);
+    runtime.RegisterService(NKqp::MakeKqpRmServiceID(nodeId), kqpRmServiceId, nodeIdx);
+}
+
+void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
+    NKikimrConfig::TTableServiceConfig tableServiceConfig;
+    SetupKqpResourceManager(runtime, tableServiceConfig, nodeIdx);
+
+    NKikimrConfig::TLogConfig logConfig;
+    NKikimrConfig::TQueryServiceConfig queryServiceConfig;
+    auto federatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
+
+    IActor* kqpProxyService = NKqp::CreateKqpProxyService(
+        logConfig,
+        tableServiceConfig,
+        queryServiceConfig,
+        {}, // kqp settings
+        nullptr, // query replay factory
+        nullptr, // kqp proxy shared resources
+        federatedQuerySetupFactory,
+        nullptr // S3 actors factory
+    );
+
+    const ui32 userPoolId = runtime.GetAppData(nodeIdx).UserPoolId;
+    TActorId kqpProxyServiceId = runtime.Register(kqpProxyService, nodeIdx, userPoolId);
+    runtime.RegisterService(NKqp::MakeKqpProxyID(runtime.GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
+}
+
 NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts, TSchemeShardFactory ssFactory, std::shared_ptr<NKikimr::NDataShard::IExportFactory> dsExportFactory)
     : SchemeShardFactory(ssFactory)
     , HiveState(new TFakeHiveState)
@@ -525,6 +589,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
     app.SetEnableBorrowedSplitCompaction(opts.EnableBorrowedSplitCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
+    app.FeatureFlags.SetEnableTableDatetime64(true);
+    app.FeatureFlags.SetEnableVectorIndex(true);
+    app.FeatureFlags.SetEnableColumnStore(true);
+    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
@@ -537,6 +605,15 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
     app.SetEnableServerlessExclusiveDynamicNodes(opts.EnableServerlessExclusiveDynamicNodes_);
     app.SetEnableAddColumsWithDefaults(opts.EnableAddColumsWithDefaults_);
+    app.SetEnableReplaceIfExistsForExternalEntities(opts.EnableReplaceIfExistsForExternalEntities_);
+    app.SetEnableChangefeedsOnIndexTables(opts.EnableChangefeedsOnIndexTables_);
+    app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);
+    app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
+    app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
+    app.SetEnableBackupService(opts.EnableBackupService_);
+    app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
+    app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
+    app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -545,20 +622,44 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
     }
 
+    // graph settings
+    if (opts.GraphBackendType_) {
+        app.GraphConfig.SetBackendType(opts.GraphBackendType_.value());
+    }
+    app.GraphConfig.SetAggregateCheckPeriodSeconds(5); // 5 seconds
+    {
+        auto& set = *app.GraphConfig.AddAggregationSettings();
+        set.SetPeriodToStartSeconds(60); // 1 minute to clear
+        set.SetMinimumStepSeconds(10); // 10 seconds
+    }
+    {
+        auto& set = *app.GraphConfig.AddAggregationSettings();
+        set.SetPeriodToStartSeconds(40); // 40 seconds
+        set.SetSampleSizeSeconds(10); // 10 seconds
+        set.SetMinimumStepSeconds(10); // 10 seconds
+    }
+    {
+        auto& set = *app.GraphConfig.AddAggregationSettings();
+        set.SetPeriodToStartSeconds(5); // 4 seconds
+        set.SetSampleSizeSeconds(5); // 5 seconds
+        set.SetMinimumStepSeconds(5); // 5 seconds
+    }
+    //
+
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
     }
 
-    AddDomain(runtime, app, TTestTxConfig::DomainUid, 0, hive, schemeRoot);
+    AddDomain(runtime, app, TTestTxConfig::DomainUid, hive, schemeRoot);
 
     SetupLogging(runtime);
-    SetupChannelProfiles(app, TTestTxConfig::DomainUid, ChannelsCount);
+    SetupChannelProfiles(app, ChannelsCount);
 
     for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
         SetupSchemeCache(runtime, node, app.Domains->GetDomain(TTestTxConfig::DomainUid).Name);
     }
 
-    SetupTabletServices(runtime, &app);
+    SetupTabletServices(runtime, &app, !opts.DSProxies_.empty(), {}, nullptr, false, opts.DSProxies_);
     if (opts.EnablePipeRetries_) {
         EnableSchemeshardPipeRetriesGuard = EnableSchemeshardPipeRetries(runtime);
     }
@@ -566,7 +667,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     if (opts.RunFakeConfigDispatcher_) {
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.RegisterService(NConsole::MakeConfigsDispatcherID(runtime.GetNodeId(node)),
-                runtime.Register(new TFakeConfigDispatcher(), node), node);
+                runtime.Register(new TFakeConfigDispatcher(GetAppConfig()), node), node);
         }
     }
 
@@ -590,6 +691,19 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         runtime.RegisterService(MakeTxProxyID(), txProxyId, node);
     }
 
+    // Create sequence proxies
+    for (size_t i = 0; i < runtime.GetNodeCount(); ++i) {
+        IActor* sequenceProxy = NSequenceProxy::CreateSequenceProxy();
+        TActorId sequenceProxyId = runtime.Register(sequenceProxy, i);
+        runtime.RegisterService(NSequenceProxy::MakeSequenceProxyServiceID(), sequenceProxyId, i);
+    }
+
+    if (opts.SetupKqpProxy_) {
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            SetupMetadataProvider(runtime, node);
+            SetupKqpProxy(runtime, node);
+        }
+    }
     //SetupBoxAndStoragePool(runtime, sender, TTestTxConfig::DomainUid);
 
     TxReliablePropose = runtime.Register(new TTxReliablePropose(schemeRoot));
@@ -599,16 +713,21 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 }
 
 NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 nchannels, bool enablePipeRetries,
-        NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory, bool enableSystemViews)
+        NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory)
     : TTestEnv(runtime, TTestEnvOptions()
         .NChannels(nchannels)
-        .EnablePipeRetries(enablePipeRetries)
-        .EnableSystemViews(enableSystemViews), ssFactory)
+        .EnablePipeRetries(enablePipeRetries), ssFactory)
 {
 }
 
 void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) {
     runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_ERROR);
+    runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NActors::NLog::PRI_ERROR);
+    if (ENABLE_TOPIC_LOG) {
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NActors::NLog::PRI_DEBUG);
+    }
+
     runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_ERROR);
@@ -667,17 +786,15 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
     }
 }
 
-void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui32 ssId, ui64 hive, ui64 schemeRoot) {
+void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui64 hive, ui64 schemeRoot) {
     app.ClearDomainsAndHive();
     ui32 planResolution = 50;
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
                 "MyRoot", domainUid, schemeRoot,
-                ssId, ssId, TVector<ui32>{ssId},
-                domainUid, TVector<ui32>{domainUid},
                 planResolution,
-                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainUid, 1)},
+                TVector<ui64>{TTestTxConfig::Coordinator},
                 TVector<ui64>{},
-                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainUid, 1)},
+                TVector<ui64>{TTestTxConfig::TxAllocator},
                 DefaultPoolKinds(2));
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
@@ -685,7 +802,7 @@ void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAp
     runtime.SetTxAllocatorTabletIds(ids);
 
     app.AddDomain(domain.Release());
-    app.AddHive(domainUid, hive);
+    app.AddHive(hive);
 }
 
 TFakeHiveState::TPtr NSchemeShardUT_Private::TTestEnv::GetHiveState() const {
@@ -826,8 +943,8 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
 }
 
 void NSchemeShardUT_Private::TTestEnv::TestServerlessComputeResourcesModeInHive(TTestActorRuntime& runtime,
-    const TString& path, NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode, ui64 hive) 
-{   
+    const TString& path, NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode, ui64 hive)
+{
     auto record = DescribePath(runtime, path);
     const auto& pathDescr = record.GetPathDescription();
     const TSubDomainKey subdomainKey(pathDescr.GetDomainDescription().GetDomainKey());
@@ -903,6 +1020,13 @@ void NSchemeShardUT_Private::TTestEnv::BootSchemeShard(NActors::TTestActorRuntim
 
 void NSchemeShardUT_Private::TTestEnv::BootTxAllocator(NActors::TTestActorRuntime &runtime, ui64 tabletId) {
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TxAllocator), &CreateTxAllocator);
+}
+
+NKikimrConfig::TAppConfig NSchemeShardUT_Private::TTestEnv::GetAppConfig() const {
+    NKikimrConfig::TAppConfig appConfig;
+    auto* queryServiceConfig = appConfig.MutableQueryServiceConfig();
+    queryServiceConfig->SetAllExternalDataSourcesAreAvailable(true);
+    return appConfig;
 }
 
 NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory)
@@ -1006,7 +1130,7 @@ void NSchemeShardUT_Private::TTestWithReboots::RestoreLogging() {
 }
 
 NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::CreateTestEnv() {
-    return new TTestEnv(*Runtime, GetTestEnvOptions());
+    return new TTestEnv(*Runtime, GetTestEnvOptions().RunFakeConfigDispatcher(true));
 }
 
 

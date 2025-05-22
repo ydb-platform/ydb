@@ -7,7 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
 
@@ -17,7 +17,7 @@
 #include <deque>
 #include <memory>
 
-namespace NYdb::NFederatedTopic {
+namespace NYdb::inline V2::NFederatedTopic {
 
 struct TFederatedDbState {
 public:
@@ -35,16 +35,29 @@ public:
         , ControlPlaneEndpoint(result.control_plane_endpoint())
         , SelfLocation(result.self_location())
         {
-            // TODO remove copy
+            // TODO ensure that all databases have unique names?
             for (const auto& db : result.federation_databases()) {
                 DbInfos.push_back(std::make_shared<TDbInfo>(db));
             }
         }
+
+    std::shared_ptr<TDbInfo> TryGetDbInfo(const TString& name) const noexcept {
+        // There are few databases per federation usually, so the linear search is probably ok.
+        // TODO better profile this
+        for (const auto& dbInfo : DbInfos) {
+            if (AsciiEqualsIgnoreCase(dbInfo->name(), name)) {
+                return dbInfo;
+            }
+        }
+        return nullptr;
+    }
+
+    friend IOutputStream& operator<<(IOutputStream& out, TFederatedDbState const& state);
 };
 
 
 class TFederatedDbObserverImpl : public TClientImplCommon<TFederatedDbObserverImpl>,
-                                 public NPersQueue::TEnableSelfContext<TFederatedDbObserverImpl> {
+                                 public NTopic::TEnableSelfContext<TFederatedDbObserverImpl> {
 public:
     static constexpr TDuration REDISCOVER_DELAY = TDuration::Seconds(60);
 
@@ -81,7 +94,7 @@ private:
     bool Stopping = false;
 };
 
-class TFederatedDbObserver : public NPersQueue::TContextOwner<TFederatedDbObserverImpl> {
+class TFederatedDbObserver : public NTopic::TContextOwner<TFederatedDbObserverImpl> {
 public:
     inline TFederatedDbObserver(std::shared_ptr<TGRpcConnectionsImpl> connections,
                                 const TFederatedTopicClientSettings& settings)

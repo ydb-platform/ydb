@@ -160,23 +160,17 @@ public:
 
     void OpenPipe(const TActorContext &ctx)
     {
-        auto domains = AppData(ctx)->DomainsInfo;
-        Y_ABORT_UNLESS(domains->Domains.size() == 1, "multiple domains are not supported by TConfigHelper");
-        auto domain = domains->Domains.begin()->second;
-        auto group = domains->GetDefaultStateStorageGroup(domain->DomainUid);
-        auto console = MakeConsoleID(group);
+        auto console = MakeConsoleID();
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, console, pipeConfig);
-        Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        Pipe = ctx.Register(pipe);
     }
 
     void SendPoolStatusRequest(const TActorContext &ctx)
     {
-        auto domains = AppData(ctx)->DomainsInfo;
-        Y_ABORT_UNLESS(domains->Domains.size() == 1, "multiple domains are not supported by TConfigHelper");
-        auto tenantPool = MakeTenantPoolID(ctx.SelfID.NodeId(), domains->Domains.begin()->second->DomainUid);
+        auto tenantPool = MakeTenantPoolID(ctx.SelfID.NodeId());
         ctx.Send(tenantPool, new TEvTenantPool::TEvGetStatus(true), IEventHandle::FlagTrackDelivery);
     }
 

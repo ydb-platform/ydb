@@ -101,7 +101,7 @@ TEST(TYTreeTest, TestMultisetAttributesByPath)
     SyncYPathMultisetAttributes(node, "/@a", attributes3);
 
     auto attribute = ConvertToNode(node->Attributes().GetYson("a"))->AsMap();
-    EXPECT_EQ(attribute->GetKeys(), std::vector<TString>({"b", "c"}));
+    EXPECT_EQ(attribute->GetKeys(), std::vector<std::string>({"b", "c"}));
 }
 
 TEST(TYTreeTest, TestGetWithAttributes)
@@ -131,7 +131,7 @@ TEST(TYTreeTest, TestGetWithAttributes)
     auto node = ConvertToNode(yson);
 
     auto compareYsons = [] (TYsonStringBuf expectedYson, INodePtr node, const TAttributeFilter& attributeFilter) {
-        // NB: serialization of ephemeral nodes is always stable.
+        // NB: Serialization of ephemeral nodes is always stable.
         TYsonString actualYson = SyncYPathGet(node, "", attributeFilter);
         auto stableOriginal = ConvertToYsonString(node, EYsonFormat::Pretty).ToString();
         auto stableExpected = ConvertToYsonString(ConvertToNode(expectedYson), EYsonFormat::Pretty).ToString();

@@ -9,8 +9,6 @@ namespace NKikimr {
         class TVMovedPatchActor : public TActorBootstrapped<TVMovedPatchActor> {
             friend TActorBootstrapped<TVMovedPatchActor>;
 
-            static constexpr ui64 SubRequestDurationMs = 1000;
-
             ui32 OriginalGroupId;
             ui32 PatchedGroupId;
             TLogoBlobID OriginalId;
@@ -29,6 +27,7 @@ namespace NKikimr {
             TActorId LeaderId;
             TOutOfSpaceStatus OOSStatus;
 
+            TInstant Deadline = TInstant::Zero();
 
             NLWTrace::TOrbit Orbit;
 
@@ -50,22 +49,26 @@ namespace NKikimr {
                 , VCtx(vCtx)
             {
                 NKikimrBlobStorage::TEvVMovedPatch &record = Event->Get()->Record;
-                Y_ABORT_UNLESS(record.HasOriginalGroupId());
+                Y_VERIFY_S(record.HasOriginalGroupId(), VCtx->VDiskLogPrefix);
                 OriginalGroupId = record.GetOriginalGroupId();
-                Y_ABORT_UNLESS(record.HasPatchedGroupId());
+                Y_VERIFY_S(record.HasPatchedGroupId(), VCtx->VDiskLogPrefix);
                 PatchedGroupId = record.GetPatchedGroupId();
-                Y_ABORT_UNLESS(record.HasOriginalBlobId());
+                Y_VERIFY_S(record.HasOriginalBlobId(), VCtx->VDiskLogPrefix);
                 OriginalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
-                Y_ABORT_UNLESS(record.HasPatchedBlobId());
+                Y_VERIFY_S(record.HasPatchedBlobId(), VCtx->VDiskLogPrefix);
                 PatchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
+                Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
+                if (record.HasMsgQoS() && record.GetMsgQoS().HasDeadlineSeconds()) {
+                    Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
+                }
 
                 DiffCount = record.DiffsSize();
                 Diffs.reset(new TEvBlobStorage::TEvPatch::TDiff[DiffCount]);
                 for (ui32 idx = 0; idx < DiffCount; ++idx) {
                     const NKikimrBlobStorage::TDiffBlock &diff = record.GetDiffs(idx);
-                    Y_ABORT_UNLESS(diff.HasOffset());
+                    Y_VERIFY_S(diff.HasOffset(), VCtx->VDiskLogPrefix);
                     Diffs[idx].Offset = diff.GetOffset();
-                    Y_ABORT_UNLESS(diff.HasBuffer());
+                    Y_VERIFY_S(diff.HasBuffer(), VCtx->VDiskLogPrefix);
                     Diffs[idx].Buffer = TRcBuf(diff.GetBuffer());
                 }
             }
@@ -96,7 +99,13 @@ namespace NKikimr {
                             << " ErrorReason# " << ErrorReason
                             << " Marker# BSVSP01");
                 }
-                SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), Event->Cookie);
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PATCH, VCtx->VDiskLogPrefix
+                        << "Send result TEvVMovedPatch: " << errorSubMsg << ';'
+                        << " OriginalBlobId# " << OriginalId
+                        << " PatchedBlobId# " << PatchedId
+                        << " ErrorReason# " << ErrorReason
+                        << " Marker# BSVSP00");
+                SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), Event->Cookie, VCtx, {});
                 PassAway();
             }
 
@@ -108,6 +117,10 @@ namespace NKikimr {
             }
 
             void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev, const TActorContext &ctx) {
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PATCH, VCtx->VDiskLogPrefix
+                        << "Receive Get ub TEvVMovedPatch: "
+                        << " OriginalBlobId# " << OriginalId
+                        << " PatchedBlobId# " << PatchedId);
                 TEvBlobStorage::TEvGetResult *result = ev->Get();
                 Orbit = std::move(result->Orbit);
 
@@ -138,15 +151,18 @@ namespace NKikimr {
 
                 Buffer = result->Responses[0].Buffer.ConvertToString();
                 ApplyDiffs();
-                TInstant deadline = TActivationContext::Now() + TDuration::MilliSeconds(SubRequestDurationMs);
 
                 // We have chosen UserData as PutHandleClass on purpose.
                 // If VMovedPatch and Put were AsyncWrite, it would become a deadlock
                 // because the put subrequest may not send and the moved patch request will end by timeout.
-                std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, deadline,
+                std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, Deadline,
                         NKikimrBlobStorage::UserData, TEvBlobStorage::TEvPut::TacticDefault);
                 put->Orbit = std::move(Orbit);
 
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PATCH, VCtx->VDiskLogPrefix
+                        << "Send Put ub TEvVMovedPatch: "
+                        << " OriginalBlobId# " << OriginalId
+                        << " PatchedBlobId# " << PatchedId);
                 SendToBSProxy(SelfId(), PatchedGroupId, put.release(), OriginalId.Hash());
             }
 
@@ -155,6 +171,11 @@ namespace NKikimr {
                 Orbit = std::move(result->Orbit);
 
                 ui32 originalIdHash = OriginalId.Hash();
+
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PATCH, VCtx->VDiskLogPrefix
+                        << "Receive Put ub TEvVMovedPatch: "
+                        << " OriginalBlobId# " << OriginalId
+                        << " PatchedBlobId# " << PatchedId);
 
                 constexpr auto errorSubMsg = "failed on VPut";
                 if (ev->Cookie != originalIdHash) {
@@ -173,10 +194,19 @@ namespace NKikimr {
             }
 
             void Bootstrap() {
-                TInstant deadline = TActivationContext::Now() + TDuration::MilliSeconds(SubRequestDurationMs);
+                if (Deadline && Deadline < TActivationContext::Now()) {
+                    SendResponseAndDie(TActivationContext::AsActorContext(), NKikimrProto::DEADLINE);
+                    return;
+                }
+
                 std::unique_ptr<TEvBlobStorage::TEvGet> get = std::make_unique<TEvBlobStorage::TEvGet>(OriginalId, 0,
-                        OriginalId.BlobSize(), deadline, NKikimrBlobStorage::AsyncRead);
+                        OriginalId.BlobSize(), Deadline, NKikimrBlobStorage::AsyncRead);
                 get->Orbit = std::move(Event->Get()->Orbit);
+
+                LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::BS_VDISK_PATCH, VCtx->VDiskLogPrefix
+                        << "Send Get ub TEvVMovedPatch: "
+                        << " OriginalBlobId# " << OriginalId
+                        << " PatchedBlobId# " << PatchedId);
 
                 SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash());
                 Become(&TThis::StateWait);

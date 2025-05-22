@@ -11,6 +11,7 @@ enum EStatus {
     SUCCESS = 0x00,
     PROTOCOL_ERROR = 0x02,
     INVALID_CREDENTIALS = 0x31,
+    BUSY = 0x33,
 };
 
 enum EProtocolOp {
@@ -37,6 +38,13 @@ enum EFilterType {
     LDAP_FILTER_PRESENT = 0x87,
     LDAP_FILTER_APPROX = 0xA8,
     LDAP_FILTER_EXT = 0xA9,
+};
+
+enum EExtendedFilterType {
+    LDAP_FILTER_EXT_OID = 0x81U,
+    LDAP_FILTER_EXT_TYPE = 0x82U,
+    LDAP_FILTER_EXT_VALUE = 0x83U,
+    LDAP_FILTER_EXT_DNATTRS = 0x84U,
 };
 
 enum EElementType {
@@ -69,6 +77,10 @@ struct TSearchRequestInfo {
         EFilterType Type;
         TString Attribute;
         TString Value;
+        TString MatchingRule;
+        bool DnAttributes = false;
+
+        std::vector<std::shared_ptr<TSearchFilter>> NestedFilters;
     };
 
     struct TInitializeList {

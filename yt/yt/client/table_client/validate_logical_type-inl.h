@@ -25,8 +25,7 @@ static Y_FORCE_INLINE void ValidateNumericRange(TNumber value, TNumber min, TNum
 {
     static_assert(std::is_same_v<TNumber, i64> || std::is_same_v<TNumber, ui64> || std::is_same_v<TNumber, double>);
     if (value < min || value > max) {
-        THROW_ERROR_EXCEPTION(
-            EErrorCode::SchemaViolation,
+        THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
             "Value %v is out of allowed range [%v, %v]",
             value,
             min,
@@ -62,8 +61,16 @@ static constexpr auto GetLogicalTypeMax()
         return static_cast<ui64>(TimestampUpperBound - 1);
     } else if constexpr (type == ESimpleLogicalValueType::Interval) {
         return static_cast<i64>(TimestampUpperBound - 1);
-    } else if constexpr (type == ESimpleLogicalValueType::Float) {
+    } else if constexpr (type == ESimpleLogicalValueType::Float) { // Floating point
         return static_cast<double>(Max<float>());
+    } else if constexpr (type == ESimpleLogicalValueType::Date32) { // Wide time types
+        return static_cast<i64>(Date32UpperBound - 1);
+    } else if constexpr (type == ESimpleLogicalValueType::Datetime64) {
+        return static_cast<i64>(Datetime64UpperBound - 1);
+    } else if constexpr (type == ESimpleLogicalValueType::Timestamp64) {
+        return static_cast<i64>(Timestamp64UpperBound - 1);
+    } else if constexpr (type == ESimpleLogicalValueType::Interval64) {
+        return static_cast<i64>(Interval64UpperBound - 1);
     } else {
         // silly replacement for static_assert(false, ...);
         static_assert(type == ESimpleLogicalValueType::Int8, "unsupported type");
@@ -100,6 +107,14 @@ static constexpr auto GetLogicalTypeMin()
         return static_cast<i64>(-TimestampUpperBound + 1);
     } else if constexpr (type == ESimpleLogicalValueType::Float) { // Floating point
         return static_cast<double>(std::numeric_limits<float>::lowest());
+    } else if constexpr (type == ESimpleLogicalValueType::Date32) { // Wide time types
+        return static_cast<i64>(Date32LowerBound);
+    } else if constexpr (type == ESimpleLogicalValueType::Datetime64) {
+        return static_cast<i64>(Datetime64LowerBound);
+    } else if constexpr (type == ESimpleLogicalValueType::Timestamp64) {
+        return static_cast<i64>(Timestamp64LowerBound);
+    } else if constexpr (type == ESimpleLogicalValueType::Interval64) {
+        return static_cast<i64>(-Interval64UpperBound + 1);
     } else {
         // silly replacement for static_assert(false, ...);
         static_assert(type == ESimpleLogicalValueType::Int8, "unsupported type");
@@ -119,7 +134,11 @@ Y_FORCE_INLINE void ValidateSimpleLogicalType(i64 value)
         type == ESimpleLogicalValueType::Int8 ||
         type == ESimpleLogicalValueType::Int16 ||
         type == ESimpleLogicalValueType::Int32 ||
-        type == ESimpleLogicalValueType::Interval)
+        type == ESimpleLogicalValueType::Interval ||
+        type == ESimpleLogicalValueType::Date32 ||
+        type == ESimpleLogicalValueType::Datetime64 ||
+        type == ESimpleLogicalValueType::Timestamp64 ||
+        type == ESimpleLogicalValueType::Interval64)
     {
         NDetail::ValidateNumericRange(
             value,
@@ -186,14 +205,12 @@ void ValidateSimpleLogicalType(TStringBuf value)
         // do nothing
     } else if constexpr (type == ESimpleLogicalValueType::Utf8) {
         if (UTF8Detect(value.data(), value.size()) == NotUTF8) {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Not a valid utf8 string");
         }
     } else if constexpr (type == ESimpleLogicalValueType::Uuid) {
         if (value.size() != 16) {
-            THROW_ERROR_EXCEPTION(
-                EErrorCode::SchemaViolation,
+            THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Not a valid Uuid");
         }
     } else {

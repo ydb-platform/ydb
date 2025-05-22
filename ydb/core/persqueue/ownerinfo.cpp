@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NPQ {
 
     void TOwnerInfo::GenerateCookie(const TString& owner, const TActorId& pipeClient, const TActorId& sender,
-                                            const TString& topicName, const ui32 partition, const TActorContext& ctx) {
+                                            const TString& topicName, const TPartitionId& partition, const TActorContext& ctx) {
         TStringBuilder s;
         s << owner << "|" << CreateGuidAsString() << "_" << OwnerGeneration;
         ++OwnerGeneration;
@@ -19,7 +19,8 @@ namespace NPQ {
             THolder<TEvPersQueue::TEvResponse> response = MakeHolder<TEvPersQueue::TEvResponse>();
             response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
             response->Record.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
-            response->Record.SetErrorReason("ownership session is killed by another session with id " + OwnerCookie);
+            response->Record.SetErrorReason(TStringBuilder() << "ownership session is killed by another session with id " << OwnerCookie
+                                                             << " partition id " << partition.OriginalPartitionId);
             ctx.Send(Sender, response.Release());
         }
         Sender = sender;

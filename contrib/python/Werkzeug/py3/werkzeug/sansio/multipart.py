@@ -70,6 +70,10 @@ LINE_BREAK_RE = re.compile(LINE_BREAK, re.MULTILINE)
 # Header values can be continued via a space or tab after the linebreak, as
 # per RFC2231
 HEADER_CONTINUATION_RE = re.compile(b"%s[ \t]" % LINE_BREAK, re.MULTILINE)
+# This must be long enough to contain any line breaks plus any
+# additional boundary markers (--) such that they will be found in a
+# subsequent search
+SEARCH_EXTRA_LENGTH = 8
 
 
 class MultipartDecoder:
@@ -83,10 +87,13 @@ class MultipartDecoder:
         self,
         boundary: bytes,
         max_form_memory_size: Optional[int] = None,
+        *,
+        max_parts: Optional[int] = None,
     ) -> None:
         self.buffer = bytearray()
         self.complete = False
         self.max_form_memory_size = max_form_memory_size
+        self.max_parts = max_parts
         self.state = State.PREAMBLE
         self.boundary = boundary
 
@@ -113,6 +120,8 @@ class MultipartDecoder:
             % (LINE_BREAK, re.escape(boundary), LINE_BREAK, LINE_BREAK),
             re.MULTILINE,
         )
+        self._search_position = 0
+        self._parts_decoded = 0
 
     def last_newline(self) -> int:
         try:
@@ -141,7 +150,7 @@ class MultipartDecoder:
         event: Event = NEED_DATA
 
         if self.state == State.PREAMBLE:
-            match = self.preamble_re.search(self.buffer)
+            match = self.preamble_re.search(self.buffer, self._search_position)
             if match is not None:
                 if match.group(1).startswith(b"--"):
                     self.state = State.EPILOGUE
@@ -150,9 +159,17 @@ class MultipartDecoder:
                 data = bytes(self.buffer[: match.start()])
                 del self.buffer[: match.end()]
                 event = Preamble(data=data)
+                self._search_position = 0
+            else:
+                # Update the search start position to be equal to the
+                # current buffer length (already searched) minus a
+                # safe buffer for part of the search target.
+                self._search_position = max(
+                    0, len(self.buffer) - len(self.boundary) - SEARCH_EXTRA_LENGTH
+                )
 
         elif self.state == State.PART:
-            match = BLANK_LINE_RE.search(self.buffer)
+            match = BLANK_LINE_RE.search(self.buffer, self._search_position)
             if match is not None:
                 headers = self._parse_headers(self.buffer[: match.start()])
                 del self.buffer[: match.end()]
@@ -177,6 +194,16 @@ class MultipartDecoder:
                         name=name,
                     )
                 self.state = State.DATA
+                self._search_position = 0
+                self._parts_decoded += 1
+
+                if self.max_parts is not None and self._parts_decoded > self.max_parts:
+                    raise RequestEntityTooLarge()
+            else:
+                # Update the search start position to be equal to the
+                # current buffer length (already searched) minus a
+                # safe buffer for part of the search target.
+                self._search_position = max(0, len(self.buffer) - SEARCH_EXTRA_LENGTH)
 
         elif self.state == State.DATA:
             if self.buffer.find(b"--" + self.boundary) == -1:

@@ -1,5 +1,7 @@
 LIBRARY()
 
+VERSION(Service-proxy-version)
+
 LICENSE(PSF-2.0)
 
 ADDINCL(

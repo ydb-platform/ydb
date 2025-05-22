@@ -47,7 +47,13 @@ void TMemoryChanges::GrabShard(TSchemeShard *ss, const TShardIdx &shardId) {
 }
 
 void TMemoryChanges::GrabDomain(TSchemeShard* ss, const TPathId& pathId) {
-    Grab<TSubDomainInfo>(pathId, ss->SubDomains, SubDomains);
+    // Copy TSubDomainInfo from ss->SubDomains to local SubDomains.
+    // Make sure that copy will be made only when needed.
+    const auto found = ss->SubDomains.find(pathId);
+    Y_ABORT_UNLESS(found != ss->SubDomains.end());
+    if (!SubDomains.contains(pathId)) {
+        SubDomains.emplace(pathId, MakeIntrusive<TSubDomainInfo>(*found->second));
+    }
 }
 
 void TMemoryChanges::GrabNewIndex(TSchemeShard* ss, const TPathId& pathId) {
@@ -56,6 +62,14 @@ void TMemoryChanges::GrabNewIndex(TSchemeShard* ss, const TPathId& pathId) {
 
 void TMemoryChanges::GrabIndex(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TTableIndexInfo>(pathId, ss->Indexes, Indexes);
+}
+
+void TMemoryChanges::GrabNewSequence(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->Sequences, Sequences);
+}
+
+void TMemoryChanges::GrabSequence(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TSequenceInfo>(pathId, ss->Sequences, Sequences);
 }
 
 void TMemoryChanges::GrabNewCdcStream(TSchemeShard* ss, const TPathId& pathId) {
@@ -98,6 +112,22 @@ void TMemoryChanges::GrabView(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TViewInfo>(pathId, ss->Views, Views);
 }
 
+void TMemoryChanges::GrabResourcePool(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TResourcePoolInfo>(pathId, ss->ResourcePools, ResourcePools);
+}
+
+void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TBackupCollectionInfo>(pathId, ss->BackupCollections, BackupCollections);
+}
+
+void TMemoryChanges::GrabNewSysView(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->SysViews, SysViews);
+}
+
+void TMemoryChanges::GrabSysView(TSchemeShard* ss, const TPathId& pathId) {
+    Grab<TSysViewInfo>(pathId, ss->SysViews, SysViews);
+}
+
 void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // be aware of the order of grab & undo ops
     // stack is the best way to manage it right
@@ -120,6 +150,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->Indexes.erase(id);
         }
         Indexes.pop();
+    }
+
+    while (Sequences) {
+        const auto& [id, elem] = Sequences.top();
+        if (elem) {
+            ss->Sequences[id] = elem;
+        } else {
+            ss->Sequences.erase(id);
+        }
+        Sequences.pop();
     }
 
     while (CdcStreams) {
@@ -173,20 +213,17 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ShardInfos[id] = *elem;
         } else {
             ss->ShardInfos.erase(id);
-            ss->ShardRemoved(id);
+            ss->OnShardRemoved(id);
         }
         Shards.pop();
     }
 
-    while (SubDomains) {
-        const auto& [id, elem] = SubDomains.top();
-        if (elem) {
-            ss->SubDomains[id] = elem;
-        } else {
-            ss->SubDomains.erase(id);
-        }
-        SubDomains.pop();
+    // Restore ss->SubDomains entries to saved copies of TSubDomainInfo objects.
+    // No copy, simple pointer replacement.
+    for (const auto& [id, elem] : SubDomains) {
+        ss->SubDomains[id] = elem;
     }
+    SubDomains.clear();
 
     while (TxStates) {
         const auto& [id, elem] = TxStates.top();
@@ -226,6 +263,26 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->Views.erase(id);
         }
         Views.pop();
+    }
+
+    while (ResourcePools) {
+        const auto& [id, elem] = ResourcePools.top();
+        if (elem) {
+            ss->ResourcePools[id] = elem;
+        } else {
+            ss->ResourcePools.erase(id);
+        }
+        ResourcePools.pop();
+    }
+
+    while (SysViews) {
+        const auto& [id, elem] = SysViews.top();
+        if (elem) {
+            ss->SysViews[id] = elem;
+        } else {
+            ss->SysViews.erase(id);
+        }
+        SysViews.pop();
     }
 }
 

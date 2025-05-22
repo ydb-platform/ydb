@@ -20,11 +20,11 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////
         typedef TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob> TSstLogoBlob;
         typedef TSstLogoBlob::TWriter TWriterLogoBlob;
-        typedef TCompactRecordMergerIndexPass<TKeyLogoBlob, TMemRecLogoBlob> TTLogoBlobCompactRecordMerger;
+        typedef TCompactRecordMerger<TKeyLogoBlob, TMemRecLogoBlob> TTLogoBlobCompactRecordMerger;
 
         typedef TLevelSegment<TKeyBlock, TMemRecBlock> TSstBlock;
         typedef TSstBlock::TWriter TWriterBlock;
-        typedef TCompactRecordMergerIndexPass<TKeyBlock, TMemRecBlock> TBlockCompactRecordMerger;
+        typedef TCompactRecordMerger<TKeyBlock, TMemRecBlock> TBlockCompactRecordMerger;
         TTestContexts TestCtx;
 
 
@@ -75,7 +75,7 @@ namespace NKikimr {
                 , AppendBlockSize(appendBlockSize)
                 , WriteBlockSize(writeBlockSize)
                 , WriterPtr(new TWriter(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse, Owner, OwnerRound,
-                        ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena))
+                        ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena, true))
                 , Arena(&TRopeArenaBackend::Allocate)
                 , ReservedChunks()
                 , Stat()
@@ -156,7 +156,7 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob>::Test(ui32 maxStep, const TString &data) {
-            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3);
+            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, true);
 
             for (ui32 step = 0; step < maxStep; step++) {
                 TLogoBlobID id(1, 1, step, 0, 0, 0);
@@ -167,21 +167,28 @@ namespace NKikimr {
                 TMemRecLogoBlob memRec(ingress);
 
 
-                TRope blobBuf = TDiskBlob::Create(data.size(), 1, 3, TRope(data), Arena);
+                TRope blobBuf = TDiskBlob::Create(data.size(), 1, 3, TRope(data), Arena, true);
 
                 memRec.SetDiskBlob(TDiskPart(0, 0, data.size()));
                 merger.Clear();
-                merger.SetLoadDataMode(true);
                 merger.AddFromFresh(memRec, &blobBuf, key, step + 1);
-                merger.Finish();
+                merger.Finish(false, true);
 
-                bool pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                if (!pushRes) {
+                auto push = [&] {
+                    TDiskPart preallocatedLocation;
+                    bool pushRes = WriterPtr->PushIndexOnly(key, merger.GetMemRec(), &merger.GetDataMerger(), &preallocatedLocation);
+                    if (pushRes && merger.GetMemRec().GetType() == TBlobType::DiskBlob && merger.GetMemRec().DataSize()) {
+                        const TDiskPart writtenLocation = WriterPtr->PushDataOnly(merger.GetDataMerger().CreateDiskBlob(Arena));
+                        Y_ABORT_UNLESS(writtenLocation == preallocatedLocation);
+                    }
+                    return pushRes;
+                };
+                if (!push()) {
                     Finish(step);
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
-                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena);
-                    pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                    Y_ABORT_UNLESS(pushRes);
+                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
+                        true);
+                    Y_ABORT_UNLESS(push());
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);
@@ -193,7 +200,7 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob>::TestOutbound(ui32 maxStep) {
-            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3);
+            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, true);
 
             for (ui32 step = 0; step < maxStep; step++) {
                 TLogoBlobID id(1, 1, step, 0, 0, 0);
@@ -211,19 +218,26 @@ namespace NKikimr {
                 memRec2.SetHugeBlob(TDiskPart(1, 2, 3));
 
                 merger.Clear();
-                merger.SetLoadDataMode(true);
                 merger.AddFromFresh(memRec1, nullptr, key, 1);
                 merger.AddFromFresh(memRec2, nullptr, key, 2);
-                merger.Finish();
+                merger.Finish(false, true);
 
-                bool pushRes = WriterPtr->Push(key, merger.GetMemRec(), merger.GetDataMerger());
-                if (!pushRes) {
+                auto push = [&] {
+                    TDiskPart preallocatedLocation;
+                    bool pushRes = WriterPtr->PushIndexOnly(key, merger.GetMemRec(), &merger.GetDataMerger(), &preallocatedLocation);
+                    if (pushRes && merger.GetMemRec().GetType() == TBlobType::DiskBlob && merger.GetMemRec().DataSize()) {
+                        const TDiskPart writtenLocation = WriterPtr->PushDataOnly(merger.GetDataMerger().CreateDiskBlob(Arena));
+                        Y_ABORT_UNLESS(writtenLocation == preallocatedLocation);
+                    }
+                    return pushRes;
+                };
+                if (!push()) {
                     Finish(step);
 
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
-                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena);
-                    pushRes = WriterPtr->Push(key, merger.GetMemRec(), merger.GetDataMerger());
-                    Y_ABORT_UNLESS(pushRes);
+                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
+                        true);
+                    Y_ABORT_UNLESS(push());
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);
@@ -235,24 +249,22 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyBlock, TMemRecBlock, TWriterBlock>::Test(ui32 maxGen) {
-            TBlockCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3);
+            TBlockCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, true);
 
             for (ui32 gen = 0; gen < maxGen; gen++) {
                 TKeyBlock key(34 + gen);
                 TMemRecBlock memRec(gen);
                 merger.Clear();
-                merger.SetLoadDataMode(true);
                 merger.AddFromFresh(memRec, nullptr, key, gen + 1);
-                merger.Finish();
+                merger.Finish(false, true);
 
-                bool pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                if (!pushRes) {
+                if (!WriterPtr->PushIndexOnly(key, memRec, nullptr, nullptr)) {
                     Finish(gen);
 
                     WriterPtr = std::make_unique<TWriterBlock>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
-                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena);
-                    pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                    Y_ABORT_UNLESS(pushRes);
+                        Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
+                        true);
+                    Y_ABORT_UNLESS(WriterPtr->PushIndexOnly(key, merger.GetMemRec(), nullptr, nullptr));
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);

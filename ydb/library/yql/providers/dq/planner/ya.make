@@ -1,13 +1,13 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/core/services
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/dq/integration
+    yql/essentials/core/services
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/core/dq_integration
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
     ydb/library/yql/dq/tasks
-    ydb/library/yql/providers/common/mkql
+    yql/essentials/providers/common/mkql
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes

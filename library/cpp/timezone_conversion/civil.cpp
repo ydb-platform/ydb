@@ -20,10 +20,15 @@ namespace {
         return true;
     }
 
-    bool TryParseUTCOffsetTimezone(TStringBuf name, int& offset) {
-        static constexpr TStringBuf OFFSET_PREFIX = "UTC";
-        if (!name.SkipPrefix(OFFSET_PREFIX)) {
-            return false;
+    bool TryParseUTCGMTOffsetTimezone(TStringBuf name, int& offset) {
+        static constexpr TStringBuf OFFSET_PREFIX_UTC = "UTC";
+        static constexpr TStringBuf OFFSET_PREFIX_GMT = "GMT";
+        if (!name.SkipPrefix(OFFSET_PREFIX_UTC)) {
+            // Sometimes timezones from client devices look like 'GMT+03:00'
+            // This format is not standard but can be translated like UTC+xxx
+            if (!name.SkipPrefix(OFFSET_PREFIX_GMT)) {
+                return false;
+            }
         }
         return NDatetime::TryParseOffset(name, offset);
     }
@@ -70,7 +75,11 @@ namespace NDatetime {
 
     TTimeZone GetTimeZone(TStringBuf name) {
         int offset;
-        if (TryParseUTCOffsetTimezone(name, offset)) {
+        // Try to preparse constant timezones like:
+        // UTC+03:00
+        // GMT+03:00
+        // Note constant timezones like 'Etc-03' will be handed in cctz library
+        if (TryParseUTCGMTOffsetTimezone(name, offset)) {
             return GetFixedTimeZone(offset);
         }
         TTimeZone result;

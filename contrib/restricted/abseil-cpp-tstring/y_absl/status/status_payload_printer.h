@@ -16,6 +16,7 @@
 
 #include <util/generic/string.h>
 
+#include "y_absl/base/nullability.h"
 #include "y_absl/strings/cord.h"
 #include "y_absl/strings/string_view.h"
 #include "y_absl/types/optional.h"
@@ -34,8 +35,8 @@ namespace status_internal {
 // NOTE: This is an internal API and the design is subject to change in the
 // future in a non-backward-compatible way. Since it's only meant for debugging
 // purpose, you should not rely on it in any critical logic.
-using StatusPayloadPrinter = y_absl::optional<TString> (*)(y_absl::string_view,
-                                                             const y_absl::Cord&);
+using StatusPayloadPrinter = y_absl::Nullable<y_absl::optional<TString> (*)(
+    y_absl::string_view, const y_absl::Cord&)>;
 
 // Sets the global payload printer. Only one printer should be set per process.
 // If multiple printers are set, it's undefined which one will be used.

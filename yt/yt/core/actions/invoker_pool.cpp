@@ -7,6 +7,13 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TDiagnosableInvokerPool::TInvokerStatistics TDiagnosableInvokerPool::GetInvokerStatistics(int index) const
+{
+    return DoGetInvokerStatistics(index);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TFuture<void> SuspendInvokerPool(const ISuspendableInvokerPoolPtr& invokerPool)
 {
     const auto size = invokerPool->GetSize();

@@ -20,7 +20,7 @@
 
 #include <yt/yt/core/actions/future.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <util/datetime/base.h>
 
@@ -28,8 +28,7 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTabletInfo
-    : public TRefCounted
+struct TTabletInfo final
 {
     TTabletId TabletId;
     NHydra::TRevision MountRevision = NHydra::NullRevision;
@@ -39,20 +38,20 @@ struct TTabletInfo
     TTabletCellId CellId;
     NObjectClient::TObjectId TableId;
     TInstant UpdateTime;
-    std::vector<TWeakPtr<TTableMountInfo>> Owners;
 
     NTableClient::TKeyBound GetLowerKeyBound() const;
+
+    TTabletInfoPtr Clone() const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TTabletInfo)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTableReplicaInfo
-    : public TRefCounted
+struct TTableReplicaInfo final
 {
     TTableReplicaId ReplicaId;
-    TString ClusterName;
+    std::string ClusterName;
     NYPath::TYPath ReplicaPath;
     ETableReplicaMode Mode;
 };
@@ -65,6 +64,10 @@ struct TIndexInfo
 {
     NObjectClient::TObjectId TableId;
     ESecondaryIndexKind Kind;
+    std::optional<TString> Predicate;
+    std::optional<TString> UnfoldedColumn;
+    ETableToIndexCorrespondence Correspondence;
+    NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -84,15 +87,18 @@ DEFINE_ENUM(ETableSchemaKind,
     (VersionedWrite)
     // Schema used for looking up rows.
     (Lookup)
+    // Schema used for locking rows.
+    (Lock)
     // For sorted schemas, coincides with primary.
     // For ordered, contains an additional tablet index columns.
     (PrimaryWithTabletIndex)
     // Schema used for replication log rows.
     (ReplicationLog)
+    // Schema used for inserting rows into ordered tables via queue producer.
+    (WriteViaQueueProducer)
 );
 
-struct TTableMountInfo
-    : public TRefCounted
+struct TTableMountInfo final
 {
     NYPath::TYPath Path;
     NObjectClient::TObjectId TableId;
@@ -128,8 +134,7 @@ struct TTableMountInfo
 
     bool EnableDetailedProfiling = false;
 
-    // COMPAT(ponasenko-rs)
-    bool EnableSharedWriteLocks = false;
+    NTableClient::ETabletTransactionSerializationType SerializationType = NTableClient::ETabletTransactionSerializationType::Coarse;
 
     bool IsSorted() const;
     bool IsOrdered() const;
@@ -156,6 +161,8 @@ struct TTableMountInfo
     void ValidateNotPhysicallyLog() const;
     void ValidateReplicated() const;
     void ValidateReplicationLog() const;
+
+    TTableMountInfoPtr Clone() const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TTableMountInfo)
@@ -166,14 +173,27 @@ struct ITableMountCache
     : public virtual TRefCounted
 {
     virtual TFuture<TTableMountInfoPtr> GetTableInfo(const NYPath::TYPath& path) = 0;
-    virtual TTabletInfoPtr FindTabletInfo(TTabletId tabletId) = 0;
-    virtual void InvalidateTablet(TTabletInfoPtr tabletInfo) = 0;
 
-    //! If #error is unretryable, returns null.
-    //! Otherwise invalidates cached tablet info (if it can be inferred from #error)
-    //! and returns actual retryable error code as first element and
-    //! tablet info as second element.
-    virtual std::pair<std::optional<TErrorCode>, TTabletInfoPtr> InvalidateOnError(
+    //! Invalidates cached table info for all table infos owning this tablet.
+    virtual void InvalidateTablet(TTabletId tabletId) = 0;
+
+    struct TInvalidationResult
+    {
+        bool Retryable = false;
+        //! Actual retryable error code.
+        TErrorCode ErrorCode;
+        //! Tablet info for the tablet mentioned in the |error|. Note that it may belong
+        //! to the would-be invalidated table.
+        TTabletInfoPtr TabletInfo;
+        //! True if table info was patched by info from the error and update is not required.
+        bool TableInfoUpdatedFromError = false;
+    };
+
+    //! If #error is unretryable, returns the result with |Retryable| = false.
+    //! Otherwise either patches cached tablet info with hints provided within
+    //! |error| attributes or invalidates cached tablet info. In the former
+    //! case |TableInfoUpdatedFromError| flag will be set.
+    virtual TInvalidationResult InvalidateOnError(
         const TError& error,
         bool forceRetry) = 0;
 

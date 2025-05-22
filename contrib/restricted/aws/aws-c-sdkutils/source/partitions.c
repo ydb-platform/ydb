@@ -10,6 +10,7 @@
 #include <aws/common/ref_count.h>
 #include <aws/common/string.h>
 #include <aws/sdkutils/partitions.h>
+#include <aws/sdkutils/private/endpoints_regex.h>
 #include <aws/sdkutils/private/endpoints_types_impl.h>
 #include <aws/sdkutils/private/endpoints_util.h>
 
@@ -28,6 +29,7 @@ static void s_partitions_config_destroy(void *data) {
 
     aws_json_value_destroy(partitions->json_root);
     aws_string_destroy(partitions->version);
+    aws_hash_table_clean_up(&partitions->base_partitions);
     aws_hash_table_clean_up(&partitions->region_to_partition_info);
     aws_mem_release(partitions->allocator, partitions);
 }
@@ -157,21 +159,37 @@ static int s_on_partition_element(
         goto on_error;
     }
 
+    struct aws_json_value *regex_node =
+        aws_json_value_get_from_object(partition_node, aws_byte_cursor_from_c_str("regionRegex"));
+
     struct aws_partition_info *partition_info = aws_partition_info_new(partitions->allocator, id_cur);
     partition_info->info = aws_string_new_from_json(partitions->allocator, outputs_node);
 
+    if (regex_node != NULL) {
+        struct aws_byte_cursor regex_cur = {0};
+        if (aws_json_value_get_string(regex_node, &regex_cur)) {
+            AWS_LOGF_ERROR(AWS_LS_SDKUTILS_PARTITIONS_PARSING, "Failed to parse region regex.");
+            goto on_error;
+        }
+
+        partition_info->region_regex = aws_endpoints_regex_new(partitions->allocator, regex_cur);
+    }
+
     if (partition_info->info == NULL) {
-        AWS_LOGF_ERROR(AWS_LS_SDKUTILS_PARTITIONS_PARSING, "Failed to add partition info.");
+        AWS_LOGF_ERROR(AWS_LS_SDKUTILS_PARTITIONS_PARSING, "Failed to parse partition info.");
         goto on_error;
     }
 
-    if (aws_hash_table_put(&partitions->region_to_partition_info, &partition_info->name, partition_info, NULL)) {
+    if (aws_hash_table_put(&partitions->base_partitions, &partition_info->name, partition_info, NULL)) {
         AWS_LOGF_ERROR(AWS_LS_SDKUTILS_PARTITIONS_PARSING, "Failed to add partition info.");
         goto on_error;
     }
 
     struct partition_parse_wrapper wrapper = {
-        .outputs_node = outputs_node, .outputs_str = partition_info->info, .partitions = partitions};
+        .outputs_node = outputs_node,
+        .outputs_str = partition_info->info,
+        .partitions = partitions,
+    };
 
     struct aws_json_value *regions_node =
         aws_json_value_get_from_object(partition_node, aws_byte_cursor_from_c_str("regions"));
@@ -239,6 +257,19 @@ struct aws_partitions_config *aws_partitions_config_new_from_string(
 
     struct aws_partitions_config *partitions = aws_mem_calloc(allocator, 1, sizeof(struct aws_partitions_config));
     partitions->allocator = allocator;
+
+    if (aws_hash_table_init(
+            &partitions->base_partitions,
+            allocator,
+            10,
+            aws_hash_byte_cursor_ptr,
+            aws_endpoints_byte_cursor_eq,
+            NULL,
+            s_callback_partition_info_destroy)) {
+        AWS_LOGF_ERROR(AWS_LS_SDKUTILS_PARTITIONS_PARSING, "Failed to init partition info map.");
+        aws_raise_error(AWS_ERROR_SDKUTILS_PARTITIONS_PARSE_FAILED);
+        goto on_error;
+    }
 
     if (aws_hash_table_init(
             &partitions->region_to_partition_info,

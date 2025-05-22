@@ -211,6 +211,10 @@ namespace NTable {
             return State_ && !State_->empty();
         }
 
+        bool Contains(ui64 txId) const {
+            return State_ && State_->contains(txId);
+        }
+
         const TRowVersion* Find(ui64 txId) const {
             if (State_) {
                 return State_->Find(txId);
@@ -226,9 +230,20 @@ namespace NTable {
             Unshare()[txId] = value;
         }
 
-        void Remove(ui64 txId) {
+        bool Remove(ui64 txId) {
             if (State_ && State_->contains(txId)) {
                 Unshare().erase(txId);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        size_t Size() const {
+            if (State_) {
+                return State_->size();
+            } else {
+                return 0;
             }
         }
 
@@ -248,12 +263,12 @@ namespace NTable {
         }
 
         ITransactionMap& operator*() const {
-            Y_ABORT_UNLESS(State_);
+            Y_ENSURE(State_);
             return *State_;
         }
 
         ITransactionMap* operator->() const {
-            Y_ABORT_UNLESS(State_);
+            Y_ENSURE(State_);
             return State_.Get();
         }
 
@@ -291,13 +306,40 @@ namespace NTable {
     };
 
     /**
+     * An interface for a collection of TxIds
+     */
+    class ITransactionSet {
+    protected:
+        ~ITransactionSet() = default;
+
+    public:
+        /**
+         * Returns true when the specified txId is in the set
+         */
+        virtual bool Contains(ui64 txId) const = 0;
+
+    public:
+        /**
+         * A special read-only object that implements an empty transaction set
+         */
+        static const ITransactionSet& None;
+    };
+
+    /**
      * A simple copy-on-write data structure for a TxId set
      */
     class TTransactionSet {
     private:
         using TTxSet = absl::flat_hash_set<ui64>;
 
-        struct TState : public TThrRefBase, TTxSet {
+        struct TState final
+            : public TThrRefBase
+            , public ITransactionSet
+            , public TTxSet
+        {
+            bool Contains(ui64 txId) const override {
+                return TTxSet::contains(txId);
+            }
         };
 
     public:
@@ -318,13 +360,32 @@ namespace NTable {
             State_.Reset();
         }
 
-        void Add(ui64 txId) {
-            Unshare().insert(txId);
+        bool Add(ui64 txId) {
+            return Unshare().insert(txId).second;
         }
 
-        void Remove(ui64 txId) {
+        bool Remove(ui64 txId) {
             if (State_ && State_->contains(txId)) {
                 Unshare().erase(txId);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        size_t Size() const {
+            if (State_) {
+                return State_->size();
+            } else {
+                return 0;
+            }
+        }
+
+        operator const ITransactionSet&() const {
+            if (State_) {
+                return *State_;
+            } else {
+                return ITransactionSet::None;
             }
         }
 

@@ -1,0 +1,125 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  3158a75221c70090b7e127aa7c980dd8
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [157:157]
+        README.md [189:189]
+        include/libfyaml.h [24:24]
+        src/lib/fy-accel.c [6:6]
+        src/lib/fy-accel.h [6:6]
+        src/lib/fy-atom.c [6:6]
+        src/lib/fy-atom.h [6:6]
+        src/lib/fy-composer.c [6:6]
+        src/lib/fy-composer.h [6:6]
+        src/lib/fy-ctype.c [6:6]
+        src/lib/fy-ctype.h [6:6]
+        src/lib/fy-diag.c [6:6]
+        src/lib/fy-diag.h [6:6]
+        src/lib/fy-doc.c [6:6]
+        src/lib/fy-doc.h [6:6]
+        src/lib/fy-docbuilder.c [6:6]
+        src/lib/fy-docbuilder.h [6:6]
+        src/lib/fy-docstate.c [6:6]
+        src/lib/fy-docstate.h [6:6]
+        src/lib/fy-dump.c [6:6]
+        src/lib/fy-dump.h [6:6]
+        src/lib/fy-emit-accum.h [6:6]
+        src/lib/fy-emit.c [6:6]
+        src/lib/fy-emit.h [6:6]
+        src/lib/fy-event.c [6:6]
+        src/lib/fy-event.h [6:6]
+        src/lib/fy-input.c [6:6]
+        src/lib/fy-input.h [6:6]
+        src/lib/fy-list.h [6:6]
+        src/lib/fy-parse.c [6:6]
+        src/lib/fy-parse.h [6:6]
+        src/lib/fy-path.c [6:6]
+        src/lib/fy-path.h [6:6]
+        src/lib/fy-token.c [6:6]
+        src/lib/fy-token.h [6:6]
+        src/lib/fy-typelist.h [6:6]
+        src/lib/fy-types.c [6:6]
+        src/lib/fy-types.h [6:6]
+        src/lib/fy-utf8.c [6:6]
+        src/lib/fy-utf8.h [6:6]
+        src/lib/fy-utils.c [9:9]
+        src/lib/fy-utils.h [6:6]
+        src/lib/fy-walk.c [6:6]
+        src/lib/fy-walk.h [6:6]
+
+KEEP     MIT                  451a391db00fbdf5d68a2b39c4fd47cf
+BELONGS ya.make
+    License text:
+         * Under the MIT license.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/lib/fy-utils.c [118:118]
+
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: LICENSE at line 16
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [3:19]
+
+KEEP     MIT                  b913b5721a19c7e97156090bd16b43c4
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: include/libfyaml.h at line 19
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        include/libfyaml.h [6:22]

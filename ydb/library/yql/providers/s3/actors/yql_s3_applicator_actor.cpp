@@ -8,8 +8,8 @@
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
-#include <ydb/library/yql/utils/url_builder.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/url_builder.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -49,7 +49,7 @@ struct TCompleteMultipartUpload {
     }
 
     TString BuildUrl() const {
-        TUrlBuilder urlBuilder(Url);
+        NS3Util::TUrlBuilder urlBuilder(NS3Util::UrlEscapeRet(Url));
         urlBuilder.AddUrlParam("uploadId", UploadId);
         return urlBuilder.Build();
     }
@@ -87,7 +87,7 @@ struct TListMultipartUploads {
         // This requirement will be fixed in the curl library
         // https://github.com/curl/curl/commit/fc76a24c53b08cdf6eec8ba787d8eac64651d56e
         // https://github.com/curl/curl/commit/c87920353883ef9d5aa952e724a8e2589d76add5
-        TUrlBuilder urlBuilder(Url);
+        NS3Util::TUrlBuilder urlBuilder(NS3Util::UrlEscapeRet(Url));
         if (KeyMarker) {
             urlBuilder.AddUrlParam("key-marker", KeyMarker);
         }
@@ -114,7 +114,7 @@ struct TAbortMultipartUpload {
     }
 
     TString BuildUrl() const {
-        TUrlBuilder urlBuilder(Url);
+        NS3Util::TUrlBuilder urlBuilder(NS3Util::UrlEscapeRet(Url));
         urlBuilder.AddUrlParam("uploadId", UploadId);
         return urlBuilder.Build();
     }
@@ -141,7 +141,7 @@ struct TListParts {
         // This requirement will be fixed in the curl library
         // https://github.com/curl/curl/commit/fc76a24c53b08cdf6eec8ba787d8eac64651d56e
         // https://github.com/curl/curl/commit/c87920353883ef9d5aa952e724a8e2589d76add5
-        TUrlBuilder urlBuilder(Url);
+        NS3Util::TUrlBuilder urlBuilder(NS3Util::UrlEscapeRet(Url));
         if (PartNumberMarker) {
             urlBuilder.AddUrlParam("part-number-marker", PartNumberMarker);
         }
@@ -204,6 +204,8 @@ class TS3ApplicatorActor;
 using TObjectStorageRequest = std::function<void(TS3ApplicatorActor& actor)>;
 
 class TS3ApplicatorActor : public NActors::TActorBootstrapped<TS3ApplicatorActor> {
+    static constexpr ui64 GLOBAL_RETRY_LIMIT = 100;
+
 public:
     using NActors::TActorBootstrapped<TS3ApplicatorActor>::Send;
 
@@ -229,8 +231,8 @@ public:
     , CredentialsFactory(credentialsFactory)
     , ExternalEffect(externalEffect)
     , ActorSystem(NActors::TActivationContext::ActorSystem())
-    , RetryPolicy(NYql::GetHTTPDefaultRetryPolicy(TDuration::Zero(), 3))
-    , RetryCount(100) {
+    , RetryPolicy(NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.MaxRetries = 3, .RetriedCurlCodes = NYql::FqRetriedCurlCodes()}))
+    , RetryCount(GLOBAL_RETRY_LIMIT) {
         // ^^^ 3 retries in HTTP GW per operation
         // up to 100 retries at app level for all operations ^^^
     }
@@ -271,13 +273,43 @@ public:
         hFunc(TEvPrivate::TEvListParts, Handle);
     )
 
-    bool RetryOperation(CURLcode curlResponseCode, ui32 httpResponseCode) {
-        auto result = RetryCount && RetryPolicy->CreateRetryState()->GetNextRetryDelay(curlResponseCode, httpResponseCode);
+    bool RetryOperation(IHTTPGateway::TResult&& operationResult, const TString& url, const TString& operationName) {
+        const auto curlResponseCode = operationResult.CurlResponseCode;
+        const auto httpResponseCode = operationResult.Content.HttpResponseCode;
+        const auto result = RetryCount && GetRetryState(operationName)->GetNextRetryDelay(curlResponseCode, httpResponseCode);
+
+        NYql::TIssues issues = std::move(operationResult.Issues);
+        TStringBuilder errorMessage = TStringBuilder() << "Retry operation " << operationName << ", curl error: " << curl_easy_strerror(curlResponseCode) << ", url: " << url;
+        if (const TString errorText = operationResult.Content.Extract()) {
+            TString errorCode;
+            TString message;
+            if (!ParseS3ErrorResponse(errorText, errorCode, message)) {
+                message = errorText;
+            }
+            issues.AddIssues(BuildIssues(httpResponseCode, errorCode, message));
+        } else {
+            errorMessage << ", HTTP code: " << httpResponseCode;
+        }
+
+        if (issues) {
+            RetryIssues.AddIssues(NS3Util::AddParentIssue(errorMessage, std::move(issues)));
+        } else {
+            RetryIssues.AddIssue(errorMessage);
+        }
+
         if (result) {
             RetryCount--;
         } else {
+            Issues.AddIssues(NS3Util::AddParentIssue(
+                RetryCount
+                    ? TStringBuilder() << "Number of retries exceeded limit for operation " << operationName
+                    : TStringBuilder() << "Number of retries exceeded global limit in " << GLOBAL_RETRY_LIMIT << " retries",
+                NYql::TIssues(RetryIssues)
+            ));
+            RetryIssues.Clear();
             Finish(true);
         }
+
         return result;
     }
 
@@ -370,8 +402,9 @@ public:
                 return;
             }
         }
-        LOG_D("CommitMultipartUpload ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
+        const TString& url = ev->Get()->State->BuildUrl();
+        LOG_D("CommitMultipartUpload ERROR " << url);
+        if (RetryOperation(std::move(result), url, "CommitMultipartUpload")) {
             PushCommitMultipartUpload(ev->Get()->State);
         }
     }
@@ -416,7 +449,9 @@ public:
                             auto prefix = ev->Get()->State->Url + ev->Get()->State->Prefix;
                             if (!UnknownPrefixes.contains(prefix)) {
                                 UnknownPrefixes.insert(prefix);
-                                Issues.AddIssue(TIssue("Unknown uncommitted upload with prefix: " + prefix));
+                                TIssue issue(TStringBuilder() << "Unknown uncommitted upload with prefix: " << prefix);
+                                issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+                                Issues.AddIssue(std::move(issue));
                             }
                         } else {
                             pos += KeyPrefix.size();
@@ -444,8 +479,9 @@ public:
             }
             return;
         }
-        LOG_D("ListMultipartUploads ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
+        const TString& url = ev->Get()->State->BuildUrl();
+        LOG_D("ListMultipartUploads ERROR " << url);
+        if (RetryOperation(std::move(result), url, "ListMultipartUploads")) {
             PushListMultipartUploads(ev->Get()->State);
         }
     }
@@ -467,8 +503,9 @@ public:
                 return;
             }
         }
-        LOG_D("AbortMultipartUpload ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
+        const TString& url = ev->Get()->State->BuildUrl();
+        LOG_D("AbortMultipartUpload ERROR " << url);
+        if (RetryOperation(std::move(result), url, "AbortMultipartUpload")) {
             PushAbortMultipartUpload(ev->Get()->State);
         }
     }
@@ -480,35 +517,46 @@ public:
 
     void Process(TEvPrivate::TEvListParts::TPtr& ev) {
         auto& result = ev->Get()->Result;
-        if (!result.Issues && result.Content.HttpResponseCode >= 200 && result.Content.HttpResponseCode < 300) {
-            TS3Result s3Result(result.Content.Extract());
-            if (s3Result.IsError) {
-                Finish(true, s3Result.S3ErrorCode + ": " + s3Result.ErrorMessage);
-            } else {
-                LOG_D("ListParts SUCCESS " << ev->Get()->State->BuildUrl());
-                const auto& root = s3Result.GetRootNode();
-                if (root.Name() == "ListPartsResult") {
-                    const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
-                    auto state = ev->Get()->State->CompleteState;
-                    state->Tags.reserve(state->Tags.size() + root.Node("s3:MaxParts", false, nss).Value<ui32>());
-                    const auto& parts = root.XPath("s3:Part", true, nss);
-                    for (const auto& part : parts) {
-                        state->Tags.push_back(part.Node("s3:ETag", false, nss).Value<TString>());
-                    }
-                    if (root.Node("s3:IsTruncated", false, nss).Value<bool>()) {
-                        ev->Get()->State->PartNumberMarker = root.Node("s3:NextPartNumberMarker", false, nss).Value<TString>();
-                        PushListParts(ev->Get()->State);
-                    } else {
-                        PushCommitMultipartUpload(state);
-                    }
-                } else {
-                    Finish(true, "ListParts reply: " + root.Name());
-                }
+        if (!result.Issues) {
+            if (result.Content.HttpResponseCode == 404) {
+                LOG_W("ListParts NOT FOUND " << ev->Get()->State->BuildUrl() << " (multipart upload may be completed already)");
+                return;
             }
-            return;
+            if (result.Content.HttpResponseCode >= 200 && result.Content.HttpResponseCode < 300) {
+                TS3Result s3Result(result.Content.Extract());
+                if (s3Result.IsError) {
+                    Finish(true, s3Result.S3ErrorCode + ": " + s3Result.ErrorMessage);
+                } else {
+                    LOG_D("ListParts SUCCESS " << ev->Get()->State->BuildUrl());
+                    const auto& root = s3Result.GetRootNode();
+                    if (root.Name() == "ListPartsResult") {
+                        const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
+                        auto state = ev->Get()->State->CompleteState;
+                        state->Tags.reserve(state->Tags.size() + root.Node("s3:MaxParts", false, nss).Value<ui32>());
+                        const auto& parts = root.XPath("s3:Part", true, nss);
+                        for (const auto& part : parts) {
+                            state->Tags.push_back(part.Node("s3:ETag", false, nss).Value<TString>());
+                        }
+                        if (root.Node("s3:IsTruncated", false, nss).Value<bool>()) {
+                            ev->Get()->State->PartNumberMarker = root.Node("s3:NextPartNumberMarker", false, nss).Value<TString>();
+                            PushListParts(ev->Get()->State);
+                        } else {
+                            if (state->Tags.empty()) {
+                                LOG_W("ListParts returned empty parts list for " << ev->Get()->State->BuildUrl() << " (multipart upload may be completed already)");
+                                return;
+                            }
+                            PushCommitMultipartUpload(state);
+                        }
+                    } else {
+                        Finish(true, "ListParts reply: " + root.Name());
+                    }
+                }
+                return;
+            }
         }
-        LOG_D("ListParts ERROR " << ev->Get()->State->BuildUrl());
-        if (RetryOperation(result.CurlResponseCode, result.Content.HttpResponseCode)) {
+        const TString& url = ev->Get()->State->BuildUrl();
+        LOG_D("ListParts ERROR " << url);
+        if (RetryOperation(std::move(result), url, "ListParts")) {
             PushListParts(ev->Get()->State);
         }
     }
@@ -578,6 +626,13 @@ public:
         actorSystem->Send(new NActors::IEventHandle(selfId, {}, new TEvPrivate::TEvListParts(state, std::move(result))));
     }
 
+    IHTTPGateway::TRetryPolicy::IRetryState::TPtr& GetRetryState(const TString& operationName) {
+        if (const auto it = RetryStates.find(operationName); it != RetryStates.end()) {
+            return it->second;
+        }
+        return RetryStates.insert({operationName, RetryPolicy->CreateRetryState()}).first->second;
+    }
+
 private:
     NActors::TActorId ParentId;
     IHTTPGateway::TPtr Gateway;
@@ -590,11 +645,13 @@ private:
     NYql::NDqProto::TExternalEffect ExternalEffect;
     NActors::TActorSystem* const ActorSystem;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
+    std::unordered_map<TString, IHTTPGateway::TRetryPolicy::IRetryState::TPtr> RetryStates;
     ui64 HttpRequestInflight = 0;
     ui64 RetryCount;
     THashSet<TString> UnknownPrefixes;
     THashSet<TString> CommitUploads;
     NYql::TIssues Issues;
+    NYql::TIssues RetryIssues;
     std::queue<TObjectStorageRequest> RequestQueue;
     bool ApplicationFinished = false;
 };

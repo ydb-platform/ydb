@@ -4,11 +4,12 @@
 #include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -88,9 +89,10 @@ struct TEvDqCompute {
 
         TEvInjectCheckpoint() = default;
 
-        TEvInjectCheckpoint(ui64 id, ui64 generation) {
+        TEvInjectCheckpoint(ui64 id, ui64 generation, NDqProto::ECheckpointType type) {
             Record.MutableCheckpoint()->SetId(id);
             Record.MutableCheckpoint()->SetGeneration(generation);
+            Record.MutableCheckpoint()->SetType(type);
             Record.SetGeneration(generation);
         }
     };
@@ -105,7 +107,7 @@ struct TEvDqCompute {
         const TString GraphId;
         const ui64 TaskId;
         const NDqProto::TCheckpoint Checkpoint;
-        NDqProto::TComputeActorState State;
+        TComputeActorState State;
     };
 
     struct TEvSaveTaskStateResult : public NActors::TEventPB<TEvSaveTaskStateResult,
@@ -164,10 +166,15 @@ struct TEvDqCompute {
 
         using TBaseEventPB::TBaseEventPB;
 
-        TEvRestoreFromCheckpointResult(const NDqProto::TCheckpoint& checkpoint, ui64 taskId, NDqProto::TEvRestoreFromCheckpointResult::ERestoreStatus status) {
+        TEvRestoreFromCheckpointResult(
+            const NDqProto::TCheckpoint& checkpoint,
+            ui64 taskId,
+            NDqProto::TEvRestoreFromCheckpointResult::ERestoreStatus status,
+            const NYql::TIssues& issues) {
             Record.MutableCheckpoint()->CopyFrom(checkpoint);
             Record.SetTaskId(taskId);
             Record.SetStatus(status);
+            NYql::IssuesToMessage(issues, Record.MutableIssues());
         }
     };
 
@@ -191,7 +198,7 @@ struct TEvDqCompute {
             , Generation(generation) {}
 
         const NDqProto::TCheckpoint Checkpoint;
-        std::vector<NDqProto::TComputeActorState> States;
+        std::vector<TComputeActorState> States;
         const TIssues Issues;
         const ui64 Generation;
     };
@@ -249,6 +256,8 @@ struct TComputeRuntimeSettings {
 
     i64 AsyncInputPushLimit = std::numeric_limits<i64>::max();
 
+    bool WithProgressStats = false;
+
     inline bool CollectNone() const {
         return StatsMode <= NDqProto::DQ_STATS_MODE_NONE;
     }
@@ -300,6 +309,10 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return true;
     }
 
+    bool IsReasonableToUseSpilling() const override {
+        return false;
+    }
+
     void FreeQuota(ui64 memorySize) override {
         Y_ABORT_UNLESS(Quota >= memorySize);
         Quota -= memorySize;
@@ -319,6 +332,10 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
     ui64 GetMaxMemorySize() const override {
         return MaxMemorySize;
     };
+
+    TString MemoryConsumptionDetails() const override {
+        return TString();
+    }
 
     virtual bool AllocateExtraQuota(ui64) {
         return false;
@@ -360,25 +377,24 @@ struct TComputeMemoryLimits {
 
     ui64 MinMemAllocSize = 30_MB;
     ui64 MinMemFreeSize = 30_MB;
+    ui64 OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
+    ui64 ChunkSizeLimit = 48_MB;
+    TMaybe<ui8> ArrayBufferMinFillPercentage; // Used by DqOutputHashPartitionConsumer and DqOutputChannel
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };
 
-//temporary flag to integarate changes in interface
-#define Y_YQL_DQ_TASK_RUNNER_REQUIRES_ALLOCATOR 1
-
 using TTaskRunnerFactory = std::function<
-    TIntrusivePtr<IDqTaskRunner>(NKikimr::NMiniKQL::TScopedAlloc& alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TLogFunc& logFunc)
+    TIntrusivePtr<IDqTaskRunner>(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, const TDqTaskSettings& task, NDqProto::EDqStatsMode statsMode, const TLogFunc& logFunc)
 >;
 
 void FillAsyncStats(NDqProto::TDqAsyncBufferStats& proto, TDqAsyncStats stats);
 
-void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& taskStats,
+void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& taskStats,
     NDqProto::TDqTaskStats* protoTask, TCollectStatsLevel level);
 
 NActors::IActor* CreateDqComputeActor(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask* task,
-    IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     const TTaskRunnerFactory& taskRunnerFactory,
     ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr);

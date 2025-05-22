@@ -1,0 +1,99 @@
+A N N O U N C E M E N T -- OpenLDAP 2.6
+
+    The OpenLDAP Project is pleased to announce the availability
+    of OpenLDAP Software 2.6, a suite of the Lightweight Directory
+    Access Protocol (v3) servers, clients, utilities, and
+    development tools.
+
+    This release contains the following major enhancements:
+
+        * Slapd(8) enhancements
+            - Ability to log directly to a file bypassing syslog
+        * Retired backends
+            - back-ndb
+        * Deprecated backends
+            - back-sql
+            - back-perl
+        * lloadd(8) enhancments
+            - Additional load balancing strategies
+            - Additional options to improve coherence with certain
+              controls and extended operations
+            - Ability to log directly to a file bypassing syslog
+
+    This release includes the following major components:
+
+        * slapd - a stand-alone LDAP directory server
+        * lloadd - a stand-alone LDAP load balancing proxy server
+        * -lldap - a LDAP client library
+        * -llber - a lightweight BER/DER encoding/decoding library
+        * LDIF tools - data conversion tools for use with slapd
+        * LDAP tools - A collection of command line LDAP utilities
+        * Admin Guide, Manual Pages - associated documentation
+
+    In addition, there are some contributed components:
+
+        * LDAPC++ - a LDAP C++ SDK
+        * Various slapd modules and slapi plugins
+
+
+ACKNOWLEDGEMENTS
+
+    OpenLDAP Software is developed by the OpenLDAP Project.  The
+    Project consists of a team of volunteers who use the
+    Internet to coordinate their activities.  The Project is
+    an organized activity of the OpenLDAP Foundation.
+
+    OpenLDAP Software is derived from University of Michigan LDAP,
+    release 3.3.
+
+
+AVAILABILITY
+
+    This software is available under the OpenLDAP Public License,
+    an non-restrictive, "free", open-source license.  Download
+    information is available at:
+
+        https://www.OpenLDAP.org/software/download/
+
+
+SUPPORT
+
+    OpenLDAP Software is user supported:
+
+        https://www.openldap.org/support/
+
+    The OpenLDAP Administrator's Guide, which includes quick
+    start instructions, is available at:
+
+        https://www.openldap.org/doc/admin/
+
+    In addition, there are also a number of discussion lists
+    related to OpenLDAP Software.  A list of mailing lists is
+    available at:
+
+        https://www.OpenLDAP.org/lists/
+
+    To report bugs, please use project's Issue Tracking System:
+
+        https://bugs.openldap.org/
+
+    The OpenLDAP home page containing lots of interesting information
+    and online documentation is available at this URL:
+
+        https://www.OpenLDAP.org/
+
+
+SUPPORTED PLATFORMS
+
+    This release has been ported to many UNIX (and UNIX-like)
+    platforms including Darwin, FreeBSD, Linux, NetBSD, OpenBSD
+    and most commercial UNIX systems.  The release has also been
+    ported (in part or in whole) to other platforms including
+    Apple MacOS X, IBM zOS, and Microsoft Windows NT/2000/etc.
+
+---
+OpenLDAP is a registered trademark of the OpenLDAP Foundation.
+
+Copyright 1999-2024 The OpenLDAP Foundation, Redwood City,
+California, USA.  All Rights Reserved.  Permission to copy and
+distribute verbatim copies of this document is granted.

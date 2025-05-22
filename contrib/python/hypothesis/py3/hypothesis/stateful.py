@@ -15,11 +15,12 @@ a single value.
 Notably, the set of steps available at any point may depend on the
 execution to date.
 """
-
+import collections
 import inspect
 from copy import copy
 from functools import lru_cache
 from io import StringIO
+from time import perf_counter
 from typing import (
     Any,
     Callable,
@@ -46,8 +47,12 @@ from hypothesis._settings import (
 from hypothesis.control import _current_build_context, current_build_context
 from hypothesis.core import TestFunc, given
 from hypothesis.errors import InvalidArgument, InvalidDefinition
+from hypothesis.internal.compat import add_note
 from hypothesis.internal.conjecture import utils as cu
+from hypothesis.internal.conjecture.engine import BUFFER_SIZE
+from hypothesis.internal.conjecture.junkdrawer import gc_cumulative_time
 from hypothesis.internal.healthcheck import fail_health_check
+from hypothesis.internal.observability import TESTCASE_CALLBACKS
 from hypothesis.internal.reflection import (
     function_digest,
     get_pretty_function_description,
@@ -116,14 +121,22 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
         machine = factory()
         check_type(RuleBasedStateMachine, machine, "state_machine_factory()")
         cd.hypothesis_runner = machine
+        machine._observability_predicates = cd._observability_predicates  # alias
 
         print_steps = (
             current_build_context().is_final or current_verbosity() >= Verbosity.debug
         )
-        try:
+        cd._stateful_repr_parts = []
+
+        def output(s):
             if print_steps:
-                report(f"state = {machine.__class__.__name__}()")
-            machine.check_invariants(settings)
+                report(s)
+            if TESTCASE_CALLBACKS:
+                cd._stateful_repr_parts.append(s)
+
+        try:
+            output(f"state = {machine.__class__.__name__}()")
+            machine.check_invariants(settings, output, cd._stateful_run_times)
             max_steps = settings.stateful_step_count
             steps_run = 0
 
@@ -140,6 +153,13 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                     must_stop = True
                 elif steps_run <= _min_steps:
                     must_stop = False
+                elif cd._bytes_drawn > (0.8 * BUFFER_SIZE):
+                    # Better to stop after fewer steps, than always overrun and retry.
+                    # See https://github.com/HypothesisWorks/hypothesis/issues/3618
+                    must_stop = True
+
+                start_draw = perf_counter()
+                start_gc = gc_cumulative_time()
                 if cd.draw_boolean(p=2**-16, forced=must_stop):
                     break
                 steps_run += 1
@@ -155,12 +175,16 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                     machine._initialize_rules_to_run.remove(rule)
                 else:
                     rule, data = cd.draw(machine._rules_strategy)
+                draw_label = f"generate:rule:{rule.function.__name__}"
+                cd.draw_times.setdefault(draw_label, 0.0)
+                in_gctime = gc_cumulative_time() - start_gc
+                cd.draw_times[draw_label] += perf_counter() - start_draw - in_gctime
 
                 # Pretty-print the values this rule was called with *before* calling
                 # _add_result_to_targets, to avoid printing arguments which are also
                 # a return value using the variable name they are assigned to.
                 # See https://github.com/HypothesisWorks/hypothesis/issues/2341
-                if print_steps:
+                if print_steps or TESTCASE_CALLBACKS:
                     data_to_print = {
                         k: machine._pretty_print(v) for k, v in data.items()
                     }
@@ -172,7 +196,18 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                     for k, v in list(data.items()):
                         if isinstance(v, VarReference):
                             data[k] = machine.names_to_values[v.name]
+                        elif isinstance(v, list) and all(
+                            isinstance(item, VarReference) for item in v
+                        ):
+                            data[k] = [machine.names_to_values[item.name] for item in v]
+
+                    label = f"execute:rule:{rule.function.__name__}"
+                    start = perf_counter()
+                    start_gc = gc_cumulative_time()
                     result = rule.function(machine, **data)
+                    in_gctime = gc_cumulative_time() - start_gc
+                    cd._stateful_run_times[label] += perf_counter() - start - in_gctime
+
                     if rule.targets:
                         if isinstance(result, MultipleResults):
                             for single_result in result.values:
@@ -189,16 +224,15 @@ def run_state_machine_as_test(state_machine_factory, *, settings=None, _min_step
                             HealthCheck.return_value,
                         )
                 finally:
-                    if print_steps:
+                    if print_steps or TESTCASE_CALLBACKS:
                         # 'result' is only used if the step has target bundles.
                         # If it does, and the result is a 'MultipleResult',
                         # then 'print_step' prints a multi-variable assignment.
-                        machine._print_step(rule, data_to_print, result)
-                machine.check_invariants(settings)
+                        output(machine._repr_step(rule, data_to_print, result))
+                machine.check_invariants(settings, output, cd._stateful_run_times)
                 cd.stop_example()
         finally:
-            if print_steps:
-                report("state.teardown()")
+            output("state.teardown()")
             machine.teardown()
 
     # Use a machine digest to identify stateful tests in the example database
@@ -232,11 +266,12 @@ class StateMachineMeta(type):
 class RuleBasedStateMachine(metaclass=StateMachineMeta):
     """A RuleBasedStateMachine gives you a structured way to define state machines.
 
-    The idea is that a state machine carries a bunch of types of data
-    divided into Bundles, and has a set of rules which may read data
-    from bundles (or just from normal strategies) and push data onto
-    bundles. At any given point a random applicable rule will be
-    executed.
+    The idea is that a state machine carries the system under test and some supporting
+    data. This data can be stored in instance variables or
+    divided into Bundles. The state machine has a set of rules which may read data
+    from bundles (or just from normal strategies), push data onto
+    bundles, change the state of the machine, or verify properties.
+    At any given point a random applicable rule will be executed.
     """
 
     _rules_per_class: ClassVar[Dict[type, List[classmethod]]] = {}
@@ -247,7 +282,8 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         if not self.rules():
             raise InvalidDefinition(f"Type {type(self).__name__} defines no rules")
         self.bundles: Dict[str, list] = {}
-        self.name_counter = 1
+        self.names_counters: collections.Counter = collections.Counter()
+        self.names_list: list[str] = []
         self.names_to_values: Dict[str, Any] = {}
         self.__stream = StringIO()
         self.__printer = RepresentationPrinter(
@@ -268,6 +304,10 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
     def _pretty_print(self, value):
         if isinstance(value, VarReference):
             return value.name
+        elif isinstance(value, list) and all(
+            isinstance(item, VarReference) for item in value
+        ):
+            return "[" + ", ".join([item.name for item in value]) + "]"
         self.__stream.seek(0)
         self.__stream.truncate(0)
         self.__printer.output_width = 0
@@ -280,15 +320,16 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
     def __repr__(self):
         return f"{type(self).__name__}({nicerepr(self.bundles)})"
 
-    def _new_name(self):
-        result = f"v{self.name_counter}"
-        self.name_counter += 1
+    def _new_name(self, target):
+        result = f"{target}_{self.names_counters[target]}"
+        self.names_counters[target] += 1
+        self.names_list.append(result)
         return result
 
     def _last_names(self, n):
-        assert self.name_counter > n
-        count = self.name_counter
-        return [f"v{i}" for i in range(count - n, count)]
+        len_ = len(self.names_list)
+        assert len_ >= n
+        return self.names_list[len_ - n :]
 
     def bundle(self, name):
         return self.bundles.setdefault(name, [])
@@ -336,47 +377,48 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         cls._invariants_per_class[cls] = target
         return cls._invariants_per_class[cls]
 
-    def _print_step(self, rule, data, result):
-        self.step_count = getattr(self, "step_count", 0) + 1
+    def _repr_step(self, rule, data, result):
         output_assignment = ""
         if rule.targets:
             if isinstance(result, MultipleResults):
                 if len(result.values) == 1:
                     output_assignment = f"({self._last_names(1)[0]},) = "
                 elif result.values:
-                    output_names = self._last_names(len(result.values))
+                    number_of_last_names = len(rule.targets) * len(result.values)
+                    output_names = self._last_names(number_of_last_names)
                     output_assignment = ", ".join(output_names) + " = "
             else:
                 output_assignment = self._last_names(1)[0] + " = "
-        report(
-            "{}state.{}({})".format(
-                output_assignment,
-                rule.function.__name__,
-                ", ".join("%s=%s" % kv for kv in data.items()),
-            )
-        )
+        args = ", ".join("%s=%s" % kv for kv in data.items())
+        return f"{output_assignment}state.{rule.function.__name__}({args})"
 
     def _add_result_to_targets(self, targets, result):
-        name = self._new_name()
-        self.__printer.singleton_pprinters.setdefault(
-            id(result), lambda obj, p, cycle: p.text(name)
-        )
-        self.names_to_values[name] = result
         for target in targets:
+            name = self._new_name(target)
+
+            def printer(obj, p, cycle, name=name):
+                return p.text(name)
+
+            self.__printer.singleton_pprinters.setdefault(id(result), printer)
+            self.names_to_values[name] = result
             self.bundles.setdefault(target, []).append(VarReference(name))
 
-    def check_invariants(self, settings):
+    def check_invariants(self, settings, output, runtimes):
         for invar in self.invariants():
             if self._initialize_rules_to_run and not invar.check_during_init:
                 continue
             if not all(precond(self) for precond in invar.preconditions):
                 continue
+            name = invar.function.__name__
             if (
                 current_build_context().is_final
                 or settings.verbosity >= Verbosity.debug
+                or TESTCASE_CALLBACKS
             ):
-                report(f"state.{invar.function.__name__}()")
+                output(f"state.{name}()")
+            start = perf_counter()
             result = invar.function(self)
+            runtimes[f"execute:invariant:{name}"] += perf_counter() - start
             if result is not None:
                 fail_health_check(
                     settings,
@@ -411,7 +453,7 @@ class RuleBasedStateMachine(metaclass=StateMachineMeta):
         return StateMachineTestCase
 
 
-@attr.s()
+@attr.s(repr=False)
 class Rule:
     targets = attr.ib()
     function = attr.ib(repr=get_pretty_function_description)
@@ -420,55 +462,75 @@ class Rule:
     bundles = attr.ib(init=False)
 
     def __attrs_post_init__(self):
-        arguments = {}
+        self.arguments_strategies = {}
         bundles = []
         for k, v in sorted(self.arguments.items()):
-            assert not isinstance(v, BundleReferenceStrategy)
             if isinstance(v, Bundle):
                 bundles.append(v)
-                consume = isinstance(v, BundleConsumer)
-                arguments[k] = BundleReferenceStrategy(v.name, consume=consume)
-            else:
-                arguments[k] = v
+            self.arguments_strategies[k] = v
         self.bundles = tuple(bundles)
-        self.arguments_strategy = st.fixed_dictionaries(arguments)
+
+    def __repr__(self) -> str:
+        rep = get_pretty_function_description
+        bits = [f"{k}={rep(v)}" for k, v in attr.asdict(self).items() if v]
+        return f"{self.__class__.__name__}({', '.join(bits)})"
 
 
 self_strategy = st.runner()
 
 
-class BundleReferenceStrategy(SearchStrategy):
-    def __init__(self, name: str, *, consume: bool = False):
+class Bundle(SearchStrategy[Ex]):
+    """A collection of values for use in stateful testing.
+
+    Bundles are a kind of strategy where values can be added by rules,
+    and (like any strategy) used as inputs to future rules.
+
+    The ``name`` argument they are passed is the they are referred to
+    internally by the state machine; no two bundles may have
+    the same name. It is idiomatic to use the attribute
+    being assigned to as the name of the Bundle::
+
+        class MyStateMachine(RuleBasedStateMachine):
+            keys = Bundle("keys")
+
+    Bundles can contain the same value more than once; this becomes
+    relevant when using :func:`~hypothesis.stateful.consumes` to remove
+    values again.
+
+    If the ``consume`` argument is set to True, then all values that are
+    drawn from this bundle will be consumed (as above) when requested.
+    """
+
+    def __init__(
+        self, name: str, *, consume: bool = False, draw_references: bool = True
+    ) -> None:
         self.name = name
         self.consume = consume
+        self.draw_references = draw_references
 
     def do_draw(self, data):
         machine = data.draw(self_strategy)
+
         bundle = machine.bundle(self.name)
         if not bundle:
-            data.mark_invalid()
+            data.mark_invalid(f"Cannot draw from empty bundle {self.name!r}")
         # Shrink towards the right rather than the left. This makes it easier
         # to delete data generated earlier, as when the error is towards the
         # end there can be a lot of hard to remove padding.
         position = data.draw_integer(0, len(bundle) - 1, shrink_towards=len(bundle))
         if self.consume:
-            return bundle.pop(position)  # pragma: no cover  # coverage is flaky here
+            reference = bundle.pop(
+                position
+            )  # pragma: no cover  # coverage is flaky here
         else:
-            return bundle[position]
+            reference = bundle[position]
 
-
-class Bundle(SearchStrategy[Ex]):
-    def __init__(self, name: str, *, consume: bool = False) -> None:
-        self.name = name
-        self.__reference_strategy = BundleReferenceStrategy(name, consume=consume)
-
-    def do_draw(self, data):
-        machine = data.draw(self_strategy)
-        reference = data.draw(self.__reference_strategy)
+        if self.draw_references:
+            return reference
         return machine.names_to_values[reference.name]
 
     def __repr__(self):
-        consume = self.__reference_strategy.consume
+        consume = self.consume
         if consume is False:
             return f"Bundle(name={self.name!r})"
         return f"Bundle(name={self.name!r}, {consume=})"
@@ -484,10 +546,12 @@ class Bundle(SearchStrategy[Ex]):
         machine = data.draw(self_strategy)
         return bool(machine.bundle(self.name))
 
-
-class BundleConsumer(Bundle[Ex]):
-    def __init__(self, bundle: Bundle[Ex]) -> None:
-        super().__init__(bundle.name, consume=True)
+    def flatmap(self, expand):
+        if self.draw_references:
+            return type(self)(
+                self.name, consume=self.consume, draw_references=False
+            ).flatmap(expand)
+        return super().flatmap(expand)
 
 
 def consumes(bundle: Bundle[Ex]) -> SearchStrategy[Ex]:
@@ -505,7 +569,10 @@ def consumes(bundle: Bundle[Ex]) -> SearchStrategy[Ex]:
     """
     if not isinstance(bundle, Bundle):
         raise TypeError("Argument to be consumed must be a bundle.")
-    return BundleConsumer(bundle)
+    return type(bundle)(
+        name=bundle.name,
+        consume=True,
+    )
 
 
 @attr.s()
@@ -552,7 +619,7 @@ def _convert_targets(targets, target):
                 )
             raise InvalidArgument(msg % (t, type(t)))
         while isinstance(t, Bundle):
-            if isinstance(t, BundleConsumer):
+            if t.consume:
                 note_deprecation(
                     f"Using consumes({t.name}) doesn't makes sense in this context.  "
                     "This will be an error in a future version of Hypothesis.",
@@ -637,7 +704,7 @@ def rule(
     ``targets`` will define where the end result of this function should go. If
     both are empty then the end result will be discarded.
 
-    ``target`` must be a Bundle, or if the result should go to multiple
+    ``target`` must be a Bundle, or if the result should be replicated to multiple
     bundles you can pass a tuple of them as the ``targets`` argument.
     It is invalid to use both arguments for a single rule.  If the result
     should go to exactly one of several bundles, define a separate rule for
@@ -898,7 +965,8 @@ class RuleStrategy(SearchStrategy):
         self.rules = list(machine.rules())
 
         self.enabled_rules_strategy = st.shared(
-            FeatureStrategy(), key=("enabled rules", machine)
+            FeatureStrategy(at_least_one_of={r.function.__name__ for r in self.rules}),
+            key=("enabled rules", machine),
         )
 
         # The order is a bit arbitrary. Primarily we're trying to group rules
@@ -926,26 +994,39 @@ class RuleStrategy(SearchStrategy):
 
         feature_flags = data.draw(self.enabled_rules_strategy)
 
-        # Note: The order of the filters here is actually quite important,
-        # because checking is_enabled makes choices, so increases the size of
-        # the choice sequence. This means that if we are in a case where many
-        # rules are invalid we will make a lot more choices if we ask if they
-        # are enabled before we ask if they are valid, so our test cases will
-        # be artificially large.
-        rule = data.draw(
-            st.sampled_from(self.rules)
-            .filter(self.is_valid)
-            .filter(lambda r: feature_flags.is_enabled(r.function.__name__))
-        )
+        def rule_is_enabled(r):
+            # Note: The order of the filters here is actually quite important,
+            # because checking is_enabled makes choices, so increases the size of
+            # the choice sequence. This means that if we are in a case where many
+            # rules are invalid we would make a lot more choices if we ask if they
+            # are enabled before we ask if they are valid, so our test cases would
+            # be artificially large.
+            return self.is_valid(r) and feature_flags.is_enabled(r.function.__name__)
 
-        return (rule, data.draw(rule.arguments_strategy))
+        rule = data.draw(st.sampled_from(self.rules).filter(rule_is_enabled))
+
+        arguments = {}
+        for k, strat in rule.arguments_strategies.items():
+            try:
+                arguments[k] = data.draw(strat)
+            except Exception as err:
+                rname = rule.function.__name__
+                add_note(err, f"while generating {k!r} from {strat!r} for rule {rname}")
+                raise
+        return (rule, arguments)
 
     def is_valid(self, rule):
-        if not all(precond(self.machine) for precond in rule.preconditions):
-            return False
-
         for b in rule.bundles:
-            bundle = self.machine.bundle(b.name)
-            if not bundle:
+            if not self.machine.bundle(b.name):
                 return False
+
+        predicates = self.machine._observability_predicates
+        desc = f"{self.machine.__class__.__qualname__}, rule {rule.function.__name__},"
+        for pred in rule.preconditions:
+            meets_precond = pred(self.machine)
+            where = f"{desc} precondition {get_pretty_function_description(pred)}"
+            predicates[where]["satisfied" if meets_precond else "unsatisfied"] += 1
+            if not meets_precond:
+                return False
+
         return True

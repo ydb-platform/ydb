@@ -1,0 +1,49 @@
+/* 
+ * Legal Notice 
+ * 
+ * This document and associated source code (the "Work") is a part of a 
+ * benchmark specification maintained by the TPC. 
+ * 
+ * The TPC reserves all right, title, and interest to the Work as provided 
+ * under U.S. and international laws, including without limitation all patent 
+ * and trademark rights therein. 
+ * 
+ * No Warranty 
+ * 
+ * 1.1 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE INFORMATION 
+ *     CONTAINED HEREIN IS PROVIDED "AS IS" AND WITH ALL FAULTS, AND THE 
+ *     AUTHORS AND DEVELOPERS OF THE WORK HEREBY DISCLAIM ALL OTHER 
+ *     WARRANTIES AND CONDITIONS, EITHER EXPRESS, IMPLIED OR STATUTORY, 
+ *     INCLUDING, BUT NOT LIMITED TO, ANY (IF ANY) IMPLIED WARRANTIES, 
+ *     DUTIES OR CONDITIONS OF MERCHANTABILITY, OF FITNESS FOR A PARTICULAR 
+ *     PURPOSE, OF ACCURACY OR COMPLETENESS OF RESPONSES, OF RESULTS, OF 
+ *     WORKMANLIKE EFFORT, OF LACK OF VIRUSES, AND OF LACK OF NEGLIGENCE. 
+ *     ALSO, THERE IS NO WARRANTY OR CONDITION OF TITLE, QUIET ENJOYMENT, 
+ *     QUIET POSSESSION, CORRESPONDENCE TO DESCRIPTION OR NON-INFRINGEMENT 
+ *     WITH REGARD TO THE WORK. 
+ * 1.2 IN NO EVENT WILL ANY AUTHOR OR DEVELOPER OF THE WORK BE LIABLE TO 
+ *     ANY OTHER PARTY FOR ANY DAMAGES, INCLUDING BUT NOT LIMITED TO THE 
+ *     COST OF PROCURING SUBSTITUTE GOODS OR SERVICES, LOST PROFITS, LOSS 
+ *     OF USE, LOSS OF DATA, OR ANY INCIDENTAL, CONSEQUENTIAL, DIRECT, 
+ *     INDIRECT, OR SPECIAL DAMAGES WHETHER UNDER CONTRACT, TORT, WARRANTY,
+ *     OR OTHERWISE, ARISING IN ANY WAY OUT OF THIS OR ANY OTHER AGREEMENT 
+ *     RELATING TO THE WORK, WHETHER OR NOT SUCH AUTHOR OR DEVELOPER HAD 
+ *     ADVANCE NOTICE OF THE POSSIBILITY OF SUCH DAMAGES. 
+ * 
+ * Contributors:
+ * Gradient Systems
+ */
+       0000129     DBGEN  minor    resolved (jack.stephens)  12-02-04  dist wrong for i_current_price  
+       0000127  1  QGEN   minor    resolved (jack.stephens)  12-02-04  qgen core dumps on some templates  
+       0000126     DBGEN  feature  resolved (jack.stephens)  11-23-04  add comparabiltiy zones to w_item  
+       0000125     QGEN   feature  resolved (jack.stephens)  11-17-04  allow LIST() on TEXT()  
+       0000120     DBGEN  minor    resolved (jack.stephens)  11-24-04  I_product_name should be unique  
+       0000119  1  DBGEN  minor    resolved (jack.stephens)  11-24-04  ws_web_page_sk  
+       0000118  1  DBGEN  minor    resolved (jack.stephens)  11-24-04  Wr_sold_time_sk should start with 1  
+       0000117     DBGEN  minor    resolved (jack.stephens)  11-24-04  Wr_sold_date_sk cannot start with 0  
+       0000116     DBGEN  major    resolved (jack.stephens)  11-24-04  Ss_sold_date_sk has to start with 2450815, not with 245814  
+       0000114     DBGEN  major    resolved (jack.stephens)  12-01-04  some history keeping dimension entries in the history table do not have NULL  
+       0000112  1  DBGEN  minor    closed   (jack.stephens)  12-02-04  c_first_sales_date_sk and c_first_shipto_date_sk are unique  
+       0000110  1  DBGEN  minor    closed   (jack.stephens)  12-02-04  cs_net_profit is always null  
+       0000109  1  DBGEN  major    closed   (jack.stephens)  12-02-04  Gen of store_sales/returns terminated with no error message  
+       0000106  1  DBGEN  major    resolved (jack.stephens)  11-30-04  parallel data doesn' t match serial generation  

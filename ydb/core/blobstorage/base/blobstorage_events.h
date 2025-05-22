@@ -21,10 +21,23 @@ namespace NKikimr {
         TEvControllerUpdateDiskStatus() = default;
 
         TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId,
-                ui32 satisfactionRankPercent) {
+                std::optional<ui32> satisfactionRankPercent, NKikimrWhiteboard::EVDiskState state, bool replicated,
+                NKikimrWhiteboard::EFlag diskSpace,
+                std::optional<bool> isThrottling, std::optional<ui32> throttlingRate) {
             NKikimrBlobStorage::TVDiskMetrics* metric = Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vDiskId, metric->MutableVDiskId());
-            metric->SetSatisfactionRank(satisfactionRankPercent);
+            if (satisfactionRankPercent) {
+                metric->SetSatisfactionRank(*satisfactionRankPercent);
+            }
+            metric->SetState(state);
+            metric->SetReplicated(replicated);
+            metric->SetDiskSpace(diskSpace);
+            if (isThrottling) {
+                metric->SetIsThrottling(*isThrottling);
+            }
+            if (throttlingRate) {
+                metric->SetThrottlingRate(*throttlingRate);
+            }
             auto *p = metric->MutableVSlotId();
             p->SetNodeId(nodeId);
             p->SetPDiskId(pdiskId);
@@ -85,7 +98,6 @@ namespace NKikimr {
         }
     };
 
-
     struct TEvBlobStorage::TEvControllerNodeServiceSetUpdate : public TEventPB<
         TEvBlobStorage::TEvControllerNodeServiceSetUpdate,
         NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate,
@@ -103,57 +115,6 @@ namespace NKikimr {
             TStringStream str;
             str << "{TEvControllerNodeServiceSetUpdate";
             str << " Record# " << Record.DebugString();
-            str << "}";
-            return str.Str();
-        }
-    };
-
-    struct TEvBlobStorage::TEvControllerGroupReconfigureWipe : public TEventPB<
-        TEvBlobStorage::TEvControllerGroupReconfigureWipe,
-        NKikimrBlobStorage::TEvControllerGroupReconfigureWipe,
-        TEvBlobStorage::EvControllerGroupReconfigureWipe>
-    {
-        TEvControllerGroupReconfigureWipe()
-        {}
-
-        TEvControllerGroupReconfigureWipe(ui32 nodeId, ui32 pDiskId, ui32 vSlotId) {
-            auto *id = Record.MutableVSlotId();
-            id->SetNodeId(nodeId);
-            id->SetPDiskId(pDiskId);
-            id->SetVSlotId(vSlotId);
-        }
-
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvControllerGroupReconfigureWipe";
-            str << " Record# " << Record.DebugString();
-            str << "}";
-            return str.Str();
-        }
-    };
-
-    struct TEvBlobStorage::TEvControllerGroupReconfigureWipeResult : public TEventPB<
-        TEvBlobStorage::TEvControllerGroupReconfigureWipeResult,
-        NKikimrBlobStorage::TEvControllerGroupReconfigureWipeResult,
-        TEvBlobStorage::EvControllerGroupReconfigureWipeResult>
-    {
-        TEvControllerGroupReconfigureWipeResult()
-        {}
-
-        TEvControllerGroupReconfigureWipeResult(NKikimrProto::EReplyStatus status) {
-            Record.SetStatus(status);
-        }
-
-        TEvControllerGroupReconfigureWipeResult(NKikimrProto::EReplyStatus status, TString errorReason) {
-            Record.SetStatus(status);
-            Record.SetErrorReason(errorReason);
-        }
-
-        TString ToString() const override {
-            TStringStream str;
-            str << "{TEvControllerGroupReconfigureWipeResult";
-            str << " Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
-            str << " ErrorReason# \"" << (Record.HasErrorReason() ? Record.GetErrorReason().c_str() : "") << "\"";
             str << "}";
             return str.Str();
         }
@@ -327,12 +288,13 @@ namespace NKikimr {
     {
         TEvVStatusResult() = default;
 
-        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, bool joinedGroup, bool replicated,
+        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, bool joinedGroup, bool replicated, bool isReadOnly,
                 ui64 incarnationGuid)
         {
             Record.SetStatus(status);
             Record.SetJoinedGroup(joinedGroup);
             Record.SetReplicated(replicated);
+            Record.SetIsReadOnly(isReadOnly);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (status == NKikimrProto::OK) {
                 Record.SetIncarnationGuid(incarnationGuid);
@@ -423,11 +385,13 @@ namespace NKikimr {
         }
     };
 
-    struct TEvBlobStorage::TEvAskRestartPDisk : TEventLocal<TEvAskRestartPDisk, EvAskRestartPDisk> {
+    struct TEvBlobStorage::TEvAskWardenRestartPDisk : TEventLocal<TEvAskWardenRestartPDisk, EvAskWardenRestartPDisk> {
         const ui32 PDiskId;
+        const bool IgnoreChecks;
 
-        TEvAskRestartPDisk(const ui32& pdiskId)
+        TEvAskWardenRestartPDisk(const ui32 pdiskId, const bool ignoreChecks)
             : PDiskId(pdiskId)
+            , IgnoreChecks(ignoreChecks)
         {}
     };
 
@@ -444,23 +408,28 @@ namespace NKikimr {
         {}
     };
 
-    struct TEvBlobStorage::TEvRestartPDisk : TEventLocal<TEvRestartPDisk, EvRestartPDisk> {
+    struct TEvBlobStorage::TEvAskWardenRestartPDiskResult : TEventLocal<TEvAskWardenRestartPDiskResult, EvAskWardenRestartPDiskResult> {
         const ui32 PDiskId;
         const NPDisk::TMainKey MainKey;
+        const bool RestartAllowed;
         TIntrusivePtr<TPDiskConfig> Config;
+        TString Details;
 
-        TEvRestartPDisk(const ui32& pdiskId, const NPDisk::TMainKey& mainKey, const TIntrusivePtr<TPDiskConfig>& config)
+        TEvAskWardenRestartPDiskResult(const ui32 pdiskId, const NPDisk::TMainKey& mainKey, const bool restartAllowed, const TIntrusivePtr<TPDiskConfig>& config,
+            TString details = "")
             : PDiskId(pdiskId)
             , MainKey(mainKey)
+            , RestartAllowed(restartAllowed)
             , Config(config)
+            , Details(details)
         {}
     };
 
-    struct TEvBlobStorage::TEvRestartPDiskResult : TEventLocal<TEvRestartPDiskResult, EvRestartPDiskResult> {
+    struct TEvBlobStorage::TEvNotifyWardenPDiskRestarted : TEventLocal<TEvNotifyWardenPDiskRestarted, EvNotifyWardenPDiskRestarted> {
         const ui32 PDiskId;
         NKikimrProto::EReplyStatus Status;
 
-        TEvRestartPDiskResult(const ui32& pdiskId, NKikimrProto::EReplyStatus status = NKikimrProto::EReplyStatus::OK)
+        TEvNotifyWardenPDiskRestarted(const ui32 pdiskId, NKikimrProto::EReplyStatus status = NKikimrProto::EReplyStatus::OK)
             : PDiskId(pdiskId)
             , Status(status)
         {}
@@ -612,8 +581,14 @@ namespace NKikimr {
         : TEventLocal<TEvNodeWardenStorageConfig, TEvBlobStorage::EvNodeWardenStorageConfig>
     {
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> Config;
+        std::unique_ptr<NKikimrBlobStorage::TStorageConfig> ProposedConfig;
+        bool SelfManagementEnabled;
+        bool IsPrimary; // if bridge mode is enabled
+        bool IsBeingPromoted; // if bridge mode is enabled
 
-        TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
+        TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
+                const NKikimrBlobStorage::TStorageConfig *proposedConfig, bool selfManagementEnabled,
+                bool isPrimary, bool isBeingPromoted);
         ~TEvNodeWardenStorageConfig();
     };
 

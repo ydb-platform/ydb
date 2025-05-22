@@ -1,13 +1,14 @@
 #pragma once
 
+#include <ydb/core/fq/libs/config/protos/compute.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/fq/libs/events/event_subspace.h>
 #include <ydb/core/fq/libs/protos/fq_private.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
@@ -58,6 +59,14 @@ struct TEvYdbCompute {
         EvInvalidateSynchronizationRequest,
         EvInvalidateSynchronizationResponse,
 
+        EvCpuLoadRequest,
+        EvCpuLoadResponse,
+        EvCpuQuotaRequest,
+        EvCpuQuotaResponse,
+        EvCpuQuotaAdjust,
+
+        EvCreateResourcePoolResponse,
+
         EvEnd
     };
 
@@ -65,23 +74,27 @@ struct TEvYdbCompute {
 
     // Events
     struct TEvExecuteScriptRequest : public NActors::TEventLocal<TEvExecuteScriptRequest, EvExecuteScriptRequest> {
-        TEvExecuteScriptRequest(TString sql, TString idempotencyKey, const TDuration& resultTtl, const TDuration& operationTimeout, Ydb::Query::Syntax syntax, Ydb::Query::ExecMode execMode, const TString& traceId)
+        TEvExecuteScriptRequest(TString sql, TString idempotencyKey, const TDuration& resultTtl, const TInstant& operationDeadline, NYdb::NQuery::ESyntax syntax, NYdb::NQuery::EExecMode execMode, NYdb::NQuery::EStatsMode statsMode, const TString& traceId, const std::map<TString, Ydb::TypedValue>& queryParameters)
             : Sql(std::move(sql))
             , IdempotencyKey(std::move(idempotencyKey))
             , ResultTtl(resultTtl)
-            , OperationTimeout(operationTimeout)
+            , OperationDeadline(operationDeadline)
             , Syntax(syntax)
             , ExecMode(execMode)
+            , StatsMode(statsMode)
             , TraceId(traceId)
+            , QueryParameters(queryParameters)
         {}
 
         TString Sql;
         TString IdempotencyKey;
         TDuration ResultTtl;
-        TDuration OperationTimeout;
-        Ydb::Query::Syntax Syntax = Ydb::Query::SYNTAX_YQL_V1;
-        Ydb::Query::ExecMode ExecMode = Ydb::Query::EXEC_MODE_EXECUTE;
+        TInstant OperationDeadline;
+        NYdb::NQuery::ESyntax Syntax = NYdb::NQuery::ESyntax::YqlV1;
+        NYdb::NQuery::EExecMode ExecMode = NYdb::NQuery::EExecMode::Execute;
+        NYdb::NQuery::EStatsMode StatsMode = NYdb::NQuery::EStatsMode::Full;
         TString TraceId;
+        std::map<TString, Ydb::TypedValue> QueryParameters;
     };
 
     struct TEvExecuteScriptResponse : public NActors::TEventLocal<TEvExecuteScriptResponse, EvExecuteScriptResponse> {
@@ -111,38 +124,43 @@ struct TEvYdbCompute {
     };
 
     struct TEvGetOperationResponse : public NActors::TEventLocal<TEvGetOperationResponse, EvGetOperationResponse> {
-        TEvGetOperationResponse(NYql::TIssues issues, NYdb::EStatus status)
+        TEvGetOperationResponse(NYql::TIssues issues, NYdb::EStatus status, bool ready)
             : Issues(std::move(issues))
             , Status(status)
+            , Ready(ready)
         {}
 
-        TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, Ydb::StatusIds::StatusCode statusCode, const TVector<Ydb::Query::ResultSetMeta>& resultSetsMeta, const Ydb::TableStats::QueryStats& queryStats, NYql::TIssues issues)
+        TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, Ydb::StatusIds::StatusCode statusCode, const std::vector<NYdb::NQuery::TResultSetMeta>& resultSetsMeta, const NYdb::NQuery::TExecStats& queryStats, NYql::TIssues issues, bool ready = true)
             : ExecStatus(execStatus)
             , StatusCode(statusCode)
             , ResultSetsMeta(resultSetsMeta)
             , QueryStats(queryStats)
             , Issues(std::move(issues))
             , Status(NYdb::EStatus::SUCCESS)
+            , Ready(ready)
         {}
 
         NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
         Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-        TVector<Ydb::Query::ResultSetMeta> ResultSetsMeta;
-        Ydb::TableStats::QueryStats QueryStats;
+        std::vector<NYdb::NQuery::TResultSetMeta> ResultSetsMeta;
+        NYdb::NQuery::TExecStats QueryStats;
         NYql::TIssues Issues;
         NYdb::EStatus Status;
+        bool Ready;
     };
 
     struct TEvFetchScriptResultRequest : public NActors::TEventLocal<TEvFetchScriptResultRequest, EvFetchScriptResultRequest> {
-        TEvFetchScriptResultRequest(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetId, const TString& fetchToken)
+        TEvFetchScriptResultRequest(const NKikimr::NOperationId::TOperationId& operationId, int64_t resultSetId, const TString& fetchToken, uint64_t rowsLimit)
             : OperationId(operationId)
             , ResultSetId(resultSetId)
             , FetchToken(fetchToken)
+            , RowsLimit(rowsLimit)
         {}
 
         NKikimr::NOperationId::TOperationId OperationId;
         int64_t ResultSetId = 0;
         TString FetchToken;
+        uint64_t RowsLimit = 0;
     };
 
     struct TEvFetchScriptResultResponse : public NActors::TEventLocal<TEvFetchScriptResultResponse, EvFetchScriptResultResponse> {
@@ -354,15 +372,17 @@ struct TEvYdbCompute {
     };
 
     struct TEvSynchronizeRequest : public NActors::TEventLocal<TEvSynchronizeRequest, EvSynchronizeRequest> {
-        TEvSynchronizeRequest(const TString& cloudId, const TString& scope, const NFq::NConfig::TYdbStorageConfig& connectionConfig)
+        TEvSynchronizeRequest(const TString& cloudId, const TString& scope, const NFq::NConfig::TYdbStorageConfig& connectionConfig, const NFq::NConfig::TWorkloadManagerConfig& workloadManagerConfig)
             : CloudId(cloudId)
             , Scope(scope)
             , ConnectionConfig(connectionConfig)
+            , WorkloadManagerConfig(workloadManagerConfig)
         {}
 
         TString CloudId;
         TString Scope;
         NFq::NConfig::TYdbStorageConfig ConnectionConfig;
+        NFq::NConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     };
 
     struct TEvSynchronizeResponse : public NActors::TEventLocal<TEvSynchronizeResponse, EvSynchronizeResponse> {
@@ -437,6 +457,68 @@ struct TEvYdbCompute {
         {}
 
         NYql::TIssues Issues;
+    };
+
+    struct TEvCpuLoadRequest : public NActors::TEventLocal<TEvCpuLoadRequest, EvCpuLoadRequest> {
+        TEvCpuLoadRequest(const TString& scope)
+            : Scope(scope)
+        {}
+
+        TString Scope;
+    };
+
+    struct TEvCpuLoadResponse : public NActors::TEventLocal<TEvCpuLoadResponse, EvCpuLoadResponse> {
+        TEvCpuLoadResponse(double instantLoad = 0.0, double averageLoad = 0.0, ui32 cpuNumber = 0)
+            : InstantLoad(instantLoad), AverageLoad(averageLoad), CpuNumber(cpuNumber)
+        {}
+
+        TEvCpuLoadResponse(NYql::TIssues issues)
+            : InstantLoad(0.0), AverageLoad(0.0), CpuNumber(0), Issues(std::move(issues))
+        {}
+
+        double InstantLoad;
+        double AverageLoad;
+        ui32 CpuNumber;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvCpuQuotaRequest : public NActors::TEventLocal<TEvCpuQuotaRequest, EvCpuQuotaRequest> {
+        TEvCpuQuotaRequest(const TString& scope, TInstant deadline = TInstant::Zero(), double quota = 0.0)
+            : Scope(scope), Deadline(deadline), Quota(quota)
+        {}
+
+        TString Scope;
+        TInstant Deadline;
+        double Quota; // if zero, default quota is used
+    };
+
+    struct TEvCpuQuotaResponse : public NActors::TEventLocal<TEvCpuQuotaResponse, EvCpuQuotaResponse> {
+        TEvCpuQuotaResponse(int32_t currentLoad = -1, NYdb::EStatus status = NYdb::EStatus::SUCCESS, NYql::TIssues issues = {})
+            : CurrentLoad(currentLoad), Status(status),  Issues(std::move(issues))
+        {}
+
+        int32_t CurrentLoad;
+        NYdb::EStatus Status;
+        NYql::TIssues Issues;
+    };
+
+    struct TEvCpuQuotaAdjust : public NActors::TEventLocal<TEvCpuQuotaAdjust, EvCpuQuotaAdjust> {
+        TEvCpuQuotaAdjust(const TString& scope, TDuration duration, double cpuSecondsConsumed, double quota = 0.0)
+            : Scope(scope), Duration(duration), CpuSecondsConsumed(cpuSecondsConsumed), Quota(quota)
+        {}
+
+        TString Scope;
+        TDuration Duration;
+        double CpuSecondsConsumed;
+        double Quota; // if zero, default quota is used
+    };
+
+    struct TEvCreateResourcePoolResponse : public NActors::TEventLocal<TEvCreateResourcePoolResponse, EvCreateResourcePoolResponse> {
+        TEvCreateResourcePoolResponse(NYdb::TStatus status)
+            : Status(std::move(status))
+        {}
+
+        NYdb::TStatus Status;
     };
 };
 

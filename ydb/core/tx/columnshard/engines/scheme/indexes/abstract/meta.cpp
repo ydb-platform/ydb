@@ -1,61 +1,68 @@
+#include "fetcher.h"
 #include "meta.h"
-#include <ydb/core/tx/columnshard/engines/portions/column_record.h>
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
-#include <ydb/core/formats/arrow/hash/xx_hash.h>
-#include <ydb/core/formats/arrow/hash/calcer.h>
-#include <ydb/core/formats/arrow/serializer/full.h>
+
+#include <ydb/core/tx/columnshard/engines/portions/index_chunk.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
-void TPortionIndexChunk::DoAddIntoPortion(const TBlobRange& bRange, TPortionInfo& portionInfo) const {
-    portionInfo.AddIndex(TIndexChunk(GetEntityId(), GetChunkIdx(), RecordsCount, bRange));
+bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
+    if (!proto.GetId()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse secondary data builder")("reason", "incorrect id - 0");
+        return false;
+    }
+    if (!proto.GetName()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse secondary data builder")("reason", "incorrect name - empty string");
+        return false;
+    }
+    IndexId = proto.GetId();
+    IndexName = proto.GetName();
+    StorageId = proto.GetStorageId() ? proto.GetStorageId() : IStoragesManager::DefaultStorageId;
+    return DoDeserializeFromProto(proto);
 }
 
-std::shared_ptr<NKikimr::NOlap::IPortionDataChunk> TIndexByColumns::DoBuildIndex(const ui32 indexId, std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const TIndexInfo& indexInfo) const {
-    AFL_VERIFY(data.size());
-    std::vector<TChunkedColumnReader> columnReaders;
-    for (auto&& i : ColumnIds) {
-        auto it = data.find(i);
-        AFL_VERIFY(it != data.end());
-        columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
+void IIndexMeta::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
+    AFL_VERIFY(IndexId);
+    proto.SetId(IndexId);
+    AFL_VERIFY(IndexName);
+    proto.SetName(IndexName);
+    if (StorageId) {
+        proto.SetStorageId(StorageId);
     }
-    ui32 recordsCount = 0;
-    for (auto&& i : data.begin()->second) {
-        recordsCount += i->GetRecordsCountVerified();
-    }
-    TChunkedBatchReader reader(std::move(columnReaders));
-    std::shared_ptr<arrow::RecordBatch> indexBatch = DoBuildIndexImpl(reader);
-    const TString indexData = TColumnSaver(nullptr, Serializer).Apply(indexBatch);
-    return std::make_shared<TPortionIndexChunk>(indexId, recordsCount, indexData);
+    return DoSerializeToProto(proto);
 }
 
-bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {
-    Serializer = std::make_shared<NArrow::NSerialization::TFullDataSerializer>(arrow::ipc::IpcWriteOptions::Defaults());
-    return true;
+NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const {
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    result.InsertValue("entity_id", iChunk.GetEntityId());
+    result.InsertValue("chunk_idx", iChunk.GetChunkIdx());
+    if (iChunk.HasBlobData()) {
+        result.InsertValue("data", DoSerializeDataToJson(iChunk.GetBlobDataVerified(), indexInfo));
+    }
+    return result;
 }
 
-TIndexByColumns::TIndexByColumns(const ui32 indexId, const std::set<ui32>& columnIds)
-    : TBase(indexId)
-    , ColumnIds(columnIds)
-{
-    Serializer = std::make_shared<NArrow::NSerialization::TFullDataSerializer>(arrow::ipc::IpcWriteOptions::Defaults());
+std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(
+    const THashSet<NRequest::TOriginalDataAddress>& dataAddresses, const std::shared_ptr<IIndexMeta>& selfPtr,
+    const std::shared_ptr<IStoragesManager>& storagesManager) const {
+    return std::make_shared<TIndexFetcherLogic>(dataAddresses, selfPtr, storagesManager);
 }
 
-NKikimr::TConclusionStatus TIndexByColumns::CheckSameColumnsForModification(const IIndexMeta& newMeta) const {
-    const auto* bMeta = dynamic_cast<const TIndexByColumns*>(&newMeta);
-    if (!bMeta) {
-        return TConclusionStatus::Fail("cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
+std::optional<ui64> IIndexMeta::CalcCategory(const TString& subColumnName) const {
+    return DoCalcCategory(subColumnName);
+}
+
+TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> IIndexMeta::BuildIndexOptional(
+    const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
+    auto conclusion = DoBuildIndexOptional(data, recordsCount, indexInfo);
+    if (conclusion.IsFail()) {
+        return conclusion;
     }
-    if (bMeta->ColumnIds.size() != ColumnIds.size()) {
-        return TConclusionStatus::Fail("columns count is different");
+    ui32 checkRecordsCount = 0;
+    for (auto&& i : *conclusion) {
+        checkRecordsCount += i->GetRecordsCountVerified();
     }
-    for (auto&& i : bMeta->ColumnIds) {
-        if (!ColumnIds.contains(i)) {
-            return TConclusionStatus::Fail("columns set is different or column was recreated in database");
-        }
-    }
-    return TConclusionStatus::Success();
+    AFL_VERIFY(checkRecordsCount == recordsCount);
+    return conclusion;
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

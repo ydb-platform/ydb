@@ -1,7 +1,6 @@
 import mimetypes
 import sys
 import typing as t
-import warnings
 from collections import defaultdict
 from datetime import datetime
 from datetime import timedelta
@@ -39,6 +38,7 @@ from .urls import url_fix
 from .urls import url_parse
 from .urls import url_unparse
 from .urls import url_unquote
+from .utils import cached_property
 from .utils import get_content_type
 from .wrappers.request import Request
 from .wrappers.response import Response
@@ -67,6 +67,7 @@ def stream_encode_multipart(
     stream: t.IO[bytes] = BytesIO()
     total_length = 0
     on_disk = False
+    write_binary: t.Callable[[bytes], int]
 
     if use_tempfile:
 
@@ -106,7 +107,8 @@ def stream_encode_multipart(
                     and mimetypes.guess_type(filename)[0]
                     or "application/octet-stream"
                 )
-            headers = Headers([("Content-Type", content_type)])
+            headers = value.headers
+            headers.update([("Content-Type", content_type)])
             if filename is None:
                 write_binary(encoder.send_event(Field(name=key, headers=headers)))
             else:
@@ -306,6 +308,10 @@ class EnvironBuilder:
         ``Authorization`` header value. A ``(username, password)`` tuple
         is a shortcut for ``Basic`` authorization.
 
+    .. versionchanged:: 2.1
+        ``CONTENT_TYPE`` and ``CONTENT_LENGTH`` are not duplicated as
+        header keys in the environ.
+
     .. versionchanged:: 2.0
         ``REQUEST_URI`` and ``RAW_URI`` is the full raw URI including
         the query string, not only the path.
@@ -322,7 +328,7 @@ class EnvironBuilder:
 
     .. versionadded:: 0.15
         The environ has keys ``REQUEST_URI`` and ``RAW_URI`` containing
-        the path before perecent-decoding. This is not part of the WSGI
+        the path before percent-decoding. This is not part of the WSGI
         PEP, but many WSGI servers include it.
 
     .. versionchanged:: 0.6
@@ -436,7 +442,7 @@ class EnvironBuilder:
             if input_stream is not None:
                 raise TypeError("can't provide input stream and data")
             if hasattr(data, "read"):
-                data = data.read()  # type: ignore
+                data = data.read()
             if isinstance(data, str):
                 data = data.encode(self.charset)
             if isinstance(data, bytes):
@@ -444,7 +450,7 @@ class EnvironBuilder:
                 if self.content_length is None:
                     self.content_length = len(data)
             else:
-                for key, value in _iter_data(data):  # type: ignore
+                for key, value in _iter_data(data):
                     if isinstance(value, (tuple, dict)) or hasattr(value, "read"):
                         self._add_file_from_data(key, value)
                     else:
@@ -693,8 +699,13 @@ class EnvironBuilder:
     def server_port(self) -> int:
         """The server port as integer (read-only, use :attr:`host` to set)"""
         pieces = self.host.split(":", 1)
-        if len(pieces) == 2 and pieces[1].isdigit():
-            return int(pieces[1])
+
+        if len(pieces) == 2:
+            try:
+                return int(pieces[1])
+            except ValueError:
+                pass
+
         if self.url_scheme == "https":
             return 443
         return 80
@@ -788,14 +799,15 @@ class EnvironBuilder:
         )
 
         headers = self.headers.copy()
+        # Don't send these as headers, they're part of the environ.
+        headers.remove("Content-Type")
+        headers.remove("Content-Length")
 
         if content_type is not None:
             result["CONTENT_TYPE"] = content_type
-            headers.set("Content-Type", content_type)
 
         if content_length is not None:
             result["CONTENT_LENGTH"] = str(content_length)
-            headers.set("Content-Length", content_length)
 
         combined_headers = defaultdict(list)
 
@@ -838,6 +850,11 @@ class Client:
     If you want to request some subdomain of your application you may set
     `allow_subdomain_redirects` to `True` as if not no external redirects
     are allowed.
+
+    .. versionchanged:: 2.1
+        Removed deprecated behavior of treating the response as a
+        tuple. All data is available as properties on the returned
+        response object.
 
     .. versionchanged:: 2.0
         ``response_wrapper`` is always a subclass of
@@ -1015,7 +1032,6 @@ class Client:
     def open(
         self,
         *args: t.Any,
-        as_tuple: bool = False,
         buffered: bool = False,
         follow_redirects: bool = False,
         **kwargs: t.Any,
@@ -1033,6 +1049,9 @@ class Client:
             redirects until a non-redirect status is returned.
             :attr:`TestResponse.history` lists the intermediate
             responses.
+
+        .. versionchanged:: 2.1
+            Removed the ``as_tuple`` parameter.
 
         .. versionchanged:: 2.0
             ``as_tuple`` is deprecated and will be removed in Werkzeug
@@ -1079,7 +1098,10 @@ class Client:
         redirects = set()
         history: t.List["TestResponse"] = []
 
-        while follow_redirects and response.status_code in {
+        if not follow_redirects:
+            return response
+
+        while response.status_code in {
             301,
             302,
             303,
@@ -1106,24 +1128,12 @@ class Client:
             history.append(response)
             response = self.resolve_redirect(response, buffered=buffered)
         else:
-            # This is the final request after redirects, or not
-            # following redirects.
+            # This is the final request after redirects.
             response.history = tuple(history)
             # Close the input stream when closing the response, in case
             # the input is an open temporary file.
             response.call_on_close(request.input_stream.close)
-
-        if as_tuple:
-            warnings.warn(
-                "'as_tuple' is deprecated and will be removed in"
-                " Werkzeug 2.1. Access 'response.request.environ'"
-                " instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            return request.environ, response  # type: ignore
-
-        return response
+            return response
 
     def get(self, *args: t.Any, **kw: t.Any) -> "TestResponse":
         """Call :meth:`open` with ``method`` set to ``GET``."""
@@ -1275,7 +1285,21 @@ class TestResponse(Response):
     If the test request included large files, or if the application is
     serving a file, call :meth:`close` to close any open files and
     prevent Python showing a ``ResourceWarning``.
+
+    .. versionchanged:: 2.2
+        Set the ``default_mimetype`` to None to prevent a mimetype being
+        assumed if missing.
+
+    .. versionchanged:: 2.1
+        Removed deprecated behavior for treating the response instance
+        as a tuple.
+
+    .. versionadded:: 2.0
+        Test client methods always return instances of this class.
     """
+
+    default_mimetype = None
+    # Don't assume a mimetype, instead use whatever the response provides
 
     request: Request
     """A request object with the environ used to make the request that
@@ -1304,28 +1328,11 @@ class TestResponse(Response):
         self.history = history
         self._compat_tuple = response, status, headers
 
-    def __iter__(self) -> t.Iterator:
-        warnings.warn(
-            (
-                "The test client no longer returns a tuple, it returns"
-                " a 'TestResponse'. Tuple unpacking is deprecated and"
-                " will be removed in Werkzeug 2.1. Access the"
-                " attributes 'data', 'status', and 'headers' instead."
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return iter(self._compat_tuple)
+    @cached_property
+    def text(self) -> str:
+        """The response data as text. A shortcut for
+        ``response.get_data(as_text=True)``.
 
-    def __getitem__(self, item: int) -> t.Any:
-        warnings.warn(
-            (
-                "The test client no longer returns a tuple, it returns"
-                " a 'TestResponse'. Item indexing is deprecated and"
-                " will be removed in Werkzeug 2.1. Access the"
-                " attributes 'data', 'status', and 'headers' instead."
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._compat_tuple[item]
+        .. versionadded:: 2.1
+        """
+        return self.get_data(as_text=True)

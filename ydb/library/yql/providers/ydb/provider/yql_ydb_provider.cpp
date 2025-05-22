@@ -1,6 +1,6 @@
 #include "yql_ydb_provider.h"
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 
@@ -17,7 +17,8 @@ TDataProviderInitializer GetYdbDataProviderInitializer(
         TIntrusivePtr<TTypeAnnotationContext> typeCtx,
         const TOperationProgressWriter& progressWriter,
         const TYqlOperationOptions& operationOptions,
-        THiddenQueryAborter)
+        THiddenQueryAborter hiddenAborter,
+        const TQContext& qContext)
     {
         Y_UNUSED(sessionId);
         Y_UNUSED(userName);
@@ -25,6 +26,8 @@ TDataProviderInitializer GetYdbDataProviderInitializer(
         Y_UNUSED(randomProvider);
         Y_UNUSED(progressWriter);
         Y_UNUSED(operationOptions);
+        Y_UNUSED(hiddenAborter);
+        Y_UNUSED(qContext);
 
         auto state = MakeIntrusive<TYdbState>();
 

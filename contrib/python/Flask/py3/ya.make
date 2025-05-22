@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.0.3)
+VERSION(2.2.5)
 
 LICENSE(BSD-3-Clause)
 
@@ -28,6 +28,7 @@ PY_SRCS(
     flask/globals.py
     flask/helpers.py
     flask/json/__init__.py
+    flask/json/provider.py
     flask/json/tag.py
     flask/logging.py
     flask/scaffold.py

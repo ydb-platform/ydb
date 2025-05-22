@@ -16,7 +16,7 @@ class TCheckDbIsEmptyManyPutGetActor : public TSyncTestBase {
     virtual void Scenario(const TActorContext &ctx) {
         SyncRunner->Run(ctx, CreateCheckDbEmptyness(SyncRunner->NotifyID(), Conf->VDisks->Get(0), ExpectEmpty));
         SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0), MsgSize, MsgNum,
-                                            0, 0, 1, HandleClassGen, BadSteps, TDuration::Seconds(0)));
+                                            DefaultTestTabletId, 0, 1, HandleClassGen, BadSteps, TDuration::Seconds(0)));
     }
 
 public:
@@ -46,7 +46,7 @@ class TManyPutsActor : public TSyncTestBase {
     std::shared_ptr<TSet<ui32>> BadSteps;
 
     virtual void Scenario(const TActorContext &ctx) {
-        ui64 tabletId = 0;
+        ui64 tabletId = DefaultTestTabletId;
         ui32 channel = 0;
         ui32 gen = 1;
         SyncRunner->Run(ctx, CreateManyPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0),
@@ -77,7 +77,7 @@ class TManyGetsActor : public TSyncTestBase {
     std::shared_ptr<TSet<ui32>> BadSteps;
 
     virtual void Scenario(const TActorContext &ctx) {
-        ui64 tabletId = 0;
+        ui64 tabletId = DefaultTestTabletId;
         ui32 channel = 0;
         ui32 gen = 1;
         SyncRunner->Run(ctx, CreateManyGets(SyncRunner->NotifyID(), Conf->VDisks->Get(0),
@@ -109,7 +109,7 @@ class TManyMultiPutsActor : public TSyncTestBase {
     std::shared_ptr<TSet<ui32>> BadSteps;
 
     virtual void Scenario(const TActorContext &ctx) {
-        ui64 tabletId = 0;
+        ui64 tabletId = DefaultTestTabletId;
         ui32 channel = 0;
         ui32 gen = 1;
         SyncRunner->Run(ctx, CreateManyMultiPuts(Conf, SyncRunner->NotifyID(), Conf->VDisks->Get(0),
@@ -155,7 +155,7 @@ class TChaoticManyPutsActor : public NActors::TActorBootstrapped<TChaoticManyPut
             ui32 channel = 0;
             ui32 gen = 1;
             auto badSteps = std::make_shared<TSet<ui32>>();
-            ctx.ExecutorThread.RegisterActor(CreateManyPuts(Conf, ctx.SelfID, Conf->VDisks->Get(0),
+            ctx.Register(CreateManyPuts(Conf, ctx.SelfID, Conf->VDisks->Get(0),
                                                             MsgSize, MsgNum, tabletId, channel, gen,
                                                             HandleClassGen, badSteps, RequestTimeout));
             BadSteps.push_back(badSteps);

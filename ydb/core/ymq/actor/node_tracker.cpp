@@ -84,9 +84,9 @@ namespace NKikimr::NSQS {
         navigateRequest->ResultSet.resize(2);
         navigateRequest->ResultSet.front().Path = TablePathSTD;
         navigateRequest->ResultSet.back().Path = TablePathFIFO;
-        ctx.ExecutorThread.ActorSystem->Schedule(
+        ctx.Schedule(
             runAfter,
-            new IEventHandle(
+            std::make_unique<IEventHandle>(
                 SchemeCacheActor,
                 SelfId(),
                 new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release())

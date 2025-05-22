@@ -37,8 +37,8 @@ public:
 
             TPathId tableId(Self->GetPathOwnerId(), createTable.GetId_Deprecated());
             if (createTable.HasPathId()) {
-                Y_ABORT_UNLESS(Self->GetPathOwnerId() == createTable.GetPathId().GetOwnerId() || Self->GetPathOwnerId() == INVALID_TABLET_ID);
-                tableId = PathIdFromPathId(createTable.GetPathId());
+                Y_ENSURE(Self->GetPathOwnerId() == createTable.GetPathId().GetOwnerId() || Self->GetPathOwnerId() == INVALID_TABLET_ID);
+                tableId = TPathId::FromProto(createTable.GetPathId());
             } else if (tableId.OwnerId == INVALID_TABLET_ID) {
                 // Legacy schemeshard before migrations, shouldn't be possible
                 tableId.OwnerId = Ev->Get()->Record.GetSchemeshardTabletId();
@@ -73,7 +73,7 @@ public:
         // Persist split description
         TString splitDescr;
         bool serilaizeOk = Self->DstSplitDescription->SerializeToString(&splitDescr);
-        Y_ABORT_UNLESS(serilaizeOk, "Failed to serialize split/merge description");
+        Y_ENSURE(serilaizeOk, "Failed to serialize split/merge description");
         Self->PersistSys(db, Schema::Sys_DstSplitDescription, splitDescr);
 
         if (initializeSchema) {
@@ -120,13 +120,11 @@ public:
 class TDataShard::TTxSplitTransferSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvSplitTransferSnapshot::TPtr Ev;
-    bool LastSnapshotReceived;
 
 public:
     TTxSplitTransferSnapshot(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
         , Ev(ev)
-        , LastSnapshotReceived(false)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT; }
@@ -175,6 +173,7 @@ public:
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Received snapshot for split/merge TxId " << opId
                     << " from tabeltId " << srcTabletId);
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Received snapshot: " << record.DebugString());
 
         if (!Self->DstSplitSchemaInitialized) {
             LegacyInitSchema(txc);
@@ -195,24 +194,18 @@ public:
         if (Self->GetSnapshotManager().GetMinWriteVersion() < minWriteVersion)
             Self->GetSnapshotManager().SetMinWriteVersion(db, minWriteVersion);
 
-        const bool mvcc = Self->IsMvccEnabled();
-        if (mvcc) {
-            TRowVersion completeEdge(record.GetMvccCompleteEdgeStep(), record.GetMvccCompleteEdgeTxId());
-            if (Self->GetSnapshotManager().GetCompleteEdge() < completeEdge)
-                Self->GetSnapshotManager().SetCompleteEdge(db, completeEdge);
-            TRowVersion incompleteEdge(record.GetMvccIncompleteEdgeStep(), record.GetMvccIncompleteEdgeTxId());
-            if (Self->GetSnapshotManager().GetIncompleteEdge() < incompleteEdge)
-                Self->GetSnapshotManager().SetIncompleteEdge(db, incompleteEdge);
-            TRowVersion immediateWriteEdge(record.GetMvccImmediateWriteEdgeStep(), record.GetMvccImmediateWriteEdgeTxId());
-            if (Self->GetSnapshotManager().GetImmediateWriteEdge() < immediateWriteEdge)
-                Self->GetSnapshotManager().SetImmediateWriteEdge(immediateWriteEdge, txc);
-            TRowVersion lowWatermark(record.GetMvccLowWatermarkStep(), record.GetMvccLowWatermarkTxId());
-            if (Self->GetSnapshotManager().GetLowWatermark() < lowWatermark)
-                Self->GetSnapshotManager().SetLowWatermark(db, lowWatermark);
-            bool performedUnprotectedReads = record.GetMvccPerformedUnprotectedReads();
-            if (!Self->GetSnapshotManager().GetPerformedUnprotectedReads() && performedUnprotectedReads)
-                Self->GetSnapshotManager().SetPerformedUnprotectedReads(true, txc);
-        }
+        TRowVersion completeEdge(record.GetMvccCompleteEdgeStep(), record.GetMvccCompleteEdgeTxId());
+        if (Self->GetSnapshotManager().GetCompleteEdge() < completeEdge)
+            Self->GetSnapshotManager().SetCompleteEdge(db, completeEdge);
+        TRowVersion incompleteEdge(record.GetMvccIncompleteEdgeStep(), record.GetMvccIncompleteEdgeTxId());
+        if (Self->GetSnapshotManager().GetIncompleteEdge() < incompleteEdge)
+            Self->GetSnapshotManager().SetIncompleteEdge(db, incompleteEdge);
+        TRowVersion immediateWriteEdge(record.GetMvccImmediateWriteEdgeStep(), record.GetMvccImmediateWriteEdgeTxId());
+        if (Self->GetSnapshotManager().GetImmediateWriteEdge() < immediateWriteEdge)
+            Self->GetSnapshotManager().SetImmediateWriteEdge(db, immediateWriteEdge);
+        TRowVersion lowWatermark(record.GetMvccLowWatermarkStep(), record.GetMvccLowWatermarkTxId());
+        if (Self->GetSnapshotManager().GetLowWatermark() < lowWatermark)
+            Self->GetSnapshotManager().SetLowWatermark(db, lowWatermark);
 
         // Would be true for the first snapshot we receive, e.g. during a merge
         const bool isFirstSnapshot = Self->ReceiveSnapshotsFrom.size() == Self->DstSplitDescription->SourceRangesSize();
@@ -256,10 +249,7 @@ public:
         }
 
         if (Self->ReceiveSnapshotsFrom.empty()) {
-            LastSnapshotReceived = true;
-
-            const auto minVersion = mvcc ? Self->GetSnapshotManager().GetLowWatermark()
-                                         : Self->GetSnapshotManager().GetMinWriteVersion();
+            const auto minVersion = Self->GetSnapshotManager().GetLowWatermark();
 
             // Mark versions not accessible via snapshots as deleted
             for (const auto& kv : Self->GetUserTables()) {
@@ -287,12 +277,21 @@ public:
                 kv.second.OptimizeSplitKeys(rdb);
             }
 
-            if (mvcc) {
-                Self->PromoteFollowerReadEdge(txc);
-            }
+            Self->PromoteFollowerReadEdge(txc);
 
-            Self->State = TShardState::Ready;
-            Self->PersistSys(db, Schema::Sys_State, Self->State);
+            // Note: we persist Ready, but keep current state in memory until Complete
+            Self->SetPersistState(TShardState::Ready, txc);
+            Self->State = TShardState::SplitDstReceivingSnapshot;
+
+            // We could perform snapshot reads after becoming ready
+            // Make sure older versions restore mediator state in that case
+            Self->PersistUnprotectedReadsEnabled(db);
+
+            // Schedule a new transaction that will move shard to the Ready state
+            // and finish initialization. This new transaction is guaranteed to
+            // wait until async LoanTable above is complete and new parts are
+            // fully merged into the table.
+            Self->Execute(new TTxLastSnapshotReceived(Self));
         }
 
         return true;
@@ -305,12 +304,47 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack snapshot OpId " << opId);
 
         ctx.Send(ackTo, new TEvDataShard::TEvSplitTransferSnapshotAck(opId, Self->TabletID()));
-
-        if (LastSnapshotReceived) {
-            // We have received all the data, reload everything from the received system tables
-            Self->Execute(Self->CreateTxInit(), ctx);
-        }
     }
+
+    class TTxLastSnapshotReceived : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+    public:
+        TTxLastSnapshotReceived(TDataShard* self)
+            : TTransactionBase(self)
+        {}
+
+        bool Execute(TTransactionContext&, const TActorContext&) override {
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            // Note: we skip init in an unlikely event of state resetting before reaching Complete
+            if (Self->State == TShardState::SplitDstReceivingSnapshot) {
+                // We have received all the data, finish shard initialization
+                // Note: previously we used TxInit, however received system tables
+                // have been empty for years now, and since pipes are still open we
+                // may receive requests between TxInit loading the Ready state and
+                // its Complete method initializing everything properly. Instead
+                // necessary steps are repeated here.
+                Self->State = TShardState::Ready;
+
+                // We are already in StateWork, but we need to repeat many steps now that we are Ready
+                Self->SwitchToWork(ctx);
+
+                // We can send the registration request now that we are ready
+                Self->SendRegistrationRequestTimeCast(ctx);
+
+                // Initialize snapshot expiration queue with current context time
+                Self->GetSnapshotManager().InitExpireQueue(ctx.Now());
+                Self->PlanCleanup(ctx);
+
+                // Initialize change senders
+                Self->KillChangeSender(ctx);
+                Self->CreateChangeSender(ctx);
+                Self->MaybeActivateChangeSender(ctx);
+                Self->EmitHeartbeats();
+            }
+        }
+    };
 };
 
 class TDataShard::TTxSplitReplicationSourceOffsets : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -367,14 +401,14 @@ public:
         }
 
         const auto& userTables = Self->GetUserTables();
-        Y_ABORT_UNLESS(msg->PathId.OwnerId == Self->GetPathOwnerId());
+        Y_ENSURE(msg->PathId.OwnerId == Self->GetPathOwnerId());
         auto itUserTables = userTables.find(msg->PathId.LocalPathId);
-        Y_ABORT_UNLESS(itUserTables != userTables.end());
+        Y_ENSURE(itUserTables != userTables.end());
         TUserTable::TCPtr tableInfo = itUserTables->second;
         TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes = tableInfo->KeyColumnTypes;
 
         auto* replTable = Self->EnsureReplicatedTable(msg->PathId);
-        Y_ABORT_UNLESS(replTable);
+        Y_ENSURE(replTable);
 
         if (Self->SrcTabletToRange.empty()) {
             for (const auto& srcRange : Self->DstSplitDescription->GetSourceRanges()) {
@@ -484,7 +518,7 @@ public:
             // Find split keys that are in the (From, To) range
             auto itBegin = std::upper_bound(kvSource.second.begin(), kvSource.second.end(), range.From, leftLess);
             auto itEnd = std::lower_bound(kvSource.second.begin(), kvSource.second.end(), range.To, rightLess);
-            Y_ABORT_UNLESS(itBegin != kvSource.second.begin());
+            Y_ENSURE(itBegin != kvSource.second.begin());
 
             // Add the shard right border first
             if (!range.To.GetCells().empty() && !rightFull) {

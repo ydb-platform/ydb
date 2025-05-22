@@ -6,6 +6,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
+#include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
 #include <ydb/core/mind/hive/domain_info.h>
@@ -27,7 +28,8 @@ namespace NKikimr {
     void RebootTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0, bool sysTablet = false);
     void GracefulRestartTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0);
     void SetupTabletServices(TTestActorRuntime& runtime, TAppPrepare* app = nullptr, bool mockDisk = false,
-                             NFake::TStorage storage = {}, NFake::TCaches caches = {}, bool forceFollowers = false);
+                             NFake::TStorage storage = {}, const NSharedCache::TSharedCacheConfig* sharedCacheConfig = nullptr, bool forceFollowers = false,
+                             TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies = {});
 
     const TString DEFAULT_STORAGE_POOL = "Storage Pool with id: 1";
 
@@ -38,8 +40,14 @@ namespace NKikimr {
     }
 
     const TChannelsBindings DEFAULT_BINDED_CHANNELS = {GetDefaultChannelBind(), GetDefaultChannelBind(), GetDefaultChannelBind()};
-    void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 domainId = 0, ui32 nGroups = 1);
-    void SetupChannelProfiles(TAppPrepare &app, ui32 domainId = 0, ui32 nchannels = 3);
+    void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32 nGroups = 1);
+    inline void SetupBoxAndStoragePool(TTestActorRuntime &runtime, const TActorId& sender, ui32, ui32 nGroups) {
+        SetupBoxAndStoragePool(runtime, sender, nGroups);
+    }
+    void SetupChannelProfiles(TAppPrepare &app, ui32 nchannels = 3);
+    inline void SetupChannelProfiles(TAppPrepare &app, ui32, ui32 nchannels) {
+        SetupChannelProfiles(app, nchannels);
+    }
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count = 1);
 
     i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);

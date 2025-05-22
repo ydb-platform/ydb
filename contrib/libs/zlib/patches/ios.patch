@@ -1,0 +1,15 @@
+From bf936e268516c9fcc6db0fc1b572f5e3f402c8ef Mon Sep 17 00:00:00 2001
+From: Александр Сомов <somov@yandex-team.ru>
+Date: Tue, 26 Jul 2016 10:57:50 +0000
+Subject: [PATCH] Fix undeclared read/write/close in iOS build REVIEW: 173143
+
+git-svn-id: svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia/contrib/libs/zlib@2410243 41d65440-b5be-11dd-afe3-b2e846d9b4f8
+--- a/gzguts.h
++++ b/gzguts.h
+@@ -30,4 +30,6 @@
+ #ifdef _WIN32
+ #  include <stddef.h>
++#else
++#  include <unistd.h>
+ #endif
+ 

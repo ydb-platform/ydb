@@ -5,6 +5,10 @@
 #include <library/cpp/monlib/service/monservice.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 
+namespace NActorsProto {
+    class TRemoteHttpInfo;
+} // NActorsProto
+
 namespace NActors {
     namespace NMon {
         enum {
@@ -80,55 +84,20 @@ namespace NActors {
         };
 
         struct TEvRemoteHttpInfo: public NActors::TEventBase<TEvRemoteHttpInfo, RemoteHttpInfo> {
-            TEvRemoteHttpInfo() = default;
+            TEvRemoteHttpInfo();
+            TEvRemoteHttpInfo(const TString& query, HTTP_METHOD method = HTTP_METHOD_UNDEFINED);
+            TEvRemoteHttpInfo(NActorsProto::TRemoteHttpInfo info);
+            ~TEvRemoteHttpInfo();
 
-            TEvRemoteHttpInfo(const TString& query, HTTP_METHOD method = HTTP_METHOD_UNDEFINED)
-                : Query(query)
-                , Method(method)
-            {
-            }
-
-            TEvRemoteHttpInfo(NActorsProto::TRemoteHttpInfo info)
-                : Query(MakeSerializedQuery(info))
-                , ExtendedQuery(std::move(info))
-            {}
-
-            static TString MakeSerializedQuery(const NActorsProto::TRemoteHttpInfo& info) {
-                TString s(1, '\0');
-                const bool success = info.AppendToString(&s);
-                Y_ABORT_UNLESS(success);
-                return s;
-            }
+            static TString MakeSerializedQuery(const NActorsProto::TRemoteHttpInfo& info);
 
             TString Query;
             HTTP_METHOD Method = HTTP_METHOD_UNDEFINED;
-            std::optional<NActorsProto::TRemoteHttpInfo> ExtendedQuery;
+            std::unique_ptr<NActorsProto::TRemoteHttpInfo> ExtendedQuery;
 
-            TString PathInfo() const {
-                if (ExtendedQuery) {
-                    return ExtendedQuery->GetPath();
-                } else {
-                    const size_t pos = Query.find('?');
-                    return (pos == TString::npos) ? TString() : Query.substr(0, pos);
-                }
-            }
-
-            TCgiParameters Cgi() const {
-                if (ExtendedQuery) {
-                    TCgiParameters params;
-                    for (const auto& kv : ExtendedQuery->GetQueryParams()) {
-                        params.emplace(kv.GetKey(), kv.GetValue());
-                    }
-                    return params;
-                } else {
-                    const size_t pos = Query.find('?');
-                    return TCgiParameters((pos == TString::npos) ? TString() : Query.substr(pos + 1));
-                }
-            }
-
-            HTTP_METHOD GetMethod() const {
-                return ExtendedQuery ? static_cast<HTTP_METHOD>(ExtendedQuery->GetMethod()) : Method;
-            }
+            TString PathInfo() const;
+            TCgiParameters Cgi() const;
+            HTTP_METHOD GetMethod() const;
 
             TString ToStringHeader() const override {
                 return "TEvRemoteHttpInfo";
@@ -146,24 +115,7 @@ namespace NActors {
                 return true;
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs) {
-                TString s = bufs->GetString();
-                if (s.size() && s[0] == '\0') {
-                    TRope::TConstIterator iter = bufs->GetBeginIter();
-                    ui64 size = bufs->GetSize();
-                    iter += 1, --size; // skip '\0'
-                    TRopeStream stream(iter, size);
-
-                    auto res = std::make_unique<TEvRemoteHttpInfo>();
-                    res->Query = s;
-                    res->ExtendedQuery.emplace();
-                    const bool success = res->ExtendedQuery->ParseFromZeroCopyStream(&stream);
-                    Y_ABORT_UNLESS(success);
-                    return res.release();
-                } else {
-                    return new TEvRemoteHttpInfo(s);
-                }
-            }
+            static TEvRemoteHttpInfo* Load(const TEventSerializedData* bufs);
         };
 
         struct TEvRemoteHttpInfoRes: public NActors::TEventBase<TEvRemoteHttpInfoRes, RemoteHttpInfoRes> {
@@ -193,7 +145,7 @@ namespace NActors {
                 return true;
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs) {
+            static TEvRemoteHttpInfoRes* Load(const TEventSerializedData* bufs) {
                 return new TEvRemoteHttpInfoRes(bufs->GetString());
             }
         };
@@ -225,7 +177,7 @@ namespace NActors {
                 return true;
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs) {
+            static TEvRemoteJsonInfoRes* Load(const TEventSerializedData* bufs) {
                 return new TEvRemoteJsonInfoRes(bufs->GetString());
             }
         };
@@ -257,7 +209,7 @@ namespace NActors {
                 return true;
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs) {
+            static TEvRemoteBinaryInfoRes* Load(const TEventSerializedData* bufs) {
                 return new TEvRemoteBinaryInfoRes(bufs->GetString());
             }
         };

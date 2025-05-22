@@ -15,7 +15,7 @@ struct TTestEnvironment {
     THolder<TTestBasicRuntime> Runtime;
     const ui32 NodeCount;
     TActorId Edge;
-    const ui64 TabletId = MakeTabletID(0, 0, 1);
+    const ui64 TabletId = MakeTabletID(false, 1);
     const TTabletTypes::EType TabletType = TTabletTypes::KeyValue;
     NWilson::TFakeWilsonUploader* WilsonUploader = nullptr;
 
@@ -45,9 +45,12 @@ struct TTestEnvironment {
 
     void SetupRuntime() {
         Runtime = MakeHolder<TTestBasicRuntime>(NodeCount, 1u);
+        Runtime->AddAppDataInit([](ui32, NKikimr::TAppData& appData) {
+            appData.FeatureFlags.SetEnablePutBatchingForBlobStorage(false);
+        });
 
         for (ui32 i = 0; i < NodeCount; ++i) {
-            SetupStateStorage(*Runtime, i, 0, true);
+            SetupStateStorage(*Runtime, i, true);
             SetupTabletResolver(*Runtime, i);
         }
     }
@@ -90,17 +93,21 @@ THolder<TEvKeyValue::TEvRead> CreateRead(TString key) {
     return request;
 }
 
-void TestOneWrite(TString value, TString expectedTrace) {
+void TestOneWrite(TString value, TVector<TString> &&expectedTraceVariants) {
     TTestEnvironment env(8);
     env.Prepare();
 
     env.DoKVRequest(CreateWrite("key", std::move(value)));
 
     UNIT_ASSERT(env.WilsonUploader->BuildTraceTrees());
-    UNIT_ASSERT_EQUAL(env.WilsonUploader->Traces.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(env.WilsonUploader->Traces.size(), 1);
     auto& trace = env.WilsonUploader->Traces.begin()->second;
 
-    UNIT_ASSERT_EQUAL(trace.ToString(), expectedTrace);
+    bool found = false;
+    for (const TString &expectedTrace : expectedTraceVariants) {
+        found |= trace.ToString() == expectedTrace;
+    }
+    UNIT_ASSERT_C(found, trace.ToString());
 }
 
 void TestOneRead(TString value, TString expectedTrace) {
@@ -124,19 +131,134 @@ Y_UNIT_TEST_SUITE(TKeyValueTracingTest) {
     const TString SmallValue = "value";
     const TString HugeValue = TString(1 << 20, 'v');
 
+
+std::string DSProxyPutBlobTemplate =
+    "(DSProxy.Put.Blob -> "
+        "[(VDisk.Log.MultiPutItem -> "
+            "[{PDISK_LOG_WRITE}]"
+        ")]"
+    ")";
+
+TVector<std::string> PDiskLogWriteVariants = {
+    "(PDisk.LogWrite -> "
+        "[(PDisk.InScheduler.InLogWriteBatch) , (PDisk.InBlockDevice)]"
+    ")",
+    "(PDisk.LogWrite -> "
+        "[(PDisk.InScheduler) , (PDisk.InBlockDevice)]"
+    ")",
+};
+
+TVector<std::string> TabletWriteLogTempaltes = {
+    "(Tablet.WriteLog -> "
+        "[(Tablet.WriteLog.Reference -> "
+            "[{DSPROXY_PUT_BLOB1}]"
+        ") , "
+        "(Tablet.WriteLog.LogEntry -> "
+            "[{DSPROXY_PUT_BLOB2}]"
+        ")]"
+    ")",
+    "(Tablet.WriteLog -> "
+        "[(Tablet.WriteLog.Reference -> "
+            "[{DSPROXY_PUT_BLOB1}]"
+        ")]"
+    ")",
+    "(Tablet.WriteLog -> "
+        "[(Tablet.WriteLog.LogEntry -> "
+            "[{DSPROXY_PUT_BLOB1}]"
+        ")]"
+    ")",
+};
+
+
+TVector<TString> MakeCanons(std::string globalTemplate) {
+    TVector<std::string> tabletWriteLogVariants;
+    TVector<std::string> dsProxyPutBlobVariants;
+    for (auto &pdiskLogWrite : PDiskLogWriteVariants) {
+        std::string localTemplate = DSProxyPutBlobTemplate;
+        std::string templateWord = "{PDISK_LOG_WRITE}";
+        auto it = localTemplate.find(templateWord);
+        UNIT_ASSERT(it != std::string::npos);
+        localTemplate.replace(it, templateWord.size(), pdiskLogWrite);
+        dsProxyPutBlobVariants.push_back(localTemplate);
+    }
+    
+    for (auto &tabletWriteLog : TabletWriteLogTempaltes) {
+        std::string templateWord1 = "{DSPROXY_PUT_BLOB1}";
+        for (auto &dsProxyPutBlob1 : dsProxyPutBlobVariants) {
+            std::string template1 = tabletWriteLog;
+            auto it1 = template1.find(templateWord1);
+            UNIT_ASSERT(it1 != std::string::npos);
+            template1.replace(it1, templateWord1.size(), dsProxyPutBlob1);
+
+            std::string templateWord2 = "{DSPROXY_PUT_BLOB2}";
+            auto it2 = template1.find(templateWord2);
+            if (it2 == std::string::npos) {
+                tabletWriteLogVariants.push_back(TString(template1));
+            } else {
+                for (auto &dsProxyPutBlob2 : dsProxyPutBlobVariants) {
+                    std::string template2 = template1;
+                    it2 = template2.find(templateWord2);
+                    UNIT_ASSERT(it2 != std::string::npos);
+                    template2.replace(it2, templateWord2.size(), dsProxyPutBlob2);
+                    tabletWriteLogVariants.push_back(TString(template2));
+                }
+            }
+        }
+    }
+
+    TVector<TString> result;
+    for (auto &tabletLogWrite : tabletWriteLogVariants) {
+        std::string localTemplate = globalTemplate;
+        std::string templateWord = "{TABLET_LOG_WRITE}";
+        auto it = localTemplate.find(templateWord);
+        UNIT_ASSERT(it != std::string::npos);
+        localTemplate.replace(it, templateWord.size(), tabletLogWrite);
+        result.push_back(TString(localTemplate));
+    }
+    return result;
+};
+
+
+
 Y_UNIT_TEST(WriteSmall) {
-    TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageRequest -> [(DSProxy.Put -> [(Backpressure.InFlight "
-        "-> [(VDisk.Log.Put)])])]) , (Tablet.Transaction -> [(Tablet.Transaction.Execute) , (Tablet.WriteLog -> "
-        "[(Tablet.WriteLog.LogEntry -> [(DSProxy.Put -> [(Backpressure.InFlight -> [(VDisk.Log.Put)])])])])])])";
-    TestOneWrite(SmallValue, std::move(canon));
+    TVector<TString> canons = MakeCanons(
+        "(KeyValue.Intermediate -> "
+            "[(KeyValue.StorageRequest -> "
+                "[(DSProxy.Put -> "
+                    "[(Backpressure.InFlight -> "
+                        "[(VDisk.Log.Put)]"
+                    ")]"
+                ")]"
+            ") , "
+            "(Tablet.Transaction -> "
+                "[(Tablet.Transaction.Execute) , {TABLET_LOG_WRITE}]"
+            ")]"
+        ")"
+    );
+    TestOneWrite(SmallValue, std::move(canons));
 }
 
 Y_UNIT_TEST(WriteHuge) {
-    TString canon = "(KeyValue.Intermediate -> [(KeyValue.StorageRequest -> [(DSProxy.Put -> [(Backpressure.InFlight -> "
-        "[(VDisk.HullHugeBlobChunkAllocator) , (VDisk.HullHugeKeeper.InWaitQueue -> [(VDisk.HugeBlobKeeper.Write -> "
-        "[(VDisk.Log.PutHuge)])])])])]) , (Tablet.Transaction -> [(Tablet.Transaction.Execute) , (Tablet.WriteLog -> "
-        "[(Tablet.WriteLog.LogEntry -> [(DSProxy.Put -> [(Backpressure.InFlight -> [(VDisk.Log.Put)])])])])])])";
-    TestOneWrite(HugeValue, std::move(canon));
+    TVector<TString> canons = MakeCanons(
+        "(KeyValue.Intermediate -> "
+            "[(KeyValue.StorageRequest -> "
+                "[(DSProxy.Put -> "
+                    "[(Backpressure.InFlight -> "
+                        "[(VDisk.HullHugeBlobChunkAllocator) , "
+                        "(VDisk.HullHugeKeeper.InWaitQueue -> "
+                            "[(VDisk.HugeBlobKeeper.Write -> "
+                                "[(VDisk.Log.PutHuge)]"
+                            ")]"
+                        ")]"
+                    ")]"
+                ")]"
+            ") , "
+            "(Tablet.Transaction -> "
+                "[(Tablet.Transaction.Execute) , {TABLET_LOG_WRITE}]"
+            ")]"
+        ")"
+    );
+    TestOneWrite(HugeValue, std::move(canons));
 }
 
 Y_UNIT_TEST(ReadSmall) {

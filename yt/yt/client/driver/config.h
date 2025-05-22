@@ -17,10 +17,9 @@ namespace NYT::NDriver {
 constexpr int ApiVersion3 = 3;
 constexpr int ApiVersion4 = 4;
 
-class TDriverConfig
+struct TDriverConfig
     : public NYTree::TYsonStruct
 {
-public:
     NApi::TFileReaderConfigPtr FileReader;
     NApi::TFileWriterConfigPtr FileWriter;
     NTableClient::TTableReaderConfigPtr TableReader;
@@ -44,6 +43,9 @@ public:
     bool EnableInternalCommands;
 
     bool ExpectStructuredInputInStructuredBatchCommands;
+
+    //! Controls whether authentication commands (SetUserPassword, IssueToken, ListUserTokens, etc.) require a correct password to be used.
+    bool RequirePasswordInAuthenticationCommands;
 
     REGISTER_YSON_STRUCT(TDriverConfig);
 

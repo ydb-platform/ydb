@@ -3,12 +3,11 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -19,7 +18,7 @@ using namespace NYql::NNodes;
 
 bool UseSource(const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrTableDescription& tableDesc) {
     bool useSource = kqpCtx.Config->EnableKqpScanQuerySourceRead && kqpCtx.IsScanQuery();
-    useSource = useSource || (kqpCtx.Config->EnableKqpDataQuerySourceRead && kqpCtx.IsDataQuery());
+    useSource = useSource || kqpCtx.IsDataQuery();
     useSource = useSource || kqpCtx.IsGenericQuery();
     useSource = useSource &&
         tableDesc.Metadata->Kind != EKikimrTableKind::SysView &&
@@ -107,6 +106,11 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         limit = settings.ItemsLimit;
         settings.ItemsLimit = nullptr;
 
+        matched->Settings = settings.BuildNode(ctx, matched->Settings.Pos());
+    }
+
+    if (kqpCtx.Config->HasMaxSequentialReadsInFlight()) {
+        settings.SequentialInFlight = *kqpCtx.Config->MaxSequentialReadsInFlight.Get();
         matched->Settings = settings.BuildNode(ctx, matched->Settings.Pos());
     }
 

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-from ydb.tests.library.common import yatest_common
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.canonical import set_canondata_root
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -9,6 +8,8 @@ import pytest
 import logging
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+import yatest
 
 logger = logging.getLogger(__name__)
 
@@ -120,10 +121,12 @@ DATA_PARQUET = pa.Table.from_arrays(ARRAYS, names=ARRAY_NAMES)
 ALL_PARAMS = [("csv", []), ("csv", ["--newline-delimited"]), ("tsv", []), ("tsv", ["--newline-delimited"]), ("json", [])]
 ONLY_CSV_TSV_PARAMS = [("csv", []), ("csv", ["--newline-delimited"]), ("tsv", []), ("tsv", ["--newline-delimited"])]
 
+BOM_UTF8 = b'\xEF\xBB\xBF'
+
 
 def ydb_bin():
     if os.getenv("YDB_CLI_BINARY"):
-        return yatest_common.binary_path(os.getenv("YDB_CLI_BINARY"))
+        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
     raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
@@ -152,7 +155,7 @@ class BaseTestTableService(object):
     def setup_class(cls):
         set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
 
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(
@@ -168,7 +171,7 @@ class BaseTestTableService(object):
 
     @classmethod
     def execute_ydb_cli_command(cls, args, stdin=None, stdout=None):
-        execution = yatest_common.execute(
+        execution = yatest.common.execute(
             [
                 ydb_bin(),
                 "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
@@ -236,16 +239,23 @@ class TestImpex(BaseTestTableService):
                 for key in range(i * rows, (i + 1) * rows):
                     f.write(TestImpex.get_row_in_format(ftype, key, id_set[key % len(id_set)], value_set[key % len(value_set)]))
 
-    def run_import(self, ftype, data, additional_args=[]):
+    def write_data_to_tmp_file(self, path, add_bom, data):
+        if add_bom:
+            with path.open("wb") as f:
+                f.write(BOM_UTF8 + data.encode('utf-8'))
+        else:
+            with path.open("w") as f:
+                f.writelines(data)
+
+    def run_import(self, ftype, data, additional_args=[], add_bom=False):
         path = self.tmp_path / "tempinput.{}".format(ftype)
-        with path.open("w") as f:
-            f.writelines(data)
+        self.write_data_to_tmp_file(path, add_bom, data)
         self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", str(path)] + self.get_header_flag(ftype) + additional_args)
 
-    def run_import_from_stdin(self, ftype, data, additional_args=[]):
-        with (self.tmp_path / "tempinput.{}".format(ftype)).open("w") as f:
-            f.writelines(data)
-        with (self.tmp_path / "tempinput.{}".format(ftype)).open("r") as f:
+    def run_import_from_stdin(self, ftype, data, additional_args=[], add_bom=False):
+        path = self.tmp_path / "tempinput.{}".format(ftype)
+        self.write_data_to_tmp_file(path, add_bom, data)
+        with (path).open("r") as f:
             self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args, stdin=f)
 
     def run_import_multiple_files(self, ftype, files_count, additional_args=[]):
@@ -273,13 +283,13 @@ class TestImpex(BaseTestTableService):
         query = "SELECT `key`, `id`, `value` FROM `{}` ORDER BY `key`".format(self.table_path)
         output_file_name = str(self.tmp_path / "result.output")
         self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan", "--format", format], stdout=output_file_name)
-        return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
+        return yatest.common.canonical_file(output_file_name, local=True, universal_lines=True)
 
     def validate_gen_data(self):
         query = "SELECT count(*) FROM `{}`".format(self.table_path)
         output_file_name = str(self.tmp_path / "result.output")
         self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan"], stdout=output_file_name)
-        return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
+        return yatest.common.canonical_file(output_file_name, local=True, universal_lines=True)
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
     def test_simple(self, tmp_path, request, table_type, ftype, additional_args):
@@ -338,3 +348,15 @@ class TestImpex(BaseTestTableService):
         self.init_test(tmp_path, table_type, request.node.name)
         self.run_import_parquet(DATA_PARQUET)
         return self.run_export("csv")
+
+    @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
+    def test_import_file_with_bom(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
+        self.run_import(ftype, DATA[ftype], additional_args, True)
+        return self.run_export(ftype)
+
+    @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
+    def test_import_stdin_with_bom(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
+        self.run_import_from_stdin(ftype, DATA[ftype], additional_args, True)
+        return self.run_export(ftype)

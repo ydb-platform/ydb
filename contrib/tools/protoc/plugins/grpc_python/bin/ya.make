@@ -1,5 +1,7 @@
 PROGRAM(grpc_python)
 
+VERSION(None)
+
 LICENSE(Apache-2.0)
 
 PEERDIR(

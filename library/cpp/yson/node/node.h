@@ -1,9 +1,8 @@
 #pragma once
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/cast.h>
 #include <util/generic/hash.h>
-#include <util/generic/variant.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/generic/ylimits.h>
@@ -79,7 +78,7 @@ public:
     TNode(TString s);
     TNode(int i);
 
-    //this case made speccially for prevent mess cast of EType into TNode through TNode(int) constructor
+    //this case made specially to prevent mess cast of EType into TNode through TNode(int) constructor
     //usual case of error SomeNode == TNode::Undefined <-- SomeNode indeed will be compared with TNode(0) without this method
     //correct way is SomeNode.GetType() == TNode::Undefined
     template<class T = EType>

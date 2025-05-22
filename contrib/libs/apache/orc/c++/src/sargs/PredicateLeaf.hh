@@ -19,18 +19,17 @@
 #ifndef ORC_PREDICATELEAF_HH
 #define ORC_PREDICATELEAF_HH
 
-#include "wrap/orc-proto-wrapper.hh"
 #include "orc/Common.hh"
 #include "orc/sargs/Literal.hh"
 #include "orc/sargs/TruthValue.hh"
+#include "wrap/orc-proto-wrapper.hh"
 
 #include <string>
 #include <vector>
 
 namespace orc {
 
-  static constexpr uint64_t INVALID_COLUMN_ID =
-    std::numeric_limits<uint64_t>::max();
+  static constexpr uint64_t INVALID_COLUMN_ID = std::numeric_limits<uint64_t>::max();
 
   class BloomFilter;
 
@@ -38,7 +37,7 @@ namespace orc {
    * The primitive predicates that form a SearchArgument.
    */
   class PredicateLeaf {
-  public:
+   public:
     /**
      * The possible operators for predicates. To get the opposites, construct
      * an expression with a not operator.
@@ -55,9 +54,9 @@ namespace orc {
 
     // The possible types for sargs.
     enum class Type {
-      LONG = 0,     // all of the integer types
-      FLOAT,        // float and double
-      STRING,       // string, char, varchar
+      LONG = 0,  // all of the integer types
+      FLOAT,     // float and double
+      STRING,    // string, char, varchar
       DATE,
       DECIMAL,
       TIMESTAMP,
@@ -66,34 +65,20 @@ namespace orc {
 
     PredicateLeaf() = default;
 
-    PredicateLeaf(Operator op,
-                  PredicateDataType type,
-                  const std::string& colName,
-                  Literal literal);
+    PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName, Literal literal);
 
-    PredicateLeaf(Operator op,
-                  PredicateDataType type,
-                  uint64_t columnId,
-                  Literal literal);
+    PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId, Literal literal);
 
-    PredicateLeaf(Operator op,
-                  PredicateDataType type,
-                  const std::string& colName,
+    PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName,
                   const std::initializer_list<Literal>& literalList);
 
-    PredicateLeaf(Operator op,
-                  PredicateDataType type,
-                  uint64_t columnId,
+    PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId,
                   const std::initializer_list<Literal>& literalList);
 
-    PredicateLeaf(Operator op,
-                  PredicateDataType type,
-                  const std::string& colName,
+    PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName,
                   const std::vector<Literal>& literalList);
 
-    PredicateLeaf(Operator op,
-                  PredicateDataType type,
-                  uint64_t columnId,
+    PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId,
                   const std::vector<Literal>& literalList);
 
     /**
@@ -134,17 +119,18 @@ namespace orc {
     /**
      * Evaluate current PredicateLeaf based on ColumnStatistics and BloomFilter
      */
-    TruthValue evaluate(const WriterVersion writerVersion,
-                        const proto::ColumnStatistics& colStats,
-                        const BloomFilter * bloomFilter) const;
+    TruthValue evaluate(const WriterVersion writerVersion, const proto::ColumnStatistics& colStats,
+                        const BloomFilter* bloomFilter) const;
 
     std::string toString() const;
 
     bool operator==(const PredicateLeaf& r) const;
 
-    size_t getHashCode() const { return mHashCode; }
+    size_t getHashCode() const {
+      return hashCode_;
+    }
 
-  private:
+   private:
     size_t hashCode() const;
 
     void validate() const;
@@ -152,20 +138,18 @@ namespace orc {
 
     std::string columnDebugString() const;
 
-    TruthValue evaluatePredicateMinMax(
-                                 const proto::ColumnStatistics& colStats) const;
+    TruthValue evaluatePredicateMinMax(const proto::ColumnStatistics& colStats) const;
 
-    TruthValue evaluatePredicateBloomFiter(const BloomFilter * bloomFilter,
-                                           bool hasNull) const;
+    TruthValue evaluatePredicateBloomFiter(const BloomFilter* bloomFilter, bool hasNull) const;
 
-  private:
-    Operator mOperator;
-    PredicateDataType mType;
-    std::string mColumnName;
-    bool mHasColumnName;
-    uint64_t mColumnId;
-    std::vector<Literal> mLiterals;
-    size_t mHashCode;
+   private:
+    Operator operator_;
+    PredicateDataType type_;
+    std::string columnName_;
+    bool hasColumnName_;
+    uint64_t columnId_;
+    std::vector<Literal> literals_;
+    size_t hashCode_;
   };
 
   struct PredicateLeafHash {
@@ -180,6 +164,6 @@ namespace orc {
     }
   };
 
-} // namespace orc
+}  // namespace orc
 
-#endif //ORC_PREDICATELEAF_HH
+#endif  // ORC_PREDICATELEAF_HH

@@ -13,7 +13,6 @@ from pyasn1.type import univ
 from pyasn1.type import tag
 from pyasn1.type import namedtype
 from pyasn1.type import opentype
-from pyasn1.compat.octets import str2octs
 from pyasn1.error import PyAsn1Error
 
 
@@ -34,7 +33,7 @@ class UntaggedAnyTestCase(BaseTestCase):
 
         self.s.clear()
 
-        self.s['blob'] = univ.Any(str2octs('xxx'))
+        self.s['blob'] = univ.Any(b'xxx')
 
         # this should succeed because Any is untagged and unconstrained
         self.s['blob'] = univ.Integer(123)
@@ -90,7 +89,7 @@ class TaggedAnyOpenTypeTestCase(BaseTestCase):
 
         self.s.clear()
 
-        self.s['blob'] = univ.Any(str2octs('xxx'))
+        self.s['blob'] = univ.Any(b'xxx')
         self.s['blob'] = univ.Integer(123)
 
 

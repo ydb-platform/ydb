@@ -39,11 +39,11 @@
           TYPES(ui32, TString, ui32, TDuration, ui64, TString, TString),                                                              \
           NAMES("poolId", "pool", "eventsProcessed", "procTimeMs", "workerId", "actorId", "actorType"))                               \
     PROBE(ActivationBegin, GROUPS(),                                                                                                  \
-          TYPES(ui32, ui32, ui32, double),                                                                                            \
-          NAMES("cpu", "poolId", "workerId", "expireMs"))                                                                             \
+          TYPES(ui32, ui32),                                                                                            \
+          NAMES("poolId", "workerId"))                                                                             \
     PROBE(ActivationEnd, GROUPS(),                                                                                                    \
-          TYPES(ui32, ui32, ui32),                                                                                                    \
-          NAMES("cpu", "poolId", "workerId"))                                                                                         \
+          TYPES(ui32, ui32),                                                                                                    \
+          NAMES("poolId", "workerId"))                                                                                         \
     PROBE(ExecutorThreadStats, GROUPS("ActorLibStats"),                                                                               \
           TYPES(ui32, TString, ui64, ui64, ui64, double, double),                                                                     \
           NAMES("poolId", "pool", "workerId", "execCount", "readyActivationCount", "execMs", "nonExecMs"))                            \
@@ -151,36 +151,22 @@
     PROBE(EpollSendReadyWrite, GROUPS("EpollThread"),                                                                                 \
           TYPES(bool, bool, int),                                                                                                     \
           NAMES("hangup", "event", "fd"))                                                                                             \
-    PROBE(HardPreemption, GROUPS("UnitedWorker"),                                                                                     \
-          TYPES(ui32, ui32, ui32, ui32),                                                                                              \
-          NAMES("cpu", "prevPoolId", "prevWorkerId", "nextWorkerId"))                                                                 \
-    PROBE(SetPreemptionTimer, GROUPS("UnitedWorker", "PreemptionTimer"),                                                              \
-          TYPES(ui32, ui32, int, double, double),                                                                                     \
-          NAMES("cpu", "workerId", "fd", "nowMs", "preemptMs"))                                                                       \
-    PROBE(ResetPreemptionTimer, GROUPS("UnitedWorker", "PreemptionTimer"),                                                            \
-          TYPES(ui32, ui32, int, double, double),                                                                                     \
-          NAMES("cpu", "workerId", "fd", "nowMs", "preemptMs"))                                                                       \
-    PROBE(SlowWorkerActionRace, GROUPS("UnitedWorker"),                                                                               \
-          TYPES(ui32, ui32, ui64),                                                                                                    \
-          NAMES("cpu", "poolId", "slowPoolsMask"))                                                                                    \
-    PROBE(PoolStats, GROUPS("PoolCpuBalancer"),                                                                                       \
-          TYPES(ui32, TString, ui64, ui8, ui8, double, double, double, ui64, ui64, ui64),                                             \
-          NAMES("poolId", "pool", "currentCpus", "loadClass", "priority", "scaleFactor", "cpuIdle", "cpuLoad", "importance", "addImportance", "subImportance")) \
-    PROBE(MoveCpu, GROUPS("PoolCpuBalancer"),                                                                                         \
-          TYPES(ui32, ui64, TString, TString, ui32),                                                                                  \
-          NAMES("fromPoolId", "toPoolId", "fromPool", "toPool", "cpu"))                                                               \
     PROBE(ThreadCount, GROUPS("BasicThreadPool"),                                                                                     \
           TYPES(ui32, TString, ui32, ui32, ui32, ui32),                                                                               \
           NAMES("poolId", "pool", "threacCount", "minThreadCount", "maxThreadCount", "defaultThreadCount"))                           \
     PROBE(HarmonizeCheckPool, GROUPS("Harmonizer"),                                                                                   \
           TYPES(ui32, TString, double, double, double, double, ui32, ui32, bool, bool, bool),                                         \
-          NAMES("poolId", "pool", "booked", "consumed", "lastSecondBooked", "lastSecondConsumed", "threadCount", "maxThreadCount", "isStarved", "isNeedy", "isHoggish")) \
+          NAMES("poolId", "pool", "elapsed", "cpu", "lastSecondElapsed", "lastSecondCpu", "threadCount", "maxThreadCount",    \
+                  "isStarved", "isNeedy", "isHoggish"))                                                                               \
+    PROBE(HarmonizeCheckPoolByThread, GROUPS("Harmonizer"),                                                                           \
+          TYPES(ui32, TString, i16, double, double, double, double),                                                                  \
+          NAMES("poolId", "pool", "threadIdx", "elapsed", "cpu", "lastSecondElapsed", "lastSecondCpu"))                       \
     PROBE(WakingUpConsumption, GROUPS("Harmonizer"),                                                                                  \
-          TYPES(double, double, double, double, double),                                                                                              \
-          NAMES("avgWakingUpUs", "realAvgWakingUpUs", "avgAwakeningUs", "realAvgAwakeningUs", "total"))                                                                          \
+          TYPES(double, double, double, double, double),                                                                              \
+          NAMES("avgWakingUpUs", "realAvgWakingUpUs", "avgAwakeningUs", "realAvgAwakeningUs", "total"))                               \
     PROBE(ChangeSpinThreshold, GROUPS("Harmonizer"),                                                                                  \
-          TYPES(ui32, TString, ui64, double, ui64),                                                                                     \
-          NAMES("poolId", "pool", "spinThreshold", "spinThresholdUs", "bucketIdx"))                                                \
+          TYPES(ui32, TString, ui64, double, ui64),                                                                                   \
+          NAMES("poolId", "pool", "spinThreshold", "spinThresholdUs", "bucketIdx"))                                                   \
     PROBE(WaitingHistogram, GROUPS("Harmonizer"),                                                                                     \
           TYPES(ui32, TString, double, double, ui64),                                                                                 \
           NAMES("poolId", "pool", "fromUs", "toUs", "count"))                                                                         \
@@ -205,12 +191,12 @@
     PROBE(SpinCycles, GROUPS("Harmonizer"),                                                                                           \
           TYPES(ui32, TString, ui64, bool),                                                                                           \
           NAMES("poolId", "pool", "spinPauseCount", "IsInterrupted"))                                                                 \
-    PROBE(WaitingHistogramPerThread, GROUPS("Harmonizer"),                                                                                     \
-          TYPES(ui32, TString, ui32, double, double, ui64),                                                                                 \
-          NAMES("poolId", "pool", "threadIdx", "fromUs", "toUs", "count"))                                                                         \
-    PROBE(ChangeSpinThresholdPerThread, GROUPS("Harmonizer"),                                                                                  \
-          TYPES(ui32, TString, ui32, ui64, double, ui64),                                                                                     \
-          NAMES("poolId", "pool", "threadIdx", "spinThreshold", "spinThresholdUs", "bucketIdx"))                                                \
+    PROBE(WaitingHistogramPerThread, GROUPS("Harmonizer"),                                                                            \
+          TYPES(ui32, TString, ui32, double, double, ui64),                                                                           \
+          NAMES("poolId", "pool", "threadIdx", "fromUs", "toUs", "count"))                                                            \
+    PROBE(ChangeSpinThresholdPerThread, GROUPS("Harmonizer"),                                                                         \
+          TYPES(ui32, TString, ui32, ui64, double, ui64),                                                                             \
+          NAMES("poolId", "pool", "threadIdx", "spinThreshold", "spinThresholdUs", "bucketIdx"))                                      \
     /**/
 
 LWTRACE_DECLARE_PROVIDER(ACTORLIB_PROVIDER)

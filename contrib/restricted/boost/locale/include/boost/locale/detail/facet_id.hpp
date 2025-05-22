@@ -12,7 +12,7 @@
 
 /// \cond INTERNAL
 namespace boost { namespace locale { namespace detail {
-#if defined(__clang__)
+#if BOOST_CLANG_VERSION >= 40900
 #    pragma clang diagnostic push
 #    pragma clang diagnostic ignored "-Wundefined-var-template"
 #endif
@@ -25,7 +25,7 @@ namespace boost { namespace locale { namespace detail {
     struct BOOST_LOCALE_DECL facet_id {
         static std::locale::id id;
     };
-#if defined(__clang__)
+#if BOOST_CLANG_VERSION >= 40900
 #    pragma clang diagnostic pop
 #endif
 }}} // namespace boost::locale::detail

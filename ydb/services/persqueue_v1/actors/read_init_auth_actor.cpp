@@ -4,6 +4,7 @@
 #include "persqueue_utils.h"
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/persqueue/utils.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -83,13 +84,15 @@ void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, c
     entry.SyncVersion = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     schemeCacheRequest->ResultSet.emplace_back(entry);
+    schemeCacheRequest->DatabaseName = AppData(ctx)->PQConfig.GetDatabase();
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Send client acl request");
     ctx.Send(NewSchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
 }
 
 
 bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
-        const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, THashMap<TString, TTopicHolder>::iterator topicsIter,
+        const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
+        THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
     Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
@@ -101,10 +104,11 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.MeteringMode = pqDescr.GetPQTabletConfig().GetMeteringMode();
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
     topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
+    topicsIter->second.PartitionGraph = entry.PQGroupInfo->PartitionGraph;
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
-        topicsIter->second.PartitionIdToTabletId[partitionDescription.GetPartitionId()] =
-            partitionDescription.GetTabletId();
+        topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
+            TPartitionInfo{ partitionDescription.GetTabletId() };
     }
 
     if (!topicsIter->second.DiscoveryConverter->IsValid()) {
@@ -176,7 +180,7 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
     }
 
     // ToDo[migration] - separate option - ?
-    bool doCheckClientAcl = DoCheckACL && !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen();
+    bool doCheckClientAcl = DoCheckACL && !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() && !SkipReadRuleCheck;
     if (doCheckClientAcl) {
         CheckClientACL(ctx);
     } else {
@@ -197,18 +201,11 @@ bool TReadInitAndAuthActor::CheckTopicACL(
         return false;
     }
     if (!SkipReadRuleCheck && (Token || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen())) {
-        bool found = false;
-        for (auto& cons : pqDescr.GetPQTabletConfig().GetReadRules() ) {
-            if (cons == ClientId) {
-                found = true;
-                break;
-            }
-        }
         //TODO : add here checking of client-service-type password. Provide it via API-call.
-        if (!found) {
+        if (!NPQ::HasConsumer(pqDescr.GetPQTabletConfig(), ClientId)) {
             CloseSession(
-                    TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster,
-                    PersQueue::ErrorCode::BAD_REQUEST, ctx
+                    TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster << "'",
+                    PersQueue::ErrorCode::UNKNOWN_READ_RULE, ctx
             );
             return false;
         }
@@ -234,14 +231,19 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
     auto path = "/" + JoinPath(entry.Path); // ToDo [migration] - through converter ?
     if (navigate->ErrorCount > 0) {
         const NSchemeCache::TSchemeCacheNavigate::EStatus status = navigate->ResultSet.front().Status;
-        CloseSession(TStringBuilder() << "Failed to read ACL for '" << path << "' Scheme cache error : " << status, PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
+        PersQueue::ErrorCode::ErrorCode errorCode = ConvertNavigateStatus(status);
+
+        CloseSession(TStringBuilder() << "Failed to read ACL for '" << path << "' Scheme cache error : " << status,  errorCode, ctx);
         return;
     }
 
-    NACLib::EAccessRights rights = (NACLib::EAccessRights)(NACLib::EAccessRights::ReadAttributes + NACLib::EAccessRights::WriteAttributes);
-    if (
-            !CheckACLPermissionsForNavigate(entry.SecurityObject, path, rights, "No ReadAsConsumer permissions", ctx)
-    ) {
+    // in future use right UseConsumer
+    auto selectRowRights = NACLib::EAccessRights::SelectRow;
+    auto accessAttributesRights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
+    if (DoCheckACL && !(entry.SecurityObject->CheckAccess(selectRowRights, *Token) || entry.SecurityObject->CheckAccess(accessAttributesRights, *Token))) {
+        CloseSession(TStringBuilder() << "No ReadAsConsumer permissions" << " for '" << path
+                    << "' for subject '" << Token->GetUserSID() << "'",
+                    PersQueue::ErrorCode::ACCESS_DENIED, ctx);
         return;
     }
     FinishInitialization(ctx);
@@ -271,7 +273,16 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicInitInfoMap res;
     for (auto& [name, holder] : Topics) {
         res.insert(std::make_pair(name, TTopicInitInfo{
-            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode, holder.PartitionIdToTabletId
+            holder.FullConverter,
+            holder.TabletID,
+            holder.CloudId,
+            holder.DbId,
+            holder.DbPath,
+            holder.IsServerless,
+            holder.FolderId,
+            holder.MeteringMode,
+            holder.Partitions,
+            holder.PartitionGraph
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

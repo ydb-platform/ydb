@@ -15,7 +15,7 @@ $$==============================================================================
 #include <yt/yt/core/misc/common.h>
 
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-#include <yt/yt/core/misc/source_location.h>
+#include <library/cpp/yt/misc/source_location.h>
 #endif
 
 namespace NYT::NDetail {
@@ -65,7 +65,7 @@ public:
     //! Returns |true| iff this callback is not equal to the other (which may be null).
     bool operator != (const TCallbackBase& other) const;
 #else
-    bool operator== (const TCallbackBase&) const = default;
+    bool operator== (const TCallbackBase& other) const = default;
 #endif
 
 protected:

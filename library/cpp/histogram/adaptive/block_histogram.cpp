@@ -10,6 +10,8 @@
 #include <util/generic/ymath.h>
 #include <util/string/printf.h>
 
+#include <format>
+
 namespace {
     struct TEmpty {
     };
@@ -138,7 +140,10 @@ namespace NKiwiAggr {
 
     void TBlockHistogram::Merge(const THistogram& histo, double multiplier) {
         if (!IsValidFloat(histo.GetMinValue()) || !IsValidFloat(histo.GetMaxValue())) {
-            fprintf(stderr, "Merging in histogram id %lu: skip bad histo with minvalue %f maxvalue %f\n", Id, histo.GetMinValue(), histo.GetMaxValue());
+            Cerr << std::format(
+                "Merging in histogram id {}: skip bad histo with minvalue {} maxvalue {}\n",
+                Id, histo.GetMinValue(), histo.GetMaxValue()
+            );
             return;
         }
         if (histo.FreqSize() == 0) {
@@ -154,7 +159,10 @@ namespace NKiwiAggr {
                 double value = histo.GetPosition(j);
                 double weight = histo.GetFreq(j);
                 if (!IsValidFloat(value) || !IsValidFloat(weight)) {
-                    fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight);
+                    Cerr << std::format(
+                        "Merging in histogram id {}: skip bad value {} weight {}\n",
+                        Id, value, weight
+                    );
                     continue;
                 }
                 Add(value, weight * multiplier);
@@ -167,7 +175,10 @@ namespace NKiwiAggr {
             for (size_t j = 0; j < histo.FreqSize(); ++j) {
                 double weight = histo.GetFreq(j);
                 if (!IsValidFloat(pos) || !IsValidFloat(weight)) {
-                    fprintf(stderr, "Merging in histogram id %lu: skip bad value %f weight %f\n", Id, pos, weight);
+                    Cerr << std::format(
+                        "Merging in histogram id {}: skip bad value {} weight {}\n",
+                        Id, pos, weight
+                    );
                     pos += histo.GetBinRange();
                     continue;
                 }
@@ -229,7 +240,10 @@ namespace NKiwiAggr {
             double value = histo.GetPosition(i);
             double weight = histo.GetFreq(i);
             if (!IsValidFloat(value) || !IsValidFloat(weight)) {
-                fprintf(stderr, "FromProto in histogram id %lu: skip bad value %f weight %f\n", Id, value, weight);
+                Cerr << std::format(
+                    "FromProto in histogram id {}: skip bad value {} weight {}\n",
+                    Id, value, weight
+                );
                 continue;
             }
             Bins[i].first = value;

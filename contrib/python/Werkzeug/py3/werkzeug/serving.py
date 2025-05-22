@@ -11,15 +11,13 @@ It provides features like interactive debugging and code reloading. Use
     from myapp import create_app
     from werkzeug import run_simple
 """
+import errno
 import io
 import os
-import platform
-import signal
 import socket
 import socketserver
 import sys
 import typing as t
-import warnings
 from datetime import datetime as dt
 from datetime import timedelta
 from datetime import timezone
@@ -70,7 +68,6 @@ except AttributeError:
     af_unix = None  # type: ignore
 
 LISTEN_QUEUE = 128
-can_open_by_fd = not platform.system() == "Windows" and hasattr(socket, "fromfd")
 
 _TSSLContextArg = t.Optional[
     t.Union["ssl.SSLContext", t.Tuple[str, t.Optional[str]], "te.Literal['adhoc']"]
@@ -161,15 +158,6 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
 
     def make_environ(self) -> "WSGIEnvironment":
         request_url = url_parse(self.path)
-
-        def shutdown_server() -> None:
-            warnings.warn(
-                "The 'environ['werkzeug.server.shutdown']' function is"
-                " deprecated and will be removed in Werkzeug 2.1.",
-                stacklevel=2,
-            )
-            self.server.shutdown_signal = True
-
         url_scheme = "http" if self.server.ssl_context is None else "https"
 
         if not self.client_address:
@@ -195,7 +183,6 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
             "wsgi.multithread": self.server.multithread,
             "wsgi.multiprocess": self.server.multiprocess,
             "wsgi.run_once": False,
-            "werkzeug.server.shutdown": shutdown_server,
             "werkzeug.socket": self.connection,
             "SERVER_SOFTWARE": self.server_version,
             "REQUEST_METHOD": self.command,
@@ -234,9 +221,7 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
         try:
             # binary_form=False gives nicer information, but wouldn't be compatible with
             # what Nginx or Apache could return.
-            peer_cert = self.connection.getpeercert(  # type: ignore[attr-defined]
-                binary_form=True
-            )
+            peer_cert = self.connection.getpeercert(binary_form=True)
             if peer_cert is not None:
                 # Nginx and Apache use PEM format.
                 environ["SSL_CLIENT_CERT"] = ssl.DER_cert_to_PEM_cert(peer_cert)
@@ -258,9 +243,10 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
         headers_set: t.Optional[t.List[t.Tuple[str, str]]] = None
         status_sent: t.Optional[str] = None
         headers_sent: t.Optional[t.List[t.Tuple[str, str]]] = None
+        chunk_response: bool = False
 
         def write(data: bytes) -> None:
-            nonlocal status_sent, headers_sent
+            nonlocal status_sent, headers_sent, chunk_response
             assert status_set is not None, "write() before start_response"
             assert headers_set is not None, "write() before start_response"
             if status_sent is None:
@@ -275,24 +261,45 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
                 header_keys = set()
                 for key, value in headers_sent:
                     self.send_header(key, value)
-                    key = key.lower()
-                    header_keys.add(key)
-                if not (
-                    "content-length" in header_keys
-                    or environ["REQUEST_METHOD"] == "HEAD"
-                    or code < 200
-                    or code in (204, 304)
+                    header_keys.add(key.lower())
+
+                # Use chunked transfer encoding if there is no content
+                # length. Do not use for 1xx and 204 responses. 304
+                # responses and HEAD requests are also excluded, which
+                # is the more conservative behavior and matches other
+                # parts of the code.
+                # https://httpwg.org/specs/rfc7230.html#rfc.section.3.3.1
+                if (
+                    not (
+                        "content-length" in header_keys
+                        or environ["REQUEST_METHOD"] == "HEAD"
+                        or (100 <= code < 200)
+                        or code in {204, 304}
+                    )
+                    and self.protocol_version >= "HTTP/1.1"
                 ):
-                    self.close_connection = True
-                    self.send_header("Connection", "close")
-                if "server" not in header_keys:
-                    self.send_header("Server", self.version_string())
-                if "date" not in header_keys:
-                    self.send_header("Date", self.date_time_string())
+                    chunk_response = True
+                    self.send_header("Transfer-Encoding", "chunked")
+
+                # Always close the connection. This disables HTTP/1.1
+                # keep-alive connections. They aren't handled well by
+                # Python's http.server because it doesn't know how to
+                # drain the stream before the next request line.
+                self.send_header("Connection", "close")
                 self.end_headers()
 
             assert isinstance(data, bytes), "applications must write bytes"
-            self.wfile.write(data)
+
+            if data:
+                if chunk_response:
+                    self.wfile.write(hex(len(data))[2:].encode())
+                    self.wfile.write(b"\r\n")
+
+                self.wfile.write(data)
+
+                if chunk_response:
+                    self.wfile.write(b"\r\n")
+
             self.wfile.flush()
 
         def start_response(status, headers, exc_info=None):  # type: ignore
@@ -316,20 +323,23 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
                     write(data)
                 if not headers_sent:
                     write(b"")
+                if chunk_response:
+                    self.wfile.write(b"0\r\n\r\n")
             finally:
                 if hasattr(application_iter, "close"):
-                    application_iter.close()  # type: ignore
+                    application_iter.close()
 
         try:
             execute(self.server.app)
         except (ConnectionError, socket.timeout) as e:
             self.connection_dropped(e, environ)
-        except Exception:
+        except Exception as e:
             if self.server.passthrough_errors:
                 raise
-            from .debug.tbtools import get_current_traceback
 
-            traceback = get_current_traceback(ignore_system_exceptions=True)
+            if status_sent is not None and chunk_response:
+                self.close_connection = True
+
             try:
                 # if we haven't yet sent the headers but they are set
                 # we roll back to be able to set them again.
@@ -339,12 +349,16 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
                 execute(InternalServerError())
             except Exception:
                 pass
-            self.server.log("error", "Error on request:\n%s", traceback.plaintext)
+
+            from .debug.tbtools import DebugTraceback
+
+            msg = DebugTraceback(e).render_traceback_text()
+            self.server.log("error", f"Error on request:\n{msg}")
 
     def handle(self) -> None:
         """Handles a request ignoring dropped connections."""
         try:
-            BaseHTTPRequestHandler.handle(self)
+            super().handle()
         except (ConnectionError, socket.timeout) as e:
             self.connection_dropped(e)
         except Exception as e:
@@ -352,16 +366,6 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
                 self.log_error("SSL error occurred: %s", e)
             else:
                 raise
-        if self.server.shutdown_signal:
-            self.initiate_shutdown()
-
-    def initiate_shutdown(self) -> None:
-        if is_running_from_reloader():
-            # Windows does not provide SIGKILL, go with SIGTERM then.
-            sig = getattr(signal, "SIGKILL", signal.SIGTERM)
-            os.kill(os.getpid(), sig)
-
-        self.server._BaseServer__shutdown_request = True  # type: ignore
 
     def connection_dropped(
         self, error: BaseException, environ: t.Optional["WSGIEnvironment"] = None
@@ -370,25 +374,13 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
         nothing happens.
         """
 
-    def handle_one_request(self) -> None:
-        """Handle a single HTTP request."""
-        self.raw_requestline = self.rfile.readline()
-        if not self.raw_requestline:
-            self.close_connection = True
-        elif self.parse_request():
-            self.run_wsgi()
+    def __getattr__(self, name: str) -> t.Any:
+        # All HTTP methods are handled by run_wsgi.
+        if name.startswith("do_"):
+            return self.run_wsgi
 
-    def send_response(self, code: int, message: t.Optional[str] = None) -> None:
-        """Send the response header and log the response code."""
-        self.log_request(code)
-        if message is None:
-            message = self.responses[code][0] if code in self.responses else ""
-        if self.request_version != "HTTP/0.9":
-            hdr = f"{self.protocol_version} {code} {message}\r\n"
-            self.wfile.write(hdr.encode("ascii"))
-
-    def version_string(self) -> str:
-        return super().version_string().strip()
+        # All other attributes are forwarded to the base class.
+        return getattr(super(), name)
 
     def address_string(self) -> str:
         if getattr(self, "environ", None):
@@ -414,21 +406,20 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
 
         code = str(code)
 
-        if _log_add_style:
-            if code[0] == "1":  # 1xx - Informational
-                msg = _ansi_style(msg, "bold")
-            elif code == "200":  # 2xx - Success
-                pass
-            elif code == "304":  # 304 - Resource Not Modified
-                msg = _ansi_style(msg, "cyan")
-            elif code[0] == "3":  # 3xx - Redirection
-                msg = _ansi_style(msg, "green")
-            elif code == "404":  # 404 - Resource Not Found
-                msg = _ansi_style(msg, "yellow")
-            elif code[0] == "4":  # 4xx - Client Error
-                msg = _ansi_style(msg, "bold", "red")
-            else:  # 5xx, or any other response
-                msg = _ansi_style(msg, "bold", "magenta")
+        if code[0] == "1":  # 1xx - Informational
+            msg = _ansi_style(msg, "bold")
+        elif code == "200":  # 2xx - Success
+            pass
+        elif code == "304":  # 304 - Resource Not Modified
+            msg = _ansi_style(msg, "cyan")
+        elif code[0] == "3":  # 3xx - Redirection
+            msg = _ansi_style(msg, "green")
+        elif code == "404":  # 404 - Resource Not Found
+            msg = _ansi_style(msg, "yellow")
+        elif code[0] == "4":  # 4xx - Client Error
+            msg = _ansi_style(msg, "bold", "red")
+        else:  # 5xx, or any other response
+            msg = _ansi_style(msg, "bold", "magenta")
 
         self.log("info", '"%s" %s %s', msg, code, size)
 
@@ -447,6 +438,9 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
 
 
 def _ansi_style(value: str, *styles: str) -> str:
+    if not _log_add_style:
+        return value
+
     codes = {
         "bold": 1,
         "red": 31,
@@ -655,12 +649,15 @@ def get_interface_ip(family: socket.AddressFamily) -> str:
 
 
 class BaseWSGIServer(HTTPServer):
+    """A WSGI server that that handles one request at a time.
 
-    """Simple single-threaded, single-process WSGI server."""
+    Use :func:`make_server` to create a server instance.
+    """
 
     multithread = False
     multiprocess = False
     request_queue_size = LISTEN_QUEUE
+    allow_reuse_address = True
 
     def __init__(
         self,
@@ -675,39 +672,85 @@ class BaseWSGIServer(HTTPServer):
         if handler is None:
             handler = WSGIRequestHandler
 
-        self.address_family = select_address_family(host, port)
+        # If the handler doesn't directly set a protocol version and
+        # thread or process workers are used, then allow chunked
+        # responses and keep-alive connections by enabling HTTP/1.1.
+        if "protocol_version" not in vars(handler) and (
+            self.multithread or self.multiprocess
+        ):
+            handler.protocol_version = "HTTP/1.1"
 
-        if fd is not None:
-            real_sock = socket.fromfd(fd, self.address_family, socket.SOCK_STREAM)
-            port = 0
+        self.host = host
+        self.port = port
+        self.app = app
+        self.passthrough_errors = passthrough_errors
 
-        server_address = get_sockaddr(host, int(port), self.address_family)
+        self.address_family = address_family = select_address_family(host, port)
+        server_address = get_sockaddr(host, int(port), address_family)
 
-        # remove socket file if it already exists
-        if self.address_family == af_unix:
+        # Remove a leftover Unix socket file from a previous run. Don't
+        # remove a file that was set up by run_simple.
+        if address_family == af_unix and fd is None:
             server_address = t.cast(str, server_address)
 
             if os.path.exists(server_address):
                 os.unlink(server_address)
 
-        super().__init__(server_address, handler)  # type: ignore
+        # Bind and activate will be handled manually, it should only
+        # happen if we're not using a socket that was already set up.
+        super().__init__(
+            server_address,  # type: ignore[arg-type]
+            handler,
+            bind_and_activate=False,
+        )
 
-        self.app = app
-        self.passthrough_errors = passthrough_errors
-        self.shutdown_signal = False
-        self.host = host
-        self.port = self.socket.getsockname()[1]
+        if fd is None:
+            # No existing socket descriptor, do bind_and_activate=True.
+            try:
+                self.server_bind()
+                self.server_activate()
+            except OSError as e:
+                # Catch connection issues and show them without the traceback. Show
+                # extra instructions for address not found, and for macOS.
+                self.server_close()
+                print(e.strerror, file=sys.stderr)
 
-        # Patch in the original socket.
-        if fd is not None:
-            self.socket.close()
-            self.socket = real_sock
+                if e.errno == errno.EADDRINUSE:
+                    print(
+                        f"Port {port} is in use by another program. Either identify and"
+                        " stop that program, or start the server with a different"
+                        " port.",
+                        file=sys.stderr,
+                    )
+
+                    if sys.platform == "darwin" and port == 5000:
+                        print(
+                            "On macOS, try disabling the 'AirPlay Receiver' service"
+                            " from System Preferences -> Sharing.",
+                            file=sys.stderr,
+                        )
+
+                sys.exit(1)
+            except BaseException:
+                self.server_close()
+                raise
+        else:
+            # TCPServer automatically opens a socket even if bind_and_activate is False.
+            # Close it to silence a ResourceWarning.
+            self.server_close()
+
+            # Use the passed in socket directly.
+            self.socket = socket.fromfd(fd, address_family, socket.SOCK_STREAM)
             self.server_address = self.socket.getsockname()
+
+        if address_family != af_unix:
+            # If port was 0, this will record the bound port.
+            self.port = self.server_address[1]
 
         if ssl_context is not None:
             if isinstance(ssl_context, tuple):
                 ssl_context = load_ssl_context(*ssl_context)
-            if ssl_context == "adhoc":
+            elif ssl_context == "adhoc":
                 ssl_context = generate_adhoc_ssl_context()
 
             self.socket = ssl_context.wrap_socket(self.socket, server_side=True)
@@ -719,7 +762,6 @@ class BaseWSGIServer(HTTPServer):
         _log(type, message, *args)
 
     def serve_forever(self, poll_interval: float = 0.5) -> None:
-        self.shutdown_signal = False
         try:
             super().serve_forever(poll_interval=poll_interval)
         except KeyboardInterrupt:
@@ -735,18 +777,58 @@ class BaseWSGIServer(HTTPServer):
 
         return super().handle_error(request, client_address)
 
+    def log_startup(self) -> None:
+        """Show information about the address when starting the server."""
+        dev_warning = (
+            "WARNING: This is a development server. Do not use it in a production"
+            " deployment. Use a production WSGI server instead."
+        )
+        dev_warning = _ansi_style(dev_warning, "bold", "red")
+        messages = [dev_warning]
+
+        if self.address_family == af_unix:
+            messages.append(f" * Running on {self.host}")
+        else:
+            scheme = "http" if self.ssl_context is None else "https"
+            display_hostname = self.host
+
+            if self.host in {"0.0.0.0", "::"}:
+                messages.append(f" * Running on all addresses ({self.host})")
+
+                if self.host == "0.0.0.0":
+                    localhost = "127.0.0.1"
+                    display_hostname = get_interface_ip(socket.AF_INET)
+                else:
+                    localhost = "[::1]"
+                    display_hostname = get_interface_ip(socket.AF_INET6)
+
+                messages.append(f" * Running on {scheme}://{localhost}:{self.port}")
+
+            if ":" in display_hostname:
+                display_hostname = f"[{display_hostname}]"
+
+            messages.append(f" * Running on {scheme}://{display_hostname}:{self.port}")
+
+        _log("info", "\n".join(messages))
+
 
 class ThreadedWSGIServer(socketserver.ThreadingMixIn, BaseWSGIServer):
+    """A WSGI server that handles concurrent requests in separate
+    threads.
 
-    """A WSGI server that does threading."""
+    Use :func:`make_server` to create a server instance.
+    """
 
     multithread = True
     daemon_threads = True
 
 
 class ForkingWSGIServer(ForkingMixIn, BaseWSGIServer):
+    """A WSGI server that handles concurrent requests in separate forked
+    processes.
 
-    """A WSGI server that does forking."""
+    Use :func:`make_server` to create a server instance.
+    """
 
     multiprocess = True
 
@@ -763,9 +845,8 @@ class ForkingWSGIServer(ForkingMixIn, BaseWSGIServer):
     ) -> None:
         if not can_fork:
             raise ValueError("Your platform does not support forking.")
-        BaseWSGIServer.__init__(
-            self, host, port, app, handler, passthrough_errors, ssl_context, fd
-        )
+
+        super().__init__(host, port, app, handler, passthrough_errors, ssl_context, fd)
         self.max_children = processes
 
 
@@ -780,16 +861,24 @@ def make_server(
     ssl_context: t.Optional[_TSSLContextArg] = None,
     fd: t.Optional[int] = None,
 ) -> BaseWSGIServer:
-    """Create a new server instance that is either threaded, or forks
-    or just processes one request after another.
+    """Create an appropriate WSGI server instance based on the value of
+    ``threaded`` and ``processes``.
+
+    This is called from :func:`run_simple`, but can be used separately
+    to have access to the server object, such as to run it in a separate
+    thread.
+
+    See :func:`run_simple` for parameter docs.
     """
     if threaded and processes > 1:
-        raise ValueError("cannot have a multithreaded and multi process server.")
-    elif threaded:
+        raise ValueError("Cannot have a multi-thread and multi-process server.")
+
+    if threaded:
         return ThreadedWSGIServer(
             host, port, app, request_handler, passthrough_errors, ssl_context, fd=fd
         )
-    elif processes > 1:
+
+    if processes > 1:
         return ForkingWSGIServer(
             host,
             port,
@@ -800,15 +889,15 @@ def make_server(
             ssl_context,
             fd=fd,
         )
-    else:
-        return BaseWSGIServer(
-            host, port, app, request_handler, passthrough_errors, ssl_context, fd=fd
-        )
+
+    return BaseWSGIServer(
+        host, port, app, request_handler, passthrough_errors, ssl_context, fd=fd
+    )
 
 
 def is_running_from_reloader() -> bool:
-    """Checks if the application is running from within the Werkzeug
-    reloader subprocess.
+    """Check if the server is running as a subprocess within the
+    Werkzeug reloader.
 
     .. versionadded:: 0.10
     """
@@ -833,256 +922,148 @@ def run_simple(
     passthrough_errors: bool = False,
     ssl_context: t.Optional[_TSSLContextArg] = None,
 ) -> None:
-    """Start a WSGI application. Optional features include a reloader,
-    multithreading and fork support.
+    """Start a development server for a WSGI application. Various
+    optional features can be enabled.
 
-    This function has a command-line interface too::
+    .. warning::
 
-        python -m werkzeug.serving --help
-
-    .. versionchanged:: 2.0
-        Added ``exclude_patterns`` parameter.
-
-    .. versionadded:: 0.5
-       `static_files` was added to simplify serving of static files as well
-       as `passthrough_errors`.
-
-    .. versionadded:: 0.6
-       support for SSL was added.
-
-    .. versionadded:: 0.8
-       Added support for automatically loading a SSL context from certificate
-       file and private key.
-
-    .. versionadded:: 0.9
-       Added command-line interface.
-
-    .. versionadded:: 0.10
-       Improved the reloader and added support for changing the backend
-       through the `reloader_type` parameter.  See :ref:`reloader`
-       for more information.
-
-    .. versionchanged:: 0.15
-        Bind to a Unix socket by passing a path that starts with
-        ``unix://`` as the ``hostname``.
+        Do not use the development server when deploying to production.
+        It is intended for use only during local development. It is not
+        designed to be particularly efficient, stable, or secure.
 
     :param hostname: The host to bind to, for example ``'localhost'``.
-        If the value is a path that starts with ``unix://`` it will bind
-        to a Unix socket instead of a TCP socket..
-    :param port: The port for the server.  eg: ``8080``
-    :param application: the WSGI application to execute
-    :param use_reloader: should the server automatically restart the python
-                         process if modules were changed?
-    :param use_debugger: should the werkzeug debugging system be used?
-    :param use_evalex: should the exception evaluation feature be enabled?
-    :param extra_files: a list of files the reloader should watch
-                        additionally to the modules.  For example configuration
-                        files.
-    :param exclude_patterns: List of :mod:`fnmatch` patterns to ignore
-        when running the reloader. For example, ignore cache files that
-        shouldn't reload when updated.
-    :param reloader_interval: the interval for the reloader in seconds.
-    :param reloader_type: the type of reloader to use.  The default is
-                          auto detection.  Valid values are ``'stat'`` and
-                          ``'watchdog'``. See :ref:`reloader` for more
-                          information.
-    :param threaded: should the process handle each request in a separate
-                     thread?
-    :param processes: if greater than 1 then handle each request in a new process
-                      up to this maximum number of concurrent processes.
-    :param request_handler: optional parameter that can be used to replace
-                            the default one.  You can use this to replace it
-                            with a different
-                            :class:`~BaseHTTPServer.BaseHTTPRequestHandler`
-                            subclass.
-    :param static_files: a list or dict of paths for static files.  This works
-                         exactly like :class:`SharedDataMiddleware`, it's actually
-                         just wrapping the application in that middleware before
-                         serving.
-    :param passthrough_errors: set this to `True` to disable the error catching.
-                               This means that the server will die on errors but
-                               it can be useful to hook debuggers in (pdb etc.)
-    :param ssl_context: an SSL context for the connection. Either an
-                        :class:`ssl.SSLContext`, a tuple in the form
-                        ``(cert_file, pkey_file)``, the string ``'adhoc'`` if
-                        the server should automatically create one, or ``None``
-                        to disable SSL (which is the default).
+        Can be a domain, IPv4 or IPv6 address, or file path starting
+        with ``unix://`` for a Unix socket.
+    :param port: The port to bind to, for example ``8080``. Using ``0``
+        tells the OS to pick a random free port.
+    :param application: The WSGI application to run.
+    :param use_reloader: Use a reloader process to restart the server
+        process when files are changed.
+    :param use_debugger: Use Werkzeug's debugger, which will show
+        formatted tracebacks on unhandled exceptions.
+    :param use_evalex: Make the debugger interactive. A Python terminal
+        can be opened for any frame in the traceback. Some protection is
+        provided by requiring a PIN, but this should never be enabled
+        on a publicly visible server.
+    :param extra_files: The reloader will watch these files for changes
+        in addition to Python modules. For example, watch a
+        configuration file.
+    :param exclude_patterns: The reloader will ignore changes to any
+        files matching these :mod:`fnmatch` patterns. For example,
+        ignore cache files.
+    :param reloader_interval: How often the reloader tries to check for
+        changes.
+    :param reloader_type: The reloader to use. The ``'stat'`` reloader
+        is built in, but may require significant CPU to watch files. The
+        ``'watchdog'`` reloader is much more efficient but requires
+        installing the ``watchdog`` package first.
+    :param threaded: Handle concurrent requests using threads. Cannot be
+        used with ``processes``.
+    :param processes: Handle concurrent requests using up to this number
+        of processes. Cannot be used with ``threaded``.
+    :param request_handler: Use a different
+        :class:`~BaseHTTPServer.BaseHTTPRequestHandler` subclass to
+        handle requests.
+    :param static_files: A dict mapping URL prefixes to directories to
+        serve static files from using
+        :class:`~werkzeug.middleware.SharedDataMiddleware`.
+    :param passthrough_errors: Don't catch unhandled exceptions at the
+        server level, let the serve crash instead. If ``use_debugger``
+        is enabled, the debugger will still catch such errors.
+    :param ssl_context: Configure TLS to serve over HTTPS. Can be an
+        :class:`ssl.SSLContext` object, a ``(cert_file, key_file)``
+        tuple to create a typical context, or the string ``'adhoc'`` to
+        generate a temporary self-signed certificate.
+
+    .. versionchanged:: 2.1
+        Instructions are shown for dealing with an "address already in
+        use" error.
+
+    .. versionchanged:: 2.1
+        Running on ``0.0.0.0`` or ``::`` shows the loopback IP in
+        addition to a real IP.
+
+    .. versionchanged:: 2.1
+        The command-line interface was removed.
+
+    .. versionchanged:: 2.0
+        Running on ``0.0.0.0`` or ``::`` shows a real IP address that
+        was bound as well as a warning not to run the development server
+        in production.
+
+    .. versionchanged:: 2.0
+        The ``exclude_patterns`` parameter was added.
+
+    .. versionchanged:: 0.15
+        Bind to a Unix socket by passing a ``hostname`` that starts with
+        ``unix://``.
+
+    .. versionchanged:: 0.10
+        Improved the reloader and added support for changing the backend
+        through the ``reloader_type`` parameter.
+
+    .. versionchanged:: 0.9
+        A command-line interface was added.
+
+    .. versionchanged:: 0.8
+        ``ssl_context`` can be a tuple of paths to the certificate and
+        private key files.
+
+    .. versionchanged:: 0.6
+        The ``ssl_context`` parameter was added.
+
+    .. versionchanged:: 0.5
+       The ``static_files`` and ``passthrough_errors`` parameters were
+       added.
     """
     if not isinstance(port, int):
         raise TypeError("port must be an integer")
-    if use_debugger:
-        from .debug import DebuggedApplication
 
-        application = DebuggedApplication(application, use_evalex)
     if static_files:
         from .middleware.shared_data import SharedDataMiddleware
 
         application = SharedDataMiddleware(application, static_files)
 
-    def log_startup(sock: socket.socket) -> None:
-        all_addresses_message = (
-            " * Running on all addresses.\n"
-            "   WARNING: This is a development server. Do not use it in"
-            " a production deployment."
-        )
+    if use_debugger:
+        from .debug import DebuggedApplication
 
-        if sock.family == af_unix:
-            _log("info", " * Running on %s (Press CTRL+C to quit)", hostname)
-        else:
-            if hostname == "0.0.0.0":
-                _log("warning", all_addresses_message)
-                display_hostname = get_interface_ip(socket.AF_INET)
-            elif hostname == "::":
-                _log("warning", all_addresses_message)
-                display_hostname = get_interface_ip(socket.AF_INET6)
-            else:
-                display_hostname = hostname
+        application = DebuggedApplication(application, evalex=use_evalex)
 
-            if ":" in display_hostname:
-                display_hostname = f"[{display_hostname}]"
+    if not is_running_from_reloader():
+        fd = None
+    else:
+        fd = int(os.environ["WERKZEUG_SERVER_FD"])
 
-            _log(
-                "info",
-                " * Running on %s://%s:%d/ (Press CTRL+C to quit)",
-                "http" if ssl_context is None else "https",
-                display_hostname,
-                sock.getsockname()[1],
-            )
+    srv = make_server(
+        hostname,
+        port,
+        application,
+        threaded,
+        processes,
+        request_handler,
+        passthrough_errors,
+        ssl_context,
+        fd=fd,
+    )
+    srv.socket.set_inheritable(True)
+    os.environ["WERKZEUG_SERVER_FD"] = str(srv.fileno())
 
-    def inner() -> None:
-        try:
-            fd: t.Optional[int] = int(os.environ["WERKZEUG_SERVER_FD"])
-        except (LookupError, ValueError):
-            fd = None
-        srv = make_server(
-            hostname,
-            port,
-            application,
-            threaded,
-            processes,
-            request_handler,
-            passthrough_errors,
-            ssl_context,
-            fd=fd,
-        )
-        if fd is None:
-            log_startup(srv.socket)
-        srv.serve_forever()
+    if not is_running_from_reloader():
+        srv.log_startup()
+        _log("info", _ansi_style("Press CTRL+C to quit", "yellow"))
 
     if use_reloader:
-        # If we're not running already in the subprocess that is the
-        # reloader we want to open up a socket early to make sure the
-        # port is actually available.
-        if not is_running_from_reloader():
-            if port == 0 and not can_open_by_fd:
-                raise ValueError(
-                    "Cannot bind to a random port with enabled "
-                    "reloader if the Python interpreter does "
-                    "not support socket opening by fd."
-                )
+        from ._reloader import run_with_reloader
 
-            # Create and destroy a socket so that any exceptions are
-            # raised before we spawn a separate Python interpreter and
-            # lose this ability.
-            address_family = select_address_family(hostname, port)
-            server_address = get_sockaddr(hostname, port, address_family)
-            s = socket.socket(address_family, socket.SOCK_STREAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(server_address)
-            s.set_inheritable(True)
-
-            # If we can open the socket by file descriptor, then we can just
-            # reuse this one and our socket will survive the restarts.
-            if can_open_by_fd:
-                os.environ["WERKZEUG_SERVER_FD"] = str(s.fileno())
-                s.listen(LISTEN_QUEUE)
-                log_startup(s)
-            else:
-                s.close()
-                if address_family == af_unix:
-                    server_address = t.cast(str, server_address)
-                    _log("info", "Unlinking %s", server_address)
-                    os.unlink(server_address)
-
-        from ._reloader import run_with_reloader as _rwr
-
-        _rwr(
-            inner,
-            extra_files=extra_files,
-            exclude_patterns=exclude_patterns,
-            interval=reloader_interval,
-            reloader_type=reloader_type,
-        )
+        try:
+            run_with_reloader(
+                srv.serve_forever,
+                extra_files=extra_files,
+                exclude_patterns=exclude_patterns,
+                interval=reloader_interval,
+                reloader_type=reloader_type,
+            )
+        finally:
+            srv.server_close()
     else:
-        inner()
-
-
-def run_with_reloader(*args: t.Any, **kwargs: t.Any) -> None:
-    """Run a process with the reloader. This is not a public API, do
-    not use this function.
-
-    .. deprecated:: 2.0
-        Will be removed in Werkzeug 2.1.
-    """
-    from ._reloader import run_with_reloader as _rwr
-
-    warnings.warn(
-        (
-            "'run_with_reloader' is a private API, it will no longer be"
-            " accessible in Werkzeug 2.1. Use 'run_simple' instead."
-        ),
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    _rwr(*args, **kwargs)
-
-
-def main() -> None:
-    """A simple command-line interface for :py:func:`run_simple`."""
-    import argparse
-    from .utils import import_string
-
-    _log("warning", "This CLI is deprecated and will be removed in version 2.1.")
-
-    parser = argparse.ArgumentParser(
-        description="Run the given WSGI application with the development server.",
-        allow_abbrev=False,
-    )
-    parser.add_argument(
-        "-b",
-        "--bind",
-        dest="address",
-        help="The hostname:port the app should listen on.",
-    )
-    parser.add_argument(
-        "-d",
-        "--debug",
-        action="store_true",
-        help="Show the interactive debugger for unhandled exceptions.",
-    )
-    parser.add_argument(
-        "-r",
-        "--reload",
-        action="store_true",
-        help="Reload the process if modules change.",
-    )
-    parser.add_argument(
-        "application", help="Application to import and serve, in the form module:app."
-    )
-    args = parser.parse_args()
-    hostname, port = None, None
-
-    if args.address:
-        hostname, _, port = args.address.partition(":")
-
-    run_simple(
-        hostname=hostname or "127.0.0.1",
-        port=int(port or 5000),
-        application=import_string(args.application),
-        use_reloader=args.reload,
-        use_debugger=args.debug,
-    )
-
-
-if __name__ == "__main__":
-    main()
+        srv.serve_forever()

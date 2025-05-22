@@ -1,4 +1,5 @@
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/tx/scheme_board/events.h>
 
 #include <util/system/hostname.h>
 
@@ -49,6 +50,14 @@ public:
             return true;
         }
     }
+
+    NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
+        return {
+            .RequestType = AuxSettings.RequestType,
+            .Database = TBase::GetDatabaseName(),
+        };
+    }
+
 private:
     TFuncCallback PassMethod;
     const TRequestAuxSettings AuxSettings;

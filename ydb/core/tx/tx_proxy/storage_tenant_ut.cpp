@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         {
             NKikimrMiniKQL::TResult result;
-            env.GetClient().FlatQuery("("
+            env.GetClient().FlatQuery(&env.GetRuntime(), "("
                 "(let row0_ '('('key (Uint64 '42))))"
                 "(let cols_ '('value))"
                 "(let select0_ (SelectRow '/dc-1/USER_0/dir/table1 row0_ cols_))"
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
 
         {
             NKikimrMiniKQL::TResult result;
-            env.GetClient().FlatQuery("("
+            env.GetClient().FlatQuery(&env.GetRuntime(), "("
                 "(let row0_ '('('key (Uint64 '42))))"
                 "(let cols_ '('value))"
                 "(let select0_ (SelectRow '/dc-1/USER_0/dir/dir_0/table row0_ cols_))"

@@ -23,22 +23,22 @@ where
                 from
                     {{part}}
                 where
-                    p_name like 'maroon%'
+                    p_name like 'forest%'
             )
-            and ps_availqty::numeric > (
+            and ps_availqty > (
                 select
-                    0.5::numeric * sum(l_quantity)
+                    0.5 * sum(l_quantity)
                 from
                     {{lineitem}}
                 where
                     l_partkey = ps_partkey
                     and l_suppkey = ps_suppkey
-                    and l_shipdate >= date '1993-01-01'
-                    and l_shipdate < date '1993-01-01' + interval '1' year
+                    and l_shipdate >= date '1994-01-01'
+                    and l_shipdate < date '1994-01-01' + interval '1' year
             )
     )
     and s_nationkey = n_nationkey
-    and n_name = 'VIETNAM'
+    and n_name = 'CANADA'
 order by
     s_name;
 

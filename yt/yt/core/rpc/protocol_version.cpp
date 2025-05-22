@@ -34,24 +34,9 @@ TProtocolVersion TProtocolVersion::FromString(TStringBuf protocolVersionString)
     return result;
 }
 
-bool operator == (const TProtocolVersion& lhs, const TProtocolVersion& rhs)
-{
-    return (lhs.Major == rhs.Major) && (lhs.Minor == rhs.Minor);
-}
-
-bool operator != (const TProtocolVersion& lhs, const TProtocolVersion& rhs)
-{
-    return !(lhs == rhs);
-}
-
 void FormatValue(TStringBuilderBase* builder, TProtocolVersion version, TStringBuf /*spec*/)
 {
     builder->AppendFormat("%v.%v", version.Major, version.Minor);
-}
-
-TString ToString(TProtocolVersion version)
-{
-    return ToStringViaBuilder(version);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

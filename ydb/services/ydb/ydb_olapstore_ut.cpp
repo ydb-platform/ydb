@@ -2,13 +2,13 @@
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 using namespace NYdb;
 
@@ -39,6 +39,13 @@ static constexpr const char* testShardingVariants[] = {
     R"(["timestamp", "uid"])",
     R"(["timestamp", "resource_type", "resource_id", "uid"])"
 };
+
+NKikimrConfig::TAppConfig GetAppConfig() {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableFeatureFlags()->SetEnableColumnStore(true);
+    return appConfig;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(YdbOlapStore) {
@@ -90,7 +97,6 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
                     Columns { Name: "saved_at" Type: "Timestamp" }
                     Columns { Name: "request_id" Type: "Utf8" }
                     KeyColumnNames: ["timestamp", "resource_type", "resource_id", "uid"]
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )", notNullStr, notNullStr, allowedTypes[opts.TsType].c_str(), notNullStr, notNullStr);
@@ -322,20 +328,21 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     template<bool NotNull>
     void TestBulkUpsert(EPrimitiveType pkFirstType) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
-        auto connection = ConnectToServer(server);
+        TClient annoyingClient(*server.ServerSettings);
+        annoyingClient.GrantConnect("alice@builtin");
+        annoyingClient.GrantConnect("bob@builtin");
 
         TTestOlapTableOptions opts;
         opts.TsType = pkFirstType;
         opts.HashFunction = "HASH_FUNCTION_MODULO_N";
         CreateOlapTable<NotNull>(*server.ServerSettings, "log1", opts);
 
-        TClient annoyingClient(*server.ServerSettings);
         annoyingClient.ModifyOwner("/Root/OlapStore", "log1", "alice@builtin");
 
+        auto connection = ConnectToServer(server);
         {
             NYdb::NTable::TTableClient client(connection, NYdb::NTable::TClientSettings().AuthToken("bob@builtin"));
 
@@ -374,16 +381,16 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(BulkUpsert, NotNull) {
+    Y_UNIT_TEST(BulkUpsert) {
         for (auto& [type, name] : allowedTypes) {
-            TestBulkUpsert<NotNull>(type);
+            TestBulkUpsert<true>(type);
         }
     }
 
     template<bool NotNull>
     void TestManyTables(const TString& sharding) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -412,16 +419,15 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         CompareQueryResults(connection, "log1", "SELECT count(*) FROM <TABLE>;");
     }
 
-    Y_UNIT_TEST_TWIN(ManyTables, NotNull) {
+    Y_UNIT_TEST(ManyTables) {
         for (auto& sharding : testShardingVariants) {
-            TestManyTables<NotNull>(sharding);
+            TestManyTables<true>(sharding);
         }
     }
 
     template<bool NotNull>
     void TestDuplicateRows(const TString& sharding) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -465,16 +471,15 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DuplicateRows, NotNull) {
+    Y_UNIT_TEST(DuplicateRows) {
         for (auto& sharding : testShardingVariants) {
-            TestDuplicateRows<NotNull>(sharding);
+            TestDuplicateRows<true>(sharding);
         }
     }
 
     template<bool NotNull>
     void TestQuery(const TString& query, const TString& sharding) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig, {}, {}, false, nullptr);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig(), {}, {}, false, nullptr);
 
         auto connection = ConnectToServer(server);
 
@@ -496,7 +501,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         CompareQueryResults(connection, "log1", query);
     }
 
-    Y_UNIT_TEST_TWIN(LogLast50, NotNull) {
+    Y_UNIT_TEST(LogLast50) {
         TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
@@ -505,11 +510,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogLast50ByResource, NotNull) {
+    Y_UNIT_TEST(LogLast50ByResource) {
         TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
@@ -519,11 +524,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogGrepNonExisting, NotNull) {
+    Y_UNIT_TEST(LogGrepNonExisting) {
         TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
@@ -533,11 +538,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogGrepExisting, NotNull) {
+    Y_UNIT_TEST(LogGrepExisting) {
         TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
@@ -547,11 +552,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogNonExistingRequest, NotNull) {
+    Y_UNIT_TEST(LogNonExistingRequest) {
         TString query(R"(
             $request_id = '0xfaceb00c';
 
@@ -563,11 +568,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogExistingRequest, NotNull) {
+    Y_UNIT_TEST(LogExistingRequest) {
         TString query(R"(
             $request_id = '1f';
 
@@ -579,11 +584,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogNonExistingUserId, NotNull) {
+    Y_UNIT_TEST(LogNonExistingUserId) {
         // Should be fixed after Arrow kernel implementation for JSON_VALUE
         // https://st.yandex-team.ru/KIKIMR-17903
         TString query(R"(
@@ -598,11 +603,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogExistingUserId, NotNull) {
+    Y_UNIT_TEST(LogExistingUserId) {
         // Should be fixed after Arrow kernel implementation for JSON_VALUE
         // https://st.yandex-team.ru/KIKIMR-17903
         TString query(R"(
@@ -617,11 +622,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogPagingBefore, NotNull) {
+    Y_UNIT_TEST(LogPagingBefore) {
         TString query(R"(
             PRAGMA kikimr.OptEnablePredicateExtract = "true";
 
@@ -639,11 +644,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogPagingBetween, NotNull) {
+    Y_UNIT_TEST(LogPagingBetween) {
         TString query(R"(
             PRAGMA kikimr.OptEnablePredicateExtract = "true";
 
@@ -667,11 +672,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogPagingAfter, NotNull) {
+    Y_UNIT_TEST(LogPagingAfter) {
         TString query(R"(
             PRAGMA kikimr.OptEnablePredicateExtract = "true";
 
@@ -695,11 +700,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogCountByResource, NotNull) {
+    Y_UNIT_TEST(LogCountByResource) {
         TString query(R"(
             SELECT count(*)
               FROM <TABLE>
@@ -708,11 +713,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogWithUnionAllAscending, NotNull) {
+    Y_UNIT_TEST(LogWithUnionAllAscending) {
         TString query(R"(
                 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
@@ -740,11 +745,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogWithUnionAllDescending, NotNull) {
+    Y_UNIT_TEST(LogWithUnionAllDescending) {
         TString query(R"(
                 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
@@ -772,11 +777,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 
-    Y_UNIT_TEST_TWIN(LogTsRangeDescending, NotNull) {
+    Y_UNIT_TEST(LogTsRangeDescending) {
         TString query(R"(
                 --PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
@@ -794,7 +799,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
             )");
 
         for (auto& sharding : testShardingVariants) {
-            TestQuery<NotNull>(query, sharding);
+            TestQuery<true>(query, sharding);
         }
     }
 }

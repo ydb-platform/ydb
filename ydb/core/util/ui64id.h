@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/base/defs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <util/system/types.h>

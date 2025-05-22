@@ -19,9 +19,16 @@ enum EPartitionType {
     NonReplicated = 1; // directly mapped network partitions
 }
 
+message TEncryptedDataKey
+{
+    optional string KekId = 1;
+    optional bytes Ciphertext = 2;
+};
+
 message TEncryptionDesc {
     optional uint32 Mode = 1;
     optional bytes KeyHash = 2;
+    optional TEncryptedDataKey EncryptedDataKey = 3;
 }
 
 message TVolumeConfig {
@@ -53,7 +60,7 @@ message TVolumeConfig {
     optional uint32 StorageMediaKind = 13;
 
     // Performance profile fields, used for correct bs group allocation and iops/bandwidth throttling
-    optional uint32 PerformanceProfileMaxReadBandwidth = 14;
+    optional uint64 PerformanceProfileMaxReadBandwidth = 14;
     /* optional uint32 PerformanceProfileMaxBurstBandwidth = 15; obsolete */
     optional uint32 PerformanceProfileMaxPostponedWeight = 16;
     optional bool PerformanceProfileThrottlingEnabled = 17;
@@ -62,7 +69,7 @@ message TVolumeConfig {
     optional uint32 PerformanceProfileBoostTime = 20;
     optional uint32 PerformanceProfileBoostRefillTime = 21;
     optional uint32 PerformanceProfileBoostPercentage = 22;
-    optional uint32 PerformanceProfileMaxWriteBandwidth = 23;
+    optional uint64 PerformanceProfileMaxWriteBandwidth = 23;
     optional uint32 PerformanceProfileMaxWriteIops = 24;
     optional uint32 PerformanceProfileBurstPercentage = 25;
 

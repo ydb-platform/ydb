@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <ydb/library/yql/dq/proto/dq_state_load_plan.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>

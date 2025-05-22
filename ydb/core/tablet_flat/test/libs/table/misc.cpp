@@ -46,14 +46,14 @@ TString PrintRow(const TDbTupleRef& row)
     return DbgPrintTuple(row, *NTest::DbgRegistry());
 }
 
-TString PrintRow(const TMemIt& it)
+TString PrintRow(const TMemIter& it)
 {
     return PrintRowImpl(*it.Remap, it);
 }
 
 namespace NTest {
 
-    TString DumpPart(const TPartStore &partStore, ui32 depth) noexcept
+    TString DumpPart(const TPartStore &partStore, ui32 depth)
     {
         TStringStream out;
         TTestEnv env;

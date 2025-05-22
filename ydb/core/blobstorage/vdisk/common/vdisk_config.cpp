@@ -34,16 +34,17 @@ namespace NKikimr {
         HugeBlobsFreeChunkReservation = 1;
         SetupHugeBytes();
         HugeBlobOverhead = 8u;
-        HugeBlobOldMapCompatible = false;
         HullCompLevel0MaxSstsAtOnce = 8u;
         HullCompSortedPartsNum = 8u;
         HullCompLevelRateThreshold = 1.0;
         HullCompFreeSpaceThreshold = 2.0;
         FreshCompMaxInFlightWrites = 10;
+        FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data
         AnubisOsirisMaxInFly = 1000;
+        AddHeader = true;
 
         RecoveryLogCutterFirstDuration = TDuration::Seconds(10);
         RecoveryLogCutterRegularDuration = TDuration::Seconds(30);
@@ -62,6 +63,8 @@ namespace NKikimr {
         SyncLogAdvisedIndexedBlockSize = ui32(1) << ui32(20);       // 1 MB
         SyncLogMaxMemAmount = ui64(64) << ui64(20);                 // 64 MB
 
+        MaxSyncLogChunkSize = ui32(16) << ui32(10);                 // 32 Kb
+
         ReplTimeInterval = TDuration::Seconds(60);                  // 60 seconds
         ReplRequestTimeout = TDuration::Seconds(10);                // 10 seconds
         ReplPlanQuantum = TDuration::MilliSeconds(100);             // 100 ms
@@ -72,13 +75,16 @@ namespace NKikimr {
         ReplPrefetchDataSize = 32 << 20;
         ReplMaxResponseSize = 10 << 20;
         ReplInterconnectChannel = TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA;
+        ReplMaxDonorNotReadyDuration = TDuration::Minutes(10);
+        ReplMaxDonorNotReadyCount = 100;
         HandoffMaxWaitQueueSize = 10000;
         HandoffMaxWaitQueueByteSize = 32u << 20u;
         HandoffMaxInFlightSize = 1000;
         HandoffMaxInFlightByteSize = 16u << 20u;
         HandoffTimeout = TDuration::Seconds(10);
         RunRepl = !baseInfo.ReadOnly;
-        RunHandoff = false;
+
+        ReplMaxTimeToMakeProgress = VDiskPerformance.at(baseInfo.DeviceType).ReplMaxTimeToMakeProgress;
 
         SkeletonFrontGets_MaxInFlightCount = 24;
         SkeletonFrontGets_MaxInFlightCost = 200000000;              // 200ms
@@ -119,6 +125,7 @@ namespace NKikimr {
 #else
         BarrierValidation = true; // switch by default on debug builds
 #endif
+
     }
 
     void TVDiskConfig::SetupHugeBytes() {
@@ -131,8 +138,7 @@ namespace NKikimr {
                 MinHugeBlobInBytes = 512u << 10u;
                 break;
         }
-        // for compatibility reasons it must be 512KB
-        MilestoneHugeBlobInBytes = 512u << 10u;
+        MilestoneHugeBlobInBytes = 512u << 10u;  // for compatibility reasons it must be 512KB
     }
 
     void TVDiskConfig::Merge(const NKikimrBlobStorage::TVDiskConfig &update) {
@@ -160,6 +166,7 @@ namespace NKikimr {
         UPDATE_MACRO(ReplInterconnectChannel);
 
         UPDATE_MACRO(BarrierValidation);
+
 #undef UPDATE_MACRO
     }
 
@@ -177,6 +184,15 @@ namespace NKikimr {
         bool result = google::protobuf::TextFormat::ParseFromString(prototext, &AllKindsConfig);
         Y_ABORT_UNLESS(result, "Failed to parse AllVDiskKinds config "
                 "(error in protobuf format):\n%s\n", prototext.data());
+        ParseConfig();
+    }
+
+    TAllVDiskKinds::TAllVDiskKinds(const NKikimrBlobStorage::TAllVDiskKinds &proto)
+        : AllKindsConfig()
+        , VDiskMegaBaseConfig(TVDiskConfig::TBaseInfo())
+        , KindsMap()
+    {
+        AllKindsConfig.CopyFrom(proto);
         ParseConfig();
     }
 

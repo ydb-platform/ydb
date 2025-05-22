@@ -41,7 +41,7 @@ public:
         Become(&TThis::StateWork);
         NActors::TMon *mon = AppData(ctx)->Mon;
         if (mon) {
-            mon->RegisterActorPage(nullptr, "cms", "Cluster Management System", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+            mon->RegisterActorPage(nullptr, "cms", "Cluster Management System", false, ctx.ActorSystem(), ctx.SelfID);
 
             ApiHandlers["/api/clusterstaterequest"] = new TApiMethodHandler<TJsonProxyCms<TEvCms::TEvClusterStateRequest,
                                                                                           TEvCms::TEvClusterStateResponse>>;
@@ -202,13 +202,13 @@ private:
         if (msg->Request.GetPathInfo().StartsWith("/api/")) {
             // Check for Wall-E call.
             if (msg->Request.GetPathInfo().StartsWith(WALLE_API_URL_PREFIX)) {
-                ctx.ExecutorThread.RegisterActor(ApiHandlers.find(WALLE_API_URL_PREFIX)->second->CreateHandlerActor(ev));
+                ctx.Register(ApiHandlers.find(WALLE_API_URL_PREFIX)->second->CreateHandlerActor(ev));
                 return;
             }
 
             auto it = ApiHandlers.find(msg->Request.GetPathInfo());
             if (it != ApiHandlers.end()) {
-                ctx.ExecutorThread.RegisterActor(it->second->CreateHandlerActor(ev));
+                ctx.Register(it->second->CreateHandlerActor(ev));
                 return;
             }
 

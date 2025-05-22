@@ -7,10 +7,10 @@ import argparse
 import os
 import sys
 from collections.abc import Mapping
-from typing import Callable, Dict, List, Optional, Sequence, Union
+from typing import Callable, Dict, List, Optional, Sequence, TextIO, Union
 
 from . import io as _io
-from .completers import ChoicesCompleter, FilesCompleter, SuppressCompleter
+from .completers import BaseCompleter, ChoicesCompleter, FilesCompleter, SuppressCompleter
 from .io import debug, mute_stderr
 from .lexers import split_line
 from .packages._argparse import IntrospectiveArgumentParser, action_is_greedy, action_is_open, action_is_satisfied
@@ -66,13 +66,13 @@ class CompletionFinder(object):
         argument_parser: argparse.ArgumentParser,
         always_complete_options: Union[bool, str] = True,
         exit_method: Callable = os._exit,
-        output_stream=None,
+        output_stream: Optional[TextIO] = None,
         exclude: Optional[Sequence[str]] = None,
         validator: Optional[Callable] = None,
         print_suppressed: bool = False,
         append_space: Optional[bool] = None,
-        default_completer=FilesCompleter(),
-    ):
+        default_completer: BaseCompleter = FilesCompleter(),
+    ) -> None:
         """
         :param argument_parser: The argument parser to autocomplete on
         :param always_complete_options:
@@ -117,11 +117,7 @@ class CompletionFinder(object):
             # not an argument completion invocation
             return
 
-        try:
-            _io.debug_stream = os.fdopen(9, "w")
-        except Exception:
-            _io.debug_stream = sys.stderr
-        debug()
+        self._init_debug_stream()
 
         if output_stream is None:
             filename = os.environ.get("_ARGCOMPLETE_STDOUT_FILENAME")
@@ -135,6 +131,8 @@ class CompletionFinder(object):
             except Exception:
                 debug("Unable to open fd 8 for writing, quitting")
                 exit_method(1)
+
+        assert output_stream is not None
 
         ifs = os.environ.get("_ARGCOMPLETE_IFS", "\013")
         if len(ifs) != 1:
@@ -189,6 +187,19 @@ class CompletionFinder(object):
         output_stream.flush()
         _io.debug_stream.flush()
         exit_method(0)
+
+    def _init_debug_stream(self):
+        """Initialize debug output stream
+
+        By default, writes to file descriptor 9, or stderr if that fails.
+        This can be overridden by derived classes, for example to avoid
+        clashes with file descriptors being used elsewhere (such as in pytest).
+        """
+        try:
+            _io.debug_stream = os.fdopen(9, "w")
+        except Exception:
+            _io.debug_stream = sys.stderr
+        debug()
 
     def _get_completions(self, comp_words, cword_prefix, cword_prequote, last_wordbreak_pos):
         active_parsers = self._patch_argument_parser()
@@ -504,7 +515,7 @@ class CompletionFinder(object):
             # Bash mangles completions which contain characters in COMP_WORDBREAKS.
             # This workaround has the same effect as __ltrim_colon_completions in bash_completion
             # (extended to characters other than the colon).
-            if last_wordbreak_pos:
+            if last_wordbreak_pos is not None:
                 completions = [c[last_wordbreak_pos + 1 :] for c in completions]
             special_chars += "();<>|&!`$* \t\n\"'"
         elif cword_prequote == '"':

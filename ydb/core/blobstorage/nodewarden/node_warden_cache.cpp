@@ -1,3 +1,4 @@
+#include "node_warden.h"
 #include "node_warden_impl.h"
 
 using namespace NKikimr;
@@ -16,7 +17,7 @@ void TNodeWarden::Handle(TEvents::TEvInvokeResult::TPtr ev) {
     // process message
     try {
         ev->Get()->Process(ActorContext());
-    } catch (const std::exception&) {
+} catch (const std::exception&) {
         Y_ABORT("Exception while executing sync callback: %s", CurrentExceptionMessage().data());
     }
 

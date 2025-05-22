@@ -1,0 +1,57 @@
+--- contrib/python/chardet/py2/test.py	(index)
++++ contrib/python/chardet/py2/test.py	(working tree)
+@@ -11,7 +11,7 @@ import textwrap
+ from difflib import ndiff
+ from io import open
+ from os import listdir
+-from os.path import dirname, isdir, join, realpath, relpath, splitext
++from os.path import dirname, isdir, join, splitext, basename
+ 
+ try:
+     import hypothesis.strategies as st
+@@ -22,20 +22,21 @@ except ImportError:
+ import pytest
+ 
+ import chardet
++import yatest.common
+ 
+ 
+ # TODO: Restore Hungarian encodings (iso-8859-2 and windows-1250) after we
+ #       retrain model.
+ MISSING_ENCODINGS = {'iso-8859-2', 'iso-8859-6', 'windows-1250',
+                      'windows-1254', 'windows-1256'}
+-EXPECTED_FAILURES = {'tests/iso-8859-7-greek/disabled.gr.xml',
+-                     'tests/iso-8859-9-turkish/divxplanet.com.xml',
+-                     'tests/iso-8859-9-turkish/subtitle.srt',
+-                     'tests/iso-8859-9-turkish/wikitop_tr_ISO-8859-9.txt'}
++EXPECTED_FAILURES = {'iso-8859-7-greek/disabled.gr.xml',
++                     'iso-8859-9-turkish/divxplanet.com.xml',
++                     'iso-8859-9-turkish/subtitle.srt',
++                     'iso-8859-9-turkish/wikitop_tr_ISO-8859-9.txt'}
+ 
+ def gen_test_params():
+     """Yields tuples of paths and encodings to use for test_encoding_detection"""
+-    base_path = relpath(join(dirname(realpath(__file__)), 'tests'))
++    base_path = yatest.common.work_path('test_data')
+     for encoding in listdir(base_path):
+         path = join(base_path, encoding)
+         # Skip files in tests directory
+@@ -58,12 +59,16 @@ def gen_test_params():
+                 continue
+             full_path = join(path, file_name)
+             test_case = full_path, encoding
+-            if full_path in EXPECTED_FAILURES:
++            if join(basename(path), file_name) in EXPECTED_FAILURES:
+                 test_case = pytest.param(*test_case, marks=pytest.mark.xfail)
+             yield test_case
+ 
+ 
+-@pytest.mark.parametrize ('file_name, encoding', gen_test_params())
++def get_test_name(args):
++    return join(basename(dirname(args)), basename(args))
++
++
++@pytest.mark.parametrize ('file_name, encoding', gen_test_params(), ids=get_test_name)
+ def test_encoding_detection(file_name, encoding):
+     with open(file_name, 'rb') as f:
+         input_bytes = f.read()

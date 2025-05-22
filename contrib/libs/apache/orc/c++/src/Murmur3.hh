@@ -24,17 +24,17 @@
 namespace orc {
 
   class Murmur3 {
-  public:
+   public:
     static const uint32_t DEFAULT_SEED = 104729;
     static const uint64_t NULL_HASHCODE = 2862933555777941757LL;
 
-    static uint64_t hash64(const uint8_t *data, uint32_t len);
+    static uint64_t hash64(const uint8_t* data, uint32_t len);
 
-  private:
+   private:
     static uint64_t fmix64(uint64_t value);
     static uint64_t hash64(const uint8_t* data, uint32_t len, uint32_t seed);
   };
 
-}
+}  // namespace orc
 
-#endif //ORC_MURMUR3_HH
+#endif  // ORC_MURMUR3_HH

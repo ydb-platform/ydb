@@ -32,7 +32,6 @@ class TPrettyTable {
 public:
     class TRow {
         friend class TPrettyTable;
-        friend class std::allocator<TRow>; // for emplace_back()
 
         // header row ctor
         explicit TRow(const TVector<TString>& columnNames) {
@@ -53,7 +52,7 @@ public:
             TString lines = TStringBuilder() << data;
 
             for (auto& line : StringSplitter(lines).Split('\n')) {
-                if (line.Empty()) {
+                if (line.empty()) {
                     continue;
                 }
 
@@ -76,7 +75,7 @@ public:
     private:
         size_t ColumnWidth(size_t columnIndex) const;
         size_t ExtraBytes(TStringBuf data) const;
-        bool PrintColumns(IOutputStream& o, const TVector<size_t>& widths, size_t lineNumber) const;
+        void PrintColumns(IOutputStream& o, const TVector<size_t>& widths) const;
         bool HasFreeText() const;
         void PrintFreeText(IOutputStream& o, size_t width) const;
 
@@ -91,7 +90,7 @@ public:
         , Config(config)
     {
         if (Config.Header) {
-            Rows.emplace_back(columnNames);
+            Rows.emplace_back(TRow{columnNames});
         }
     }
 

@@ -42,6 +42,7 @@
 #include "y_absl/base/config.h"
 #include "y_absl/base/internal/endian.h"
 #include "y_absl/base/macros.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/base/port.h"
 #include "y_absl/numeric/bits.h"
 #include "y_absl/numeric/int128.h"
@@ -59,7 +60,8 @@ Y_ABSL_NAMESPACE_BEGIN
 // encountered, this function returns `false`, leaving `out` in an unspecified
 // state.
 template <typename int_type>
-Y_ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str, int_type* out);
+Y_ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str,
+                                     y_absl::Nonnull<int_type*> out);
 
 // SimpleAtof()
 //
@@ -70,7 +72,8 @@ Y_ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str, int_type* out);
 // allowed formats for `str`, except SimpleAtof() is locale-independent and will
 // always use the "C" locale. If any errors are encountered, this function
 // returns `false`, leaving `out` in an unspecified state.
-Y_ABSL_MUST_USE_RESULT bool SimpleAtof(y_absl::string_view str, float* out);
+Y_ABSL_MUST_USE_RESULT bool SimpleAtof(y_absl::string_view str,
+                                     y_absl::Nonnull<float*> out);
 
 // SimpleAtod()
 //
@@ -81,7 +84,8 @@ Y_ABSL_MUST_USE_RESULT bool SimpleAtof(y_absl::string_view str, float* out);
 // allowed formats for `str`, except SimpleAtod is locale-independent and will
 // always use the "C" locale. If any errors are encountered, this function
 // returns `false`, leaving `out` in an unspecified state.
-Y_ABSL_MUST_USE_RESULT bool SimpleAtod(y_absl::string_view str, double* out);
+Y_ABSL_MUST_USE_RESULT bool SimpleAtod(y_absl::string_view str,
+                                     y_absl::Nonnull<double*> out);
 
 // SimpleAtob()
 //
@@ -91,7 +95,8 @@ Y_ABSL_MUST_USE_RESULT bool SimpleAtod(y_absl::string_view str, double* out);
 // are interpreted as boolean `false`: "false", "f", "no", "n", "0". If any
 // errors are encountered, this function returns `false`, leaving `out` in an
 // unspecified state.
-Y_ABSL_MUST_USE_RESULT bool SimpleAtob(y_absl::string_view str, bool* out);
+Y_ABSL_MUST_USE_RESULT bool SimpleAtob(y_absl::string_view str,
+                                     y_absl::Nonnull<bool*> out);
 
 // SimpleHexAtoi()
 //
@@ -104,13 +109,14 @@ Y_ABSL_MUST_USE_RESULT bool SimpleAtob(y_absl::string_view str, bool* out);
 // by this function. If any errors are encountered, this function returns
 // `false`, leaving `out` in an unspecified state.
 template <typename int_type>
-Y_ABSL_MUST_USE_RESULT bool SimpleHexAtoi(y_absl::string_view str, int_type* out);
+Y_ABSL_MUST_USE_RESULT bool SimpleHexAtoi(y_absl::string_view str,
+                                        y_absl::Nonnull<int_type*> out);
 
 // Overloads of SimpleHexAtoi() for 128 bit integers.
-Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
-                                               y_absl::int128* out);
-Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
-                                               y_absl::uint128* out);
+Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(
+    y_absl::string_view str, y_absl::Nonnull<y_absl::int128*> out);
+Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(
+    y_absl::string_view str, y_absl::Nonnull<y_absl::uint128*> out);
 
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
@@ -132,18 +138,22 @@ Y_ABSL_DLL extern const char
 //   PutTwoDigits(42, buf);
 //   // buf[0] == '4'
 //   // buf[1] == '2'
-void PutTwoDigits(uint32_t i, char* buf);
+void PutTwoDigits(uint32_t i, y_absl::Nonnull<char*> buf);
 
 // safe_strto?() functions for implementing SimpleAtoi()
 
-bool safe_strto32_base(y_absl::string_view text, int32_t* value, int base);
-bool safe_strto64_base(y_absl::string_view text, int64_t* value, int base);
-bool safe_strto128_base(y_absl::string_view text, y_absl::int128* value,
-                         int base);
-bool safe_strtou32_base(y_absl::string_view text, uint32_t* value, int base);
-bool safe_strtou64_base(y_absl::string_view text, uint64_t* value, int base);
-bool safe_strtou128_base(y_absl::string_view text, y_absl::uint128* value,
-                         int base);
+bool safe_strto32_base(y_absl::string_view text, y_absl::Nonnull<int32_t*> value,
+                       int base);
+bool safe_strto64_base(y_absl::string_view text, y_absl::Nonnull<int64_t*> value,
+                       int base);
+bool safe_strto128_base(y_absl::string_view text,
+                        y_absl::Nonnull<y_absl::int128*> value, int base);
+bool safe_strtou32_base(y_absl::string_view text, y_absl::Nonnull<uint32_t*> value,
+                        int base);
+bool safe_strtou64_base(y_absl::string_view text, y_absl::Nonnull<uint64_t*> value,
+                        int base);
+bool safe_strtou128_base(y_absl::string_view text,
+                         y_absl::Nonnull<y_absl::uint128*> value, int base);
 
 static const int kFastToBufferSize = 32;
 static const int kSixDigitsToBufferSize = 16;
@@ -154,20 +164,26 @@ static const int kSixDigitsToBufferSize = 16;
 // outside the range 0.0001-999999 are output using scientific notation
 // (1.23456e+06). This routine is heavily optimized.
 // Required buffer size is `kSixDigitsToBufferSize`.
-size_t SixDigitsToBuffer(double d, char* buffer);
+size_t SixDigitsToBuffer(double d, y_absl::Nonnull<char*> buffer);
 
-// These functions are intended for speed. All functions take an output buffer
+// WARNING: These functions may write more characters than necessary, because
+// they are intended for speed. All functions take an output buffer
 // as an argument and return a pointer to the last byte they wrote, which is the
 // terminating '\0'. At most `kFastToBufferSize` bytes are written.
-char* FastIntToBuffer(int32_t, char*);
-char* FastIntToBuffer(uint32_t, char*);
-char* FastIntToBuffer(int64_t, char*);
-char* FastIntToBuffer(uint64_t, char*);
+y_absl::Nonnull<char*> FastIntToBuffer(int32_t i, y_absl::Nonnull<char*> buffer)
+    Y_ABSL_INTERNAL_NEED_MIN_SIZE(buffer, kFastToBufferSize);
+y_absl::Nonnull<char*> FastIntToBuffer(uint32_t n, y_absl::Nonnull<char*> out_str)
+    Y_ABSL_INTERNAL_NEED_MIN_SIZE(out_str, kFastToBufferSize);
+y_absl::Nonnull<char*> FastIntToBuffer(int64_t i, y_absl::Nonnull<char*> buffer)
+    Y_ABSL_INTERNAL_NEED_MIN_SIZE(buffer, kFastToBufferSize);
+y_absl::Nonnull<char*> FastIntToBuffer(uint64_t i, y_absl::Nonnull<char*> buffer)
+    Y_ABSL_INTERNAL_NEED_MIN_SIZE(buffer, kFastToBufferSize);
 
 // For enums and integer types that are not an exact match for the types above,
 // use templates to call the appropriate one of the four overloads above.
 template <typename int_type>
-char* FastIntToBuffer(int_type i, char* buffer) {
+y_absl::Nonnull<char*> FastIntToBuffer(int_type i, y_absl::Nonnull<char*> buffer)
+    Y_ABSL_INTERNAL_NEED_MIN_SIZE(buffer, kFastToBufferSize) {
   static_assert(sizeof(i) <= 64 / 8,
                 "FastIntToBuffer works only with 64-bit-or-less integers.");
   // TODO(jorg): This signed-ness check is used because it works correctly
@@ -194,7 +210,8 @@ char* FastIntToBuffer(int_type i, char* buffer) {
 // Implementation of SimpleAtoi, generalized to support arbitrary base (used
 // with base different from 10 elsewhere in Abseil implementation).
 template <typename int_type>
-Y_ABSL_MUST_USE_RESULT bool safe_strtoi_base(y_absl::string_view s, int_type* out,
+Y_ABSL_MUST_USE_RESULT bool safe_strtoi_base(y_absl::string_view s,
+                                           y_absl::Nonnull<int_type*> out,
                                            int base) {
   static_assert(sizeof(*out) == 4 || sizeof(*out) == 8,
                 "SimpleAtoi works only with 32-bit or 64-bit integers.");
@@ -237,7 +254,7 @@ Y_ABSL_MUST_USE_RESULT bool safe_strtoi_base(y_absl::string_view s, int_type* ou
 // without the terminating null character. Thus `out` must be of length >= 16.
 // Returns the number of non-pad digits of the output (it can never be zero
 // since 0 has one digit).
-inline size_t FastHexToBufferZeroPad16(uint64_t val, char* out) {
+inline size_t FastHexToBufferZeroPad16(uint64_t val, y_absl::Nonnull<char*> out) {
 #ifdef Y_ABSL_INTERNAL_HAVE_SSSE3
   uint64_t be = y_absl::big_endian::FromHost64(val);
   const auto kNibbleMask = _mm_set1_epi8(0xf);
@@ -263,32 +280,34 @@ inline size_t FastHexToBufferZeroPad16(uint64_t val, char* out) {
 }  // namespace numbers_internal
 
 template <typename int_type>
-Y_ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str, int_type* out) {
+Y_ABSL_MUST_USE_RESULT bool SimpleAtoi(y_absl::string_view str,
+                                     y_absl::Nonnull<int_type*> out) {
   return numbers_internal::safe_strtoi_base(str, out, 10);
 }
 
 Y_ABSL_MUST_USE_RESULT inline bool SimpleAtoi(y_absl::string_view str,
-                                            y_absl::int128* out) {
+                                            y_absl::Nonnull<y_absl::int128*> out) {
   return numbers_internal::safe_strto128_base(str, out, 10);
 }
 
 Y_ABSL_MUST_USE_RESULT inline bool SimpleAtoi(y_absl::string_view str,
-                                            y_absl::uint128* out) {
+                                            y_absl::Nonnull<y_absl::uint128*> out) {
   return numbers_internal::safe_strtou128_base(str, out, 10);
 }
 
 template <typename int_type>
-Y_ABSL_MUST_USE_RESULT bool SimpleHexAtoi(y_absl::string_view str, int_type* out) {
+Y_ABSL_MUST_USE_RESULT bool SimpleHexAtoi(y_absl::string_view str,
+                                        y_absl::Nonnull<int_type*> out) {
   return numbers_internal::safe_strtoi_base(str, out, 16);
 }
 
-Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
-                                               y_absl::int128* out) {
+Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(
+    y_absl::string_view str, y_absl::Nonnull<y_absl::int128*> out) {
   return numbers_internal::safe_strto128_base(str, out, 16);
 }
 
-Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(y_absl::string_view str,
-                                               y_absl::uint128* out) {
+Y_ABSL_MUST_USE_RESULT inline bool SimpleHexAtoi(
+    y_absl::string_view str, y_absl::Nonnull<y_absl::uint128*> out) {
   return numbers_internal::safe_strtou128_base(str, out, 16);
 }
 

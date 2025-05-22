@@ -64,8 +64,10 @@ def httpsserver(request):
     """
     from pytest_localserver import https
     try:
+        with open(https.DEFAULT_KEY, 'wb') as f:
+            f.write(pkgutil.get_data('pytest_localserver', 'server.key'))
         with open(https.DEFAULT_CERTIFICATE, 'wb') as f:
-            f.write(pkgutil.get_data('pytest_localserver', 'server.pem'))
+            f.write(pkgutil.get_data('pytest_localserver', 'cert.crt'))
         server = https.SecureContentServer()
         server.start()
         request.addfinalizer(server.stop)

@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "datashard.h"
-#include "datashard_locks.h"
+#include <ydb/core/tx/locks/locks.h>
 #include "datashard_outreadset.h"
 #include "datashard_snapshots.h"
 #include "execution_unit_kind.h"
@@ -27,6 +27,12 @@ namespace NDataShard {
 using NTabletFlatExecutor::TTableSnapshotContext;
 
 class TDataShard;
+
+enum class ERestoreDataStatus {
+    Ok,
+    Restart,
+    Error,
+};
 
 enum class ETxOrder {
     Unknown,
@@ -68,7 +74,7 @@ struct TStepOrder {
     }
 
     ETxOrder CheckOrder(const TStepOrder& stepTxId) const {
-        Y_ABORT_UNLESS(*this != stepTxId); // avoid self checks
+        Y_ENSURE(*this != stepTxId); // avoid self checks
         if (!Step && !stepTxId.Step) // immediate vs immediate
             return ETxOrder::Any;
         if (!Step || !stepTxId.Step) // planned vs immediate
@@ -255,7 +261,7 @@ public:
     bool HasReadOnlyFlag() const { return HasFlag(TTxFlags::ReadOnly); }
     void SetReadOnlyFlag(bool val = true)
     {
-        Y_ABORT_UNLESS(!val || !IsGlobalWriter());
+        Y_ENSURE(!val || !IsGlobalWriter());
         SetFlag(TTxFlags::ReadOnly, val);
     }
     void ResetReadOnlyFlag() { ResetFlag(TTxFlags::ReadOnly); }
@@ -280,7 +286,7 @@ public:
 
     bool HasGlobalWriterFlag() const { return HasFlag(TTxFlags::GlobalWriter); }
     void SetGlobalWriterFlag(bool val = true) {
-        Y_ABORT_UNLESS(!val || !IsReadOnly());
+        Y_ENSURE(!val || !IsReadOnly());
         SetFlag(TTxFlags::GlobalWriter, val);
     }
     void ResetGlobalWriterFlag() { ResetFlag(TTxFlags::GlobalWriter); }
@@ -402,11 +408,17 @@ public:
 
     bool IsMvccSnapshotRead() const { return !MvccSnapshot.IsMax(); }
     const TRowVersion& GetMvccSnapshot() const { return MvccSnapshot; }
-    bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable; }
+    bool IsMvccSnapshotRepeatable() const { return MvccSnapshotRepeatable_; }
     void SetMvccSnapshot(const TRowVersion& snapshot, bool isRepeatable = true) {
         MvccSnapshot = snapshot;
-        MvccSnapshotRepeatable = isRepeatable;
+        MvccSnapshotRepeatable_ = isRepeatable;
     }
+
+    bool IsProposeResultSentEarly() const { return ProposeResultSentEarly_; }
+    void SetProposeResultSentEarly(bool value = true) { ProposeResultSentEarly_ = value; }
+
+    bool GetPerformedUserReads() const { return PerformedUserReads_; }
+    void SetPerformedUserReads(bool value = true) { PerformedUserReads_ = value; }
 
     ///////////////////////////////////
     //     DEBUG AND MONITORING      //
@@ -429,7 +441,12 @@ protected:
 
     TSnapshotKey AcquiredSnapshotKey;
     TRowVersion MvccSnapshot = TRowVersion::Max();
-    bool MvccSnapshotRepeatable = false;
+
+private:
+    // Runtime flags
+    ui8 MvccSnapshotRepeatable_ : 1 = 0;
+    ui8 ProposeResultSentEarly_ : 1 = 0;
+    ui8 PerformedUserReads_ : 1 = 0;
 };
 
 struct TRSData {
@@ -503,6 +520,33 @@ struct TExecutionProfile {
     TInstant CompletedAt;
     TInstant StartUnitAt;
     THashMap<EExecutionUnitKind, TUnitProfile> UnitProfiles;
+};
+
+class TValidatedDataTx;
+class TValidatedWriteTx;
+
+class TValidatedTx {
+public:
+    using TPtr = std::shared_ptr<TValidatedTx>;
+
+    virtual ~TValidatedTx() = default;
+
+    enum class EType { 
+        DataTx,
+        WriteTx 
+    };
+
+public:
+    virtual EType GetType() const = 0;
+    virtual ui64 GetTxId() const = 0;
+    virtual ui64 GetMemoryConsumption() const = 0;
+
+    bool IsProposed() const {
+        return GetSource() != TActorId();
+    }
+
+    YDB_ACCESSOR_DEF(TActorId, Source);
+    YDB_ACCESSOR_DEF(ui64, TxCacheUsage);
 };
 
 struct TOperationAllListTag {};
@@ -679,6 +723,7 @@ public:
     const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetSpecialDependencies() const { return SpecialDependencies; }
     const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetPlannedConflicts() const { return PlannedConflicts; }
     const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetImmediateConflicts() const { return ImmediateConflicts; }
+    const absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> &GetRepeatableReadConflicts() const { return RepeatableReadConflicts; }
     const absl::flat_hash_set<ui64> &GetVolatileDependencies() const { return VolatileDependencies; }
     bool HasVolatileDependencies() const { return !VolatileDependencies.empty(); }
     bool GetVolatileDependenciesAborted() const { return VolatileDependenciesAborted; }
@@ -695,6 +740,10 @@ public:
     void ClearImmediateConflicts();
     void ClearSpecialDependents();
     void ClearSpecialDependencies();
+
+    void AddRepeatableReadConflict(const TOperation::TPtr &op);
+    void PromoteRepeatableReadConflicts();
+    void ClearRepeatableReadConflicts();
 
     void AddVolatileDependency(ui64 txId);
     void RemoveVolatileDependency(ui64 txId, bool success);
@@ -808,9 +857,37 @@ public:
     void SetFinishProposeTs(TMonotonic now) noexcept { FinishProposeTs = now; }
     void SetFinishProposeTs() noexcept;
 
-    NWilson::TTraceId GetTraceId() const noexcept {
+    NWilson::TTraceId GetTraceId() const {
         return OperationSpan.GetTraceId();
     }
+
+    /**
+     * Called when datashard is going to stop soon
+     *
+     * Operation may override this method to support sending notifications or
+     * results signalling that the operation will never complete. When result
+     * is sent operation is supposed to set its ResultSentFlag.
+     *
+     * When this method returns true the operation will be added to the
+     * pipeline as a candidate for execution.
+     */
+    virtual bool OnStopping(TDataShard& self, const TActorContext& ctx);
+
+    /**
+     * Called when operation is aborted on cleanup
+     *
+     * Distributed transaction is cleaned up when deadline is reached, and
+     * it hasn't been planned yet. Additionally volatile transactions are
+     * cleaned when shard is waiting for transaction queue to drain, and
+     * the given operation wasn't planned yet.
+     */
+    virtual void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies);
+
+
+    // CommittingOps book keeping
+    const std::optional<TRowVersion>& GetCommittingOpsVersion() const { return CommittingOpsVersion; }
+    void SetCommittingOpsVersion(const TRowVersion& version) { CommittingOpsVersion = version; }
+    void ResetCommittingOpsVersion() { CommittingOpsVersion.reset(); }
 
 protected:
     TOperation()
@@ -873,6 +950,7 @@ private:
     absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> SpecialDependencies;
     absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> PlannedConflicts;
     absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> ImmediateConflicts;
+    absl::flat_hash_set<TOperation::TPtr, THash<TOperation::TPtr>> RepeatableReadConflicts;
     absl::flat_hash_set<ui64> VolatileDependencies;
     bool VolatileDependenciesAborted = false;
     TVector<EExecutionUnitKind> ExecutionPlan;
@@ -883,6 +961,8 @@ private:
     TMonotonic FinishProposeTs;
 
     static NMiniKQL::IEngineFlat::TValidationInfo EmptyKeysInfo;
+
+    std::optional<TRowVersion> CommittingOpsVersion;
 
 public:
     std::optional<TRowVersion> MvccReadWriteVersion;

@@ -1,18 +1,19 @@
 #include "yql_generic_provider.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 
     TDataProviderInitializer GetGenericDataProviderInitializer(NConnector::IClient::TPtr genericClient,
-                                                               const std::shared_ptr<IDatabaseAsyncResolver> dbResolver)
+                                                               const IDatabaseAsyncResolver::TPtr& dbResolver,
+                                                               const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory)
     {
-        return [genericClient, dbResolver](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
-                                           const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-                                           TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-                                           const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
-                                           THiddenQueryAborter)
+        return [genericClient, dbResolver, credentialsFactory](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
+                                                               const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+                                                               TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+                                                               const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
+                                                               THiddenQueryAborter hiddenAborter, const TQContext& qContext)
         {
             Y_UNUSED(sessionId);
             Y_UNUSED(userName);
@@ -20,11 +21,14 @@ namespace NYql {
             Y_UNUSED(randomProvider);
             Y_UNUSED(progressWriter);
             Y_UNUSED(operationOptions);
+            Y_UNUSED(hiddenAborter);
+            Y_UNUSED(qContext);
 
             auto state = MakeIntrusive<TGenericState>(
                 typeCtx.Get(),
                 functionRegistry,
                 dbResolver,
+                credentialsFactory,
                 genericClient,
                 gatewaysConfig->GetGeneric());
 

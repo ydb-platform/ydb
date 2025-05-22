@@ -81,12 +81,12 @@ NMetrics::EResource GetDominantResourceType(const TResourceNormalizedValues& nor
     return dominant;
 }
 
-TNodeFilter::TNodeFilter(const THive& hive) 
-    : Hive(hive) 
+TNodeFilter::TNodeFilter(const THive& hive)
+    : Hive(&hive)
 {}
 
 TArrayRef<const TSubDomainKey> TNodeFilter::GetEffectiveAllowedDomains() const {
-    const auto* objectDomainInfo = Hive.FindDomain(ObjectDomain);
+    const auto* objectDomainInfo = Hive->FindDomain(ObjectDomain);
 
     if (!objectDomainInfo) {
         return {AllowedDomains.begin(), AllowedDomains.end()};
@@ -99,6 +99,50 @@ TArrayRef<const TSubDomainKey> TNodeFilter::GetEffectiveAllowedDomains() const {
             return {&ObjectDomain, 1};
     }
 }
+
+bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
+    if (AllowedDataCenters.empty()) {
+        return true;
+    }
+    return std::find(AllowedDataCenters.begin(), AllowedDataCenters.end(), dc) != AllowedDataCenters.end();
+}
+
+template <typename K, typename V>
+std::unordered_map<V, K> MakeReverseMap(const std::unordered_map<K, V>& map) {
+    std::unordered_map<V, K> result;
+    for (const auto& [k, v] : map) {
+        result.emplace(v, k);
+    }
+    return result;
+}
+
+const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES = {{TTabletTypes::SchemeShard, "SS"},
+                                                                                  {TTabletTypes::Hive, "H"},
+                                                                                  {TTabletTypes::DataShard, "DS"},
+                                                                                  {TTabletTypes::ColumnShard, "CS"},
+                                                                                  {TTabletTypes::KeyValue, "KV"},
+                                                                                  {TTabletTypes::PersQueue, "PQ"},
+                                                                                  {TTabletTypes::PersQueueReadBalancer, "PQRB"},
+                                                                                  {TTabletTypes::Dummy, "DY"},
+                                                                                  {TTabletTypes::Coordinator, "C"},
+                                                                                  {TTabletTypes::Mediator, "M"},
+                                                                                  {TTabletTypes::BlockStoreVolume, "BV"},
+                                                                                  {TTabletTypes::BlockStorePartition2, "BP"},
+                                                                                  {TTabletTypes::Kesus, "K"},
+                                                                                  {TTabletTypes::SysViewProcessor, "SV"},
+                                                                                  {TTabletTypes::FileStore, "FS"},
+                                                                                  {TTabletTypes::TestShard, "TS"},
+                                                                                  {TTabletTypes::SequenceShard, "SQ"},
+                                                                                  {TTabletTypes::ReplicationController, "RC"},
+                                                                                  {TTabletTypes::BlobDepot, "BD"},
+                                                                                  {TTabletTypes::StatisticsAggregator, "SA"},
+                                                                                  {TTabletTypes::GraphShard, "GS"},
+                                                                                  {TTabletTypes::NodeBroker, "NB"},
+                                                                                  {TTabletTypes::BlockStoreDiskRegistry, "BDR"},
+                                                                                  {TTabletTypes::BackupController, "BCT"},
+                                                                                 };
+
+const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHORT_NAME = MakeReverseMap(TABLET_TYPE_SHORT_NAMES);
 
 } // NHive
 } // NKikimr

@@ -1,0 +1,67 @@
+commit 6a570ad85b81eb53f0245268c7315409de2520e0
+merge: b38db0d0c3651fa83d5bc81f795fde7680f72033 45a49d9b4df748ab9f2b1267f8183b6574fea206
+author: eeight
+date: 2021-02-24T23:44:48+03:00
+revision: 7897977
+
+    IGNIETFERRO-603 Record exception backtraces during stack unwinding
+    
+    REVIEW: 1637486
+
+--- a/include/unwind.h
++++ b/include/unwind.h
+@@ -396,6 +396,21 @@ extern EXCEPTION_DISPOSITION _GCC_specific_handler(EXCEPTION_RECORD *exc,
+                                                    _Unwind_Personality_Fn pers);
+ #endif
+ 
++#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE
++
++#define _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_SIZE 128
++// NB. How to compute:
++// offsetof(__cxa_exception, unwindHeader) + (sizeof(_Unwind_Backtrace_Buffer) + 15) / 16 * 16 - sizeof(_Unwind_Backtrace_Buffer)
++// Correctness of this value is static_assert'd in contrib/libs/cxxsupp/libcxxrta/exception.cc
++#define _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_MAGIC_OFFSET 104
++#define _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_PRIMARY_CLASS 0xacadacadull
++#define _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_DEPENDENT_CLASS 0xddddacadull
++
++typedef struct _Unwind_Backtrace_Buffer {
++    size_t size;
++    void* backtrace[_YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_SIZE];
++} _Unwind_Backtrace_Buffer;
++#endif
+ #ifdef __cplusplus
+ }
+ #endif
+--- a/src/UnwindLevel1.c
++++ b/src/UnwindLevel1.c
+@@ -38,6 +38,15 @@ static _Unwind_Reason_Code
+ unwind_phase1(unw_context_t *uc, unw_cursor_t *cursor, _Unwind_Exception *exception_object) {
+   __unw_init_local(cursor, uc);
+ 
++#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE
++  _Unwind_Backtrace_Buffer* backtrace_buffer =
++      exception_object->exception_class == _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_PRIMARY_CLASS ||
++          exception_object->exception_class == _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_DEPENDENT_CLASS ?
++      (_Unwind_Backtrace_Buffer *)(
++          (char*)exception_object - _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_MAGIC_OFFSET) - 1
++      : NULL;
++#endif
++
+   // Walk each frame looking for a place to stop.
+   while (true) {
+     // Ask libunwind to get next frame (skip over first which is
+@@ -57,6 +66,14 @@ unwind_phase1(unw_context_t *uc, unw_cursor_t *cursor, _Unwind_Exception *except
+       return _URC_FATAL_PHASE1_ERROR;
+     }
+ 
++#ifdef _YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE
++    if (backtrace_buffer && backtrace_buffer->size < _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_SIZE) {
++        unw_word_t pc;
++        __unw_get_reg(cursor, UNW_REG_IP, &pc);
++        backtrace_buffer->backtrace[backtrace_buffer->size++] = (void *)pc;
++    }
++#endif
++
+     // See if frame has code to run (has personality routine).
+     unw_proc_info_t frameInfo;
+     unw_word_t sp;

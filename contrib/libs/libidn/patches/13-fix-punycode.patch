@@ -1,0 +1,53 @@
+--- contrib/libs/libidn/lib/punycode.c	(index)
++++ contrib/libs/libidn/lib/punycode.c	(working tree)
+@@ -88,11 +88,11 @@ enum
+ /* point (for use in representing integers) in the range 0 to */
+ /* base-1, or base if cp does not represent a value.          */
+ 
+-static unsigned
+-decode_digit (int cp)
++static punycode_uint
++decode_digit (punycode_uint cp)
+ {
+-  return (unsigned) (cp - 48 < 10 ? cp - 22 : cp - 65 < 26 ? cp - 65 :
+-		     cp - 97 < 26 ? cp - 97 : base);
++  return cp - 48 < 10 ? cp - 22 : cp - 65 < 26 ? cp - 65 :
++    cp - 97 < 26 ? cp - 97 : base;
+ }
+ 
+ /* encode_digit(d,flag) returns the basic code point whose value      */
+--- contrib/libs/libidn/lib/punycode.h	(index)
++++ contrib/libs/libidn/lib/punycode.h	(working tree)
+@@ -75,15 +75,7 @@
+  */
+ 
+ # ifndef IDNAPI
+-#  if defined LIBIDN_BUILDING && defined HAVE_VISIBILITY && HAVE_VISIBILITY
+-#   define IDNAPI __attribute__((__visibility__("default")))
+-#  elif defined LIBIDN_BUILDING && defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllexport)
+-#  elif defined _MSC_VER && ! defined LIBIDN_STATIC
+-#   define IDNAPI __declspec(dllimport)
+-#  else
+ #   define IDNAPI
+-#  endif
+ # endif
+ 
+ # ifdef __cplusplus
+@@ -182,11 +174,11 @@ extern "C"
+         and output might contain garbage.
+ */
+ 
+-  extern IDNAPI int punycode_decode (size_t input_length,
+-				     const char input[],
+-				     size_t *output_length,
+-				     punycode_uint output[],
+-				     unsigned char case_flags[]);
++  extern int punycode_decode (size_t input_length,
++			     const char input[],
++			     size_t *output_length,
++			     punycode_uint output[],
++			     unsigned char case_flags[]);
+ 
+ /*
+     punycode_decode() converts Punycode to a sequence of code points

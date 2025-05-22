@@ -3,8 +3,7 @@
 namespace NKikimr::NDataShard {
 
 std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() const {
-    Y_ABORT_UNLESS(!IsFollower());
-    Y_DEBUG_ABORT_UNLESS(IsMvccEnabled());
+    Y_ENSURE(!IsFollower());
 
     TRowVersion volatileUncertain = VolatileTxManager.GetMinUncertainVersion();
 
@@ -48,9 +47,9 @@ std::tuple<TRowVersion, bool, ui64> TDataShard::CalculateFollowerReadEdge() cons
 }
 
 bool TDataShard::PromoteFollowerReadEdge(TTransactionContext& txc) {
-    Y_ABORT_UNLESS(!IsFollower());
+    Y_ENSURE(!IsFollower());
 
-    if (IsMvccEnabled() && HasFollowers()) {
+    if (HasFollowers()) {
         auto [version, repeatable, waitStep] = CalculateFollowerReadEdge();
 
         if (waitStep) {
@@ -74,7 +73,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_UPDATE_FOLLOWER_READ_EDGE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        Y_ABORT_UNLESS(Self->UpdateFollowerReadEdgePending);
+        Y_ENSURE(Self->UpdateFollowerReadEdgePending);
         Self->UpdateFollowerReadEdgePending = false;
         Self->PromoteFollowerReadEdge(txc);
         return true;
@@ -86,9 +85,9 @@ public:
 };
 
 bool TDataShard::PromoteFollowerReadEdge() {
-    Y_ABORT_UNLESS(!IsFollower());
+    Y_ENSURE(!IsFollower());
 
-    if (IsMvccEnabled() && HasFollowers()) {
+    if (HasFollowers()) {
         auto [currentEdge, currentRepeatable] = SnapshotManager.GetFollowerReadEdge();
         auto [nextEdge, nextRepeatable, waitStep] = CalculateFollowerReadEdge();
 

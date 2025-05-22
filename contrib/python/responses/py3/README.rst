@@ -62,100 +62,6 @@ Please ensure to update your code according to the guidance.
      - Use ``responses.mock.assert_all_requests_are_fired``,
        ``responses.mock.passthru_prefixes``, ``responses.mock.target`` instead.
 
-BETA Features
--------------
-Below you can find a list of BETA features. Although we will try to keep the API backwards compatible
-with released version, we reserve the right to change these APIs before they are considered stable. Please share your feedback via
-`GitHub Issues <https://github.com/getsentry/responses/issues>`_.
-
-Record Responses to files
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-You can perform real requests to the server and ``responses`` will automatically record the output to the
-file. Recorded data is stored in `YAML <https://yaml.org>`_ format.
-
-Apply ``@responses._recorder.record(file_path="out.yaml")`` decorator to any function where you perform
-requests to record responses to ``out.yaml`` file.
-
-Following code
-
-.. code-block:: python
-
-    import requests
-    from responses import _recorder
-
-
-    def another():
-        rsp = requests.get("https://httpstat.us/500")
-        rsp = requests.get("https://httpstat.us/202")
-
-
-    @_recorder.record(file_path="out.yaml")
-    def test_recorder():
-        rsp = requests.get("https://httpstat.us/404")
-        rsp = requests.get("https://httpbin.org/status/wrong")
-        another()
-
-will produce next output:
-
-.. code-block:: yaml
-
-    responses:
-    - response:
-        auto_calculate_content_length: false
-        body: 404 Not Found
-        content_type: text/plain
-        method: GET
-        status: 404
-        url: https://httpstat.us/404
-    - response:
-        auto_calculate_content_length: false
-        body: Invalid status code
-        content_type: text/plain
-        method: GET
-        status: 400
-        url: https://httpbin.org/status/wrong
-    - response:
-        auto_calculate_content_length: false
-        body: 500 Internal Server Error
-        content_type: text/plain
-        method: GET
-        status: 500
-        url: https://httpstat.us/500
-    - response:
-        auto_calculate_content_length: false
-        body: 202 Accepted
-        content_type: text/plain
-        method: GET
-        status: 202
-        url: https://httpstat.us/202
-
-
-Replay responses (populate registry) from files
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-You can populate your active registry from a ``yaml`` file with recorded responses.
-(See `Record Responses to files`_ to understand how to obtain a file).
-To do that you need to execute ``responses._add_from_file(file_path="out.yaml")`` within
-an activated decorator or a context manager.
-
-The following code example registers a ``patch`` response, then all responses present in
-``out.yaml`` file and a ``post`` response at the end.
-
-.. code-block:: python
-
-    import responses
-
-
-    @responses.activate
-    def run():
-        responses.patch("http://httpbin.org")
-        responses._add_from_file(file_path="out.yaml")
-        responses.post("http://httpbin.org/form")
-
-
-    run()
-
 Basics
 ------
 
@@ -899,16 +805,19 @@ Integration with unit test frameworks
 Responses as a ``pytest`` fixture
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Use the pytest-responses package to export ``responses`` as a pytest fixture.
+
+``pip install pytest-responses``
+
+You can then access it in a pytest script using:
+
 .. code-block:: python
 
-    @pytest.fixture
-    def mocked_responses():
-        with responses.RequestsMock() as rsps:
-            yield rsps
+    import pytest_responses
 
 
-    def test_api(mocked_responses):
-        mocked_responses.get(
+    def test_api(responses):
+        responses.get(
             "http://twitter.com/api/1/foobar",
             body="{}",
             status=200,
@@ -1232,6 +1141,7 @@ If you are using the ``Retry`` features of ``urllib3`` and want to cover scenari
 
     import responses
     from responses import registries
+    from urllib3.util import Retry
 
 
     @responses.activate(registry=registries.OrderedRegistry)
@@ -1397,6 +1307,116 @@ single thread to access it.
             assert responses.calls[0].request.url == "http://twitter.com/api/1/foobar"
 
         await run()
+
+BETA Features
+-------------
+Below you can find a list of BETA features. Although we will try to keep the API backwards compatible
+with released version, we reserve the right to change these APIs before they are considered stable. Please share your feedback via
+`GitHub Issues <https://github.com/getsentry/responses/issues>`_.
+
+Record Responses to files
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can perform real requests to the server and ``responses`` will automatically record the output to the
+file. Recorded data is stored in `YAML <https://yaml.org>`_ format.
+
+Apply ``@responses._recorder.record(file_path="out.yaml")`` decorator to any function where you perform
+requests to record responses to ``out.yaml`` file.
+
+Following code
+
+.. code-block:: python
+
+    import requests
+    from responses import _recorder
+
+
+    def another():
+        rsp = requests.get("https://httpstat.us/500")
+        rsp = requests.get("https://httpstat.us/202")
+
+
+    @_recorder.record(file_path="out.yaml")
+    def test_recorder():
+        rsp = requests.get("https://httpstat.us/404")
+        rsp = requests.get("https://httpbin.org/status/wrong")
+        another()
+
+will produce next output:
+
+.. code-block:: yaml
+
+    responses:
+    - response:
+        auto_calculate_content_length: false
+        body: 404 Not Found
+        content_type: text/plain
+        method: GET
+        status: 404
+        url: https://httpstat.us/404
+    - response:
+        auto_calculate_content_length: false
+        body: Invalid status code
+        content_type: text/plain
+        method: GET
+        status: 400
+        url: https://httpbin.org/status/wrong
+    - response:
+        auto_calculate_content_length: false
+        body: 500 Internal Server Error
+        content_type: text/plain
+        method: GET
+        status: 500
+        url: https://httpstat.us/500
+    - response:
+        auto_calculate_content_length: false
+        body: 202 Accepted
+        content_type: text/plain
+        method: GET
+        status: 202
+        url: https://httpstat.us/202
+
+If you are in the REPL, you can also activete the recorder for all following responses:
+
+.. code-block:: python
+
+    import requests
+    from responses import _recorder
+
+    _recorder.recorder.start()
+
+    requests.get("https://httpstat.us/500")
+
+    _recorder.recorder.dump_to_file("out.yaml")
+
+    # you can stop or reset the recorder
+    _recorder.recorder.stop()
+    _recorder.recorder.reset()
+
+Replay responses (populate registry) from files
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can populate your active registry from a ``yaml`` file with recorded responses.
+(See `Record Responses to files`_ to understand how to obtain a file).
+To do that you need to execute ``responses._add_from_file(file_path="out.yaml")`` within
+an activated decorator or a context manager.
+
+The following code example registers a ``patch`` response, then all responses present in
+``out.yaml`` file and a ``post`` response at the end.
+
+.. code-block:: python
+
+    import responses
+
+
+    @responses.activate
+    def run():
+        responses.patch("http://httpbin.org")
+        responses._add_from_file(file_path="out.yaml")
+        responses.post("http://httpbin.org/form")
+
+
+    run()
 
 
 Contributing

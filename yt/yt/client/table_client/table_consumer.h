@@ -1,12 +1,12 @@
 #pragma once
 
 #include "public.h"
+#include "value_consumer.h"
+#include "name_table.h"
 
 #include <yt/yt/client/complex_types/yson_format_conversion.h>
-#include <yt/yt/client/formats/public.h>
 
-#include <yt/yt/client/table_client/value_consumer.h>
-#include <yt/yt/client/table_client/name_table.h>
+#include <yt/yt/client/formats/public.h>
 
 #include <yt/yt/core/misc/error.h>
 

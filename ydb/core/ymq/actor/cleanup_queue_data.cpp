@@ -13,8 +13,8 @@ namespace NKikimr::NSQS {
     constexpr TDuration IDLE_TIMEOUT = TDuration::Seconds(30);
     constexpr TDuration RETRY_PERIOD_MIN = TDuration::MilliSeconds(100);
     constexpr TDuration RETRY_PERIOD_MAX = TDuration::Seconds(30);
-    
-    // (table, has shard column) 
+
+    // (table, has shard column)
     const TVector<std::pair<TString, bool>> StdTables = {
         {"Infly", true},
         {"MessageData", true},
@@ -32,7 +32,7 @@ namespace NKikimr::NSQS {
         {"Reads", false},
         {"SentTimestampIdx", false}
     };
-    
+
     TString GetCommonTablePath(const TString& name, bool isFifo) {
         return TStringBuilder() << Cfg().GetRoot() << "/." << (isFifo ? "FIFO" : "STD") << "/" << name;
     }
@@ -44,7 +44,7 @@ namespace NKikimr::NSQS {
 
     void TCleanupQueueDataActor::Bootstrap(const TActorContext& ctx) {
         Become(&TCleanupQueueDataActor::StateFunc);
-        
+
         TString removedQueuesTable = Cfg().GetRoot() + "/.RemovedQueues";
 
         LockQueueQuery = TStringBuilder() << R"__(
@@ -61,7 +61,7 @@ namespace NKikimr::NSQS {
             );
             UPDATE `)__" << removedQueuesTable <<  R"__(` ON SELECT * FROM $to_update;
         )__";
-        
+
         UpdateLockQueueQuery = TStringBuilder() << R"__(
             --!syntax_v1
             DECLARE $StartProcessTimestamp as Uint64; DECLARE $NodeId as Uint32;
@@ -71,12 +71,12 @@ namespace NKikimr::NSQS {
                 SELECT
                     RemoveTimestamp, QueueIdNumber, $Now AS StartProcessTimestamp
                 FROM `)__" << removedQueuesTable <<  R"__(`
-                WHERE RemoveTimestamp=$RemoveTimestamp AND QueueIdNumber=$QueueIdNumber 
+                WHERE RemoveTimestamp=$RemoveTimestamp AND QueueIdNumber=$QueueIdNumber
                     AND  StartProcessTimestamp = $StartProcessTimestamp AND NodeProcess = $NodeId
             );
             UPDATE `)__" << removedQueuesTable <<  R"__(` ON SELECT * FROM $to_update;
         )__";
-        
+
 
         SelectQueuesQuery = TStringBuilder() << R"__(
             --!syntax_v1
@@ -113,7 +113,7 @@ namespace NKikimr::NSQS {
     }
 
     void TCleanupQueueDataActor::HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record.GetRef();
+        const auto& record = ev->Get()->Record;
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
             HandleError(record.DebugString(), ctx);
             return;
@@ -174,7 +174,7 @@ namespace NKikimr::NSQS {
         LOG_ERROR_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got an error while deleting data : " << error);
         LockQueueToRemove(runAfter, ctx);
     }
-    
+
     void TCleanupQueueDataActor::LockQueueToRemove(TDuration runAfter, const TActorContext& ctx) {
         State = EState::LockQueue;
 
@@ -194,7 +194,7 @@ namespace NKikimr::NSQS {
 
         RunYqlQuery(LockQueueQuery, std::move(params), false, runAfter, Cfg().GetRoot(), ctx);
     }
-    
+
     void TCleanupQueueDataActor::UpdateLock(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] update queue lock...");
         State = EState::UpdateLockQueue;
@@ -229,12 +229,12 @@ namespace NKikimr::NSQS {
         // Select RemoveTimestamp, QueueIdNumber, FifoQueue, Shards, TablesFormat
         ui64 queueIdNumber = *parser.ColumnParser(1).GetOptionalUint64();
         if (queueIdNumber != QueueIdNumber) {
-            LOG_WARN_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got queue to continue remove data queue_id_number=" << queueIdNumber 
+            LOG_WARN_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got queue to continue remove data queue_id_number=" << queueIdNumber
                 << ", but was locked queue_id_number=" << QueueIdNumber);
             StartRemoveData(parser, ctx);
             return;
         }
-        
+
         State = EState::RemoveData;
         RunRemoveData(ctx);
     }
@@ -249,8 +249,8 @@ namespace NKikimr::NSQS {
         IsFifoQueue = *parser.ColumnParser(2).GetOptionalBool();
         Shards = *parser.ColumnParser(3).GetOptionalUint32();
         TablesFormat = *parser.ColumnParser(4).GetOptionalUint32();
-        
-        LOG_INFO_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got queue to remove data: removed at " << RemoveQueueTimetsamp 
+
+        LOG_INFO_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got queue to remove data: removed at " << RemoveQueueTimetsamp
             << " queue_id_number=" << QueueIdNumber << " tables_format=" << TablesFormat);
         if (TablesFormat == 0) {
             Finish(ctx); // TODO move code for removing directories
@@ -258,9 +258,9 @@ namespace NKikimr::NSQS {
             ClearNextTable(ctx);
         }
     }
-    
+
     void TCleanupQueueDataActor::OnRemovedData(ui64 removedRows, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] removed rows " << removedRows 
+        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] removed rows " << removedRows
             << ", cleared tables " << ClearedTablesCount << ", shards to remove " << ShardsToRemove
         );
         MonitoringCounters->CleanupRemovedQueuesRows->Add(removedRows);
@@ -276,7 +276,7 @@ namespace NKikimr::NSQS {
         }
         RunRemoveData(ctx);
     }
-    
+
     void TCleanupQueueDataActor::Finish(const TActorContext& ctx) {
         State = EState::Finish;
 
@@ -291,7 +291,7 @@ namespace NKikimr::NSQS {
 
         RunYqlQuery(RemoveQueueFromListQuery, std::move(params), false, TDuration::Zero(), Cfg().GetRoot(), ctx);
     }
-    
+
     std::optional<std::pair<TString, bool>> TCleanupQueueDataActor::GetNextTable() const {
         const auto& tables = IsFifoQueue ? FifoTables : StdTables;
         if (ClearedTablesCount < tables.size()) {
@@ -299,7 +299,7 @@ namespace NKikimr::NSQS {
         }
         return std::nullopt;
     }
-    
+
     void TCleanupQueueDataActor::RunRemoveData(const TActorContext& ctx) {
         if (ctx.Now() - StartProcessTimestamp > UPDATE_LOCK_PERIOD) {
             UpdateLock(ctx);
@@ -325,7 +325,7 @@ namespace NKikimr::NSQS {
 
         RunYqlQuery(RemoveDataQuery, std::move(params), false, TDuration::Zero(), Cfg().GetRoot(), ctx);
     }
-    
+
     void TCleanupQueueDataActor::ClearNextTable(const TActorContext& ctx) {
         auto tableInfo = GetNextTable();
         if (!tableInfo) {
@@ -334,7 +334,7 @@ namespace NKikimr::NSQS {
         }
         auto& [tableName, hasShardColumn] = tableInfo.value();
         auto table = GetCommonTablePath(tableName, IsFifoQueue);
-        
+
         TString condition;
         if (hasShardColumn) {
             ShardsToRemove = Shards;
@@ -358,6 +358,6 @@ namespace NKikimr::NSQS {
 
         RunRemoveData(ctx);
     }
-    
+
 
 } // namespace NKikimr::NSQS

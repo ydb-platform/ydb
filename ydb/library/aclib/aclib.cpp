@@ -178,7 +178,7 @@ ui32 TSecurityObject::GetEffectiveAccessRights(const TUserToken& user) const {
 
 bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
     if (user.IsSystemUser()) {
-        return true; // the system alway has access
+        return true; // the system always has access
     }
     if (HasOwnerSID() && user.IsExist(GetOwnerSID()))
         return true; // the owner always has access
@@ -377,6 +377,16 @@ std::pair<ui32, ui32> TACL::RemoveAccess(const NACLibProto::TACE& filter) {
         ACL->RemoveLast();
     }
     return modified;
+}
+
+bool TACL::HasAccess(const NACLib::TSID& sid) {
+    for (const auto& ace : GetACE()) {
+        if (ace.GetSID() == sid) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 void TACL::SortACL() {
@@ -805,6 +815,11 @@ TString AccessRightsToString(ui32 accessRights) {
 const NACLib::TUserToken& TSystemUsers::Metadata() {
     static TUserToken GlobalMetadataUser = TUserToken(BUILTIN_ACL_METADATA, {});
     return GlobalMetadataUser;
+}
+
+const NACLib::TUserToken& TSystemUsers::Tmp() {
+    static TUserToken GlobalTmpUser = TUserToken(BUILTIN_ACL_TMP, {});
+    return GlobalTmpUser;
 }
 
 }

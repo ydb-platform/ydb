@@ -4,7 +4,10 @@
 
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include <ydb/core/base/path.h>
+#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -20,7 +23,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TUpdateMainTableOnIndexMove TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -84,7 +87,7 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
 
             auto notice = tx.MutableMoveIndex();
-            PathIdFromPathId(pathId, notice->MutablePathId());
+            pathId.ToProto(notice->MutablePathId());
             notice->SetTableSchemaVersion(table->AlterVersion + 1);
 
             auto remap = notice->MutableReMapIndex();
@@ -113,8 +116,8 @@ public:
                                  << ", type: " << (int)txState->TxType
                                  << ", parent pathId: " << pathId);
                     if (pathId == parent.Base()->PathId) {
-                        PathIdFromPathId(txState->SourcePathId, remap->MutableSrcPathId());
-                        PathIdFromPathId(txState->TargetPathId, remap->MutableDstPathId());
+                        txState->SourcePathId.ToProto(remap->MutableSrcPathId());
+                        txState->TargetPathId.ToProto(remap->MutableDstPathId());
                         auto targetIndexName = context.SS->PathsById.at(txState->TargetPathId);
 
                         for (const auto& [_, childPathId] : path->GetChildren()) {
@@ -122,7 +125,7 @@ public:
                             auto childPath = context.SS->PathsById.at(childPathId);
 
                             if (childPath->Name == targetIndexName->Name) {
-                                PathIdFromPathId(childPathId, remap->MutableReplacedPathId());
+                                childPathId.ToProto(remap->MutableReplacedPathId());
                                 remap->SetDstName(childPath->Name);
                             }
                         }
@@ -268,7 +271,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " HandleReply TEvPrivate:TEvCompleteBarrier"
                                << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -300,7 +303,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
         return false;
@@ -572,19 +575,19 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
                 result.push_back(CreateDropTableIndex(NextPartId(nextId, result), indexDropping));
             }
 
-            for (const auto& items: dstIndexPath.Base()->GetChildren()) {
-                Y_ABORT_UNLESS(context.SS->PathsById.contains(items.second));
-                auto implPath = context.SS->PathsById.at(items.second);
+            for (const auto& [name, pathId]: dstIndexPath.Base()->GetChildren()) {
+                Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
+                auto implPath = context.SS->PathsById.at(pathId);
                 if (implPath->Dropped()) {
                     continue;
                 }
 
-                auto implTable = context.SS->PathsById.at(items.second);
+                auto implTable = context.SS->PathsById.at(pathId);
                 Y_ABORT_UNLESS(implTable->IsTable());
 
                 auto implTableDropping = TransactionTemplate(dstIndexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
                 auto operation = implTableDropping.MutableDrop();
-                operation->SetName(items.first);
+                operation->SetName(name);
 
                 result.push_back(CreateDropTable(NextPartId(nextId, result), implTableDropping));
             }
@@ -593,14 +596,17 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
 
     result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcIndexPath, dstIndexPath)));
 
-    TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;
-    TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
+    for(const auto& implTable : srcIndexPath.Base()->GetChildren()) {
+        TString srcImplTableName = implTable.first;
+        TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
 
-    Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second);
+        Y_ABORT_UNLESS(srcImplTable.Base()->PathId == implTable.second);
 
-    TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
+        TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-    result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
+        result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
+    }
+
     return result;
 }
 

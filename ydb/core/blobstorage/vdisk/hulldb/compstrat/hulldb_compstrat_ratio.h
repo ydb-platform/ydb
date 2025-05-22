@@ -163,11 +163,9 @@ namespace NKikimr {
                     ratio->HugeDataTotal += hugeDataSize;
                     // calculate keep status
                     bool allowKeepFlags = HullCtx->AllowKeepFlags;
-                    NGc::TKeepStatus keep = BarriersEssence->Keep(dbIt.GetCurKey(),
-                                                                  dbMerger.GetMemRec(),
-                                                                  dbMerger.GetMemRecsMerged(),
-                                                                  allowKeepFlags,
-                                                                  AllowGarbageCollection);
+                    NGc::TKeepStatus keep = BarriersEssence->Keep(dbIt.GetCurKey(), dbMerger.GetMemRec(),
+                        {subsMerger.GetNumKeepFlags(), subsMerger.GetNumDoNotKeepFlags(), dbMerger.GetNumKeepFlags(),
+                        dbMerger.GetNumDoNotKeepFlags()}, allowKeepFlags, AllowGarbageCollection);
                     if (keep.KeepIndex) {
                         // calculate index overhead
                         ratio->IndexItemsKeep++;

@@ -6,7 +6,8 @@
 
 #include <yt/yt/core/misc/lazy_ptr.h>
 #include <yt/yt/core/misc/blob_output.h>
-#include <yt/yt/core/misc/phoenix.h>
+
+#include <yt/yt/core/phoenix/context.h>
 
 #include <util/generic/cast.h>
 

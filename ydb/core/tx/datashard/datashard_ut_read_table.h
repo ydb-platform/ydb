@@ -4,7 +4,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr {
 namespace NDataShardReadTableTest {
@@ -73,7 +73,7 @@ namespace NDataShardReadTableTest {
                 case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResponseData: {
                     const auto rsData = msg->Record.GetSerializedReadTableResponse();
                     Ydb::ResultSet rsParsed;
-                    Y_ABORT_UNLESS(rsParsed.ParseFromString(rsData));
+                    Y_ENSURE(rsParsed.ParseFromString(rsData));
                     NYdb::TResultSet rs(rsParsed);
                     auto& columns = rs.GetColumnsMeta();
                     NYdb::TResultSetParser parser(rs);
@@ -160,7 +160,7 @@ namespace NDataShardReadTableTest {
                 break;
 
             default:
-                Y_ABORT("Unhandled");
+                Y_ENSURE(false, "Unhandled");
             }
         }
 
@@ -178,9 +178,12 @@ namespace NDataShardReadTableTest {
             case NYdb::EPrimitiveType::Timestamp:
                 out << parser.GetTimestamp();
                 break;
+            case NYdb::EPrimitiveType::Uuid:
+                out << parser.GetUuid().ToString();
+                break;
 
             default:
-                Y_ABORT("Unhandled");
+                Y_ENSURE(false, "Unhandled");
             }
         }
 

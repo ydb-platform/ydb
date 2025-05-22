@@ -1,0 +1,19 @@
+PRAGMA dq.EnableDqReplicate = "1";
+PRAGMA DisableSimpleColumns;
+
+PRAGMA dq.MaxTasksPerStage='200';
+PRAGMA dq.MaxTasksPerOperation='1700';
+PRAGMA dq.HashJoinMode = "grace";
+PRAGMA dq.HashShuffleTasksRatio="1.0";
+PRAGMA dq.HashShuffleMaxTasks="200";
+
+-- pragma dq.AggregateStatsByStage="false";
+pragma dq.ComputeActorType="sync";
+pragma dq.OptLLVM="off";
+
+PRAGMA s3.UseBlocksSource="true";
+pragma OrderedColumns="true";
+
+pragma FilterPushdownOverJoinOptionalSide;
+pragma RotateJoinTree="false";
+pragma AnsiOptionalAs="true";

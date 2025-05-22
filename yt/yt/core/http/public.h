@@ -2,8 +2,6 @@
 
 #include <yt/yt/core/misc/common.h>
 
-#include <util/generic/size_literals.h>
-
 namespace NYT::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -22,11 +20,11 @@ DECLARE_REFCOUNTED_STRUCT(IResponseChecker)
 DECLARE_REFCOUNTED_STRUCT(IRequestPathMatcher)
 DECLARE_REFCOUNTED_STRUCT(IHttpHandler)
 
-DECLARE_REFCOUNTED_CLASS(THttpIOConfig)
-DECLARE_REFCOUNTED_CLASS(TServerConfig)
-DECLARE_REFCOUNTED_CLASS(TClientConfig)
-DECLARE_REFCOUNTED_CLASS(TRetryingClientConfig)
-DECLARE_REFCOUNTED_CLASS(TCorsConfig)
+DECLARE_REFCOUNTED_STRUCT(THttpIOConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerConfig)
+DECLARE_REFCOUNTED_STRUCT(TClientConfig)
+DECLARE_REFCOUNTED_STRUCT(TRetryingClientConfig)
+DECLARE_REFCOUNTED_STRUCT(TCorsConfig)
 
 DECLARE_REFCOUNTED_CLASS(TConnectionPool)
 
@@ -34,9 +32,9 @@ DECLARE_REFCOUNTED_CLASS(TSharedRefOutputStream)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TContentEncoding = TString;
-
-static constexpr size_t DefaultStreamBufferSize = 32_KB;
+using TContentEncoding = std::string;
+using TConnectionId = TGuid;
+using TRequestId = TGuid;
 
 ////////////////////////////////////////////////////////////////////////////////
 

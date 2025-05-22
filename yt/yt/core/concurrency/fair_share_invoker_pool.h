@@ -6,6 +6,7 @@
 #include <yt/yt/core/actions/invoker_pool.h>
 #include <yt/yt/core/actions/public.h>
 
+#include <yt/yt/core/misc/adjusted_exponential_moving_average.h>
 #include <yt/yt/core/misc/public.h>
 
 #include <yt/yt/core/profiling/public.h>
@@ -48,16 +49,42 @@ using TFairShareCallbackQueueFactory = std::function<IFairShareCallbackQueuePtr(
 //! so use with care in case of multiple workers in the underlying invoker.
 //! Factory #callbackQueueFactory is used by the invoker pool for creation of the storage for callbacks.
 //! Ability to specify #callbackQueueFactory is provided for testing purposes.
-IDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
+TDiagnosableInvokerPoolPtr CreateFairShareInvokerPool(
     IInvokerPtr underlyingInvoker,
     int invokerCount,
     TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
-    THistoricUsageAggregationParameters aggregatorParameters =
-        THistoricUsageAggregationParameters{
-            EHistoricUsageAggregationMode::ExponentialMovingAverage,
-            /*emaAlpha*/ THistoricUsageAggregationParameters::DefaultEmaAlpha,
-        });
+    TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Creates invoker pool from above with invokerCount = bucketNames.size()
+//! And adds profiling on top of it.
+
+TDiagnosableInvokerPoolPtr CreateProfiledFairShareInvokerPool(
+    IInvokerPtr underlyingInvoker,
+    TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
+    TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife,
+    const std::string& poolName = "fair_share_invoker_pool",
+    std::vector<std::string> bucketNames = {},
+    NProfiling::IRegistryPtr registry = nullptr);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Same as above but bucket names are derived from EInvoker domain values.
+
+template <class EInvoker>
+    requires TEnumTraits<EInvoker>::IsEnum
+TDiagnosableInvokerPoolPtr CreateEnumIndexedProfiledFairShareInvokerPool(
+    IInvokerPtr underlyingInvoker,
+    TFairShareCallbackQueueFactory callbackQueueFactory = CreateFairShareCallbackQueue,
+    TDuration actionTimeRelevancyHalflife = TAdjustedExponentialMovingAverage::DefaultHalflife,
+    const std::string& poolName = "fair_share_invoker_pool",
+    NProfiling::IRegistryPtr registry = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
+
+#define FAIR_SHARE_INVOKER_POOL_INL_H_
+#include "fair_share_invoker_pool-inl.h"
+#undef FAIR_SHARE_INVOKER_POOL_INL_H_

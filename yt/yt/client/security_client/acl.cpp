@@ -16,7 +16,7 @@ TSerializableAccessControlEntry::TSerializableAccessControlEntry() = default;
 
 TSerializableAccessControlEntry::TSerializableAccessControlEntry(
     ESecurityAction action,
-    std::vector<TString> subjects,
+    std::vector<std::string> subjects,
     EPermissionSet permissions,
     EAceInheritanceMode inheritanceMode)
     : Action(action)
@@ -24,22 +24,6 @@ TSerializableAccessControlEntry::TSerializableAccessControlEntry(
     , Permissions(permissions)
     , InheritanceMode(inheritanceMode)
 { }
-
-bool operator == (const TSerializableAccessControlEntry& lhs, const TSerializableAccessControlEntry& rhs)
-{
-    return
-        lhs.Action == rhs.Action &&
-        lhs.Subjects == rhs.Subjects &&
-        lhs.Permissions == rhs.Permissions &&
-        lhs.InheritanceMode == rhs.InheritanceMode &&
-        lhs.Columns == rhs.Columns &&
-        lhs.Vital == rhs.Vital;
-}
-
-bool operator != (const TSerializableAccessControlEntry& lhs, const TSerializableAccessControlEntry& rhs)
-{
-    return !(lhs == rhs);
-}
 
 // NB(levysotsky): We don't use TYsonStruct here
 // because we want to mirror the TAccessControlList structure,
@@ -173,23 +157,13 @@ void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& c
     Persist(context, Subjects);
     Persist(context, Permissions);
     Persist(context, InheritanceMode);
-    // COMPAT(vovamelnikov)
-    if (context.IsLoad() && context.GetVersion() < 301305) {
-        SubjectTagFilter =  {};
-    } else {
-        Persist(context, SubjectTagFilter);
-    }
+    Persist(context, SubjectTagFilter);
     // NB: Columns and Vital are not persisted since this method is intended only for use in controller.
 }
 
 bool operator == (const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs)
 {
     return lhs.Entries == rhs.Entries;
-}
-
-bool operator != (const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs)
-{
-    return !(lhs == rhs);
 }
 
 void Serialize(const TSerializableAccessControlList& acl, NYson::IYsonConsumer* consumer)

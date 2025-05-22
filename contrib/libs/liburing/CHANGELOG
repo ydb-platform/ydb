@@ -1,3 +1,75 @@
+liburing-2.9 release
+
+- Add support for ring resizing
+- Add support for registered waits
+- Test additions and improvements
+- Fix bug with certain ring setups with SQE128 set not fully closing
+  the ring after io_uring_queue_exit(3) had been called.
+- Various man page fixes and updates
+
+liburing-2.8 release
+
+- Add support for incrementally/partially consumed provided buffers,
+  usable with the provided buffer ring support.
+- Add support for foo_and_wait_min_timeout(), where it's possible to
+  define a minimum timeout for waiting to get batches of completions,
+  but if that fails, extend for a longer timeout without having any
+  extra context switches.
+- Add support for using different clock sources for completion waiting.
+- Great increase coverage of test cases, test case improvements and
+  fixes.
+- Man page updates
+- Don't leak _GNU_SOURCE via pkb-config --cflags
+- Support for address sanitizer
+- Add examples/kdigest sample program
+- Add discard helper, test, and man page
+
+liburing-2.7 release
+
+- Man page updates
+- Sync with kernel 6.10
+	- send/recv bundle support
+	- accept nowait and CQE_F_MORE
+- Add and update test cases
+- Fix io_uring_queue_init_mem() returning a value that was too small,
+  potentially causing memory corruption in userspace by overwriting
+  64 bytes beyond the returned value. Also add test case for that.
+- Add 64-bit length variants of io_uring_prep_{m,f}advise()
+- Add BIND/LISTEN support and helpers / man pages
+- Add io_uring_enable_rings.3 man page
+- Fix bug in io_uring_prep_read_multishot()
+- Fixup bundle test cases
+- Add fixed-hugepage test case
+- Fix io_uring_prep_fixed_fd_install.3 man page
+- Note 'len' == 0 requirement in io_uring_prep_send.3 man page
+- Fix some test cases for skipping on older kernels
+
+liburing-2.6 release
+
+- Add getsockopt and setsockopt socket commands
+- Add test cases to test/hardlink
+- Man page fixes
+- Add futex support, and test cases
+- Add waitid support, and test cases
+- Add read multishot, and test cases
+- Add support for IORING_SETUP_NO_SQARRAY
+- Use IORING_SETUP_NO_SQARRAY as the default
+- Add support for IORING_OP_FIXED_FD_INSTALL
+- Add io_uring_prep_fixed_fd_install() helper
+- Support for napi busy polling
+- Improve/add test cases
+- Man page fixes
+- Add sample 'proxy' example
+
+liburing-2.5 release
+
+- Add support for io_uring_prep_cmd_sock()
+- Add support for application allocated ring memory, for placing rings
+  in huge mem. Available through io_uring_queue_init_mem().
+- Add support for registered ring fds
+- Various documentation updates
+- Various fixes
+
 liburing-2.4 release
 
 - Add io_uring_{major,minor,check}_version() functions.
@@ -15,6 +87,7 @@ liburing-2.4 release
   io_uring_prep_socket_direct() factor in being called with
   IORING_FILE_INDEX_ALLOC for allocating a direct descriptor.
 - Add io_uring_prep_sendto() function.
+- Add io_uring_prep_cmd_sock() function.
 
 liburing-2.3 release
 

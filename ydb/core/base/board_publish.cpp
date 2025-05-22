@@ -97,7 +97,6 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     const TString Path;
     const TString Payload;
     const TActorId Owner;
-    const ui32 StateStorageGroupId;
     const ui32 TtlMs;
     const bool Register;
     const TBoardRetrySettings BoardRetrySettings;
@@ -139,11 +138,14 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
                 Send(xpair.second.PublishActor, new TEvents::TEvPoisonPill());
         }
 
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(), SelfId(),
+            nullptr, 0));
+
         TActor::PassAway();
     }
 
     void HandleUndelivered() {
-        BLOG_ERROR("publish on unavailable statestorage board service " << StateStorageGroupId);
+        BLOG_ERROR("publish on unavailable statestorage board service");
         Become(&TThis::StateCalm);
     }
 
@@ -151,15 +153,27 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
         auto *msg = ev->Get();
 
         if (msg->Replicas.empty()) {
-            BLOG_ERROR("publish on unconfigured statestorage board service " << StateStorageGroupId);
+            Y_ABORT_UNLESS(ReplicaPublishActors.empty());
+            BLOG_ERROR("publish on unconfigured statestorage board service");
         } else {
             auto now = TlsActivationContext->Monotonic();
+
             for (auto &replicaId : msg->Replicas) {
                 auto& publishActorState = ReplicaPublishActors[replicaId];
                 if (publishActorState.RetryState.LastRetryAt == TMonotonic::Zero()) {
                     publishActorState.PublishActor =
                         RegisterWithSameMailbox(new TBoardReplicaPublishActor(Path, Payload, replicaId, SelfId()));
                     publishActorState.RetryState.LastRetryAt = now;
+                }
+            }
+            THashSet<TActorId> usedReplicas(msg->Replicas.begin(), msg->Replicas.end());
+            for (auto it = ReplicaPublishActors.begin(); it != ReplicaPublishActors.end(); ) {
+                if (usedReplicas.contains(it->first)) {
+                    ++it;
+                } else {
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, it->second.PublishActor,
+                        SelfId(), nullptr, 0));
+                    ReplicaPublishActors.erase(it++);
                 }
             }
         }
@@ -238,12 +252,11 @@ public:
     }
 
     TBoardPublishActor(
-        const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg,
+        const TString &path, const TString &payload, const TActorId &owner, ui32 ttlMs, bool reg,
         TBoardRetrySettings boardRetrySettings)
         : Path(path)
         , Payload(payload)
         , Owner(owner)
-        , StateStorageGroupId(groupId)
         , TtlMs(ttlMs)
         , Register(reg)
         , BoardRetrySettings(std::move(boardRetrySettings))
@@ -253,8 +266,8 @@ public:
     }
 
     void Bootstrap() {
-        const TActorId proxyId = MakeStateStorageProxyID(StateStorageGroupId);
-        Send(proxyId, new TEvStateStorage::TEvResolveBoard(Path), IEventHandle::FlagTrackDelivery);
+        const TActorId proxyId = MakeStateStorageProxyID();
+        Send(proxyId, new TEvStateStorage::TEvResolveBoard(Path, true), IEventHandle::FlagTrackDelivery);
 
         Become(&TThis::StateResolve);
     }
@@ -269,6 +282,7 @@ public:
 
     STATEFN(StateCalm) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TEvStateStorage::TEvPublishActorGone, CalmGone);
             hFunc(TEvPrivate::TEvRetryPublishActor, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
@@ -277,9 +291,9 @@ public:
 };
 
 IActor* CreateBoardPublishActor(
-        const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg,
+        const TString &path, const TString &payload, const TActorId &owner, ui32 ttlMs, bool reg,
         TBoardRetrySettings boardRetrySettings) {
-    return new TBoardPublishActor(path, payload, owner, groupId, ttlMs, reg, std::move(boardRetrySettings));
+    return new TBoardPublishActor(path, payload, owner, ttlMs, reg, std::move(boardRetrySettings));
 }
 
 TString MakeEndpointsBoardPath(const TString &database) {

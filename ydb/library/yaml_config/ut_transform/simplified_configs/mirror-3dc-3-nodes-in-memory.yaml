@@ -1,0 +1,104 @@
+erasure: mirror-3-dc
+host_configs:
+- host_config_id: 1
+  drive:
+  - type: RAM
+  - type: RAM
+  - type: RAM
+hosts:
+- host: localhost
+  host_config_id: 1
+  port: 19001
+  location:
+    data_center: '1'
+- host: localhost
+  host_config_id: 1
+  port: 19002
+  location:
+    data_center: '2'
+- host: localhost
+  host_config_id: 1
+  port: 19003
+  location:
+    data_center: '3'
+domains_config:
+  domain:
+  - name: Root
+    storage_pool_types:
+    - kind: ssd
+      pool_config:
+        box_id: 1
+        kind: ssd
+        geometry:
+          realm_level_begin: 10
+          realm_level_end: 20
+          domain_level_begin: 10
+          domain_level_end: 256
+        pdisk_filter:
+        - property:
+          - type: SSD
+  state_storage:
+  - ring:
+      node: [1, 2, 3]
+      nto_select: 3
+    ssid: 1
+blob_storage_config:
+  service_set:
+    groups:
+    - rings:
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "localhost:19001"
+            pdisk_category: SSD
+            path: SectorMap:1:64
+        - vdisk_locations:
+          - node_id: "localhost:19001"
+            pdisk_category: SSD
+            path: SectorMap:2:64
+        - vdisk_locations:
+          - node_id: "localhost:19001"
+            pdisk_category: SSD
+            path: SectorMap:3:64
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "localhost:19002"
+            pdisk_category: SSD
+            path: SectorMap:1:64
+        - vdisk_locations:
+          - node_id: "localhost:19002"
+            pdisk_category: SSD
+            path: SectorMap:2:64
+        - vdisk_locations:
+          - node_id: "localhost:19002"
+            pdisk_category: SSD
+            path: SectorMap:3:64
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: "localhost:19003"
+            pdisk_category: SSD
+            path: SectorMap:1:64
+        - vdisk_locations:
+          - node_id: "localhost:19003"
+            pdisk_category: SSD
+            path: SectorMap:2:64
+        - vdisk_locations:
+          - node_id: "localhost:19003"
+            pdisk_category: SSD
+            path: SectorMap:3:64
+tls:
+  cert: "/opt/ydb/certs/node.crt"
+  key: "/opt/ydb/certs/node.key"
+  ca: "/opt/ydb/certs/ca.crt"
+channel_profile_config:
+  profile:
+  - channel:
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    - erasure_species: mirror-3-dc
+      pdisk_category: 1
+      storage_pool_kind: ssd
+    profile_id: 0

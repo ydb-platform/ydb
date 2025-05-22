@@ -3,280 +3,18 @@
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <ydb/core/util/light.h>
 
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
-
 
 namespace NKikimr {
 
 struct TPDiskConfig;
-
-inline NHPTimer::STime HPNow() {
-    NHPTimer::STime ret;
-    GetTimeFast(&ret);
-    return ret;
-}
-
-inline double HPSecondsFloat(i64 cycles) {
-    if (cycles > 0) {
-        return double(cycles) / NHPTimer::GetClockRate();
-    } else {
-        return 0.0;
-    }
-}
-
-inline double HPMilliSecondsFloat(i64 cycles) {
-    if (cycles > 0) {
-        return double(cycles) * 1000.0 / NHPTimer::GetClockRate();
-    } else {
-        return 0;
-    }
-}
-
-inline ui64 HPMilliSeconds(i64 cycles) {
-    return (ui64)HPMilliSecondsFloat(cycles);
-}
-
-inline ui64 HPMicroSecondsFloat(i64 cycles) {
-    if (cycles > 0) {
-        return double(cycles) * 1000000.0 / NHPTimer::GetClockRate();
-    } else {
-        return 0;
-    }
-}
-
-inline ui64 HPMicroSeconds(i64 cycles) {
-    return (ui64)HPMicroSecondsFloat(cycles);
-}
-
-inline ui64 HPNanoSeconds(i64 cycles) {
-    if (cycles > 0) {
-        return ui64(double(cycles) * 1000000000.0 / NHPTimer::GetClockRate());
-    } else {
-        return 0;
-    }
-}
-
-inline ui64 HPCyclesNs(ui64 ns) {
-    return ui64(NHPTimer::GetClockRate() * double(ns) / 1000000000.0);
-}
-
-inline ui64 HPCyclesUs(ui64 us) {
-    return ui64(NHPTimer::GetClockRate() * double(us) / 1000000.0);
-}
-
-inline ui64 HPCyclesMs(ui64 ms) {
-    return ui64(NHPTimer::GetClockRate() * double(ms) / 1000.0);
-}
-
-class TLightBase {
-protected:
-    TString Name;
-    ::NMonitoring::TDynamicCounters::TCounterPtr State; // Current state (0=OFF=green, 1=ON=red)
-    ::NMonitoring::TDynamicCounters::TCounterPtr Count; // Number of switches to ON state
-    ::NMonitoring::TDynamicCounters::TCounterPtr RedMs; // Time elapsed in ON state
-    ::NMonitoring::TDynamicCounters::TCounterPtr GreenMs; // Time elapsed in OFF state
-private:
-    ui64 RedCycles = 0;
-    ui64 GreenCycles = 0;
-    NHPTimer::STime AdvancedTill = 0;
-    NHPTimer::STime LastNow = 0;
-    ui64 UpdateThreshold = 0;
-public:
-    void Initialize(TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& name) {
-        Name = name;
-        State = counters->GetCounter(name + "_state");
-        Count = counters->GetCounter(name + "_count", true);
-        RedMs = counters->GetCounter(name + "_redMs", true);
-        GreenMs = counters->GetCounter(name + "_greenMs", true);
-        UpdateThreshold = HPCyclesMs(100);
-        AdvancedTill = Now();
-    }
-
-    void Initialize(TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& countName,
-            const TString& redMsName,const TString& greenMsName) {
-        Count = counters->GetCounter(countName, true);
-        RedMs = counters->GetCounter(redMsName, true);
-        GreenMs = counters->GetCounter(greenMsName, true);
-        UpdateThreshold = HPCyclesMs(100);
-        AdvancedTill = Now();
-    }
-
-    ui64 GetCount() const {
-        return *Count;
-    }
-
-    ui64 GetRedMs() const {
-        return *RedMs;
-    }
-
-    ui64 GetGreenMs() const {
-        return *GreenMs;
-    }
-protected:
-    void Modify(bool state, bool prevState) {
-        if (state && !prevState) { // Switched to ON state
-            if (State) {
-                *State = true;
-            }
-            (*Count)++;
-            return;
-        }
-        if (!state && prevState) { // Switched to OFF state
-            if (State) {
-                *State = false;
-            }
-            return;
-        }
-    }
-
-    void Advance(bool state, NHPTimer::STime now) {
-        if (now == AdvancedTill) {
-            return;
-        }
-        Elapsed(state, now - AdvancedTill);
-        if (RedCycles > UpdateThreshold) {
-            *RedMs += CutMs(RedCycles);
-        }
-        if (GreenCycles > UpdateThreshold) {
-            *GreenMs += CutMs(GreenCycles);
-        }
-        AdvancedTill = now;
-    }
-
-    NHPTimer::STime Now() {
-        // Avoid time going backwards
-        NHPTimer::STime now = HPNow();
-        if (now < LastNow) {
-            now = LastNow;
-        }
-        LastNow = now;
-        return now;
-    }
-private:
-    void Elapsed(bool state, ui64 cycles) {
-        if (state) {
-            RedCycles += cycles;
-        } else {
-            GreenCycles += cycles;
-        }
-    }
-
-    ui64 CutMs(ui64& src) {
-        ui64 ms = HPMilliSeconds(src);
-        ui64 cycles = HPCyclesMs(ms);
-        src -= cycles;
-        return ms;
-    }
-};
-
-// Thread-safe light
-class TLight : public TLightBase {
-private:
-    struct TItem {
-        bool State;
-        bool Filled;
-        TItem(bool state = false, bool filled = false)
-            : State(state)
-            , Filled(filled)
-        {}
-    };
-
-    // Cyclic buffer to enforce event ordering by seqno
-    TSpinLock Lock;
-    size_t HeadIdx = 0; // Index of current state
-    size_t FilledCount = 0;
-    ui16 Seqno = 0; // Current seqno
-    TStackVec<TItem, 32> Data; // In theory should have not more than thread count items
-public:
-    TLight() {
-        InitData();
-    }
-
-    void Set(bool state, ui16 seqno) {
-        TGuard<TSpinLock> g(Lock);
-        Push(state, seqno);
-        bool prevState;
-        // Note that 'state' variable is being reused
-        NHPTimer::STime now = Now();
-        while (Pop(state, prevState)) {
-            Modify(state, prevState);
-            Advance(prevState, now);
-        }
-    }
-
-    void Update() {
-        TGuard<TSpinLock> g(Lock);
-        Advance(Data[HeadIdx].State, Now());
-    }
-
-private:
-    void InitData(bool state = false, bool filled = false) {
-        Data.clear();
-        Data.emplace_back(state, filled);
-        Data.resize(32);
-        HeadIdx = 0;
-    }
-
-    void Push(bool state, ui16 seqno) {
-        FilledCount++;
-        if (FilledCount == 1) { // First event must initialize seqno
-            Seqno = seqno;
-            InitData(state, true);
-            if (state) {
-                Modify(true, false);
-            }
-            return;
-        }
-        Y_ABORT_UNLESS(seqno != Seqno, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
-        ui16 diff = seqno;
-        diff -= Seqno; // Underflow is fine
-        size_t size = Data.size();
-        if (size <= diff) { // Buffer is full -- extend and move wrapped part
-            Data.resize(size * 2);
-            for (size_t i = 0; i < HeadIdx; i++) {
-                Data[size + i] = Data[i];
-                Data[i].Filled = false;
-            }
-        }
-        TItem& item = Data[(HeadIdx + diff) % Data.size()];
-        Y_ABORT_UNLESS(!item.Filled, "ordering overflow or duplicate event headSeqno# %d seqno# %d state# %d filled# %d",
-                 (int)Seqno, (int)seqno, (int)state, (int)CountFilled());
-        item.Filled = true;
-        item.State = state;
-    }
-
-    bool Pop(bool& state, bool& prevState) {
-        size_t nextIdx = (HeadIdx + 1) % Data.size();
-        TItem& head = Data[HeadIdx];
-        TItem& next = Data[nextIdx];
-        if (!head.Filled || !next.Filled) {
-            return false;
-        }
-        state = next.State;
-        prevState = head.State;
-        head.Filled = false;
-        HeadIdx = nextIdx;
-        Seqno++; // Overflow is fine
-        FilledCount--;
-        if (FilledCount == 1 && Data.size() > 32) {
-            InitData(state, true);
-        }
-        return true;
-    }
-
-    size_t CountFilled() const {
-        size_t ret = 0;
-        for (const TItem& item : Data) {
-            ret += item.Filled;
-        }
-        return ret;
-    }
-};
 
 class TBurstmeter {
 private:
@@ -289,8 +27,9 @@ public:
 
     void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters,
                     const TString& group, const TString& subgroup, const TString& name,
-                    const TVector<float> &thresholds) {
-        Tracker.Initialize(counters, group, subgroup, name, thresholds);
+                    const TVector<float> &thresholds,
+                    NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public) {
+        Tracker.Initialize(counters, group, subgroup, name, thresholds, visibility);
     }
 
     double Increment(ui64 tokens) {
@@ -334,6 +73,7 @@ struct TPDiskMon {
             Booting,
             OK,
             Error,
+            Stopped
         };
 
         enum EDetailedState {
@@ -362,6 +102,7 @@ struct TPDiskMon {
             ErrorDeviceSerialMismatch,
             ErrorFake,
             BootingReencryptingFormat,
+            StoppedByYardControl,
         };
 
         static TString StateToStr(i64 val) {
@@ -373,6 +114,7 @@ struct TPDiskMon {
                 case Booting: return "Booting";
                 case OK: return "OK";
                 case Error: return "Error";
+                case Stopped: return "Stopped";
                 default: return "Unknown";
             }
         }
@@ -404,6 +146,7 @@ struct TPDiskMon {
                 case ErrorDeviceSerialMismatch: return "ErrorDeviceSerialMismatch";
                 case ErrorFake: return "ErrorFake";
                 case BootingReencryptingFormat: return "BootingReencryptingFormat";
+                case StoppedByYardControl: return "StoppedByYardControl";
                 default: return "Unknown";
             }
         }
@@ -418,6 +161,8 @@ struct TPDiskMon {
 
         ::NMonitoring::TDynamicCounters::TCounterPtr PDiskThreadBusyTimeNs;
 
+        ui32 PDiskId = 0;
+
     public:
         NMonitoring::TPercentileTrackerLg<5, 4, 15> UpdateCycleTime;
 
@@ -425,6 +170,10 @@ struct TPDiskMon {
         TUpdateDurationTracker()
             : BeginUpdateAt(HPNow())
         {}
+
+        void SetPDiskId(ui32 pdiskId) {
+            PDiskId = pdiskId;
+        }
 
         void SetCounter(const ::NMonitoring::TDynamicCounters::TCounterPtr& pDiskThreadBusyTimeNs) {
             PDiskThreadBusyTimeNs = pDiskThreadBusyTimeNs;
@@ -461,18 +210,19 @@ struct TPDiskMon {
             }
         }
 
-        void UpdateEnded() {
+        float UpdateEnded() {
             NHPTimer::STime updateEndedAt = HPNow();
+            float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
             if (IsLwProbeEnabled) {
-                float entireUpdateMs = HPMilliSecondsFloat(updateEndedAt - BeginUpdateAt);
                 float inputQueueMs = HPMilliSecondsFloat(SchedulingStartAt - BeginUpdateAt);
                 float schedulingMs = HPMilliSecondsFloat(ProcessingStartAt - SchedulingStartAt);
                 float processingMs = HPMilliSecondsFloat(WaitingStartAt - ProcessingStartAt);
                 float waitingMs = HPMilliSecondsFloat(updateEndedAt - WaitingStartAt);
-                GLOBAL_LWPROBE(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails, entireUpdateMs, inputQueueMs,
+                GLOBAL_LWPROBE(BLOBSTORAGE_PROVIDER, PDiskUpdateCycleDetails, PDiskId, entireUpdateMs, inputQueueMs,
                         schedulingMs, processingMs, waitingMs);
             }
             BeginUpdateAt = updateEndedAt;
+            return entireUpdateMs;
         }
     };
 
@@ -563,6 +313,7 @@ struct TPDiskMon {
     THistogram DeviceReadDuration;
     THistogram DeviceWriteDuration;
     THistogram DeviceTrimDuration;
+    THistogram DeviceFlushDuration;
 
     // <BASE_BITS, EXP_BITS, FRAME_COUNT>
     using TDurationTracker = NMonitoring::TPercentileTrackerLg<5, 4, 15>;
@@ -653,16 +404,18 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkReadPayload;
     ::NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkReadSectorFooter;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteBufferCompactedBytes;
+
     struct TIoCounters {
         ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
         ::NMonitoring::TDynamicCounters::TCounterPtr Bytes;
         ::NMonitoring::TDynamicCounters::TCounterPtr Results;
 
-        void Setup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString name) {
+        void Setup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString name, NMonitoring::TCountableBase::EVisibility vis) {
             TIntrusivePtr<::NMonitoring::TDynamicCounters> subgroup = group->GetSubgroup("req", name);
-            Requests = subgroup->GetCounter("Requests", true);
-            Bytes = subgroup->GetCounter("Bytes", true);
-            Results = subgroup->GetCounter("Results", true);
+            Requests = subgroup->GetCounter("Requests", true, vis);
+            Bytes = subgroup->GetCounter("Bytes", true, vis);
+            Results = subgroup->GetCounter("Results", true, vis);
         }
 
         void CountRequest(ui32 size) {
@@ -692,10 +445,10 @@ struct TPDiskMon {
         ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
         ::NMonitoring::TDynamicCounters::TCounterPtr Results;
 
-        void Setup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString name) {
+        void Setup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString name, NMonitoring::TCountableBase::EVisibility vis) {
             TIntrusivePtr<::NMonitoring::TDynamicCounters> subgroup = group->GetSubgroup("req", name);
-            Requests = subgroup->GetCounter("Requests", true);
-            Results = subgroup->GetCounter("Results", true);
+            Requests = subgroup->GetCounter("Requests", true, vis);
+            Results = subgroup->GetCounter("Results", true, vis);
         }
 
         void CountRequest() {
@@ -718,12 +471,17 @@ struct TPDiskMon {
     TReqCounters YardSlay;
     TReqCounters YardControl;
 
+    TReqCounters ShredPDisk;
+    TReqCounters PreShredCompactVDisk;
+    TReqCounters ShredVDiskResult;
+    TReqCounters MarkDirty;
+
     TIoCounters WriteSyncLog;
     TIoCounters WriteFresh;
     TIoCounters WriteHuge;
     TIoCounters WriteComp;
     TIoCounters Trim;
-
+    TIoCounters ChunkShred;
     TIoCounters ReadSyncLog;
     TIoCounters ReadComp;
     TIoCounters ReadOnlineRt;
@@ -765,4 +523,3 @@ struct TPDiskMon {
 };
 
 } // NKikimr
-

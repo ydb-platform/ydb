@@ -1,7 +1,6 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_path_describer.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/scheme_board/populator.h>
 
@@ -13,7 +12,7 @@ using namespace NTabletFlatExecutor;
 struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
     using TDescription = NSchemeBoard::TTwoPartDescription;
 
-    TMap<TPathId, TDescription> Descriptions;
+    std::vector<std::pair<TPathId, TDescription>> Descriptions;
     TSideEffects::TPublications DelayedPublications;
 
     explicit TTxInitPopulator(TSelf *self, TSideEffects::TPublications&& publications)
@@ -49,7 +48,7 @@ struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
 
             auto result = DescribePath(Self, ctx, pathId);
             TDescription description(std::move(result->PreSerializedData), std::move(result->Record));
-            Descriptions.emplace(pathId, std::move(description));
+            Descriptions.emplace_back(pathId, std::move(description));
         }
 
         return true;
@@ -57,12 +56,9 @@ struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
 
     void Complete(const TActorContext& ctx) override {
         const ui64 tabletId = Self->TabletID();
-        const auto &domains = *AppData()->DomainsInfo;
-        const ui32 domainId = domains.GetDomainUidByTabletId(tabletId);
-        const ui32 boardSSId = domains.GetDomain(domainId).DefaultSchemeBoardGroup;
 
         IActor* populator = CreateSchemeBoardPopulator(
-            tabletId, Self->Generation(), boardSSId,
+            tabletId, Self->Generation(),
             std::move(Descriptions), Self->NextLocalPathId
         );
 

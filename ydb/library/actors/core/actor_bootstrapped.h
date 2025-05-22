@@ -1,6 +1,5 @@
 #pragma once
 
-#include "actorsystem.h"
 #include "actor.h"
 #include "events.h"
 #include <util/generic/noncopyable.h>
@@ -16,7 +15,7 @@ namespace NActors {
         }
 
         STFUNC(StateBootstrap) {
-            Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap, "Unexpected bootstrap message");
+            Y_ABORT_UNLESS(ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap, "Unexpected bootstrap message: %s", ev->GetTypeName().data());
             using T = decltype(&TDerived::Bootstrap);
             TDerived& self = static_cast<TDerived&>(*this);
             if constexpr (std::is_invocable_v<T, TDerived, const TActorContext&>) {
@@ -36,13 +35,9 @@ namespace NActors {
             : TActor<TDerived>(&TDerived::StateBootstrap) {
         }
 
-        template <class TEnum>
-        TActorBootstrapped(const TEnum activityType)
-            : TActor<TDerived>(&TDerived::StateBootstrap, activityType) {
-        }
-
-        TActorBootstrapped(const TString& activityName)
-            : TActor<TDerived>(&TDerived::StateBootstrap, activityName) {
+        template <typename T>
+        TActorBootstrapped(T&& activityType)
+            : TActor<TDerived>(&TDerived::StateBootstrap, std::forward<T>(activityType)) {
         }
     };
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -29,9 +30,5 @@ struct TTaskResourceEstimation {
 
 TTaskResourceEstimation BuildInitialTaskResources(const NYql::NDqProto::TDqTask& task);
 
-TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task,
-    const NKikimrConfig::TTableServiceConfig::TResourceManager& config, const ui32 tasksCount);
-
-void EstimateTaskResources(const NKikimrConfig::TTableServiceConfig::TResourceManager& config, TTaskResourceEstimation& result, const ui32 tasksCount);
 
 } // namespace NKikimr::NKqp

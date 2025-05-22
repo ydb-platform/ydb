@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/logoblob.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 
 #include <util/random/entropy.h>
 #include <util/random/mersenne.h>
@@ -73,29 +74,6 @@ struct TTabletInfo {
 };
 
 using TBSState = std::map<ui64, TTabletInfo>;
-
-struct TIntervals {
-    std::vector<ui32> Borders; // [0; x_1) [x_1; x_2) ... [x_n-1; x_n)
-
-    TIntervals(std::vector<ui32> borders) {
-        Borders = borders;
-        for (ui32 i = 1; i < Borders.size(); ++i) {
-            Borders[i] += Borders[i - 1];
-        }
-    }
-
-    ui32 GetInterval(ui32 x) {
-        for (ui32 i = 0; i < Borders.size(); ++i) {
-            if (x < Borders[i]) {
-                return i;
-            }
-        }
-        return Borders.size();
-    }
-    ui32 UpperLimit() {
-        return Borders[Borders.size() - 1];
-    }
-};
 
 struct TEvArgs {
     enum EEventType : ui32 {
@@ -180,6 +158,7 @@ struct TEvRangeArgs : public TEvArgs {
 };
 
 struct TBlobDepotTestEnvironment {
+    ui64 RandomSeed;
     TMersenne<ui32> Mt;
     TMersenne<ui64> Mt64;
 
@@ -190,7 +169,8 @@ struct TBlobDepotTestEnvironment {
 
     TBlobDepotTestEnvironment(ui32 seed = 0, ui32 numGroups = 1, ui32 nodeCount = 8,
             TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4)
-        : Mt(seed)
+        : RandomSeed(seed)
+        , Mt(seed)
         , Mt64(seed) {
         Cerr << "Mersenne random seed " << seed << Endl;
         ConfigureEnvironment(numGroups, Env, RegularGroups, BlobDepot, nodeCount, erasure);
@@ -222,7 +202,7 @@ struct TBlobDepotTestEnvironment {
         {
             auto *cmd = request.AddCommand()->MutableAllocateVirtualGroup();
             cmd->SetName("vg");
-            cmd->SetHiveId(envPtr->Runtime->GetDomainsInfo()->HivesByHiveUid.begin()->second);
+            cmd->SetHiveId(envPtr->Runtime->GetDomainsInfo()->GetHive());
             cmd->SetStoragePoolName(virtualPool);
             auto *prof = cmd->AddChannelProfiles();
             prof->SetStoragePoolName(envPtr->StoragePoolName);

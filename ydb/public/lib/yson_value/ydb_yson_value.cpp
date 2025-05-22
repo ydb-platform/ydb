@@ -1,7 +1,7 @@
 #include "ydb_yson_value.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <util/string/builder.h>
 
@@ -54,6 +54,18 @@ static void PrimitiveValueToYson(EPrimitiveType type, TValueParser& parser, NYso
             break;
         case EPrimitiveType::Interval:
             writer.OnInt64Scalar(parser.GetInterval());
+            break;
+        case EPrimitiveType::Date32:
+            writer.OnInt64Scalar(parser.GetDate32());
+            break;
+        case EPrimitiveType::Datetime64:
+            writer.OnInt64Scalar(parser.GetDatetime64());
+            break;
+        case EPrimitiveType::Timestamp64:
+            writer.OnInt64Scalar(parser.GetTimestamp64());
+            break;
+        case EPrimitiveType::Interval64:
+            writer.OnInt64Scalar(parser.GetInterval64());
             break;
         case EPrimitiveType::TzDate:
             writer.OnStringScalar(parser.GetTzDate());

@@ -38,16 +38,20 @@ __all__ = [
 ]
 
 
-def _usable_dir(path: Path) -> bool:
+def _usable_dir(path: os.PathLike) -> bool:
     """
-    Returns True iff the desired path can be used as database path because
+    Returns True if the desired path can be used as database path because
     either the directory exists and can be used, or its root directory can
     be used and we can make the directory as needed.
     """
-    while not path.exists():
-        # Loop terminates because the root dir ('/' on unix) always exists.
-        path = path.parent
-    return path.is_dir() and os.access(path, os.R_OK | os.W_OK | os.X_OK)
+    path = Path(path)
+    try:
+        while not path.exists():
+            # Loop terminates because the root dir ('/' on unix) always exists.
+            path = path.parent
+        return path.is_dir() and os.access(path, os.R_OK | os.W_OK | os.X_OK)
+    except PermissionError:
+        return False
 
 
 def _db_for_path(path=None):
@@ -59,7 +63,7 @@ def _db_for_path(path=None):
                 "https://hypothesis.readthedocs.io/en/latest/settings.html#settings-profiles"
             )
 
-        path = storage_directory("examples")
+        path = storage_directory("examples", intent_to_write=False)
         if not _usable_dir(path):  # pragma: no cover
             warnings.warn(
                 "The database setting is not configured, and the default "
@@ -71,7 +75,7 @@ def _db_for_path(path=None):
             return InMemoryExampleDatabase()
     if path in (None, ":memory:"):
         return InMemoryExampleDatabase()
-    return DirectoryBasedExampleDatabase(str(path))
+    return DirectoryBasedExampleDatabase(path)
 
 
 class _EDMeta(abc.ABCMeta):
@@ -220,18 +224,21 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
     def save(self, key: bytes, value: bytes) -> None:
         # Note: we attempt to create the dir in question now. We
         # already checked for permissions, but there can still be other issues,
-        # e.g. the disk is full
-        self._key_path(key).mkdir(exist_ok=True, parents=True)
-        path = self._value_path(key, value)
-        if not path.exists():
-            suffix = binascii.hexlify(os.urandom(16)).decode("ascii")
-            tmpname = path.with_suffix(f"{path.suffix}.{suffix}")
-            tmpname.write_bytes(value)
-            try:
-                tmpname.rename(path)
-            except OSError:  # pragma: no cover
-                tmpname.unlink()
-            assert not tmpname.exists()
+        # e.g. the disk is full, or permissions might have been changed.
+        try:
+            self._key_path(key).mkdir(exist_ok=True, parents=True)
+            path = self._value_path(key, value)
+            if not path.exists():
+                suffix = binascii.hexlify(os.urandom(16)).decode("ascii")
+                tmpname = path.with_suffix(f"{path.suffix}.{suffix}")
+                tmpname.write_bytes(value)
+                try:
+                    tmpname.rename(path)
+                except OSError:  # pragma: no cover
+                    tmpname.unlink()
+                assert not tmpname.exists()
+        except OSError:  # pragma: no cover
+            pass
 
     def move(self, src: bytes, dest: bytes, value: bytes) -> None:
         if src == dest:
@@ -349,8 +356,8 @@ class GitHubArtifactDatabase(ExampleDatabase):
         You must provide ``GITHUB_TOKEN`` as an environment variable. In CI, Github Actions provides
         this automatically, but it needs to be set manually for local usage. In a developer machine,
         this would usually be a `Personal Access Token <https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token>`_.
-        If the repository is private, it's necessary for the token to have `repo` scope
-        in the case of a classic token, or `actions:read` in the case of a fine-grained token.
+        If the repository is private, it's necessary for the token to have ``repo`` scope
+        in the case of a classic token, or ``actions:read`` in the case of a fine-grained token.
 
 
     In most cases, this will be used
@@ -400,9 +407,9 @@ class GitHubArtifactDatabase(ExampleDatabase):
     does not support downloading artifacts from previous workflow runs.
 
     The database automatically implements a simple file-based cache with a default expiration period
-    of 1 day. You can adjust this through the `cache_timeout` property.
+    of 1 day. You can adjust this through the ``cache_timeout`` property.
 
-    For mono-repo support, you can provide a unique `artifact_name` (e.g. `hypofuzz-example-db-frontend`).
+    For mono-repo support, you can provide a unique ``artifact_name`` (e.g. ``hypofuzz-example-db-frontend``).
     """
 
     def __init__(
@@ -495,6 +502,8 @@ class GitHubArtifactDatabase(ExampleDatabase):
         self._initialized = True
 
     def _initialize_db(self) -> None:
+        # Trigger warning that we suppressed earlier by intent_to_write=False
+        storage_directory(self.path.name)
         # Create the cache directory if it doesn't exist
         self.path.mkdir(exist_ok=True, parents=True)
 

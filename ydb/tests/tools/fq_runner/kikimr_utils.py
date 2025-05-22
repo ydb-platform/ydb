@@ -46,9 +46,20 @@ class AddInflightExtension(ExtensionPoint):
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.inflight = request.param["inflight"]
-        kikimr.compute_plane.fq_config['read_actors_factory_config']['s3_read_actor_factory_config'][
-            'max_inflight'] = kikimr.inflight
+        kikimr.compute_plane.fq_config['gateways']['s3']['max_inflight'] = kikimr.inflight
         del request.param["inflight"]
+
+
+class AddAllowConcurrentListingsExtension(ExtensionPoint):
+    def is_applicable(self, request):
+        return (hasattr(request, 'param')
+                and isinstance(request.param, dict)
+                and "allow_concurrent_listings" in request.param)
+
+    def apply_to_kikimr(self, request, kikimr):
+        kikimr.allow_concurrent_listings = request.param["allow_concurrent_listings"]
+        kikimr.compute_plane.fq_config['gateways']['s3']['allow_concurrent_listings'] = kikimr.allow_concurrent_listings
+        del request.param["allow_concurrent_listings"]
 
 
 class AddDataInflightExtension(ExtensionPoint):
@@ -59,9 +70,12 @@ class AddDataInflightExtension(ExtensionPoint):
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.data_inflight = request.param["data_inflight"]
-        kikimr.compute_plane.fq_config['read_actors_factory_config']['s3_read_actor_factory_config'][
-            'data_inflight'] = kikimr.data_inflight
+        kikimr.compute_plane.fq_config['gateways']['s3']['data_inflight'] = kikimr.data_inflight
         del request.param["data_inflight"]
+
+
+def enable_external_data_sources(qs_config):
+    qs_config['all_external_data_sources_are_available'] = True
 
 
 class AddFormatSizeLimitExtension(ExtensionPoint):
@@ -81,6 +95,7 @@ class AddFormatSizeLimitExtension(ExtensionPoint):
                     {'name': name, 'file_size_limit': limit})
         kikimr.compute_plane.fq_config['gateways']['s3'] = s3  # v1
         kikimr.compute_plane.qs_config['s3'] = s3  # v2
+        enable_external_data_sources(kikimr.compute_plane.qs_config)
 
 
 class DefaultConfigExtension(ExtensionPoint):
@@ -114,32 +129,44 @@ class DefaultConfigExtension(ExtensionPoint):
         solomon_endpoint = os.environ.get('SOLOMON_URL')
         if solomon_endpoint is not None:
             kikimr.compute_plane.fq_config['common']['monitoring_endpoint'] = solomon_endpoint
+        kikimr.control_plane.fq_config['common']['show_query_timeline'] = True
+        enable_external_data_sources(kikimr.compute_plane.qs_config)
+
+        if 's3' not in kikimr.compute_plane.qs_config:
+            kikimr.compute_plane.qs_config['s3'] = {}
+        kikimr.compute_plane.qs_config['s3']['generator_paths_limit'] = 50000
 
 
 class YQv2Extension(ExtensionPoint):
 
-    def __init__(self, yq_version):
+    def __init__(self, yq_version, is_replace_if_exists=False):
         YQv2Extension.__init__.__annotations__ = {
             'yq_version': str,
             'return': None
         }
         super().__init__()
         self.yq_version = yq_version
+        self.is_replace_if_exists = is_replace_if_exists
 
     def apply_to_kikimr_conf(self, request, configuration):
+        extra_feature_flags = [
+            'enable_external_data_sources',
+            'enable_script_execution_operations',
+            'enable_external_source_schema_inference',
+        ]
+        if self.is_replace_if_exists:
+            extra_feature_flags.append('enable_replace_if_exists_for_external_entities')
+
         if isinstance(configuration.node_count, dict):
             configuration.node_count["/compute"].tenant_type = TenantType.YDB
-            configuration.node_count["/compute"].extra_feature_flags = ['enable_external_data_sources', 'enable_script_execution_operations']
+            configuration.node_count["/compute"].extra_feature_flags = extra_feature_flags
             configuration.node_count["/compute"].extra_grpc_services = ['query_service']
         else:
             configuration.node_count = {
                 "/cp": TenantConfig(node_count=1),
                 "/compute": TenantConfig(node_count=1,
                                          tenant_type=TenantType.YDB,
-                                         extra_feature_flags=[
-                                             'enable_external_data_sources',
-                                             'enable_script_execution_operations'
-                                         ],
+                                         extra_feature_flags=extra_feature_flags,
                                          extra_grpc_services=['query_service']),
             }
 
@@ -170,6 +197,9 @@ class YQv2Extension(ExtensionPoint):
                         }
                     }
                 }
+            },
+            "supported_compute_ydb_features": {
+                "replace_if_exists": self.is_replace_if_exists
             }
         }
 
@@ -262,8 +292,11 @@ class ConnectorExtension(ExtensionPoint):
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.control_plane.fq_config['common']['disable_ssl_for_generic_data_sources'] = True
-        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('POSTGRESQL_CLUSTER')
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('CLICKHOUSE_CLUSTER')
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('GREENPLUM_CLUSTER')
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('MYSQL_CLUSTER')
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('POSTGRESQL_CLUSTER')
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('YDB_DATABASE')
 
         generic = {
             'connector': {
@@ -276,7 +309,9 @@ class ConnectorExtension(ExtensionPoint):
         }
 
         kikimr.compute_plane.fq_config['gateways']['generic'] = generic  # v1
+        kikimr.control_plane.fq_config['gateways']['generic'] = generic  # v1
         kikimr.compute_plane.qs_config['generic'] = generic  # v2
+        enable_external_data_sources(kikimr.compute_plane.qs_config)
 
 
 class MDBExtension(ExtensionPoint):
@@ -298,8 +333,32 @@ class MDBExtension(ExtensionPoint):
         kikimr.compute_plane.qs_config['generic']['mdb_gateway'] = self.endpoint
 
         kikimr.compute_plane.fq_config['common']['mdb_transform_host'] = False
-        kikimr.compute_plane.fq_config['common']['mdb_gateway'] = self.endpoint     # v2
-        kikimr.compute_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint   # v1
+        kikimr.compute_plane.fq_config['common']['mdb_gateway'] = self.endpoint
+        kikimr.compute_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint
+
+        kikimr.control_plane.fq_config['common']['mdb_transform_host'] = False
+        kikimr.control_plane.fq_config['common']['mdb_gateway'] = self.endpoint
+        kikimr.control_plane.fq_config['gateways']['generic']['mdb_gateway'] = self.endpoint
+        enable_external_data_sources(kikimr.compute_plane.qs_config)
+
+
+class YdbMvpExtension(ExtensionPoint):
+
+    def __init__(self, mvp_external_ydb_endpoint):
+        self.mvp_external_ydb_endpoint = mvp_external_ydb_endpoint
+        super().__init__()
+
+    def is_applicable(self, request):
+        return True
+
+    def apply_to_kikimr_conf(self, request, configuration):
+        configuration.mvp_external_ydb_endpoint = self.mvp_external_ydb_endpoint
+
+    def apply_to_kikimr(self, request, kikimr):
+        if 'generic' in kikimr.compute_plane.qs_config:
+            kikimr.compute_plane.qs_config['generic']['ydb_mvp_endpoint'] = kikimr.control_plane.fq_config['common']['ydb_mvp_cloud_endpoint']
+        if bool(kikimr.compute_plane.qs_config):
+            enable_external_data_sources(kikimr.compute_plane.qs_config)
 
 
 class TokenAccessorExtension(ExtensionPoint):
@@ -328,6 +387,10 @@ class TokenAccessorExtension(ExtensionPoint):
         kikimr.control_plane.fq_config['token_accessor']['endpoint'] = self.endpoint
         kikimr.control_plane.fq_config['token_accessor']['use_ssl'] = self.use_ssl
         kikimr.control_plane.fq_config['token_accessor']['hmac_secret_file'] = self.hmac_secret_file
+
+        kikimr.compute_plane.fq_config['token_accessor']['enabled'] = True
+        kikimr.compute_plane.fq_config['token_accessor']['endpoint'] = self.endpoint
+        kikimr.compute_plane.fq_config['token_accessor']['use_ssl'] = self.use_ssl
 
 
 @contextmanager
@@ -360,7 +423,10 @@ def start_kikimr(request, kikimr_extensions):
         kikimr.stop_mvp_mock_server()
 
 
-yq_v1 = pytest.mark.yq_version('v1')
-yq_v2 = pytest.mark.yq_version('v2')
-yq_all = pytest.mark.yq_version('v1', 'v2')
-yq_stats_full = pytest.mark.stats_mode('STATS_MODE_FULL')
+YQV1_VERSION_NAME = 'v1'
+YQV2_VERSION_NAME = 'v2'
+YQ_STATS_FULL = 'STATS_MODE_FULL'
+
+yq_v1 = pytest.mark.yq_version(YQV1_VERSION_NAME)
+yq_v2 = pytest.mark.yq_version(YQV2_VERSION_NAME)
+yq_all = pytest.mark.yq_version(YQV1_VERSION_NAME, YQV2_VERSION_NAME)

@@ -3,6 +3,8 @@
 #include "flat_part_iface.h"
 #include "flat_sausage_fetch.h"
 #include "flat_fwd_misc.h"
+#include "shared_handle.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -22,15 +24,14 @@ namespace NFwd {
     };
 
     struct TPage {
-        TPage(TPageId id, ui64 size, ui16 tag, TPageId refer)
-            : Size(size), PageId(id), Refer(refer), Tag(tag)
+        TPage(TPageId pageId, ui64 size, ui16 tag, TPageId refer)
+            : Size(size), PageId(pageId), Refer(refer), Tag(tag)
         {
 
         }
 
         ~TPage()
         {
-            Y_ABORT_UNLESS(!Data, "Forward cache page is still holds data");
         }
 
         explicit operator bool() const
@@ -53,29 +54,30 @@ namespace NFwd {
             return Data ? &Data : nullptr;
         }
 
-        ui32 Settle(NPageCollection::TLoadedPage &page) noexcept
+        ui32 Settle(NPageCollection::TLoadedPage &page, NSharedCache::TSharedPageRef ref)
         {
             const auto was = std::exchange(Fetch, EFetch::Done);
 
             if (PageId != page.PageId) {
-                Y_ABORT("Settling page with different reference number");
+                Y_TABLET_ERROR("Settling page with different reference number");
             } else if (Size != page.Data.size()) {
-                Y_ABORT("Requested and obtained page sizes are not the same");
+                Y_TABLET_ERROR("Requested and obtained page sizes are not the same");
             } else if (was == EFetch::Drop) {
                 std::exchange(page.Data, { });
             } else if (was != EFetch::Wait) {
-                Y_ABORT("Settling page that is not waiting for any data");
+                Y_TABLET_ERROR("Settling page that is not waiting for any data");
             } else {
                 Data = std::move(page.Data);
+                SharedPageRef = ref;
             }
 
             return Data.size();
         }
 
-        const TSharedData* Touch(TPageId pageId, TStat &stat) noexcept
+        const TSharedData* Touch(TPageId pageId, TStat &stat)
         {
             if (PageId != pageId || (!Data && Fetch == EFetch::Done)) {
-                Y_ABORT("Touching page thatd doesn't fits to this action");
+                Y_TABLET_ERROR("Touching page that doesn't fit to this action");
             } else {
                 auto to = Fetch == EFetch::None ? EUsage::Seen : EUsage::Keep;
 
@@ -86,11 +88,18 @@ namespace NFwd {
             return Plain();
         }
 
-        TSharedData Release() noexcept
+        TSharedData Release()
         {
             Fetch = Max(Fetch, EFetch::Drop);
 
+            SharedPageRef.Drop();
+            
             return std::exchange(Data, { });
+        }
+
+        bool Released() const noexcept
+        {
+            return !Data && !SharedPageRef;
         }
 
         const ui64 Size = 0;
@@ -100,6 +109,7 @@ namespace NFwd {
         EUsage Usage    = EUsage::None;
         EFetch Fetch    = EFetch::None;
         TSharedData Data;
+        NSharedCache::TSharedPageRef SharedPageRef;
     };
 
 }

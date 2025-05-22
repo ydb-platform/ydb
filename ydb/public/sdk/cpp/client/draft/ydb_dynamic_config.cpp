@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 
-namespace NYdb::NDynamicConfig {
+namespace NYdb::inline V2::NDynamicConfig {
 
 class TDynamicConfigClient::TImpl : public TClientImplCommon<TDynamicConfigClient::TImpl> {
 public:
@@ -155,9 +155,12 @@ public:
                 TString config;
                 TMap<ui64, TString> volatileConfigs;
                 if (Ydb::DynamicConfig::GetConfigResult result; any && any->UnpackTo(&result)) {
-                    clusterName = result.identity().cluster();
-                    version = result.identity().version();
-                    config = result.config();
+                    // only if they are present
+                    if (result.identity_size() && result.config_size()) {
+                        clusterName = result.identity(0).cluster();
+                        version = result.identity(0).version();
+                        config = result.config(0);
+                    }
                     for (const auto& config : result.volatile_configs()) {
                         volatileConfigs.emplace(config.id(), config.config());
                     }

@@ -77,6 +77,7 @@ def get_default_json():
     "BUILD_HOST": "localhost",
     "BUILD_USER": "nobody",
     "CUSTOM_VERSION": "",
+    "RELEASE_VERSION": "",
     "PROGRAM_VERSION": "Arc info:\\n    Branch: unknown-vcs-branch\\n    Commit: 0000000000000000000000000000000000000000\\n    Author: <UNKNOWN>\\n    Summary: No VCS\\n\\n",
     "SCM_DATA": "Arc info:\\n    Branch: unknown-vcs-branch\\n    Commit: 0000000000000000000000000000000000000000\\n    Author: <UNKNOWN>\\n    Summary: No VCS\\n",
     "VCS": "arc",
@@ -88,7 +89,7 @@ def get_default_json():
 
 def get_json(file_name):
     try:
-        with open(file_name, 'r') as f:
+        with open(file_name, 'rt', encoding="utf-8") as f:
             out = json.load(f)
 
         # TODO: check 'tar+svn' parsing
@@ -110,9 +111,9 @@ def print_c(json_file, output_file, argv):
     $(SOURCE_ROOT)/build/scripts/c_templates/svn_interface.c"""
     interface = argv[0]
 
-    with open(interface) as c:
+    with open(interface, 'rt', encoding="utf-8") as c:
         c_file = c.read()
-    with open(output_file, 'w') as f:
+    with open(output_file, 'wt', encoding="utf-8") as f:
         header = '\n'.join(_Formatting.escaped_define(k, v) for k, v in json_file.items())
         f.write(header + '\n' + c_file)
 
@@ -178,10 +179,10 @@ def merge_java_mf_dir(json_file, out_manifest, input_dir):
 
     old_lines = []
     if os.path.isfile(manifest):
-        with open(manifest, 'r') as f:
+        with open(manifest, 'rt', encoding="utf-8") as f:
             old_lines = f.readlines()
 
-    with open(out_manifest, 'w') as f:
+    with open(out_manifest, 'wt', encoding="utf-8") as f:
         f.write(merge_java_content(old_lines, json_file))
 
 
@@ -229,6 +230,10 @@ def print_java_mf(info):
         lines += wrap(
             'Custom-Version-String: ', base64.b64encode(info['CUSTOM_VERSION'].encode('utf-8')).decode('utf-8')
         )
+    if 'RELEASE_VERSION' in info:
+        lines += wrap(
+            'Release-Version-String: ', base64.b64encode(info['RELEASE_VERSION'].encode('utf-8')).decode('utf-8')
+        )
     return lines, names
 
 
@@ -248,7 +253,7 @@ def print_go(json_file, output_file, arc_project_prefix):
             lines.append(_Formatting.escaped_go_map_key(k, v))
         return lines
 
-    with open(output_file, 'w') as f:
+    with open(output_file, 'wt', encoding="utf-8") as f:
         f.write(
             '\n'.join(
                 [
@@ -294,6 +299,7 @@ def print_json(json_file, output_file):
     OPTIONAL_FIELDS_MAP = {
         'BUILD_TIMESTAMP': 'Build-Timestamp',
         'CUSTOM_VERSION': 'Custom-Version-String',
+        'RELEASE_VERSION': 'Release-Version-String',
         'DIRTY': 'Working-Copy-State',
     }
 
@@ -310,7 +316,7 @@ def print_json(json_file, output_file):
         if k in json_file and json_file[k]:
             ext_json[OPTIONAL_FIELDS_MAP[k]] = json_file[k]
 
-    with open(output_file, 'w') as f:
+    with open(output_file, 'wt', encoding="utf-8") as f:
         json.dump(ext_json, f, sort_keys=True, indent=4)
 
 

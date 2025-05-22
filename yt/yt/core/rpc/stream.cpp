@@ -528,7 +528,7 @@ TFuture<TSharedRef> TRpcClientInputStream::Read()
             return MakeFuture(ref);
         }
 
-        return invokeResult.Apply(BIND([] () {
+        return invokeResult.Apply(BIND([] {
             return TSharedRef();
         }));
     }));
@@ -551,8 +551,8 @@ TError CheckWriterFeedback(
         return TError("Failed to deserialize writer feedback");
     }
 
-    EWriterFeedback actualFeedback;
-    if (!TryEnumCast(protoFeedback.feedback(), &actualFeedback)) {
+    auto actualFeedback = TryCheckedEnumCast<EWriterFeedback>(protoFeedback.feedback());
+    if (!actualFeedback) {
         return TError("Invalid writer feedback value %v",
             static_cast<int>(protoFeedback.feedback()));
     }
@@ -639,7 +639,7 @@ TFuture<void> TRpcClientOutputStream::Write(const TSharedRef& data)
 TFuture<void> TRpcClientOutputStream::Close()
 {
     CloseResult_.TrySetFrom(Underlying_->Close());
-    return CloseResult_.ToFuture().Apply(BIND([invokeResult = InvokeResult_] () {
+    return CloseResult_.ToFuture().Apply(BIND([invokeResult = InvokeResult_] {
         return invokeResult;
     }));
 }

@@ -10,6 +10,7 @@
 #include "flat_util_misc.h"
 #include "flat_abi_evol.h"
 #include "flat_abi_check.h"
+#include "util_fmt_abort.h"
 #include "util_fmt_flat.h"
 #include "util_basics.h"
 #include "util_deref.h"
@@ -24,6 +25,7 @@ namespace NTable {
             ui32 Table;
             TEpoch Head;
             TTxStamp Edge;
+            const TIntrusivePtr<TKeyRangeCacheNeedGCList>& GCList;
         };
 
         struct TTableWrapper {
@@ -32,7 +34,7 @@ namespace NTable {
 
             TTableWrapper(TArgs args)
                 : Table(args.Table)
-                , Self(new TTable(args.Head))
+                , Self(new TTable(args.Head, args.GCList))
                 , Edge(args.Edge)
             {
 
@@ -58,7 +60,7 @@ namespace NTable {
                 return false;
             }
 
-            void Aggr(TDbStats &aggr, bool enter) const noexcept
+            void Aggr(TDbStats &aggr, bool enter) const
             {
                 const auto &stat = Self->Stat();
 
@@ -83,14 +85,14 @@ namespace NTable {
                 }
             }
 
-            void BackupMemStats() noexcept
+            void BackupMemStats()
             {
                 BackupMemTableWaste = Self->GetMemWaste();
                 BackupMemTableBytes = Self->GetMemSize();
                 BackupMemTableOps = Self->GetOpsCount();
             }
 
-            void RestoreMemStats(TDbStats &aggr) const noexcept
+            void RestoreMemStats(TDbStats &aggr) const
             {
                 NUtil::SubSafe(aggr.MemTableWaste, BackupMemTableWaste);
                 NUtil::SubSafe(aggr.MemTableBytes, BackupMemTableBytes);
@@ -98,6 +100,24 @@ namespace NTable {
                 aggr.MemTableWaste += Self->GetMemWaste();
                 aggr.MemTableBytes += Self->GetMemSize();
                 aggr.MemTableOps += Self->GetOpsCount();
+            }
+
+            /**
+             * Returns serial before the transaction (when in transaction),
+             * but possibly after schema changes or memtable flushes.
+             */
+            ui64 StableSerial() const noexcept
+            {
+                return DataModified && !EpochSnapshot ? SerialBackup : Serial;
+            }
+
+            /**
+             * Returns epoch before the transaction (when in transaction),
+             * but possibly after schema changes or memtable flushes.
+             */
+            TEpoch StableHead() const noexcept
+            {
+                return EpochSnapshot ? *EpochSnapshot : Self->Head();
             }
 
             const ui32 Table = Max<ui32>();
@@ -127,11 +147,12 @@ namespace NTable {
         using TMemGlob = NPageCollection::TMemGlob;
 
         TDatabaseImpl(TTxStamp weak, TAutoPtr<TScheme> scheme, const TEdges *edges)
-            : Weak(weak)
+            : GCList(new TKeyRangeCacheNeedGCList)
+            , Weak(weak)
             , Redo(*this)
             , Scheme(scheme)
         {
-            for (auto it : Scheme->Tables) {
+            for (const auto& it : Scheme->Tables) {
                 auto *mine = edges ? edges->FindPtr(it.first) : nullptr;
 
                 MakeTable(it.first, mine ? *mine : TSnapEdge{ })->SetScheme(it.second);
@@ -145,20 +166,28 @@ namespace NTable {
             return Serial_;
         }
 
-        TTableWrapper& Get(ui32 table, bool require) noexcept
+        /**
+         * Returns serial before the transaction (when in transaction)
+         */
+        ui64 StableSerial() const noexcept
+        {
+            return InTransaction ? Begin_ : Serial_;
+        }
+
+        TTableWrapper& Get(ui32 table, bool require)
         {
             auto *wrap = Tables.FindPtr(table);
 
             if (!wrap || wrap->Dropped) {
-                Y_ABORT_UNLESS(!require, "Cannot find table %" PRIu32, table);
+                Y_ENSURE(!require, "Cannot find table " << table);
                 return Dummy;
             }
 
             if (wrap->SchemePending) {
-                Y_ABORT_UNLESS(InTransaction);
+                Y_ENSURE(InTransaction);
 
                 auto* info = Scheme->GetTableInfo(table);
-                Y_ABORT_UNLESS(info, "No scheme for existing table %" PRIu32, table);
+                Y_ENSURE(info, "No scheme for existing table " << table);
 
                 if (!wrap->Created && !wrap->RollbackPrepared) {
                     wrap->BackupMemStats();
@@ -190,9 +219,9 @@ namespace NTable {
             return *wrap;
         }
 
-        TTableWrapper& GetForUpdate(ui32 table) noexcept
+        TTableWrapper& GetForUpdate(ui32 table)
         {
-            Y_ABORT_UNLESS(InTransaction);
+            Y_ENSURE(InTransaction);
             TTableWrapper& wrap = Get(table, true);
             if (!wrap.Created && !wrap.RollbackPrepared) {
                 wrap.BackupMemStats();
@@ -203,20 +232,20 @@ namespace NTable {
             if (wrap.Touch(Begin_, Serial_)) {
                 Affects.push_back(table);
             }
-            Y_ABORT_UNLESS(wrap.Created || wrap.RollbackPrepared);
+            Y_ENSURE(wrap.Created || wrap.RollbackPrepared);
             wrap.DataModified = true;
             return wrap;
         }
 
-        ui64 Rewind(ui64 serial) noexcept
+        ui64 Rewind(ui64 serial)
         {
-            Y_ABORT_UNLESS(!InTransaction, "Unexpected rewind inside a transaction");
+            Y_ENSURE(!InTransaction, "Unexpected rewind inside a transaction");
             return std::exchange(Serial_, Max(Serial_, serial));
         }
 
-        void BeginTransaction() noexcept
+        void BeginTransaction()
         {
-            Y_ABORT_UNLESS(!InTransaction);
+            Y_ENSURE(!InTransaction);
             InTransaction = true;
 
             // We pretend as if we just processed Switch and EvBegin with the next serial
@@ -230,13 +259,13 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(Prepared.empty());
         }
 
-        TEpoch FlushTable(ui32 tid) noexcept
+        TEpoch FlushTable(ui32 tid)
         {
-            Y_ABORT_UNLESS(InTransaction);
+            Y_ENSURE(InTransaction);
             auto& wrap = Get(tid, true);
-            Y_ABORT_UNLESS(!wrap.DataModified, "Cannot flush a modified table");
+            Y_ENSURE(!wrap.DataModified, "Cannot flush a modified table");
             if (!wrap.EpochSnapshot) {
-                Y_ABORT_UNLESS(!wrap.Created);
+                Y_ENSURE(!wrap.Created);
                 wrap.EpochSnapshot.emplace(wrap->Snapshot());
                 // Simulate inserting and processing EvFlush
                 Flushed.push_back(tid);
@@ -247,9 +276,9 @@ namespace NTable {
             return *wrap.EpochSnapshot;
         }
 
-        void CommitTransaction(TTxStamp stamp, TArrayRef<const TMemGlob> annex, NRedo::TWriter& writer) noexcept
+        void CommitTransaction(TTxStamp stamp, TArrayRef<const TMemGlob> annex, NRedo::TWriter& writer)
         {
-            Y_ABORT_UNLESS(Stamp <= stamp, "Executor tx stamp cannot go to the past");
+            Y_ENSURE(Stamp <= stamp, "Executor tx stamp cannot go to the past");
             Stamp = stamp;
 
             CommitScheme(annex);
@@ -261,7 +290,7 @@ namespace NTable {
                     continue;
                 }
                 auto& wrap = it->second;
-                Y_ABORT_UNLESS(wrap.RollbackPrepared);
+                Y_ENSURE(wrap.RollbackPrepared);
                 wrap->CommitChanges(annex);
                 wrap.RestoreMemStats(Stats);
                 wrap.RollbackPrepared = false;
@@ -278,7 +307,7 @@ namespace NTable {
                     continue;
                 }
                 auto& wrap = it->second;
-                Y_ABORT_UNLESS(wrap.EpochSnapshot);
+                Y_ENSURE(wrap.EpochSnapshot);
                 writer.EvFlush(tid, Stamp - 1, *wrap.EpochSnapshot);
                 wrap.EpochSnapshot.reset();
             }
@@ -304,7 +333,7 @@ namespace NTable {
             InTransaction = false;
         }
 
-        void CommitScheme(TArrayRef<const TMemGlob> annex) noexcept
+        void CommitScheme(TArrayRef<const TMemGlob> annex)
         {
             if (!SchemeRollbackState.Tables.empty() || SchemeRollbackState.Redo) {
                 // Table or redo settings have changed
@@ -318,10 +347,10 @@ namespace NTable {
                 if (!info) {
                     // This table doesn't exist in current schema,
                     // which means it has been dropped.
-                    Y_ABORT_UNLESS(Tables.contains(tid), "Unexpected drop for a table that doesn't exist");
+                    Y_ENSURE(Tables.contains(tid), "Unexpected drop for a table that doesn't exist");
                     auto& wrap = Tables.at(tid);
-                    Y_ABORT_UNLESS(wrap.Dropped);
-                    Y_ABORT_UNLESS(!wrap.DataModified, "Unexpected drop of a modified table");
+                    Y_ENSURE(wrap.Dropped);
+                    Y_ENSURE(!wrap.DataModified, "Unexpected drop of a modified table");
                     if (wrap.RollbackPrepared) {
                         wrap->CommitChanges(annex);
                         wrap.RestoreMemStats(Stats);
@@ -337,9 +366,9 @@ namespace NTable {
 
                 // This call will also apply schema changes
                 auto& wrap = Get(tid, true);
-                Y_ABORT_UNLESS(!wrap.Dropped);
-                Y_ABORT_UNLESS(!wrap.SchemePending);
-                Y_ABORT_UNLESS(wrap.SchemeModified);
+                Y_ENSURE(!wrap.Dropped);
+                Y_ENSURE(!wrap.SchemePending);
+                Y_ENSURE(wrap.SchemeModified);
 
                 if (wrap.Created) {
                     // If the table is both created and modified in the same
@@ -347,7 +376,7 @@ namespace NTable {
                     // table stats are accounted for.
                     wrap.Created = false;
                     wrap.DataModified = false;
-                    Y_ABORT_UNLESS(!wrap.RollbackPrepared);
+                    Y_ENSURE(!wrap.RollbackPrepared);
                     wrap.EpochSnapshot.reset();
                     wrap->CommitNewTable(annex);
                     wrap.Aggr(Stats, true /* enter */);
@@ -361,11 +390,11 @@ namespace NTable {
             SchemeRollbackState.Redo.reset();
         }
 
-        void RollbackTransaction() noexcept
+        void RollbackTransaction()
         {
             for (ui32 tid : Prepared) {
                 auto& wrap = Tables.at(tid);
-                Y_ABORT_UNLESS(wrap.RollbackPrepared);
+                Y_ENSURE(wrap.RollbackPrepared);
                 wrap->RollbackChanges();
                 wrap.RestoreMemStats(Stats);
                 wrap.RollbackPrepared = false;
@@ -376,7 +405,7 @@ namespace NTable {
 
             for (ui32 tid : Flushed) {
                 auto& wrap = Tables.at(tid);
-                Y_ABORT_UNLESS(wrap.EpochSnapshot);
+                Y_ENSURE(wrap.EpochSnapshot);
                 wrap.EpochSnapshot.reset();
             }
             Flushed.clear();
@@ -394,7 +423,7 @@ namespace NTable {
             InTransaction = false;
         }
 
-        void RollbackScheme() noexcept
+        void RollbackScheme()
         {
             // Note: we assume schema rollback is very rare,
             // so it doesn't have to be efficient
@@ -419,7 +448,7 @@ namespace NTable {
             for (auto& pr : SchemeRollbackState.Tables) {
                 if (pr.second) {
                     auto res = scheme.Tables.emplace(pr.first, *pr.second);
-                    Y_ABORT_UNLESS(res.second);
+                    Y_ENSURE(res.second);
                     scheme.TableNames.emplace(res.first->second.Name, pr.first);
                 }
             }
@@ -434,8 +463,8 @@ namespace NTable {
                     continue;
                 }
                 // By the time schema rollback is called we expect changes to be rolled back already
-                Y_ABORT_UNLESS(!wrap.SchemeModified, "Unexpected schema rollback on a modified table");
-                Y_ABORT_UNLESS(!wrap.EpochSnapshot, "Unexpected schema rollback on a flushed table");
+                Y_ENSURE(!wrap.SchemeModified, "Unexpected schema rollback on a modified table");
+                Y_ENSURE(!wrap.EpochSnapshot, "Unexpected schema rollback on a flushed table");
                 if (wrap.Dropped) {
                     // This table is no longer dropped
                     wrap.Dropped = false;
@@ -445,10 +474,14 @@ namespace NTable {
             SchemeRollbackState.Tables.clear();
         }
 
-        TDatabaseImpl& Switch(TTxStamp stamp) noexcept
+        void RunGC() {
+            GCList->RunGC();
+        }
+
+        TDatabaseImpl& Switch(TTxStamp stamp)
         {
-            Y_ABORT_UNLESS(!InTransaction, "Unexpected switch inside a transaction");
-            Y_ABORT_UNLESS(Stamp <= stamp, "Executor tx stamp cannot go to the past");
+            Y_ENSURE(!InTransaction, "Unexpected switch inside a transaction");
+            Y_ENSURE(Stamp <= stamp, "Executor tx stamp cannot go to the past");
             Stamp = stamp;
 
             First_ = Max<ui64>();
@@ -459,14 +492,14 @@ namespace NTable {
             return *this;
         }
 
-        void Assign(TVector<TMemGlob> annex) noexcept
+        void Assign(TVector<TMemGlob> annex)
         {
-            Y_ABORT_UNLESS(!Annex, "Annex has been already attached to TDatabaseImpl");
+            Y_ENSURE(!Annex, "Annex has been already attached to TDatabaseImpl");
 
             Annex = std::move(annex);
         }
 
-        void ReplaceSlices(ui32 tid, TBundleSlicesMap slices) noexcept
+        void ReplaceSlices(ui32 tid, TBundleSlicesMap slices)
         {
             auto &wrap = Get(tid, true);
 
@@ -475,25 +508,20 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Replace(ui32 tid, TArrayRef<const TPartView> partViews, const TSubset &subset) noexcept
+        void Replace(
+            ui32 tid,
+            const TSubset &subset,
+            TArrayRef<const TPartView> newParts,
+            TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus)
         {
             auto &wrap = Get(tid, true);
 
             wrap.Aggr(Stats, false /* leave */);
-            wrap->Replace(partViews, subset);
+            wrap->Replace(subset, newParts, newTxStatus);
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void ReplaceTxStatus(ui32 tid, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> txStatus, const TSubset &subset) noexcept
-        {
-            auto &wrap = Get(tid, true);
-
-            wrap.Aggr(Stats, false /* leave */);
-            wrap->ReplaceTxStatus(txStatus, subset);
-            wrap.Aggr(Stats, true /* enter */);
-        }
-
-        void Merge(ui32 tid, TPartView partView) noexcept
+        void Merge(ui32 tid, TPartView partView)
         {
             auto &wrap = Get(tid, true);
 
@@ -502,7 +530,7 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Merge(ui32 tid, TIntrusiveConstPtr<TColdPart> part) noexcept
+        void Merge(ui32 tid, TIntrusiveConstPtr<TColdPart> part)
         {
             auto &wrap = Get(tid, true);
 
@@ -511,13 +539,29 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        void Merge(ui32 tid, TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
+        void Merge(ui32 tid, TIntrusiveConstPtr<TTxStatusPart> txStatus)
         {
             auto &wrap = Get(tid, true);
 
             wrap.Aggr(Stats, false /* leave */);
             wrap->Merge(std::move(txStatus));
             wrap.Aggr(Stats, true /* enter */);
+        }
+
+        void MergeDone(ui32 tid)
+        {
+            auto &wrap = Get(tid, true);
+
+            wrap.Aggr(Stats, false /* leave */);
+            wrap->MergeDone();
+            wrap.Aggr(Stats, true /* enter */);
+        }
+
+        void MergeDone()
+        {
+            for (auto &pr : Tables) {
+                MergeDone(pr.first);
+            }
         }
 
         bool ApplySchema(const TSchemeChanges &delta)
@@ -533,7 +577,7 @@ namespace NTable {
             }
         }
 
-        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain) noexcept
+        TDatabaseImpl& ApplyRedo(TArrayRef<const char> plain)
         {
             return Redo.Replay(plain), *this;
         }
@@ -565,10 +609,10 @@ namespace NTable {
             Large = Max(Large, Scheme->Redo.Annex);
         }
 
-        TTableWrapper& MakeTable(ui32 table, TSnapEdge edge) noexcept
+        TTableWrapper& MakeTable(ui32 table, TSnapEdge edge)
         {
             if (edge.TxStamp == Max<ui64>()) {
-                Y_ABORT("Cannot make table on undefined TxStamp edge");
+                Y_TABLET_ERROR("Cannot make table on undefined TxStamp edge");
             } else if (edge.Head == TEpoch::Zero()) {
                 /* Table written in compatability mode utilizes global
                     TxStamp instead of private TEpoch values. In order
@@ -577,16 +621,16 @@ namespace NTable {
                  */
 
                 ui64 head = edge.TxStamp + 1;
-                Y_ABORT_UNLESS(head < Max<i64>(), "TxStamp is too large for epoch");
+                Y_ENSURE(head < Max<i64>(), "TxStamp is too large for epoch");
 
                 edge.Head = TEpoch(i64(head));
             }
 
-            TArgs args{ table, edge.Head, edge.TxStamp };
+            TArgs args{ table, edge.Head, edge.TxStamp, GCList };
 
             auto result = Tables.emplace(table, args);
 
-            Y_ABORT_UNLESS(result.second, "Table alredy exists");
+            Y_ENSURE(result.second, "Table alredy exists");
 
             Stats.Tables += 1;
 
@@ -616,7 +660,7 @@ namespace NTable {
         }
 
     public: /*_ Redo log player interface impl. */
-        bool NeedIn(ui32 table) noexcept
+        bool NeedIn(ui32 table)
         {
             /* Scheme deltas are applied before any redo log entries on
                 db bootstrap and udate log entries for already deleted
@@ -628,7 +672,7 @@ namespace NTable {
             return wrap ? Stamp > wrap.Edge : false;
         }
 
-        void DoBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp) noexcept
+        void DoBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp)
         {
             TAbi().Check(tail, head, "redo");
 
@@ -641,7 +685,7 @@ namespace NTable {
             } else if (Serial_ < serial && (stamp == 0 || stamp >= back)) {
                 Serial_ = serial;
             } else {
-                Y_Fail("EvBegin{" << serial << " " << NFmt::TStamp(stamp)
+                Y_TABLET_ERROR("EvBegin{" << serial << " " << NFmt::TStamp(stamp)
                     << "} does not match db state {" << Serial_ << " "
                     << NFmt::TStamp(Stamp) << "} (redo log was reordered)");
             }
@@ -649,14 +693,14 @@ namespace NTable {
             First_ = Min(First_, Serial_);
         }
 
-        void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex) noexcept
+        void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex)
         {
             if (Annex) {
-                Y_ABORT_UNLESS(annex.size() == Annex.size());
+                Y_ENSURE(annex.size() == Annex.size());
 
                 for (auto it : xrange(Annex.size()))
                     if (Annex[it].GId != *annex[it]) {
-                        Y_ABORT("NRedo EvAnnex isn't match to assigned annex");
+                        Y_TABLET_ERROR("NRedo EvAnnex isn't match to assigned annex");
                     }
 
             } else {
@@ -667,7 +711,7 @@ namespace NTable {
             }
         }
 
-        void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion) noexcept
+        void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion)
         {
             auto &wrap = Touch(tid);
 
@@ -679,7 +723,7 @@ namespace NTable {
             Stats.MemTableOps += 1;
         }
 
-        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId) noexcept
+        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId)
         {
             auto &wrap = Touch(tid);
 
@@ -691,7 +735,7 @@ namespace NTable {
             Stats.MemTableOps += 1;
         }
 
-        void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion) noexcept
+        void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion)
         {
             auto &wrap = Touch(tid);
 
@@ -702,7 +746,7 @@ namespace NTable {
             Stats.MemTableBytes += wrap->GetMemSize();
         }
 
-        void DoRemoveTx(ui32 tid, ui64 txId) noexcept
+        void DoRemoveTx(ui32 tid, ui64 txId)
         {
             auto &wrap = Touch(tid);
 
@@ -713,17 +757,17 @@ namespace NTable {
             Stats.MemTableBytes += wrap->GetMemSize();
         }
 
-        void DoFlush(ui32 tid, ui64 /* stamp */, TEpoch epoch) noexcept
+        void DoFlush(ui32 tid, ui64 /* stamp */, TEpoch epoch)
         {
             auto on = Touch(tid)->Snapshot();
 
             if (epoch != TEpoch::Zero() && epoch != on) {
-                Y_Fail("EvFlush{" << tid << ", " << epoch << "eph} turned"
+                Y_TABLET_ERROR("EvFlush{" << tid << ", " << epoch << "eph} turned"
                         << " table to unexpected epoch " << on);
             }
         }
 
-        TTableWrapper& Touch(ui32 table) noexcept
+        TTableWrapper& Touch(ui32 table)
         {
             auto &wrap = Get(table, true);
 
@@ -746,7 +790,7 @@ namespace NTable {
     private:
         bool ApplyAlterRecord(const TAlterRecord& record) override
         {
-            Y_ABORT_UNLESS(InTransaction, "Unexpected ApplyAlterRecord outside of transaction");
+            Y_ENSURE(InTransaction, "Unexpected ApplyAlterRecord outside of transaction");
             TSchemeModifier modifier(*Scheme, &SchemeRollbackState);
             bool changes = modifier.Apply(record);
             if (changes) {
@@ -757,8 +801,8 @@ namespace NTable {
                         wrap = &MakeTable(tid, { });
                         wrap->Created = true;
                     }
-                    Y_ABORT_UNLESS(!wrap->DataModified, "Table %" PRIu32 " cannot be altered after being changed", tid);
-                    Y_ABORT_UNLESS(!wrap->Dropped, "Table %" PRIu32 " cannot be altered after being dropped", tid);
+                    Y_ENSURE(!wrap->DataModified, "Table " << tid << " cannot be altered after being changed");
+                    Y_ENSURE(!wrap->Dropped, "Table " << tid << " cannot be altered after being dropped");
                     if (!Scheme->GetTableInfo(tid)) {
                         wrap->Dropped = true;
                     }
@@ -775,7 +819,18 @@ namespace NTable {
             }
         }
 
+    public:
+        TDbRuntimeStats GetRuntimeStats() const {
+            TDbRuntimeStats stats;
+            for (auto& pr : Tables) {
+                // TODO: use a lazy aggregate to balance many idle tables vs frequent updates
+                stats += pr.second->RuntimeStats();
+            }
+            return stats;
+        }
+
     private:
+        const TIntrusivePtr<TKeyRangeCacheNeedGCList> GCList;
         const TTxStamp Weak;    /* db bootstrap upper stamp         */
         ui64 Stamp = 0;
         ui64 Serial_ = 1;       /* db global change serial number    */

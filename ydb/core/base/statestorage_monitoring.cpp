@@ -213,8 +213,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         // try to send monitoring request to proxy
-        const ui64 stateStorageGroup = StateStorageGroupFromTabletID(TabletID);
-        const TActorId proxyActorID = MakeStateStorageProxyID(stateStorageGroup);
+        const TActorId proxyActorID = MakeStateStorageProxyID();
 
         BeginMoment = ctx.Now();
 

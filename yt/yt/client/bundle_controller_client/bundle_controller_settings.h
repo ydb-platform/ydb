@@ -40,6 +40,8 @@ struct TMemoryLimits
     std::optional<i64> TabletStatic;
     std::optional<i64> UncompressedBlockCache;
     std::optional<i64> VersionedChunkMeta;
+    std::optional<i64> Reserved;
+    std::optional<i64> Query;
 
     REGISTER_YSON_STRUCT(TMemoryLimits);
 
@@ -54,7 +56,11 @@ struct TInstanceResources
     : public NYTree::TYsonStruct
 {
     i64 Memory;
-    std::optional<i64> Net;
+    // Bits per second.
+    // TODO(grachevkirill): Remove this field.
+    std::optional<i64> NetBits;
+    // Bytes per second.
+    std::optional<i64> NetBytes;
 
     TString Type;
     int Vcpu;
@@ -63,12 +69,47 @@ struct TInstanceResources
 
     void Clear();
 
+    void CanonizeNet();
+    void ResetNet();
+
     REGISTER_YSON_STRUCT(TInstanceResources);
 
     static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TInstanceResources)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TDefaultInstanceConfig
+    : public NYTree::TYsonStruct
+{
+    TCpuLimitsPtr CpuLimits;
+    TMemoryLimitsPtr MemoryLimits;
+
+    REGISTER_YSON_STRUCT(TDefaultInstanceConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TDefaultInstanceConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TInstanceSize
+    : public NYTree::TYsonStruct
+{
+    TInstanceResourcesPtr ResourceGuarantee;
+    TDefaultInstanceConfigPtr DefaultConfig;
+
+    std::optional<TString> HostTagFilter;
+
+    REGISTER_YSON_STRUCT(TInstanceSize);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TInstanceSize)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -91,6 +132,39 @@ DEFINE_REFCOUNTED_TYPE(TBundleTargetConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TBundleConfigConstraints
+    : public NYTree::TYsonStruct
+{
+    std::vector<TInstanceSizePtr> RpcProxySizes;
+    std::vector<TInstanceSizePtr> TabletNodeSizes;
+
+    REGISTER_YSON_STRUCT(TBundleConfigConstraints);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBundleConfigConstraints)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TBundleResourceQuota
+    : public NYTree::TYsonStruct
+{
+    int Vcpu;
+    i64 Memory;
+    // TODO(grachevkirill): Remove it later.
+    i64 NetworkBits;
+    i64 NetworkBytes;
+
+    REGISTER_YSON_STRUCT(TBundleResourceQuota);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBundleResourceQuota)
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NProto {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -104,11 +178,20 @@ void FromProto(TMemoryLimitsPtr memoryLimits, const NBundleController::NProto::T
 void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResources, const TInstanceResourcesPtr instanceResources);
 void FromProto(TInstanceResourcesPtr instanceResources, const NBundleController::NProto::TInstanceResources* protoInstanceResources);
 
-void ToProto(NBundleController::NProto::TInstanceResources* protoInstanceResources, const TInstanceResourcesPtr instanceResources);
-void FromProto(TInstanceResourcesPtr instanceResources, const NBundleController::NProto::TInstanceResources* protoInstanceResources);
+void ToProto(NBundleController::NProto::TDefaultInstanceConfig* protoDefaultInstanceConfig, const TDefaultInstanceConfigPtr defaultInstanceConfig);
+void FromProto(TDefaultInstanceConfigPtr defaultInstanceConfig, const NBundleController::NProto::TDefaultInstanceConfig* protoDefaultInstanceConfig);
+
+void ToProto(NBundleController::NProto::TInstanceSize* protoInstanceSize, const TInstanceSizePtr instanceSize);
+void FromProto(TInstanceSizePtr instanceSize, const NBundleController::NProto::TInstanceSize* protoInstanceSize);
 
 void ToProto(NBundleController::NProto::TBundleConfig* protoBundleConfig, const TBundleTargetConfigPtr bundleConfig);
 void FromProto(TBundleTargetConfigPtr bundleConfig, const NBundleController::NProto::TBundleConfig* protoBundleConfig);
+
+void ToProto(NBundleController::NProto::TBundleConfigConstraints* protoBundleConfigConstraints, const TBundleConfigConstraintsPtr bundleConfigConstraints);
+void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundleController::NProto::TBundleConfigConstraints* protoBundleConfigConstraints);
+
+void ToProto(NBundleController::NProto::TResourceQuota* protoResourceQuota, const TBundleResourceQuotaPtr resourceQuota);
+void FromProto(TBundleResourceQuotaPtr resourceQuota, const NBundleController::NProto::TResourceQuota* protoResourceQuota);
 
 ////////////////////////////////////////////////////////////////////////////////
 

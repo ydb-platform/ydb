@@ -1,6 +1,8 @@
 #include "validator_bootstrap.h"
 #include "validator_ut_common.h"
 
+#include <ydb/library/actors/protos/interconnect.pb.h>
+
 namespace NKikimr::NConsole {
 
 using namespace NTests;

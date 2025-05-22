@@ -1,0 +1,11 @@
+items:
+  - name: Именование тегов
+    href: tags.md
+  - name: Установка Docker
+    href: prerequisites.md
+  - name: Работа с Docker
+    href: start.md
+  - name: Настройка
+    href: configuration.md
+  - name: Остановка и очистка
+    href: cleanup.md 

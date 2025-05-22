@@ -1,7 +1,7 @@
 #pragma once
 
-#include "flat_fwd_conf.h"
 #include "flat_fwd_sieve.h"
+#include "flat_mem_snapshot.h"
 #include "flat_mem_warm.h"
 #include "flat_part_screen.h"
 #include "flat_part_iface.h"
@@ -33,12 +33,12 @@ namespace NFwd {
             }
         }
 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag)
         {
             const auto &glob = memTable->GetBlobs()->Get(ref);
 
-            Y_ABORT_UNLESS(glob.Data, "External blob in TMemTable with no data");
-            Y_ABORT_UNLESS(!Blobs || ref >= Offset, "Unexpected ELargeObj reference");
+            Y_ENSURE(glob.Data, "External blob in TMemTable with no data");
+            Y_ENSURE(!Blobs || ref >= Offset, "Unexpected ELargeObj reference");
 
             bool omit = glob.Bytes() >= Edge && !TRowScheme::HasTag(Tags, tag);
 
@@ -47,7 +47,7 @@ namespace NFwd {
             return { !omit, omit ? nullptr : &glob.Data };
         }
 
-        TSieve Traced() noexcept
+        TSieve Traced()
         {
             /* Blobs in TMemTable catalog isn't sorted in order of appearance
                 in rows cells. That is way bitmap is used instead of just

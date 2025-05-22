@@ -18,11 +18,11 @@
 
 // This header is used to apply serialization traits to templates.  The
 // standard system can't be used for platforms which don't support
-// Partial Templlate Specialization.
+// Partial Template Specialization.
 
 // The motivation for this is the Name-Value Pair (NVP) template.
 // it has to work the same on all platforms in order for archives
-// to be portable accross platforms.
+// to be portable across platforms.
 
 #include <boost/config.hpp>
 #include <boost/static_assert.hpp>

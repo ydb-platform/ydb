@@ -15,8 +15,10 @@ public:
         SetStreamState(EStreamState::Creating);
     }
 
-    void Progress(ui64 schemeShardId, const TActorId& proxy, const TActorContext& ctx) override;
+    void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
+
+    IActor* CreateWorkerRegistar(const TActorContext& ctx) const override;
 
 private:
     bool NameAssignmentInProcess = false;

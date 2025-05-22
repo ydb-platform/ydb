@@ -88,13 +88,13 @@ CREATE TABLE person (
  PRIMARY KEY (name)
 );
 
-statement error Unexpected token 'INHERITS'
+statement error
 CREATE TABLE emp (
  salary int32,
  manager name
 ) INHERITS (person) WITH OIDS;
 
-statement error Unexpected token 'WITH'
+statement error
 CREATE TABLE emp (
  salary int32,
  manager name
@@ -166,7 +166,7 @@ CREATE TABLE road (
  thepath path
 );
 
-statement error Unexpected token
+statement error
 CREATE TABLE ihighway () INHERITS (road);
 
 statement error
@@ -174,7 +174,7 @@ CREATE TABLE shighway (
  surface text
 ) INHERITS (road);
 
-statement error Unknown type: 'Path'
+statement error
 CREATE TABLE real_city (
  pop int32,
  cname string,

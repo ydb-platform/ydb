@@ -9,11 +9,13 @@
 #include <yt/yt/core/rpc/public.h>
 
 // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-#include <yt/yt/core/misc/atomic_object.h>
-
 #include <yt/yt/core/service_discovery/public.h>
 
 #include <yt/yt/core/logging/log.h>
+
+#include <yt/yt/core/misc/backoff_strategy.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -27,15 +29,15 @@ public:
     ~TConnection();
 
     NRpc::IChannelPtr CreateChannel(bool sticky);
-    NRpc::IChannelPtr CreateChannelByAddress(const TString& address);
+    NRpc::IChannelPtr CreateChannelByAddress(const std::string& address);
 
     const TConnectionConfigPtr& GetConfig();
 
     // IConnection implementation.
     TClusterTag GetClusterTag() const override;
-    const TString& GetLoggingTag() const override;
-    const TString& GetClusterId() const override;
-    const std::optional<TString>& GetClusterName() const override;
+    const std::string& GetLoggingTag() const override;
+    const std::string& GetClusterId() const override;
+    const std::optional<std::string>& GetClusterName() const override;
 
     bool IsSameCluster(const IConnectionPtr& other) const override;
 
@@ -49,6 +51,7 @@ public:
     void ClearMetadataCaches() override;
 
     void Terminate() override;
+    bool IsTerminated() const override;
 
     NYson::TYsonString GetConfigYson() const override;
 
@@ -59,27 +62,31 @@ private:
 
     const TConnectionConfigPtr Config_;
 
+    std::atomic<bool> Terminated_ = false;
+    std::atomic<bool> ProxyListUpdateStarted_ = false;
+
     const TGuid ConnectionId_;
-    const TString LoggingTag_;
-    const TString ClusterId_;
+    const std::string LoggingTag_;
+    const std::string ClusterId_;
     const NLogging::TLogger Logger;
     const NRpc::IChannelFactoryPtr ChannelFactory_;
     const NRpc::IChannelFactoryPtr CachingChannelFactory_;
     const NRpc::TDynamicChannelPoolPtr ChannelPool_;
 
-    NConcurrency::TActionQueuePtr ActionQueue_;
-    IInvokerPtr ConnectionInvoker_;
+    const NConcurrency::TActionQueuePtr ActionQueue_;
+    const IInvokerPtr ConnectionInvoker_;
 
-    NConcurrency::TPeriodicExecutorPtr UpdateProxyListExecutor_;
+    TBackoffStrategy UpdateProxyListBackoffStrategy_;
+
+    const NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 
     // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-    TAtomicObject<TString> DiscoveryToken_;
+    NThreading::TAtomicObject<std::string> DiscoveryToken_;
 
-    NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
+    std::vector<std::string> DiscoverProxiesViaHttp();
+    std::vector<std::string> DiscoverProxiesViaServiceDiscovery();
 
-    std::vector<TString> DiscoverProxiesViaHttp();
-    std::vector<TString> DiscoverProxiesViaServiceDiscovery();
-
+    void ScheduleProxyListUpdate(TDuration delay);
     void OnProxyListUpdate();
 };
 

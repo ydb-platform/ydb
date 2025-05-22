@@ -124,7 +124,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
             Self->Config.Resolution = PlanResolution;
             Self->Config.ReducedResolution = ReducedResolution;
             Self->Config.HaveProcessingParams = HaveProcessingParams;
-            Self->SetCounter(COUNTER_MISSING_CONFIG, HaveProcessingParams ? 1 : 0);
+            Self->SetCounter(COUNTER_MISSING_CONFIG, HaveProcessingParams ? 0 : 1);
 
             if (LastBlockedActor && LastPlanned < LastBlockedStep) {
                 Self->RestoreState(LastBlockedActor, LastBlockedStep);
@@ -145,7 +145,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
             LOG_INFO_S(ctx, NKikimrServices::TX_COORDINATOR,
                  "tablet# " << Self->TabletID() <<
                  " CreateTxInit initialize himself");
-            Self->DoConfiguration(*CreateDomainConfigurationFromStatic(appData, Self->TabletID()), ctx);
+            Self->DoConfiguration(*CreateDomainConfigurationFromStatic(appData), ctx);
             return;
         }
 

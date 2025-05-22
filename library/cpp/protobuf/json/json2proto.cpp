@@ -85,7 +85,15 @@ static void JsonString2Duration(const NJson::TJsonValue& json,
                  const google::protobuf::FieldDescriptor& field,
                  const NProtobufJson::TJson2ProtoConfig& config) {
     using namespace google::protobuf;
-    if (!json.GetString() && !config.CastRobust) {
+    if (json.IsMap()) {
+        const auto& m = json.GetMap();
+        Duration duration;
+        duration.set_seconds(m.contains("Seconds") ? m.at("Seconds").GetInteger() : 0);
+        duration.set_nanos(m.contains("Nanos") ? m.at("Nanos").GetInteger() : 0);
+        proto.CopyFrom(duration);
+
+        return;
+    } else if (!json.GetString() && !config.CastRobust) {
         ythrow yexception() << "Invalid type of JSON field '" << field.name() << "': "
                             << "IsString() failed while "
                             << "CPPTYPE_STRING is expected.";

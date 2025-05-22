@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include "key.h"
+#include "key_bound.h"
 
 #include <yt/yt/core/actions/callback.h>
 
@@ -28,7 +29,7 @@ public:
 
 public:
     TComparator() = default;
-    explicit TComparator(std::vector<ESortOrder> sortOrders);
+    explicit TComparator(std::vector<ESortOrder> sortOrders, TCallback<TUUComparerSignature> cgComparator = {});
 
     void Persist(const TPersistenceContext& context);
 
@@ -48,17 +49,17 @@ public:
 
     //! Returns the strongest of two key bounds. Key bounds should be of same direction
     //! (but possibly of different inclusiveness).
-    TKeyBound StrongerKeyBound(const TKeyBound& lhs, const TKeyBound& rhs) const;
+    template <CKeyBound T>
+    T StrongerKeyBound(const T& lhs, const T& rhs) const;
 
     //! Shorthand for #lhs = #StrongerKeyBound(#lhs, #rhs).
-    void ReplaceIfStrongerKeyBound(TKeyBound& lhs, const TKeyBound& rhs) const;
-
-    //! Same as previous for owning key bounds.
-    void ReplaceIfStrongerKeyBound(TOwningKeyBound& lhs, const TOwningKeyBound& rhs) const;
+    template <CKeyBound T>
+    void ReplaceIfStrongerKeyBound(T& lhs, const T& rhs) const;
 
     //! Returns the weakest of two key bounds. Key bounds should be of same direction
     //! (but possibly of different inclusiveness).
-    TKeyBound WeakerKeyBound(const TKeyBound& lhs, const TKeyBound& rhs) const;
+    template <CKeyBound T>
+    T WeakerKeyBound(const T& lhs, const T& rhs) const;
 
     //! Check if the range defined by two key bounds is empty.
     bool IsRangeEmpty(const TKeyBound& lowerBound, const TKeyBound& upperBound) const;
@@ -85,24 +86,27 @@ public:
     explicit operator bool() const;
 
 private:
+    // Compiler generated comparer that is used in CompareKeys().
+    TCallback<TUUComparerSignature> CGComparator_;
+
+private:
     void ValidateKey(const TKey& key) const;
     void ValidateKeyBound(const TKeyBound& keyBound) const;
 };
 
 void FormatValue(TStringBuilderBase* builder, const TComparator& comparator, TStringBuf spec);
-TString ToString(const TComparator& comparator);
 
 void Serialize(const TComparator& comparator, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TPrefixComparer = int(const TUnversionedValue*, const TUnversionedValue*, int);
+using TPrefixComparer = TUUComparerSignature;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 int GetCompareSign(int value);
 
-//! Obeys the usual rule: the result's sign incidates the comparison outcome.
+//! Obeys the usual rule: the result's sign indicates the comparison outcome.
 //! Also |abs(result) - 1| is equal to index of first non-equal component.
 template <typename TComparer>
 int CompareKeys(TUnversionedValueRange lhs, TUnversionedValueRange rhs, const TComparer& prefixComparer);

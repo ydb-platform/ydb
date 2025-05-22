@@ -36,7 +36,7 @@ struct TEvPGEvents {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PGWIRE), "ES_PGWIRE event space is too small.");
 
     struct TRowDescriptionField {
-        TString Name;
+        std::string Name;
         uint32_t TableId = 0;
         uint16_t ColumnId = 0;
         uint32_t DataType;
@@ -124,6 +124,7 @@ struct TEvPGEvents {
         bool EmptyQuery = false;
         bool CommandCompleted = true;
         bool ReadyForQuery = true;
+        bool DropConnection = false;
         char TransactionStatus = 0;
     };
 
@@ -160,6 +161,7 @@ struct TEvPGEvents {
         std::vector<std::pair<char, TString>> ErrorFields;
         std::vector<std::pair<char, TString>> NoticeFields;
         TString Tag;
+        bool DropConnection = false;
         char TransactionStatus = 0;
 
         TEvParseResponse()
@@ -209,6 +211,7 @@ struct TEvPGEvents {
         std::vector<TRowDescriptionField> DataFields;
         std::vector<uint32_t> ParameterTypes;
         std::vector<std::pair<char, TString>> ErrorFields;
+        bool DropConnection = false;
     };
 
     struct TEvExecuteResponse : NActors::TEventLocal<TEvExecuteResponse, EvExecuteResponse> {
@@ -219,6 +222,7 @@ struct TEvPGEvents {
         bool EmptyQuery = false;
         bool CommandCompleted = true;
         bool ReadyForQuery = true;
+        bool DropConnection = false;
         char TransactionStatus = 0;
     };
 

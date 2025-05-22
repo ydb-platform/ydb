@@ -1,15 +1,14 @@
 """
 Hook wrapper "result" utilities.
 """
+
 from __future__ import annotations
 
 from types import TracebackType
 from typing import Callable
 from typing import cast
 from typing import final
-from typing import Generator
 from typing import Generic
-from typing import NoReturn
 from typing import Optional
 from typing import Tuple
 from typing import Type
@@ -18,19 +17,6 @@ from typing import TypeVar
 
 _ExcInfo = Tuple[Type[BaseException], BaseException, Optional[TracebackType]]
 ResultType = TypeVar("ResultType")
-
-
-def _raise_wrapfail(
-    wrap_controller: (
-        Generator[None, Result[ResultType], None] | Generator[None, object, object]
-    ),
-    msg: str,
-) -> NoReturn:
-    co = wrap_controller.gi_code
-    raise RuntimeError(
-        "wrap_controller at %r %s:%d %s"
-        % (co.co_name, co.co_filename, co.co_firstlineno, msg)
-    )
 
 
 class HookCallError(Exception):

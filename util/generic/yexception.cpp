@@ -1,4 +1,3 @@
-#include "bt_exception.h"
 #include "yexception.h"
 
 #include <util/system/backtrace.h>
@@ -103,8 +102,8 @@ std::string CurrentExceptionTypeName() {
         return TypeName(*currentExceptionTypePtr);
     }
 #endif
-    //There is no abi::__cxa_current_exception_type() on Windows.
-    //Emulated it with rethrow - catch construction.
+    // There is no abi::__cxa_current_exception_type() on Windows.
+    // Emulated it with rethrow - catch construction.
     std::exception_ptr currentException = std::current_exception();
     Y_ASSERT(currentException != nullptr);
     try {

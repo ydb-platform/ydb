@@ -413,17 +413,17 @@ ICodec* GetCodec(ECodec id)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const THashSet<ECodec>& GetDeprecatedCodecIds()
+const THashSet<ECodec>& GetForbiddenCodecs()
 {
-    static const THashSet<ECodec> deprecatedCodecIds{
+    static const THashSet<ECodec> deprecatedCodecs{
         ECodec::QuickLz
     };
-    return deprecatedCodecIds;
+    return deprecatedCodecs;
 }
 
-const THashMap<TString, TString>& GetDeprecatedCodecNameToAlias()
+const THashMap<std::string, std::string>& GetForbiddenCodecNameToAlias()
 {
-    static const THashMap<TString, TString> deprecatedCodecNameToAlias = {
+    static const THashMap<std::string, std::string> deprecatedCodecNameToAlias = {
         {"zlib6", FormatEnum(ECodec::Zlib_6)},
         {"gzip_normal", FormatEnum(ECodec::Zlib_6)},
         {"zlib9", FormatEnum(ECodec::Zlib_9)},
@@ -431,24 +431,24 @@ const THashMap<TString, TString>& GetDeprecatedCodecNameToAlias()
         {"zstd", FormatEnum(ECodec::Zstd_3)},
         {"brotli3", FormatEnum(ECodec::Brotli_3)},
         {"brotli5", FormatEnum(ECodec::Brotli_5)},
-        {"brotli8", FormatEnum(ECodec::Brotli_8)}
+        {"brotli8", FormatEnum(ECodec::Brotli_8)},
     };
     return deprecatedCodecNameToAlias;
 }
 
-const std::vector<ECodec>& GetSupportedCodecIds()
+const std::vector<ECodec>& GetSupportedCodecs()
 {
-    static const std::vector<ECodec> supportedCodecIds = [] {
-        std::vector<ECodec> supportedCodecIds;
+    static const std::vector<ECodec> supportedCodecs = [] {
+        std::vector<ECodec> supportedCodecs;
         for (auto codecId : TEnumTraits<ECodec>::GetDomainValues()) {
-            if (!GetDeprecatedCodecIds().contains(codecId)) {
-                supportedCodecIds.push_back(codecId);
+            if (!GetForbiddenCodecs().contains(codecId)) {
+                supportedCodecs.push_back(codecId);
             }
         }
-        SortUnique(supportedCodecIds);
-        return supportedCodecIds;
+        SortUnique(supportedCodecs);
+        return supportedCodecs;
     }();
-    return supportedCodecIds;
+    return supportedCodecs;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -6,23 +6,17 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
-/**
- * DEVELOPER PREVIEW DISCLAIMER
- *
- * MQTT5 support is currently in **developer preview**.  We encourage feedback at all times, but feedback during the
- * preview window is especially valuable in shaping the final product.  During the preview period we may make
- * backwards-incompatible changes to the public API, but in general, this is something we will try our best to avoid.
- */
-
 #include <aws/mqtt/mqtt.h>
 
 #include <aws/io/retry_strategy.h>
 #include <aws/mqtt/v5/mqtt5_types.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_allocator;
 struct aws_client_bootstrap;
+struct aws_host_resolution_config;
 struct aws_http_message;
-struct aws_input_stream;
 struct aws_mqtt5_client;
 struct aws_mqtt5_client_lifecycle_event;
 struct aws_tls_connection_options;
@@ -84,16 +78,15 @@ enum aws_mqtt5_client_outbound_topic_alias_behavior_type {
      * topic alias mappings unpredictably.  The client will properly use the alias when the current connection
      * has seen the alias binding already.
      */
-    AWS_MQTT5_COTABT_USER,
+    AWS_MQTT5_COTABT_MANUAL,
 
     /**
-     * Client fails any user-specified topic aliasing and acts on the outbound alias set as an LRU cache.
+     * Client ignores any user-specified topic aliasing and acts on the outbound alias set as an LRU cache.
      */
     AWS_MQTT5_COTABT_LRU,
 
     /**
-     * Completely disable outbound topic aliasing.  Attempting to set a topic alias on a PUBLISH results in
-     * an error.
+     * Completely disable outbound topic aliasing.
      */
     AWS_MQTT5_COTABT_DISABLED
 };
@@ -160,7 +153,7 @@ struct aws_mqtt5_client_topic_alias_options {
      * disabled, this setting has no effect.
      *
      * Behaviorally, this value overrides anything present in the topic_alias_maximum field of
-     * the CONNECT packet options.  We intentionally don't bind that field to managed clients to reduce
+     * the CONNECT packet options.
      */
     uint16_t inbound_alias_cache_size;
 };
@@ -179,16 +172,10 @@ enum aws_mqtt5_extended_validation_and_flow_control_options {
     AWS_MQTT5_EVAFCO_NONE,
 
     /**
-     * Apply additional client-side validation and operational flow control that respects the
+     * Apply additional client-side operational flow control that respects the
      * default AWS IoT Core limits.
      *
-     * Currently applies the following additional validation:
-     *  (1) No more than 8 subscriptions per SUBSCRIBE packet
-     *  (2) Topics and topic filters have a maximum of 7 slashes (8 segments), not counting any AWS rules prefix
-     *  (3) Topics must be <= 256 bytes in length
-     *  (4) Client id must be <= 128 bytes in length
-     *
-     * Also applies the following flow control:
+     * Applies the following flow control:
      *  (1) Outbound throughput throttled to 512KB/s
      *  (2) Outbound publish TPS throttled to 100
      */
@@ -348,31 +335,40 @@ typedef void(aws_mqtt5_client_termination_completion_fn)(void *complete_ctx);
 /* operation completion options structures */
 
 /**
- * Completion callback options for the Publish operation
+ * Completion options for the Publish operation
  */
 struct aws_mqtt5_publish_completion_options {
     aws_mqtt5_publish_completion_fn *completion_callback;
     void *completion_user_data;
+
+    /** Overrides the client's ack timeout with this value, for this operation only */
+    uint32_t ack_timeout_seconds_override;
 };
 
 /**
- * Completion callback options for the Subscribe operation
+ * Completion options for the Subscribe operation
  */
 struct aws_mqtt5_subscribe_completion_options {
     aws_mqtt5_subscribe_completion_fn *completion_callback;
     void *completion_user_data;
+
+    /** Overrides the client's ack timeout with this value, for this operation only */
+    uint32_t ack_timeout_seconds_override;
 };
 
 /**
- * Completion callback options for the Unsubscribe operation
+ * Completion options for the Unsubscribe operation
  */
 struct aws_mqtt5_unsubscribe_completion_options {
     aws_mqtt5_unsubscribe_completion_fn *completion_callback;
     void *completion_user_data;
+
+    /** Overrides the client's ack timeout with this value, for this operation only */
+    uint32_t ack_timeout_seconds_override;
 };
 
 /**
- * Public completion callback options for the a DISCONNECT operation
+ * Completion options for the a DISCONNECT operation
  */
 struct aws_mqtt5_disconnect_completion_options {
     aws_mqtt5_disconnect_completion_fn *completion_callback;
@@ -533,7 +529,7 @@ struct aws_mqtt5_client_options {
     /**
      * Port to establish mqtt connections to
      */
-    uint16_t port;
+    uint32_t port;
 
     /**
      * Client bootstrap to use whenever this client establishes a connection
@@ -629,7 +625,7 @@ struct aws_mqtt5_client_options {
     /**
      * Controls how the client uses mqtt5 topic aliasing.  If NULL, zero-based defaults will be used.
      */
-    struct aws_mqtt5_client_topic_alias_options *topic_aliasing_options;
+    const struct aws_mqtt5_client_topic_alias_options *topic_aliasing_options;
 
     /**
      * Callback for received publish packets
@@ -655,6 +651,12 @@ struct aws_mqtt5_client_options {
      */
     aws_mqtt5_client_termination_completion_fn *client_termination_handler;
     void *client_termination_handler_user_data;
+
+    /**
+     * Options to override aspects of DNS resolution.  If unspecified, use a default that matches the regular
+     * configuration but changes the refresh frequency to a value that prevents DNS pinging.
+     */
+    struct aws_host_resolution_config *host_resolution_override;
 };
 
 AWS_EXTERN_C_BEGIN
@@ -786,12 +788,14 @@ AWS_MQTT_API int aws_mqtt5_negotiated_settings_init(
     const struct aws_byte_cursor *client_id);
 
 /**
- * Makes an owning copy of a negotiated settings structure
+ * Makes an owning copy of a negotiated settings structure.
  *
  * @param source settings to copy from
  * @param dest settings to copy into.  Must be in a zeroed or initialized state because it gets clean up
  *  called on it as the first step of the copy process.
  * @return success/failure
+ *
+ * Used in downstream.
  */
 AWS_MQTT_API int aws_mqtt5_negotiated_settings_copy(
     const struct aws_mqtt5_negotiated_settings *source,
@@ -805,5 +809,6 @@ AWS_MQTT_API int aws_mqtt5_negotiated_settings_copy(
 AWS_MQTT_API void aws_mqtt5_negotiated_settings_clean_up(struct aws_mqtt5_negotiated_settings *negotiated_settings);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_MQTT_MQTT5_CLIENT_H */

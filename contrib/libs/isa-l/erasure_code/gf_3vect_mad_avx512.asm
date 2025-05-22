@@ -44,7 +44,7 @@
  %define arg5   r9
  %define tmp    r11
  %define return rax
- %define func(x) x:
+ %define func(x) x: endbranch
  %define FUNC_SAVE
  %define FUNC_RESTORE
 %endif
@@ -117,8 +117,8 @@
 %else
 ;;; Use Non-temporal load/stor
  %ifdef NO_NT_LDST
-  %define XLDR vmovdqa
-  %define XSTR vmovdqa
+  %define XLDR vmovdqa64
+  %define XSTR vmovdqa64
  %else
   %define XLDR vmovntdqa
   %define XSTR vmovntdq
@@ -152,13 +152,8 @@ section .text
 %define xmask0f   zmm17
 
 align 16
-global gf_3vect_mad_avx512:ISAL_SYM_TYPE_FUNCTION
+global gf_3vect_mad_avx512, function
 func(gf_3vect_mad_avx512)
-%ifidn __OUTPUT_FORMAT__, macho64
-global _gf_3vect_mad_avx512:ISAL_SYM_TYPE_FUNCTION
-func(_gf_3vect_mad_avx512)
-%endif
-
 	FUNC_SAVE
 	sub	len, 64
 	jl	.return_fail
@@ -209,7 +204,7 @@ func(_gf_3vect_mad_avx512)
 	vpshufb	xtmph3 {k1}{z}, xgft3_hi, x0	;Lookup mul table of high nibble
 	vpshufb	xtmpl3 {k1}{z}, xgft3_lo, xtmpa	;Lookup mul table of low nibble
 	vpxorq	xtmph3, xtmph3, xtmpl3		;GF add high and low partials
-	vpxorq	xd3, xd3, xtmph3		;xd2 += partial
+	vpxorq	xd3, xd3, xtmph3		;xd3 += partial
 
 	XSTR	[dest1+pos], xd1
 	XSTR	[dest2+pos], xd2

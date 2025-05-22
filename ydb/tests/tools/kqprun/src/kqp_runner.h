@@ -9,13 +9,23 @@ class TKqpRunner {
 public:
     explicit TKqpRunner(const TRunnerOptions& options);
 
-    bool ExecuteSchemeQuery(const TString& query) const;
+    bool ExecuteSchemeQuery(const TRequestOptions& query) const;
 
-    bool ExecuteScript(const TString& script, NKikimrKqp::EQueryAction action, const TString& traceId) const;
+    bool ExecuteScript(const TRequestOptions& script) const;
 
-    bool ExecuteQuery(const TString& query, NKikimrKqp::EQueryAction action, const TString& traceId) const;
+    bool ExecuteQuery(const TRequestOptions& query) const;
 
-    bool WriteScriptResults() const;
+    bool ExecuteYqlScript(const TRequestOptions& query) const;
+
+    void ExecuteQueryAsync(const TRequestOptions& query) const;
+
+    void FinalizeRunner() const;
+
+    bool FetchScriptResults();
+
+    bool ForgetExecutionOperation();
+
+    void PrintScriptResults() const;
 
 private:
     class TImpl;

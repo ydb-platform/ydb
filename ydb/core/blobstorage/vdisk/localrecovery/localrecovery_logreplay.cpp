@@ -75,7 +75,6 @@ namespace NKikimr {
         NHuge::TAllocChunkRecoveryLogRec HugeBlobAllocChunkRecoveryLogRec;
         NHuge::TFreeChunkRecoveryLogRec HugeBlobFreeChunkRecoveryLogRec;
         NHuge::TPutRecoveryLogRec HugeBlobPutRecoveryLogRec;
-        TDiskPartVec HugeBlobs;
         NKikimrVDiskData::TPhantomLogoBlobs PhantomLogoBlobs;
 
         void Bootstrap(const TActorContext &ctx) {
@@ -111,7 +110,7 @@ namespace NKikimr {
                 Finish(ctx, ReadLogCtx->Msg->Status, "Recovery log read failed");
                 return;
             } else {
-                Y_ABORT_UNLESS(ReadLogCtx->Msg->Position == PrevLogPos);
+                Y_VERIFY_S(ReadLogCtx->Msg->Position == PrevLogPos, LocRecCtx->VCtx->VDiskLogPrefix);
                 // update RecovInfo
                 LocRecCtx->RecovInfo->HandleReadLogResult(ReadLogCtx->Msg->Results);
                 // run dispatcher
@@ -230,6 +229,9 @@ namespace NKikimr {
                 TLogoBlobID genId(id, 0);
                 LocRecCtx->HullDbRecovery->ReplayAddHugeLogoBlobCmd(ctx, genId, ingress, diskAddr, lsn,
                         THullDbRecovery::RECOVERY);
+                if (diskAddr.ChunkIdx && diskAddr.Size) {
+                    LocRecCtx->RepairedHuge->RegisterBlob(diskAddr);
+                }
             }
 
             // skip records that already in synclog
@@ -384,9 +386,10 @@ namespace NKikimr {
             const bool fromVPutCommand = true;
             const TLogoBlobID id = LogoBlobIDFromLogoBlobID(PutMsg.GetBlobID());
             const TString &buf = PutMsg.GetBuffer();
-            TIngress ingress = *TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk, id);
+            TMaybe<TIngress> ingress = TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk, id);
+            Y_VERIFY_S(ingress, "Failed to create ingress, VDiskId# " << LocRecCtx->VCtx->ShortSelfVDisk << ", BlobId# " << id);
 
-            PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, id, ingress, buf, fromVPutCommand);
+            PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, id, *ingress, buf, fromVPutCommand);
             return EDispatchStatus::Success;
         }
 
@@ -396,10 +399,12 @@ namespace NKikimr {
                 return EDispatchStatus::Error;
 
             const bool fromVPutCommand = true;
-            TIngress ingress = *TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk,
+            TMaybe<TIngress> ingress = TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk,
                 PutMsgOpt.Id);
+            Y_VERIFY_S(ingress, "Failed to create ingress, VDiskId# " << LocRecCtx->VCtx->ShortSelfVDisk << 
+                    ", BlobId# " << PutMsgOpt.Id);
 
-            PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, PutMsgOpt.Id, ingress, PutMsgOpt.Data, fromVPutCommand);
+            PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, PutMsgOpt.Id, *ingress, PutMsgOpt.Data, fromVPutCommand);
             return EDispatchStatus::Success;
         }
 
@@ -426,10 +431,9 @@ namespace NKikimr {
 
         void ApplySyncDataByRecord(const TActorContext &ctx, ui64 recordLsn) {
             // count number of records
-            ui64 recsNum = 0;
-            auto count = [&recsNum] (const void *) { recsNum++; };
             NSyncLog::TFragmentReader fragment(LocalSyncDataMsg.Data);
-            fragment.ForEach(count, count, count, count);
+            std::vector<const NSyncLog::TRecordHdr*> records = fragment.ListRecords();
+            ui64 recsNum = records.size();
 
             // calculate lsn
             Y_DEBUG_ABORT_UNLESS(recordLsn >= recsNum, "recordLsn# %" PRIu64 " recsNum# %" PRIu64,
@@ -462,7 +466,9 @@ namespace NKikimr {
             };
 
             // apply local sync data
-            fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
+            for (const NSyncLog::TRecordHdr* rec : records) {
+                NSyncLog::HandleRecordHdr(rec, blobHandler, blockHandler, barrierHandler, blockHandlerV2);
+            }
         }
 
         void PutLogoBlobsBatchToHull(
@@ -693,9 +699,9 @@ namespace NKikimr {
             if (!good)
                 return EDispatchStatus::Error;
 
-            HugeBlobs = TDiskPartVec(pb.GetRemovedHugeBlobs());
             ui64 lsn = record.Lsn;
-            TRlas res = LocRecCtx->RepairedHuge->ApplySlotsDeletion(ctx, lsn, HugeBlobs, dbType);
+            TRlas res = LocRecCtx->RepairedHuge->ApplySlotsDeletion(ctx, lsn, TDiskPartVec(pb.GetRemovedHugeBlobs()),
+                TDiskPartVec(pb.GetAllocatedHugeBlobs()), dbType);
             if (!res.Ok)
                 return EDispatchStatus::Error;
 
@@ -752,7 +758,7 @@ namespace NKikimr {
             }
 
             TEvAnubisOsirisPut put(AnubisOsirisPutMsg);
-            TEvAnubisOsirisPut::THullDbInsert insert = put.PrepareInsert(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk);
+            THullDbInsert insert = put.PrepareInsert(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk);
             const bool fromVPutCommand = false;
             PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, insert.Id, insert.Ingress, TString(), fromVPutCommand);
             return EDispatchStatus::Success;
@@ -802,9 +808,10 @@ namespace NKikimr {
                             "DISPATCH RECORD: %s", record.ToString().data()));
 
             // Remember last seen lsn
-            Y_ABORT_UNLESS(RecoveredLsn < record.Lsn,
-                     "%s RecoveredLsn# %" PRIu64 " recordLsn# %" PRIu64 " signature# %" PRIu64,
-                     LocRecCtx->VCtx->VDiskLogPrefix.data(), RecoveredLsn, record.Lsn, ui64(record.Signature));
+            Y_VERIFY_S(RecoveredLsn < record.Lsn, LocRecCtx->VCtx->VDiskLogPrefix
+                     << "RecoveredLsn# " << RecoveredLsn
+                     << " recordLsn# " << record.Lsn
+                     << " signature# " << ui64(record.Signature));
             RecoveredLsn = record.Lsn;
 
             switch (record.Signature) {
@@ -942,4 +949,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

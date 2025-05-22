@@ -258,7 +258,7 @@
     defined(HAVE_MACHINE_ENDIAN_H) || __has_include(<machine/endian.h>)
 #include <machine/endian.h>
 #elif defined(HAVE_SYS_ISA_DEFS_H) || __has_include(<sys/isa_defs.h>)
-#include <sys/isa_defs.h>
+#error #include <sys/isa_defs.h>
 #elif (defined(HAVE_SYS_TYPES_H) && defined(HAVE_SYS_ENDIAN_H)) ||             \
     (__has_include(<sys/types.h>) && __has_include(<sys/endian.h>))
 #include <sys/endian.h>

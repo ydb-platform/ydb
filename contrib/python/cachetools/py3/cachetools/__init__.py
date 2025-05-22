@@ -13,7 +13,7 @@ __all__ = (
     "cachedmethod",
 )
 
-__version__ = "5.3.2"
+__version__ = "5.5.2"
 
 import collections
 import collections.abc
@@ -23,10 +23,10 @@ import random
 import time
 
 from . import keys
+from ._decorators import _cached_wrapper
 
 
 class _DefaultSize:
-
     __slots__ = ()
 
     def __getitem__(self, _):
@@ -241,6 +241,10 @@ class MRUCache(Cache):
     """Most Recently Used (MRU) cache implementation."""
 
     def __init__(self, maxsize, getsizeof=None):
+        from warnings import warn
+
+        warn("MRUCache is deprecated", DeprecationWarning, stacklevel=2)
+
         Cache.__init__(self, maxsize, getsizeof)
         self.__order = collections.OrderedDict()
 
@@ -374,7 +378,6 @@ class TTLCache(_TimedCache):
     """LRU Cache implementation with per-item time-to-live (TTL) value."""
 
     class _Link:
-
         __slots__ = ("key", "expires", "next", "prev")
 
         def __init__(self, key=None, expires=None):
@@ -465,19 +468,26 @@ class TTLCache(_TimedCache):
         return self.__ttl
 
     def expire(self, time=None):
-        """Remove expired items from the cache."""
+        """Remove expired items from the cache and return an iterable of the
+        expired `(key, value)` pairs.
+
+        """
         if time is None:
             time = self.timer()
         root = self.__root
         curr = root.next
         links = self.__links
+        expired = []
         cache_delitem = Cache.__delitem__
+        cache_getitem = Cache.__getitem__
         while curr is not root and not (time < curr.expires):
+            expired.append((curr.key, cache_getitem(self, curr.key)))
             cache_delitem(self, curr.key)
             del links[curr.key]
             next = curr.next
             curr.unlink()
             curr = next
+        return expired
 
     def popitem(self):
         """Remove and return the `(key, value)` pair least recently used that
@@ -504,7 +514,6 @@ class TLRUCache(_TimedCache):
 
     @functools.total_ordering
     class _Item:
-
         __slots__ = ("key", "expires", "removed")
 
         def __init__(self, key=None, expires=None):
@@ -579,7 +588,10 @@ class TLRUCache(_TimedCache):
         return self.__ttu
 
     def expire(self, time=None):
-        """Remove expired items from the cache."""
+        """Remove expired items from the cache and return an iterable of the
+        expired `(key, value)` pairs.
+
+        """
         if time is None:
             time = self.timer()
         items = self.__items
@@ -588,12 +600,16 @@ class TLRUCache(_TimedCache):
         if len(order) > len(items) * 2:
             self.__order = order = [item for item in order if not item.removed]
             heapq.heapify(order)
+        expired = []
         cache_delitem = Cache.__delitem__
+        cache_getitem = Cache.__getitem__
         while order and (order[0].removed or not (time < order[0].expires)):
             item = heapq.heappop(order)
             if not item.removed:
+                expired.append((item.key, cache_getitem(self, item.key)))
                 cache_delitem(self, item.key)
                 del items[item.key]
+        return expired
 
     def popitem(self):
         """Remove and return the `(key, value)` pair least recently used that
@@ -628,150 +644,28 @@ def cached(cache, key=keys.hashkey, lock=None, info=False):
 
     def decorator(func):
         if info:
-            hits = misses = 0
-
             if isinstance(cache, Cache):
 
-                def getinfo():
-                    nonlocal hits, misses
+                def make_info(hits, misses):
                     return _CacheInfo(hits, misses, cache.maxsize, cache.currsize)
 
             elif isinstance(cache, collections.abc.Mapping):
 
-                def getinfo():
-                    nonlocal hits, misses
+                def make_info(hits, misses):
                     return _CacheInfo(hits, misses, None, len(cache))
 
             else:
 
-                def getinfo():
-                    nonlocal hits, misses
+                def make_info(hits, misses):
                     return _CacheInfo(hits, misses, 0, 0)
 
-            if cache is None:
-
-                def wrapper(*args, **kwargs):
-                    nonlocal misses
-                    misses += 1
-                    return func(*args, **kwargs)
-
-                def cache_clear():
-                    nonlocal hits, misses
-                    hits = misses = 0
-
-                cache_info = getinfo
-
-            elif lock is None:
-
-                def wrapper(*args, **kwargs):
-                    nonlocal hits, misses
-                    k = key(*args, **kwargs)
-                    try:
-                        result = cache[k]
-                        hits += 1
-                        return result
-                    except KeyError:
-                        misses += 1
-                    v = func(*args, **kwargs)
-                    try:
-                        cache[k] = v
-                    except ValueError:
-                        pass  # value too large
-                    return v
-
-                def cache_clear():
-                    nonlocal hits, misses
-                    cache.clear()
-                    hits = misses = 0
-
-                cache_info = getinfo
-
-            else:
-
-                def wrapper(*args, **kwargs):
-                    nonlocal hits, misses
-                    k = key(*args, **kwargs)
-                    try:
-                        with lock:
-                            result = cache[k]
-                            hits += 1
-                            return result
-                    except KeyError:
-                        with lock:
-                            misses += 1
-                    v = func(*args, **kwargs)
-                    # in case of a race, prefer the item already in the cache
-                    try:
-                        with lock:
-                            return cache.setdefault(k, v)
-                    except ValueError:
-                        return v  # value too large
-
-                def cache_clear():
-                    nonlocal hits, misses
-                    with lock:
-                        cache.clear()
-                        hits = misses = 0
-
-                def cache_info():
-                    with lock:
-                        return getinfo()
-
+            wrapper = _cached_wrapper(func, cache, key, lock, make_info)
         else:
-            if cache is None:
-
-                def wrapper(*args, **kwargs):
-                    return func(*args, **kwargs)
-
-                def cache_clear():
-                    pass
-
-            elif lock is None:
-
-                def wrapper(*args, **kwargs):
-                    k = key(*args, **kwargs)
-                    try:
-                        return cache[k]
-                    except KeyError:
-                        pass  # key not found
-                    v = func(*args, **kwargs)
-                    try:
-                        cache[k] = v
-                    except ValueError:
-                        pass  # value too large
-                    return v
-
-                def cache_clear():
-                    cache.clear()
-
-            else:
-
-                def wrapper(*args, **kwargs):
-                    k = key(*args, **kwargs)
-                    try:
-                        with lock:
-                            return cache[k]
-                    except KeyError:
-                        pass  # key not found
-                    v = func(*args, **kwargs)
-                    # in case of a race, prefer the item already in the cache
-                    try:
-                        with lock:
-                            return cache.setdefault(k, v)
-                    except ValueError:
-                        return v  # value too large
-
-                def cache_clear():
-                    with lock:
-                        cache.clear()
-
-            cache_info = None
+            wrapper = _cached_wrapper(func, cache, key, lock, None)
 
         wrapper.cache = cache
         wrapper.cache_key = key
         wrapper.cache_lock = lock
-        wrapper.cache_clear = cache_clear
-        wrapper.cache_info = cache_info
 
         return functools.update_wrapper(wrapper, func)
 

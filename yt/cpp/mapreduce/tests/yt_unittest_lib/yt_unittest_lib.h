@@ -7,7 +7,7 @@
 
 #include <library/cpp/yson/node/node_io.h>
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 
 #include <util/datetime/base.h>
 
@@ -25,7 +25,7 @@ namespace NYT::NTesting {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IClientPtr CreateTestClient(TString proxy = "", const TCreateClientOptions& options = {});
+IClientPtr CreateTestClient(TString proxy = "", TCreateClientOptions options = {});
 
 // Create map node by unique path in Cypress and return that path.
 TYPath CreateTestDirectory(const IClientBasePtr& client);

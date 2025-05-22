@@ -1252,11 +1252,11 @@ wait_state_list::header* wait_state_list::allocate_buffer(std::size_t new_capaci
 
         const volatile void** old_a = get_atomic_pointers(old_header);
         std::memcpy(a, old_a, old_header->size * sizeof(const volatile void*));
-        std::memset(a + old_header->size * sizeof(const volatile void*), 0, (new_capacity - old_header->size) * sizeof(const volatile void*));
+        std::memset(a + old_header->size, 0, (new_capacity - old_header->size) * sizeof(const volatile void*));
 
         wait_state** old_w = get_wait_states(old_a, old_header->capacity);
         std::memcpy(w, old_w, old_header->capacity * sizeof(wait_state*)); // copy spare wait state pointers
-        std::memset(w + old_header->capacity * sizeof(wait_state*), 0, (new_capacity - old_header->capacity) * sizeof(wait_state*));
+        std::memset(w + old_header->capacity, 0, (new_capacity - old_header->capacity) * sizeof(wait_state*));
     }
     else
     {

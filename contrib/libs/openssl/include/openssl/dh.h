@@ -1,3 +1,4 @@
+#include <contrib/libs/openssl/redef.h>
 /*
  * Copyright 1995-2018 The OpenSSL Project Authors. All Rights Reserved.
  *
@@ -28,6 +29,9 @@ extern "C" {
 
 # ifndef OPENSSL_DH_MAX_MODULUS_BITS
 #  define OPENSSL_DH_MAX_MODULUS_BITS    10000
+# endif
+# ifndef OPENSSL_DH_CHECK_MAX_MODULUS_BITS
+#  define OPENSSL_DH_CHECK_MAX_MODULUS_BITS  32768
 # endif
 
 # define OPENSSL_DH_FIPS_MIN_MODULUS_BITS 1024

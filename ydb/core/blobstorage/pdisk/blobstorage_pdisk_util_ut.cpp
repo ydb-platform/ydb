@@ -255,7 +255,7 @@ void TestOffset(ui64 offset, ui64 size, ui64 expectedFirstSector, ui64 expectedL
     ui64 firstSector;
     ui64 lastSector;
     ui64 sectorOffset;
-    bool isOk = ParseSectorOffset(format, nullptr, 0, offset, size, firstSector, lastSector, sectorOffset);
+    bool isOk = ParseSectorOffset(format, nullptr, 0, offset, size, firstSector, lastSector, sectorOffset, "");
     UNIT_ASSERT_C(isOk && firstSector == expectedFirstSector && lastSector == expectedLastSector &&
             sectorOffset == expectedSectorOffset,
             "isOk# " << isOk << "\n"
@@ -298,7 +298,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
 
     ui64 payloadSize;
     ui64 payloadOffset;
-    ParsePayloadFromSectorOffset(format, firstSector, lastSector, currentSector, &payloadSize, &payloadOffset);
+    ParsePayloadFromSectorOffset(format, firstSector, lastSector, currentSector, &payloadSize, &payloadOffset, "");
     UNIT_ASSERT_C(payloadSize == expectedPayloadSize && payloadOffset == expectedPayloadOffset,
             "firstSector# " << firstSector << " lastSector# " << lastSector << " currentSector# " << currentSector << "\n"
             "payloadSize# " << payloadSize << " expectedPayloadSize# " << expectedPayloadSize << "\n"
@@ -345,7 +345,7 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
                 }
             }
             TSectorRestorator restorator(false, LogErasureDataParts, true, format);
-            restorator.Restore(sectors.Data(), 0, magic, 0, useT1haHash, 0);
+            restorator.Restore(sectors.Data(), 0, magic, 0, 0);
             UNIT_ASSERT_C(restorator.GoodSectorCount == LogErasureDataParts + 1,
                     "restorator.GoodSectorCount# " << restorator.GoodSectorCount);
         }
@@ -380,8 +380,8 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
                     UNIT_ASSERT(false);
                 }
                 TSectorRestorator restorator(false, 1, false, format);
-                restorator.Restore(sectors[i].Begin(), offset, magic, 0, useT1haHash, 0);
-                UNIT_ASSERT_C(restorator.GoodSectorCount == 1, "i# " << i << " useT1haHash# " << useT1haHash
+                restorator.Restore(sectors[i].Begin(), offset, magic, 0, 0);
+                UNIT_ASSERT_C(restorator.GoodSectorCount == 1, "i# " << i
                         << " GoodSectorCount# " << restorator.GoodSectorCount);
             }
         }

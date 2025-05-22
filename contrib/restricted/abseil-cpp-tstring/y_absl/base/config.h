@@ -75,6 +75,12 @@
 #define Y_ABSL_INTERNAL_CPLUSPLUS_LANG __cplusplus
 #endif
 
+#if defined(Y_ABSL_INTERNAL_CPLUSPLUS_LANG) && \
+    Y_ABSL_INTERNAL_CPLUSPLUS_LANG >= 202002L
+// Include library feature test macros.
+#include <version>
+#endif
+
 #if defined(__APPLE__)
 // Included for TARGET_OS_IPHONE, __IPHONE_OS_VERSION_MIN_REQUIRED,
 // __IPHONE_8_0.
@@ -111,7 +117,7 @@
 //
 // LTS releases can be obtained from
 // https://github.com/abseil/abseil-cpp/releases.
-#define Y_ABSL_LTS_RELEASE_VERSION 20230802
+#define Y_ABSL_LTS_RELEASE_VERSION 20240722
 #define Y_ABSL_LTS_RELEASE_PATCH_LEVEL 1
 
 // Helper macro to convert a CPP variable to a string literal.
@@ -225,12 +231,11 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #endif
 
 // Y_ABSL_HAVE_TLS is defined to 1 when __thread should be supported.
-// We assume __thread is supported on Linux or Asylo when compiled with Clang or
+// We assume __thread is supported on Linux when compiled with Clang or
 // compiled against libstdc++ with _GLIBCXX_HAVE_TLS defined.
 #ifdef Y_ABSL_HAVE_TLS
 #error Y_ABSL_HAVE_TLS cannot be directly set
-#elif (defined(__linux__) || defined(__ASYLO__)) && \
-    (defined(__clang__) || defined(_GLIBCXX_HAVE_TLS))
+#elif (defined(__linux__)) && (defined(__clang__) || defined(_GLIBCXX_HAVE_TLS))
 #define Y_ABSL_HAVE_TLS 1
 #endif
 
@@ -269,52 +274,17 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #define Y_ABSL_HAVE_STD_IS_TRIVIALLY_COPYABLE 1
 #endif
 
+
 // Y_ABSL_HAVE_THREAD_LOCAL
 //
+// DEPRECATED - `thread_local` is available on all supported platforms.
 // Checks whether C++11's `thread_local` storage duration specifier is
 // supported.
 #ifdef Y_ABSL_HAVE_THREAD_LOCAL
 #error Y_ABSL_HAVE_THREAD_LOCAL cannot be directly set
-#elif defined(__APPLE__)
-// Notes:
-// * Xcode's clang did not support `thread_local` until version 8, and
-//   even then not for all iOS < 9.0.
-// * Xcode 9.3 started disallowing `thread_local` for 32-bit iOS simulator
-//   targeting iOS 9.x.
-// * Xcode 10 moves the deployment target check for iOS < 9.0 to link time
-//   making Y_ABSL_HAVE_FEATURE unreliable there.
-//
-#if Y_ABSL_HAVE_FEATURE(cxx_thread_local) && \
-    !(TARGET_OS_IPHONE && __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_9_0)
+#else
 #define Y_ABSL_HAVE_THREAD_LOCAL 1
 #endif
-#else  // !defined(__APPLE__)
-#define Y_ABSL_HAVE_THREAD_LOCAL 1
-#endif
-
-// There are platforms for which TLS should not be used even though the compiler
-// makes it seem like it's supported (Android NDK < r12b for example).
-// This is primarily because of linker problems and toolchain misconfiguration:
-// Abseil does not intend to support this indefinitely. Currently, the newest
-// toolchain that we intend to support that requires this behavior is the
-// r11 NDK - allowing for a 5 year support window on that means this option
-// is likely to be removed around June of 2021.
-// TLS isn't supported until NDK r12b per
-// https://developer.android.com/ndk/downloads/revision_history.html
-// Since NDK r16, `__NDK_MAJOR__` and `__NDK_MINOR__` are defined in
-// <android/ndk-version.h>. For NDK < r16, users should define these macros,
-// e.g. `-D__NDK_MAJOR__=11 -D__NKD_MINOR__=0` for NDK r11.
-#if defined(__ANDROID__) && defined(__clang__)
-#if __has_include(<android/ndk-version.h>)
-#include <android/ndk-version.h>
-#endif  // __has_include(<android/ndk-version.h>)
-#if defined(__ANDROID__) && defined(__clang__) && defined(__NDK_MAJOR__) && \
-    defined(__NDK_MINOR__) &&                                               \
-    ((__NDK_MAJOR__ < 12) || ((__NDK_MAJOR__ == 12) && (__NDK_MINOR__ < 1)))
-#undef Y_ABSL_HAVE_TLS
-#undef Y_ABSL_HAVE_THREAD_LOCAL
-#endif
-#endif  // defined(__ANDROID__) && defined(__clang__)
 
 // Y_ABSL_HAVE_INTRINSIC_INT128
 //
@@ -332,8 +302,8 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #ifdef Y_ABSL_HAVE_INTRINSIC_INT128
 #error Y_ABSL_HAVE_INTRINSIC_INT128 cannot be directly set
 #elif defined(__SIZEOF_INT128__)
-#if (defined(__clang__) && !defined(_WIN32)) || \
-    (defined(__CUDACC__) && __CUDACC_VER_MAJOR__ >= 9) ||                \
+#if (defined(__clang__) && !defined(_WIN32)) ||           \
+    (defined(__CUDACC__) && __CUDACC_VER_MAJOR__ >= 9) || \
     (defined(__GNUC__) && !defined(__clang__) && !defined(__CUDACC__))
 #define Y_ABSL_HAVE_INTRINSIC_INT128 1
 #elif defined(__CUDACC__)
@@ -373,9 +343,7 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #define Y_ABSL_HAVE_EXCEPTIONS 1
 #endif  // defined(__EXCEPTIONS) && Y_ABSL_HAVE_FEATURE(cxx_exceptions)
 // Handle remaining special cases and default to exceptions being supported.
-#elif !(defined(__GNUC__) && (__GNUC__ < 5) && !defined(__EXCEPTIONS)) && \
-    !(Y_ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(5, 0) &&                        \
-      !defined(__cpp_exceptions)) &&                                      \
+#elif !(defined(__GNUC__) && !defined(__cpp_exceptions)) && \
     !(defined(_MSC_VER) && !defined(_CPPUNWIND))
 #define Y_ABSL_HAVE_EXCEPTIONS 1
 #endif
@@ -395,7 +363,7 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 //   Windows                           _WIN32
 //   NaCL                              __native_client__
 //   AsmJS                             __asmjs__
-//   WebAssembly                       __wasm__
+//   WebAssembly (Emscripten)          __EMSCRIPTEN__
 //   Fuchsia                           __Fuchsia__
 //
 // Note that since Android defines both __ANDROID__ and __linux__, one
@@ -407,12 +375,12 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // POSIX.1-2001.
 #ifdef Y_ABSL_HAVE_MMAP
 #error Y_ABSL_HAVE_MMAP cannot be directly set
-#elif defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || \
-    defined(_AIX) || defined(__ros__) || defined(__native_client__) ||    \
-    defined(__asmjs__) || defined(__wasm__) || defined(__Fuchsia__) ||    \
-    defined(__sun) || defined(__ASYLO__) || defined(__myriad2__) ||       \
-    defined(__HAIKU__) || defined(__OpenBSD__) || defined(__NetBSD__) ||  \
-    defined(__QNX__) || defined(__VXWORKS__) || defined(__hexagon__)
+#elif defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) ||    \
+    defined(_AIX) || defined(__ros__) || defined(__native_client__) ||       \
+    defined(__asmjs__) || defined(__EMSCRIPTEN__) || defined(__Fuchsia__) || \
+    defined(__sun) || defined(__myriad2__) || defined(__HAIKU__) ||          \
+    defined(__OpenBSD__) || defined(__NetBSD__) || defined(__QNX__) ||       \
+    defined(__VXWORKS__) || defined(__hexagon__)
 #define Y_ABSL_HAVE_MMAP 1
 #endif
 
@@ -484,6 +452,8 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // https://sourceforge.net/p/mingw-w64/mingw-w64/ci/master/tree/mingw-w64-crt/misc/alarm.c
 #elif defined(__EMSCRIPTEN__)
 // emscripten doesn't support signals
+#elif defined(__wasi__)
+// WASI doesn't support signals
 #elif defined(__Fuchsia__)
 // Signals don't exist on fuchsia.
 #elif defined(__native_client__)
@@ -536,14 +506,14 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // and
 // https://github.com/llvm/llvm-project/commit/0bc451e7e137c4ccadcd3377250874f641ca514a
 // The second has the actually correct versions, thus, is what we copy here.
-#if defined(__APPLE__) &&                                           \
-    ((defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) &&     \
-      __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 101300) ||    \
-     (defined(__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__) &&    \
-      __ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__ < 120000) ||   \
-     (defined(__ENVIRONMENT_WATCH_OS_VERSION_MIN_REQUIRED__) &&     \
-      __ENVIRONMENT_WATCH_OS_VERSION_MIN_REQUIRED__ < 50000) ||     \
-     (defined(__ENVIRONMENT_TV_OS_VERSION_MIN_REQUIRED__) &&        \
+#if defined(__APPLE__) &&                                         \
+    ((defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) &&   \
+      __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 101300) ||  \
+     (defined(__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__) &&  \
+      __ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__ < 120000) || \
+     (defined(__ENVIRONMENT_WATCH_OS_VERSION_MIN_REQUIRED__) &&   \
+      __ENVIRONMENT_WATCH_OS_VERSION_MIN_REQUIRED__ < 50000) ||   \
+     (defined(__ENVIRONMENT_TV_OS_VERSION_MIN_REQUIRED__) &&      \
       __ENVIRONMENT_TV_OS_VERSION_MIN_REQUIRED__ < 120000))
 #define Y_ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE 1
 #else
@@ -555,7 +525,7 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // Checks whether C++17 std::any is available.
 #ifdef Y_ABSL_HAVE_STD_ANY
 #error "Y_ABSL_HAVE_STD_ANY cannot be directly set."
-#elif defined(__cpp_lib_any)
+#elif defined(__cpp_lib_any) && __cpp_lib_any >= 201606L
 #define Y_ABSL_HAVE_STD_ANY 1
 #elif defined(Y_ABSL_INTERNAL_CPLUSPLUS_LANG) && \
     Y_ABSL_INTERNAL_CPLUSPLUS_LANG >= 201703L && \
@@ -568,9 +538,9 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // Checks whether C++17 std::optional is available.
 #ifdef Y_ABSL_HAVE_STD_OPTIONAL
 #error "Y_ABSL_HAVE_STD_OPTIONAL cannot be directly set."
-#elif defined(__cpp_lib_optional)
+#elif defined(__cpp_lib_optional) && __cpp_lib_optional >= 202106L
 #define Y_ABSL_HAVE_STD_OPTIONAL 1
-#elif defined(Y_ABSL_INTERNAL_CPLUSPLUS_LANG) &&  \
+#elif defined(Y_ABSL_INTERNAL_CPLUSPLUS_LANG) && \
     Y_ABSL_INTERNAL_CPLUSPLUS_LANG >= 201703L && \
     !Y_ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE
 #define Y_ABSL_HAVE_STD_OPTIONAL 1
@@ -581,7 +551,7 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // Checks whether C++17 std::variant is available.
 #ifdef Y_ABSL_HAVE_STD_VARIANT
 #error "Y_ABSL_HAVE_STD_VARIANT cannot be directly set."
-#elif defined(__cpp_lib_variant)
+#elif defined(__cpp_lib_variant) && __cpp_lib_variant >= 201606L
 #define Y_ABSL_HAVE_STD_VARIANT 1
 #elif defined(Y_ABSL_INTERNAL_CPLUSPLUS_LANG) && \
     Y_ABSL_INTERNAL_CPLUSPLUS_LANG >= 201703L && \
@@ -594,13 +564,27 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // Checks whether C++17 std::string_view is available.
 #ifdef Y_ABSL_HAVE_STD_STRING_VIEW
 #error "Y_ABSL_HAVE_STD_STRING_VIEW cannot be directly set."
-#elif defined(__NVCC__)
-#define Y_ABSL_HAVE_STD_STRING_VIEW 1
-#elif defined(__cpp_lib_string_view)
+#elif defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
 #define Y_ABSL_HAVE_STD_STRING_VIEW 1
 #elif defined(Y_ABSL_INTERNAL_CPLUSPLUS_LANG) && \
     Y_ABSL_INTERNAL_CPLUSPLUS_LANG >= 201703L
 #define Y_ABSL_HAVE_STD_STRING_VIEW 1
+#endif
+
+// Y_ABSL_HAVE_STD_ORDERING
+//
+// Checks whether C++20 std::{partial,weak,strong}_ordering are available.
+//
+// __cpp_lib_three_way_comparison is missing on libc++
+// (https://github.com/llvm/llvm-project/issues/73953) so treat it as defined
+// when building in C++20 mode.
+#ifdef Y_ABSL_HAVE_STD_ORDERING
+#error "Y_ABSL_HAVE_STD_ORDERING cannot be directly set."
+#elif (defined(__cpp_lib_three_way_comparison) &&    \
+       __cpp_lib_three_way_comparison >= 201907L) || \
+    (defined(Y_ABSL_INTERNAL_CPLUSPLUS_LANG) &&        \
+     Y_ABSL_INTERNAL_CPLUSPLUS_LANG >= 202002L)
+#define Y_ABSL_HAVE_STD_ORDERING 1
 #endif
 
 // Y_ABSL_USES_STD_ANY
@@ -661,6 +645,22 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
     (Y_ABSL_OPTION_USE_STD_STRING_VIEW == 2 &&  \
      defined(Y_ABSL_HAVE_STD_STRING_VIEW))
 #define Y_ABSL_USES_STD_STRING_VIEW 1
+#else
+#error options.h is misconfigured.
+#endif
+
+// Y_ABSL_USES_STD_ORDERING
+//
+// Indicates whether y_absl::{partial,weak,strong}_ordering are aliases for the
+// std:: ordering types.
+#if !defined(Y_ABSL_OPTION_USE_STD_ORDERING)
+#error options.h is misconfigured.
+#elif Y_ABSL_OPTION_USE_STD_ORDERING == 0 || \
+    (Y_ABSL_OPTION_USE_STD_ORDERING == 2 && !defined(Y_ABSL_HAVE_STD_ORDERING))
+#undef Y_ABSL_USES_STD_ORDERING
+#elif Y_ABSL_OPTION_USE_STD_ORDERING == 1 || \
+    (Y_ABSL_OPTION_USE_STD_ORDERING == 2 && defined(Y_ABSL_HAVE_STD_ORDERING))
+#define Y_ABSL_USES_STD_ORDERING 1
 #else
 #error options.h is misconfigured.
 #endif
@@ -847,11 +847,28 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // RTTI support.
 #ifdef Y_ABSL_INTERNAL_HAS_RTTI
 #error Y_ABSL_INTERNAL_HAS_RTTI cannot be directly set
-#elif (defined(__GNUC__) && defined(__GXX_RTTI)) || \
-    (defined(_MSC_VER) && defined(_CPPRTTI)) ||     \
-    (!defined(__GNUC__) && !defined(_MSC_VER))
+#elif Y_ABSL_HAVE_FEATURE(cxx_rtti)
 #define Y_ABSL_INTERNAL_HAS_RTTI 1
-#endif  // !defined(__GNUC__) || defined(__GXX_RTTI)
+#elif defined(__GNUC__) && defined(__GXX_RTTI)
+#define Y_ABSL_INTERNAL_HAS_RTTI 1
+#elif defined(_MSC_VER) && defined(_CPPRTTI)
+#define Y_ABSL_INTERNAL_HAS_RTTI 1
+#elif !defined(__GNUC__) && !defined(_MSC_VER)
+// Unknown compiler, default to RTTI
+#define Y_ABSL_INTERNAL_HAS_RTTI 1
+#endif
+
+// `Y_ABSL_INTERNAL_HAS_CXA_DEMANGLE` determines whether `abi::__cxa_demangle` is
+// available.
+#ifdef Y_ABSL_INTERNAL_HAS_CXA_DEMANGLE
+#error Y_ABSL_INTERNAL_HAS_CXA_DEMANGLE cannot be directly set
+#elif defined(OS_ANDROID) && (defined(__i386__) || defined(__x86_64__))
+#define Y_ABSL_INTERNAL_HAS_CXA_DEMANGLE 0
+#elif defined(__GNUC__)
+#define Y_ABSL_INTERNAL_HAS_CXA_DEMANGLE 1
+#elif defined(__clang__) && !defined(_MSC_VER)
+#define Y_ABSL_INTERNAL_HAS_CXA_DEMANGLE 1
+#endif
 
 // Y_ABSL_INTERNAL_HAVE_SSE is used for compile-time detection of SSE support.
 // See https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html for an overview of
@@ -913,15 +930,43 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #define Y_ABSL_INTERNAL_HAVE_ARM_NEON 1
 #endif
 
+#ifdef __NVCC__
+#undef Y_ABSL_INTERNAL_HAVE_SSE
+#undef Y_ABSL_INTERNAL_HAVE_SSE2
+#undef Y_ABSL_INTERNAL_HAVE_SSSE3
+#undef Y_ABSL_INTERNAL_HAVE_ARM_NEON
+#endif
+
 // Y_ABSL_HAVE_CONSTANT_EVALUATED is used for compile-time detection of
 // constant evaluation support through `y_absl::is_constant_evaluated`.
 #ifdef Y_ABSL_HAVE_CONSTANT_EVALUATED
 #error Y_ABSL_HAVE_CONSTANT_EVALUATED cannot be directly set
 #endif
-#if defined(__cpp_lib_is_constant_evaluated) && (!defined(__CUDACC__) || CUDA_VERSION >= 11000)
+#ifdef __cpp_lib_is_constant_evaluated
 #define Y_ABSL_HAVE_CONSTANT_EVALUATED 1
-#elif Y_ABSL_HAVE_BUILTIN(__builtin_is_constant_evaluated) && (!defined(__CUDACC__) || CUDA_VERSION >= 11000)
+#elif Y_ABSL_HAVE_BUILTIN(__builtin_is_constant_evaluated)
 #define Y_ABSL_HAVE_CONSTANT_EVALUATED 1
+#endif
+
+// Y_ABSL_INTERNAL_CONSTEXPR_SINCE_CXXYY is used to conditionally define constexpr
+// for different C++ versions.
+//
+// These macros are an implementation detail and will be unconditionally removed
+// once the minimum supported C++ version catches up to a given version.
+//
+// For this reason, this symbol is considered INTERNAL and code outside of
+// Abseil must not use it.
+#if defined(Y_ABSL_INTERNAL_CPLUSPLUS_LANG) && \
+    Y_ABSL_INTERNAL_CPLUSPLUS_LANG >= 201703L
+#define Y_ABSL_INTERNAL_CONSTEXPR_SINCE_CXX17 constexpr
+#else
+#define Y_ABSL_INTERNAL_CONSTEXPR_SINCE_CXX17
+#endif
+#if defined(Y_ABSL_INTERNAL_CPLUSPLUS_LANG) && \
+    Y_ABSL_INTERNAL_CPLUSPLUS_LANG >= 202002L
+#define Y_ABSL_INTERNAL_CONSTEXPR_SINCE_CXX20 constexpr
+#else
+#define Y_ABSL_INTERNAL_CONSTEXPR_SINCE_CXX20
 #endif
 
 // Y_ABSL_INTERNAL_EMSCRIPTEN_VERSION combines Emscripten's three version macros
@@ -930,7 +975,7 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #error Y_ABSL_INTERNAL_EMSCRIPTEN_VERSION cannot be directly set
 #endif
 #ifdef __EMSCRIPTEN__
-#error #include <emscripten/version.h>
+#include <emscripten/version.h>
 #ifdef __EMSCRIPTEN_major__
 #if __EMSCRIPTEN_minor__ >= 1000
 #error __EMSCRIPTEN_minor__ is too big to fit in Y_ABSL_INTERNAL_EMSCRIPTEN_VERSION
@@ -938,8 +983,8 @@ static_assert(Y_ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #if __EMSCRIPTEN_tiny__ >= 1000
 #error __EMSCRIPTEN_tiny__ is too big to fit in Y_ABSL_INTERNAL_EMSCRIPTEN_VERSION
 #endif
-#define Y_ABSL_INTERNAL_EMSCRIPTEN_VERSION                          \
-  ((__EMSCRIPTEN_major__)*1000000 + (__EMSCRIPTEN_minor__)*1000 + \
+#define Y_ABSL_INTERNAL_EMSCRIPTEN_VERSION                              \
+  ((__EMSCRIPTEN_major__) * 1000000 + (__EMSCRIPTEN_minor__) * 1000 + \
    (__EMSCRIPTEN_tiny__))
 #endif
 #endif

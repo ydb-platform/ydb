@@ -9,7 +9,7 @@
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -191,18 +191,18 @@ public:
 
     TTaskRunnerActor(
         ITaskRunnerActor::ICallbacks* parent,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const NTaskRunnerProxy::IProxyFactory::TPtr& factory,
-        const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry,
         const ITaskRunnerInvoker::TPtr& invoker,
         const TTxId& txId,
         ui64 taskId,
         TWorkerRuntimeData* runtimeData)
         : TActor<TTaskRunnerActor>(&TTaskRunnerActor::Handler)
         , Parent(parent)
+        , Alloc(alloc)
         , TraceId(TStringBuilder() << txId)
         , TaskId(taskId)
         , Factory(factory)
-        , FuncRegistry(funcRegistry)
         , Invoker(invoker)
         , Local(Invoker->IsLocal())
         , Settings(MakeIntrusive<TDqConfiguration>())
@@ -228,10 +228,10 @@ public:
             cFunc(NActors::TEvents::TEvPoison::EventType, TTaskRunnerActor::PassAway);
             hFunc(TEvTaskRunnerCreate, OnDqTask);
             hFunc(TEvContinueRun, OnContinueRun);
-            hFunc(TEvPop, OnChannelPop);
-            hFunc(TEvPush, OnChannelPush);
-            hFunc(TEvSinkPop, OnSinkPop);
-            hFunc(TEvSinkPopFinished, OnSinkPopFinished);
+            hFunc(TEvOutputChannelDataRequest, OnOutputhannelDataRequest);
+            hFunc(TEvInputChannelData, OnInputChannelData);
+            hFunc(TEvSinkDataRequest, OnSinkDataRequest);
+            hFunc(TEvSinkData, OnSinkData);
             IgnoreFunc(TEvStatistics);
             default: {
                 auto message = TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ")" << " stageId: " << StageId;
@@ -255,11 +255,12 @@ private:
 
         bool fallback = false;
         bool retry = false;
+        bool rpcReaderFalledBack = false;
         for (TStringBuf line: StringSplitter(input).SplitByString("\n")) {
             if (line.Contains("mlockall failed")) {
                 // skip
             } else {
-                if (!fallback) {
+                if (!fallback || rpcReaderFalledBack) {
                     if (line.Contains("FindColumnInfo(): requirement memberType->GetKind() == TType::EKind::Data")) {
                     // YQL-14757: temporary workaround for part6/produce-reduce_lambda_list_table-default.txt
                         fallback = true;
@@ -272,6 +273,10 @@ private:
                     } else if (line.Contains("YT RPC Reader exception:")) {
                         // RPC reader fallback to YT
                         fallback = true;
+                        rpcReaderFalledBack = true;
+                    } else if (line.Contains("Attachments stream write timed out") || line.Contains("No alive peers found")) {
+                        // RPC reader DQ retry
+                        retry = true;
                     } else if (line.Contains("Transaction") && line.Contains("aborted")) {
                         // YQL-15542
                         fallback = true;
@@ -362,22 +367,21 @@ private:
         Run(ev);
     }
 
-    void OnChannelPush(TEvPush::TPtr& ev) {
+    void OnInputChannelData(TEvInputChannelData::TPtr& ev) {
         auto* actorSystem = TActivationContext::ActorSystem();
         auto replyTo = ev->Sender;
         auto selfId = SelfId();
-        auto hasData = ev->Get()->HasData;
         auto finish = ev->Get()->Finish;
         auto channelId = ev->Get()->ChannelId;
         auto cookie = ev->Cookie;
         auto data = ev->Get()->Data;
-        Invoker->Invoke([hasData, selfId, cookie, finish, channelId, taskRunner=TaskRunner, data, actorSystem, replyTo, settings=Settings, stageId=StageId] () mutable {
+        Invoker->Invoke([selfId, cookie, finish, channelId, taskRunner=TaskRunner, data, actorSystem, replyTo, settings=Settings, stageId=StageId] () mutable {
             try {
                 // todo:(whcrc) finish output channel?
                 ui64 freeSpace = 0;
-                if (hasData) {
+                if (data) {
                     // auto guard = taskRunner->BindAllocator(); // only for local mode
-                    taskRunner->GetInputChannel(channelId)->Push(std::move(data));
+                    taskRunner->GetInputChannel(channelId)->Push(std::move(*data));
                     freeSpace = taskRunner->GetInputChannel(channelId)->GetFreeSpace();
                 }
                 if (finish) {
@@ -389,7 +393,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        new TEvPushFinished(channelId, freeSpace),
+                        new TEvInputChannelDataAck(channelId, freeSpace),
                         /*flags=*/0,
                         cookie));
             } catch (...) {
@@ -412,7 +416,7 @@ private:
         i64 space,
         bool finish) override
     {
-        auto* actorSystem = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
+        auto* actorSystem = NActors::TActivationContext::ActorSystem();
         auto selfId = SelfId();
 
         YQL_ENSURE(!batch.IsWide());
@@ -433,7 +437,7 @@ private:
                     new IEventHandle(
                         parentId,
                         selfId,
-                        new TEvAsyncInputPushFinished(index, source->GetFreeSpace()),
+                        new TEvSourceDataAck(index, source->GetFreeSpace()),
                         /*flags=*/0,
                         cookie));
             } catch (...) {
@@ -449,7 +453,7 @@ private:
         });
     }
 
-    void OnChannelPop(TEvPop::TPtr& ev) {
+    void OnOutputhannelDataRequest(TEvOutputChannelDataRequest::TPtr& ev) {
         auto* actorSystem = TActivationContext::ActorSystem();
         auto replyTo = ev->Sender;
         auto selfId = SelfId();
@@ -477,7 +481,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        new TEvChannelPopFinished(
+                        new TEvOutputChannelData(
                             channelId,
                             std::move(result.DataChunks),
                             Nothing(),
@@ -500,7 +504,7 @@ private:
         });
     }
 
-    void OnSinkPopFinished(TEvSinkPopFinished::TPtr& ev) {
+    void OnSinkData(TEvSinkData::TPtr& ev) {
         auto guard = TaskRunner->BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueBatch batch;
         auto sink = TaskRunner->GetSink(ev->Get()->Index);
@@ -517,7 +521,7 @@ private:
             ev->Get()->Changed);
     }
 
-    void OnSinkPop(TEvSinkPop::TPtr& ev) {
+    void OnSinkDataRequest(TEvSinkDataRequest::TPtr& ev) {
         auto selfId = SelfId();
         auto* actorSystem = TActivationContext::ActorSystem();
 
@@ -543,7 +547,7 @@ private:
                 }
                 auto finished = sink->IsFinished();
                 bool changed = finished || ev->Get()->Size > 0 || hasCheckpoint;
-                auto event = MakeHolder<TEvSinkPopFinished>(
+                auto event = MakeHolder<TEvSinkData>(
                     ev->Get()->Index,
                     std::move(maybeCheckpoint), size, checkpointSize, finished, changed);
                 event->Batch = std::move(batch);
@@ -608,18 +612,10 @@ private:
             StageId = taskMeta.GetStageId();
 
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
-            YQL_ENSURE(!Alloc);
-            YQL_ENSURE(FuncRegistry);
-            Alloc = std::make_unique<NKikimr::NMiniKQL::TScopedAlloc>(
-                    __LOCATION__,
-                    NKikimr::TAlignedPagePoolCounters(),
-                    FuncRegistry->SupportsSizedAllocators(),
-                    false
-            );
-            TaskRunner = Factory->GetOld(*Alloc.get(), settings, TraceId);
+            TaskRunner = Factory->GetOld(Alloc, settings, TraceId);
         } catch (...) {
             TString message = "Could not create TaskRunner for " + ToString(taskId) + " on node " + ToString(replyTo.NodeId()) + ", error: " + CurrentExceptionMessage();
-            Send(replyTo, TEvDq::TEvAbortExecution::InternalError(message), 0, cookie);
+            Send(replyTo, TEvDq::TEvAbortExecution::Unavailable(message), 0, cookie); // retries, fallback on retries limit
             return;
         }
 
@@ -645,6 +641,8 @@ private:
                     taskRunner->GetReadRanges(),
                     taskRunner->GetTypeEnv(),
                     taskRunner->GetHolderFactory(),
+                    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>{},
+                    THashMap<ui64, std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>>{},
                     sensors);
 
                 actorSystem->Send(
@@ -735,7 +733,7 @@ private:
 
     void CreateSpillingStorage(ui64 channelId, TActorSystem* actorSystem, bool enableSpilling) {
         TSpillingStorageInfo::TPtr spillingStorageInfo = nullptr;
-        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem, true /*isConcurrent*/);
+        auto channelStorage = ExecCtx->CreateChannelStorage(channelId, enableSpilling, actorSystem);
 
         if (channelStorage) {
             auto spillingIt = SpillingStoragesInfos.find(channelId);
@@ -746,13 +744,12 @@ private:
         }
     }
 
-    std::unique_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NActors::TActorId ParentId;
     ITaskRunnerActor::ICallbacks* Parent;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     const TString TraceId;
     const ui64 TaskId;
     NTaskRunnerProxy::IProxyFactory::TPtr Factory;
-    const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
     NTaskRunnerProxy::ITaskRunner::TPtr TaskRunner;
     ITaskRunnerInvoker::TPtr Invoker;
     bool Local;
@@ -773,22 +770,21 @@ public:
     TTaskRunnerActorFactory(
         const NTaskRunnerProxy::IProxyFactory::TPtr& proxyFactory,
         const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory,
-        const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry,
-        TWorkerRuntimeData* runtimeData)
+         TWorkerRuntimeData* runtimeData)
         : ProxyFactory(proxyFactory)
         , InvokerFactory(invokerFactory)
-        , FuncRegistry(funcRegistry)
         , RuntimeData(runtimeData)
     { }
 
     std::tuple<ITaskRunnerActor*, NActors::IActor*> Create(
         ITaskRunnerActor::ICallbacks* parent,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
         THashSet<ui32>&&,
         THolder<NYql::NDq::TDqMemoryQuota>&&) override
     {
-        auto* actor = new TTaskRunnerActor(parent, ProxyFactory, FuncRegistry, InvokerFactory->Create(), txId, taskId, RuntimeData);
+        auto* actor = new TTaskRunnerActor(parent, alloc, ProxyFactory, InvokerFactory->Create(), txId, taskId, RuntimeData);
         return std::make_tuple(
             static_cast<ITaskRunnerActor*>(actor),
             static_cast<NActors::IActor*>(actor)
@@ -798,17 +794,15 @@ public:
 private:
     NTaskRunnerProxy::IProxyFactory::TPtr ProxyFactory;
     NDqs::ITaskRunnerInvokerFactory::TPtr InvokerFactory;
-    const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
     TWorkerRuntimeData* RuntimeData;
 };
 
 ITaskRunnerActorFactory::TPtr CreateTaskRunnerActorFactory(
     const NTaskRunnerProxy::IProxyFactory::TPtr& proxyFactory,
     const NDqs::ITaskRunnerInvokerFactory::TPtr& invokerFactory,
-    const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry,
     TWorkerRuntimeData* runtimeData)
 {
-    return ITaskRunnerActorFactory::TPtr(new TTaskRunnerActorFactory(proxyFactory, invokerFactory, funcRegistry, runtimeData));
+    return ITaskRunnerActorFactory::TPtr(new TTaskRunnerActorFactory(proxyFactory, invokerFactory, runtimeData));
 }
 
 } // namespace NTaskRunnerActor

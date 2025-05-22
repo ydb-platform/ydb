@@ -5,7 +5,8 @@
 #include <ydb/core/blobstorage/crypto/crypto.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
@@ -83,7 +84,6 @@ public:
     using TVDiskIds = TStackVec<TVDiskID, 16>;
     using TServiceIds = TStackVec<TActorId, 16>;
     using TOrderNums = TStackVec<ui32, 16>;
-
     enum EBlobStateFlags {
         EBSF_DISINTEGRATED = 1, // Group is disintegrated.
         EBSF_UNRECOVERABLE = 1 << 1, // Recoverability: Blob can not be recovered. Ever.
@@ -145,6 +145,10 @@ public:
         virtual bool OneStepFromDegradedOrWorse(const TGroupVDisks& failedDisks) const = 0;
 
         virtual EBlobState GetBlobState(const TSubgroupPartLayout& parts, const TSubgroupVDisks& failedDisks) const = 0;
+
+        // check recoverability of the blob based only on presense of different parts without checking the layout
+        virtual EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+                const TSubgroupVDisks& failedDisks) const = 0;
 
         // check if we need to resurrect something; returns bit mask of parts needed for specified disk in group,
         // nth bit represents nth part; all returned parts are suitable for this particular disk
@@ -250,6 +254,8 @@ public:
         // function returns idxInSubgroup-th element of vdisks array from PickSubgroup
         TVDiskIdShort GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const;
 
+        bool IsHandoff(const TVDiskIdShort& vdisk, ui32 hash) const;
+
 
         TFailRealmIterator FailRealmsBegin() const;
         TFailRealmIterator FailRealmsEnd() const;
@@ -278,13 +284,13 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     struct TDynamicInfo {
         // blobstorage group id
-        const ui32 GroupId;
+        const TGroupId GroupId;
         // blobstorage group generation
         const ui32 GroupGeneration;
         // map to quickly get Service id (TActorId) from its order number inside TTopology
         TVector<TActorId> ServiceIdForOrderNumber;
 
-        TDynamicInfo(ui32 groupId, ui32 groupGen);
+        TDynamicInfo(TGroupId groupId, ui32 groupGen);
         TDynamicInfo(const TDynamicInfo&) = default;
         TDynamicInfo(TDynamicInfo&&) = default;
         TDynamicInfo &operator =(TDynamicInfo&&) = default;
@@ -304,12 +310,15 @@ public:
     const TCypherKey* GetCypherKey() const { return &Key; }
     std::shared_ptr<TTopology> PickTopology() const { return Topology; }
 
+    const std::vector<TGroupId>& GetBridgeGroupIds() const { return BridgeGroupIds; }
+    bool IsBridged() const { return !BridgeGroupIds.empty(); }
+
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
     explicit TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain = 1,
             ui32 numFailDomains = 0, ui32 numFailRealms = 1, const TVector<TActorId> *vdiskIds = nullptr,
             EEncryptionMode encryptionMode = EEM_ENC_V1, ELifeCyclePhase lifeCyclePhase = ELCP_IN_USE,
-            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8));
+            TCypherKey key = TCypherKey((const ui8*)"TestKey", 8), TGroupId groupId = TGroupId::Zero());
 
     TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& rti, TString storagePoolName,
         TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType);
@@ -413,7 +422,7 @@ private:
 
 public:
     // blobstorage group id
-    const ui32 GroupID;
+    const TGroupId GroupID;
     // blobstorage group generation
     const ui32 GroupGeneration;
     // erasure primarily
@@ -441,6 +450,8 @@ private:
     TMaybe<TKikimrScopeId> AcceptedScope;
     TString StoragePoolName;
     NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
+    // bridge mode fields
+    std::vector<TGroupId> BridgeGroupIds;
 };
 
 // physical fail domain description

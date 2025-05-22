@@ -1,9 +1,9 @@
 #pragma once
-#include <ydb/core/grpc_services/auth_processor/dynamic_node_auth_processor.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/protos/tx_proxy.pb.h>
 #include "msgbus_http_server.h"
 #include "msgbus_server_pq_metacache.h"
 
@@ -87,6 +87,7 @@ public:
     void SendReplyMove(NBus::TBusMessageAutoPtr response);
     void Swap(TBusMessageContext& msg);
     TVector<TStringBuf> FindClientCert() const;
+    TString GetPeerName() const;
 
 private:
     friend class TMessageBusSessionIdentHolder;
@@ -100,9 +101,6 @@ struct TEvBusProxy {
         EvFlatTxRequest,
         EvFlatDescribeRequest,
         EvPersQueue,
-        EvDbSchema,
-        EvDbOperation,
-        EvDbBatch,
         EvInitRoot,
         EvChooseProxy,
 
@@ -127,9 +125,6 @@ struct TEvBusProxy {
     typedef TEvMsgBusRequest<EvFlatDescribeRequest> TEvFlatDescribeRequest;
     typedef TEvMsgBusRequest<EvPersQueue> TEvPersQueue;
     typedef TEvMsgBusRequest<EvChooseProxy> TEvChooseProxy;
-    typedef TEvMsgBusRequest<EvDbSchema> TEvDbSchema;
-    typedef TEvMsgBusRequest<EvDbOperation> TEvDbOperation;
-    typedef TEvMsgBusRequest<EvDbBatch> TEvDbBatch;
     typedef TEvMsgBusRequest<EvInitRoot> TEvInitRoot;
 };
 
@@ -278,18 +273,12 @@ IActor* CreateMessageBusServerProxy(TMessageBusServer *server);
 
 //IActor* CreateMessageBusDatashardSetConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletCountersRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalMKQL(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalSchemeTx(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeInitRoot(TBusMessageContext &msg);
-IActor* CreateMessageBusBSAdm(TBusMessageContext &msg);
 IActor* CreateMessageBusGetTypes(TBusMessageContext &msg);
 IActor* CreateMessageBusHiveCreateTablet(TBusMessageContext &msg);
-IActor* CreateMessageBusLocalEnumerateTablets(TBusMessageContext &msg);
-IActor* CreateMessageBusKeyValue(TBusMessageContext &msg);
 IActor* CreateMessageBusPersQueue(TBusMessageContext &msg);
 IActor* CreateMessageBusChooseProxy(TBusMessageContext &msg);
 IActor* CreateMessageBusTabletStateRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusTabletKillRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusSchemeOperationStatus(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageLoadRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusBlobStorageGetRequest(TBusMessageContext &msg);
@@ -298,14 +287,11 @@ IActor* CreateMessageBusBlobStorageConfig(TBusMessageContext &msg);
 IActor* CreateMessageBusDrainNode(TBusMessageContext &msg);
 IActor* CreateMessageBusFillNode(TBusMessageContext &msg);
 IActor* CreateMessageBusResolveNode(TBusMessageContext &msg);
-IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg, const TDynamicNodeAuthorizationParams& dynamicNodeAuthorizationParams);
+IActor* CreateMessageBusRegisterNode(TBusMessageContext &msg);
 IActor* CreateMessageBusCmsRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusSqsRequest(TBusMessageContext &msg);
-IActor* CreateMessageBusWhoAmI(TBusMessageContext &msg);
 IActor* CreateMessageBusInterconnectDebug(TBusMessageContext& msg);
 IActor* CreateMessageBusConsoleRequest(TBusMessageContext &msg);
 IActor* CreateMessageBusTestShardControl(TBusMessageContext &msg);
-IActor* CreateMessageBusLoginRequest(TBusMessageContext &msg);
 
 TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result);
 

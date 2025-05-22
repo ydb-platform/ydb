@@ -1,7 +1,9 @@
 #include "gz.h"
 
 #include <util/generic/size_literals.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/exceptions.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include "output_queue_impl.h"
 
 namespace NYql {
@@ -46,7 +48,7 @@ bool TReadBuffer::nextImpl() {
 
         switch (const auto code = inflate(&Z_, Z_SYNC_FLUSH)) {
             case Z_NEED_DICT:
-                ythrow yexception() << "Need dict.";
+                ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << "Need dict.";
             case Z_STREAM_END:
                 YQL_ENSURE(inflateReset(&Z_) == Z_OK, "Inflate reset error: " << GetErrMsg(Z_));
                 [[fallthrough]];
@@ -57,7 +59,7 @@ bool TReadBuffer::nextImpl() {
                 }
                 break;
             default:
-                ythrow yexception() << GetErrMsg(Z_) << ", code: " << code;
+                ythrow TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << GetErrMsg(Z_) << ", code: " << code;
         }
     }
 }
@@ -114,7 +116,7 @@ private:
             Z_.avail_out = OutputBufferSize;
 
             const auto code = deflate(&Z_, done ? Z_FINISH : Z_BLOCK);
-            YQL_ENSURE((done ? Z_STREAM_END : Z_OK) == code, "code: " << code << ", error: " << GetErrMsg(Z_));
+            YQL_ENSURE_CODELINE((done ? Z_STREAM_END : Z_OK) == code, NYql::NDqProto::StatusIds::BAD_REQUEST, "code: " << code << ", error: " << GetErrMsg(Z_));
 
             if (const auto size = OutputBufferSize - Z_.avail_out)
                 TOutputQueue::Push(TString(OutputBuffer.get(), size));

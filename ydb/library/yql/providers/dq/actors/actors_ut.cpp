@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/dq/actors/events.h>
 
 #include "result_receiver.h"
+#include "result_actor_base.h"
 
 using namespace NActors;
 using namespace NYql;
@@ -33,8 +34,8 @@ Y_UNIT_TEST(ReceiveStatus) {
     runtime.Initialize();
 
     auto sender = runtime.AllocateEdgeActor();
-    auto receiverId = runtime.Register(ResultReceiver().Release()); 
-    runtime.Send(new IEventHandle(receiverId, sender, new TEvReadyState(), 0, true)); 
+    auto receiverId = runtime.Register(ResultReceiver().Release());
+    runtime.Send(new IEventHandle(receiverId, sender, new TEvReadyState(), 0, true));
 }
 
 Y_UNIT_TEST(ReceiveError) {
@@ -49,5 +50,23 @@ Y_UNIT_TEST(ReceiveError) {
     UNIT_ASSERT_EQUAL(response->Record.GetStatusCode(), NYql::NDqProto::StatusIds::UNAVAILABLE);
 }
 
-} // Y_UNIT_TEST_SUITE(ResultReceiver) 
+Y_UNIT_TEST(WriteQueue) {
+    NYql::NDqs::NExecutionHelpers::TWriteQueue q;
+    UNIT_ASSERT(q.empty());
 
+    NYql::NDqs::NExecutionHelpers::TQueueItem item({}, ""); item.Size = 1000;
+    q.emplace(item);
+    UNIT_ASSERT_EQUAL(q.ByteSize, 1000);
+
+    item.Size = 11;
+    q.emplace(item);
+    UNIT_ASSERT_EQUAL(q.ByteSize, 1011);
+
+    q.pop();
+    UNIT_ASSERT_EQUAL(q.ByteSize, 11);
+
+    q.pop();
+    UNIT_ASSERT_EQUAL(q.ByteSize, 0);
+}
+
+} // Y_UNIT_TEST_SUITE(ResultReceiver)

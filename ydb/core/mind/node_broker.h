@@ -75,6 +75,16 @@ struct TEpochInfo {
     }
 };
 
+struct TApproximateEpochStartInfo {
+    ui64 Id = 0;
+    ui64 Version = 0;
+
+    TString ToString() const
+    {
+        return TStringBuilder() << "#" << Id << "." << Version;
+    }
+};
+
 struct TEvNodeBroker {
     enum EEv {
         // requests
@@ -94,6 +104,16 @@ struct TEvNodeBroker {
         EvGetConfigResponse,
         EvSetConfigRequest,
         EvSetConfigResponse,
+
+        // decommission
+        EvGracefulShutdownRequest,
+        EvGracefulShutdownResponse,
+
+        // delta protocol
+        EvSubscribeNodesRequest,
+        EvUpdateNodes,
+        EvSyncNodesRequest,
+        EvSyncNodesResponse,
 
         // TODO: remove
         // internal
@@ -123,6 +143,11 @@ struct TEvNodeBroker {
     struct TEvRegistrationRequest : public TEventPB<TEvRegistrationRequest,
                                                     NKikimrNodeBroker::TRegistrationRequest,
                                                     EvRegistrationRequest> {
+    };
+
+    struct TEvGracefulShutdownRequest : public TEventPB<TEvGracefulShutdownRequest,
+                                                    NKikimrNodeBroker::TGracefulShutdownRequest,
+                                                    EvGracefulShutdownRequest> {
     };
 
     struct TEvExtendLeaseRequest : public TEventPB<TEvExtendLeaseRequest,
@@ -156,6 +181,11 @@ struct TEvNodeBroker {
                                                      EvRegistrationResponse> {
     };
 
+    struct TEvGracefulShutdownResponse : public TEventPB<TEvGracefulShutdownResponse,
+                                                     NKikimrNodeBroker::TGracefulShutdownResponse,
+                                                     EvGracefulShutdownResponse> {
+    };
+
     struct TEvExtendLeaseResponse : public TEventPB<TEvExtendLeaseResponse,
                                                     NKikimrNodeBroker::TExtendLeaseResponse,
                                                     EvExtendLeaseResponse> {
@@ -180,25 +210,36 @@ struct TEvNodeBroker {
                                                   NKikimrNodeBroker::TSetConfigResponse,
                                                   EvSetConfigResponse> {
     };
+
+    struct TEvSubscribeNodesRequest : public TEventPB<TEvSubscribeNodesRequest,
+                                                      NKikimrNodeBroker::TSubscribeNodesRequest,
+                                                      EvSubscribeNodesRequest> {
+    };
+
+    struct TEvUpdateNodes : public TEventPreSerializedPB<TEvUpdateNodes,
+                                                         NKikimrNodeBroker::TUpdateNodes,
+                                                         EvUpdateNodes> {
+        TEvUpdateNodes() = default;
+        TEvUpdateNodes(const NKikimrNodeBroker::TUpdateNodes &record)
+            : TEventPreSerializedPB(record)
+        {
+        }
+    };
+
+    struct TEvSyncNodesRequest : public TEventPB<TEvSyncNodesRequest,
+                                                 NKikimrNodeBroker::TSyncNodesRequest,
+                                                 EvSyncNodesRequest> {
+    };
+
+    struct TEvSyncNodesResponse : public TEventPB<TEvSyncNodesResponse,
+                                                  NKikimrNodeBroker::TSyncNodesResponse,
+                                                  EvSyncNodesResponse> {
+    };
 };
 
 constexpr ui32 DOMAIN_BITS = TDomainsInfo::DomainBits;
 constexpr ui32 DOMAINS_COUNT = 1 << DOMAIN_BITS;
 constexpr ui32 DOMAIN_MASK = (1 << DOMAIN_BITS) - 1;
-
-inline ui32 NodeIdToDomain(ui32 nodeId)
-{
-    return nodeId & DOMAIN_MASK;
-}
-
-inline ui32 NodeIdToDomain(ui32 nodeId, const TDomainsInfo& domains) {
-    // All nodes belong to the same domain when it's the only one defined
-    if (Y_LIKELY(domains.Domains.size() == 1)) {
-        return domains.Domains.begin()->first;
-    }
-
-    return NodeIdToDomain(nodeId);
-}
 
 IActor *CreateNodeBroker(const TActorId &tablet, TTabletStorageInfo *info);
 

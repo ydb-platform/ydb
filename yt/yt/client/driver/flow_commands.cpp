@@ -90,8 +90,6 @@ void ExecuteRemovePipelineSpecCommand(
     auto specSetter)
 {
     auto client = context->GetClient();
-    auto spec = context->ConsumeInputValue();
-
     auto getResult = WaitFor(specGetter(client, specGetterOptions))
         .ValueOrThrow();
 
@@ -312,6 +310,62 @@ void TPausePipelineCommand::DoExecute(ICommandContextPtr context)
         .ThrowOnError();
 
     ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetPipelineStateCommand::Register(TRegistrar /*registrar*/)
+{ }
+
+void TGetPipelineStateCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+    auto result = WaitFor(client->GetPipelineState(PipelinePath, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(TYsonString(ToString(result.State)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TGetFlowViewCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("view_path", &TThis::ViewPath)
+        .Default();
+
+     registrar.ParameterWithUniversalAccessor<bool>(
+        "cache",
+        [] (TThis* command) -> auto& {
+            return command->Options.Cache;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TGetFlowViewCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+    auto result = WaitFor(client->GetFlowView(PipelinePath, ViewPath, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(result.FlowViewPart);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TFlowExecuteCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("flow_command", &TThis::Command)
+        .Default();
+}
+
+void TFlowExecuteCommand::DoExecute(ICommandContextPtr context)
+{
+    auto argument = context->ConsumeInputValue();
+    auto client = context->GetClient();
+    auto result = WaitFor(client->FlowExecute(PipelinePath, Command, argument, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(result.Result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

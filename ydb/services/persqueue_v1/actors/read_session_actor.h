@@ -6,14 +6,19 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 #include <util/generic/guid.h>
 #include <util/system/compiler.h>
+
+#include <google/protobuf/util/time_util.h>
 
 #include <type_traits>
 
@@ -40,11 +45,14 @@ struct TPartitionActorInfo {
     TSet<ui64> NextCommits;
     TDisjointIntervalTree<ui64> NextRanges;
     ui64 Offset;
+    bool ConsumerHasAnyCommits;
 
     TInstant AssignTimestamp;
 
     ui64 Generation;
     ui64 NodeId;
+    bool ReadingFinished;
+    ui64 EndOffset;
 
 
     struct TDirectReadInfo {
@@ -55,7 +63,8 @@ struct TPartitionActorInfo {
     ui64 MaxProcessedDirectReadId = 0;
     ui64 LastDirectReadId = 0;
 
-    std::map<i64, TDirectReadInfo> DirectReads;
+    std::map<ui64, TDirectReadInfo> DirectReads;
+    std::queue<ui64> PendingDirectReadAcks;
 
     explicit TPartitionActorInfo(
             const TActorId& actor,
@@ -77,8 +86,13 @@ struct TPartitionActorInfo {
         , AssignTimestamp(timestamp)
         , Generation(0)
         , NodeId(0)
+        , ReadingFinished(false)
     {
         Y_ABORT_UNLESS(partition.DiscoveryConverter != nullptr);
+    }
+
+    bool IsLastOffsetCommitted() const {
+        return ReadingFinished && EndOffset == Offset;
     }
 };
 
@@ -171,7 +185,8 @@ class TReadSessionActor
 
     using IContext = NGRpcServer::IGRpcStreamingContext<TClientMessage, TServerMessage>;
 
-    using TPartitionsMap = THashMap<ui64, TPartitionActorInfo>;
+    using TPartitionsMap = std::unordered_map<ui64, TPartitionActorInfo>;
+    using TPartitionsMapIterator = typename TPartitionsMap::iterator;
 
 private:
     // 11 tries = 10,23 seconds, then each try for 5 seconds , so 21 retries will take near 1 min
@@ -185,6 +200,7 @@ private:
 
     static constexpr ui64 MAX_INFLY_BYTES = 25_MB;
     static constexpr ui32 MAX_INFLY_READS = 10;
+    static constexpr ui32 MAX_PENDING_DIRECT_READ_ACKS = 10;
 
     static constexpr ui64 MAX_READ_SIZE = 100_MB;
     static constexpr ui64 READ_BLOCK_SIZE = 8_KB; // metering
@@ -237,6 +253,8 @@ private:
             HFunc(TEvPQProxy::TEvCommitDone, Handle); // from PartitionActor
             HFunc(TEvPQProxy::TEvPartitionStatus, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvUpdateSession, Handle); // from partitionActor
+            HFunc(TEvPQProxy::TEvReadingStarted, Handle); // from partitionActor
+            HFunc(TEvPQProxy::TEvReadingFinished, Handle); // from partitionActor
 
 
             // Balancer events
@@ -288,6 +306,8 @@ private:
     void Handle(TEvPQProxy::TEvCommitDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvUpdateSession::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);
 
     // Balancer events
     void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx); // can be sent to itself when reading without a consumer
@@ -309,8 +329,9 @@ private:
     void InitSession(const TActorContext& ctx);
     void RegisterSession(const TString& topic, const TActorId& pipe, const TVector<ui32>& groups, const TActorContext& ctx);
     void CloseSession(PersQueue::ErrorCode::ErrorCode code, const TString& reason, const TActorContext& ctx);
-    void SendLockPartitionToSelf(ui32 group, TString topicName, TTopicHolder topic, const TActorContext& ctx);
+    void SendLockPartitionToSelf(ui32 partitionId, TString topicName, TTopicHolder topic, const TActorContext& ctx);
 
+    void SetupBytesReadByUserAgentCounter();
     void SetupCounters();
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic);
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic,
@@ -319,19 +340,30 @@ private:
     void ProcessReads(const TActorContext& ctx);
     ui64 PrepareResponse(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse);
     void ProcessAnswer(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse, const TActorContext& ctx);
+    void ProcessDirectReads(
+        TPartitionsMap::iterator it,
+        const TActorContext& ctx
+    );
 
-    void DropPartition(typename TPartitionsMap::iterator it, const TActorContext& ctx);
-    void ReleasePartition(typename TPartitionsMap::iterator it, bool couldBeReads, const TActorContext& ctx);
-    void SendReleaseSignal(typename TPartitionsMap::iterator it, bool kill, const TActorContext& ctx);
-    void InformBalancerAboutRelease(typename TPartitionsMap::iterator it, const TActorContext& ctx);
+    void DropPartition(TPartitionsMapIterator& it, const TActorContext& ctx);
+    void ReleasePartition(TPartitionsMapIterator& it, bool couldBeReads, const TActorContext& ctx);
+    void SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);
+    void InformBalancerAboutRelease(TPartitionsMapIterator it, const TActorContext& ctx);
+
+    std::tuple<TString, ui32, ui64> GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const;
 
     static ui32 NormalizeMaxReadMessagesCount(ui32 sourceValue);
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);
+
+    void NotifyChildren(const TPartitionActorInfo& partition, const TActorContext& ctx);
 
 private:
     std::unique_ptr</* type alias */ TEvStreamReadRequest> Request;
     const TString ClientDC;
     const TInstant StartTimestamp;
+
+    TString SdkBuildInfo;
+    TString UserAgent = UseMigrationProtocol ? "pqv1 server" : "topic server";
 
     TActorId SchemeCache;
     TActorId NewSchemeCache;
@@ -397,6 +429,7 @@ private:
     TMap<TPartitionId, TControlMessages> PartitionToControlMessages;
 
     std::deque<THolder<TEvPQProxy::TEvRead>> Reads;
+    std::deque<THolder<TEvPersQueue::TEvLockPartition>> Locks;
 
     ui64 Cookie;
 
@@ -415,6 +448,8 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
     ::NMonitoring::TDynamicCounters::TCounterPtr PipeReconnects;
     ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesReadByUserAgent;
+
     ui64 BytesInflight_;
     ui64 RequestedBytes;
     ui32 ReadsInfly;
@@ -441,11 +476,7 @@ private:
     NPersQueue::TTopicsToConverter TopicsList;
 
     bool DirectRead;
+    bool AutoPartitioningSupport;
 };
 
 }
-
-// Implementation
-#define READ_SESSION_ACTOR_IMPL
-    #include "read_session_actor.ipp"
-#undef READ_SESSION_ACTOR_IMPL

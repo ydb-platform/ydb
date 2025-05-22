@@ -1,0 +1,7 @@
+{
+    "test.test[nan]": [
+        {
+            "uri": "file://test.test_nan_/results.txt"
+        }
+    ]
+}

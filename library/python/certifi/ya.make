@@ -1,5 +1,7 @@
 PY23_LIBRARY()
 
+STYLE_PYTHON()
+
 RESOURCE_FILES(
     PREFIX library/python/certifi/
     .dist-info/METADATA

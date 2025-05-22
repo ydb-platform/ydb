@@ -29,6 +29,7 @@ namespace NKikimr {
             TEvBlobStorage::TEvVStatus::TPtr &ev,
             const TActorId &notifyId,
             const TInstant &now,
-            bool replDone);
+            bool replDone,
+            bool isReadOnly);
 
 } // NKikimr

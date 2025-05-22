@@ -2,7 +2,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
@@ -452,7 +452,7 @@ private:
     bool OnCurrentRequestChanged() override {
         if (CurrentRequest == 0 && !Limits[0]) {
             SCHEMA_LOG_WARN("Create " << TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc>::GetEntityName() << ". Attempt to create rate limiter resource root without limit");
-            NYql::TIssues issues;
+            NYdb::NIssue::TIssues issues;
             issues.AddIssue(TStringBuilder() << "Internal error: attempt to create rate limiter resource root \"" << RequestsPath[0].Path << "\" without limit");
             NYdb::TStatus status(NYdb::EStatus::INTERNAL_ERROR, std::move(issues));
             ReplyStatusAndDie(status);
@@ -474,7 +474,11 @@ private:
     }
 
     NYdb::TAsyncStatus CallYdbSdk(const TCreateRateLimiterResourceRequestDesc& req) override {
-        return Connection->RateLimiterClient.CreateResource(CoordinationNodePath, req.Path, NYdb::NRateLimiter::TCreateResourceSettings().MaxUnitsPerSecond(req.Limit));
+        return Connection->RateLimiterClient.CreateResource(
+            CoordinationNodePath,
+            req.Path,
+            NYdb::NRateLimiter::TCreateResourceSettings()
+                .MaxUnitsPerSecond(req.Limit ? std::optional<double>(req.Limit.GetRef()) : std::optional<double>()));
     }
 
 private:
@@ -537,7 +541,12 @@ private:
     }
 
     NYdb::TAsyncStatus CallYdbSdk() override {
-        return Connection->RateLimiterClient.AlterResource(CoordinationNodePath, ResourcePath, NYdb::NRateLimiter::TAlterResourceSettings().MaxUnitsPerSecond(Limit));
+        return Connection->RateLimiterClient.AlterResource(
+            CoordinationNodePath,
+            ResourcePath,
+            NYdb::NRateLimiter::TAlterResourceSettings()
+                .MaxUnitsPerSecond(Limit ? std::optional<ui64>(Limit.GetRef()) : std::optional<ui64>())
+        );
     }
 
 private:

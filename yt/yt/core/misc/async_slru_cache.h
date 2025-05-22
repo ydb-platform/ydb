@@ -6,12 +6,11 @@
 
 #include <yt/yt/core/actions/future.h>
 
-#include <yt/yt/core/misc/error.h>
-
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/library/profiling/sensor.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <atomic>
@@ -28,20 +27,26 @@ class TAsyncCacheValueBase
     : public virtual TRefCounted
 {
 public:
+    using TCache = TAsyncSlruCacheBase<TKey, TValue, THash>;
+
     virtual ~TAsyncCacheValueBase();
 
     const TKey& GetKey() const;
 
     void UpdateWeight() const;
 
+    TIntrusivePtr<TCache> TryGetCache() const;
+    void SetCache(TWeakPtr<TCache> cache);
+    void ResetCache();
+
 protected:
     explicit TAsyncCacheValueBase(const TKey& key);
 
 private:
-    using TCache = TAsyncSlruCacheBase<TKey, TValue, THash>;
-    friend class TAsyncSlruCacheBase<TKey, TValue, THash>;
+    friend TCache;
 
-    TWeakPtr<TCache> Cache_;
+    NThreading::TAtomicObject<TWeakPtr<TCache>> Cache_;
+
     TKey Key_;
     typename TCache::TItem* Item_ = nullptr;
 };
@@ -78,6 +83,8 @@ public:
 
     void UpdateWeight(TItem* item, i64 weightDelta);
 
+    void UpdateCookie(TItem* item, i64 countDelta, i64 weightDelta);
+
     TIntrusiveListWithAutoDelete<TItem, TDelete> TrimNoDelete();
 
     bool TouchItem(TItem* item);
@@ -106,19 +113,21 @@ protected:
     // Callbacks to be overloaded in derived classes.
     void OnYoungerUpdated(i64 deltaCount, i64 deltaWeight);
     void OnOlderUpdated(i64 deltaCount, i64 deltaWeight);
+    void OnCookieUpdated(i64 deltaCount, i64 deltaWeight);
 
 private:
-    TIntrusiveListWithAutoDelete<TItem, TDelete> YoungerLruList;
-    TIntrusiveListWithAutoDelete<TItem, TDelete> OlderLruList;
+    TIntrusiveListWithAutoDelete<TItem, TDelete> YoungerLruList_;
+    TIntrusiveListWithAutoDelete<TItem, TDelete> OlderLruList_;
 
-    std::vector<TItem*> TouchBuffer;
-    std::atomic<int> TouchBufferPosition = 0;
+    std::vector<TItem*> TouchBuffer_;
+    std::atomic<int> TouchBufferPosition_ = 0;
 
-    size_t YoungerWeightCounter = 0;
-    size_t OlderWeightCounter = 0;
+    i64 YoungerWeightCounter_ = 0;
+    i64 OlderWeightCounter_ = 0;
+    i64 CookieWeightCounter_ = 0;
 
-    std::atomic<i64> Capacity;
-    std::atomic<double> YoungerSizeFraction;
+    std::atomic<i64> Capacity_;
+    std::atomic<double> YoungerSizeFraction_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -164,6 +173,8 @@ public:
         TValueFuture GetValue() const;
         bool IsActive() const;
 
+        void UpdateWeight(i64 newWeight);
+
         void Cancel(const TError& error);
         void EndInsert(TValuePtr value);
 
@@ -189,8 +200,8 @@ public:
     // NB: Shards store reference to the cache, so the cache cannot be simply copied or moved.
     TAsyncSlruCacheBase(const TAsyncSlruCacheBase&) = delete;
     TAsyncSlruCacheBase(TAsyncSlruCacheBase&&) = delete;
-    TAsyncSlruCacheBase& operator=(const TAsyncSlruCacheBase&) = delete;
-    TAsyncSlruCacheBase& operator=(TAsyncSlruCacheBase&&) = delete;
+    TAsyncSlruCacheBase& operator = (const TAsyncSlruCacheBase&) = delete;
+    TAsyncSlruCacheBase& operator = (TAsyncSlruCacheBase&&) = delete;
 
     int GetSize() const;
     i64 GetCapacity() const;
@@ -201,7 +212,7 @@ public:
     TValueFuture Lookup(const TKey& key);
     void Touch(const TValuePtr& value);
 
-    TInsertCookie BeginInsert(const TKey& key);
+    TInsertCookie BeginInsert(const TKey& key, i64 cookieWeight = 0);
     void TryRemove(const TKey& key, bool forbidResurrection = false);
     void TryRemoveValue(const TValuePtr& value, bool forbidResurrection = false);
 
@@ -221,8 +232,12 @@ protected:
     // If item weight ever changes, UpdateWeight() should be called to apply the changes.
     virtual i64 GetWeight(const TValuePtr& value) const;
 
+    // These methods are executed under the cache write lock.
+    // Therefore, these methods should not perform heavy operations.
     virtual void OnAdded(const TValuePtr& value);
     virtual void OnRemoved(const TValuePtr& value);
+
+    //! Called on weight updates and on operations with weighted cookies.
     virtual void OnWeightUpdated(i64 weightDelta);
 
     //! Returns true if resurrection is supported. Note that the function must always returns the same value.
@@ -272,7 +287,7 @@ private:
 
         TValuePromise ValuePromise;
         TValuePtr Value;
-        i64 CachedWeight;
+        i64 CachedWeight = 0;
         //! Counter for accurate calculation of AsyncHitWeight.
         //! It can be updated concurrently under the ReadLock.
         std::atomic<int> AsyncHitCount = 0;
@@ -282,16 +297,14 @@ private:
     struct TGhostItem
         : public TIntrusiveListItem<TGhostItem>
     {
-        explicit TGhostItem(TKey key)
-            : Key(std::move(key))
-        { }
+        explicit TGhostItem(TKey key);
 
         TKey Key;
         //! The value associated with this item. If Inserted == true and Value is null, then we refer to some
         //! old item freed from the memory. If the main cache was bigger, than the item would be present in it.
         //! So, we still need to keep such items in ghost shards.
         TWeakPtr<TValue> Value;
-        i64 CachedWeight;
+        i64 CachedWeight = 0;
         //! Counter for accurate calculation of AsyncHitWeight.
         //! It can be updated concurrently under the ReadLock.
         std::atomic<int> AsyncHitCount = 0;
@@ -330,9 +343,9 @@ private:
 
         //! If BeginInsert() returns true, then it must be paired with either CancelInsert() or EndInsert()
         //! called with the same key. Do not call CancelInsert() or EndInsert() without matching BeginInsert().
-        bool BeginInsert(const TKey& key);
+        bool BeginInsert(const TKey& key, i64 cookieWeight);
         void CancelInsert(const TKey& key);
-        void EndInsert(const TValuePtr& value, i64 weight);
+        void EndInsert(TValuePtr value, i64 weight);
 
         //! Inserts the value back to the cache immediately. Called when the value is resurected in the
         //! main cache.
@@ -344,6 +357,8 @@ private:
 
         void UpdateWeight(const TKey& key, i64 newWeight);
 
+        void UpdateCookieWeight(const TKey& key, i64 newWeight);
+
         using TAsyncSlruCacheListManager<TGhostItem, TGhostShard>::SetTouchBufferCapacity;
 
         void Reconfigure(i64 capacity, double youngerSizeFraction);
@@ -353,7 +368,7 @@ private:
     private:
         friend class TAsyncSlruCacheListManager<TGhostItem, TGhostShard>;
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock);
+        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
 
         THashMap<TKey, TGhostItem*, THash> ItemMap_;
 
@@ -402,12 +417,13 @@ private:
         TGhostShard SmallGhost;
         TGhostShard LargeGhost;
 
-        //! Trims the lists and releases the guard. Returns the list of evicted items.
-        std::vector<TValuePtr> Trim(NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard);
+        //! Returns the list of evicted items.
+        std::vector<TValuePtr> Trim(TIntrusiveListWithAutoDelete<TItem, TDelete>&& evictedItems);
 
     protected:
         void OnYoungerUpdated(i64 deltaCount, i64 deltaWeight);
         void OnOlderUpdated(i64 deltaCount, i64 deltaWeight);
+        void OnCookieUpdated(i64 deltaCount, i64 deltaWeight);
 
         friend class TAsyncSlruCacheListManager<TItem, TShard>;
     };
@@ -428,6 +444,9 @@ private:
     std::atomic<i64> YoungerSizeCounter_ = 0;
     std::atomic<i64> OlderSizeCounter_ = 0;
 
+    std::atomic<i64> CookieSizeCounter_ = 0;
+    std::atomic<i64> CookieWeightCounter_ = 0;
+
     std::atomic<bool> GhostCachesEnabled_;
 
     TShard* GetShardByKey(const TKey& key) const;
@@ -438,8 +457,14 @@ private:
 
     //! Calls OnAdded on OnRemoved for the values evicted with Trim(). If the trim was caused by insertion, then
     //! insertedValue must be the value, insertion of which caused trim. Otherwise, insertedValue must be nullptr.
-    void NotifyOnTrim(const std::vector<TValuePtr>& evictedValues, const TValuePtr& insertedValue);
+    //! If the trim was causes by weight update or weighted cookie, then weightDelta represents weight changes.
+    std::vector<TValuePtr> TrimWithNotify(
+        TShard* shard,
+        NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard,
+        const TValuePtr& insertedValue,
+        i64 weightDelta = 0);
 
+    void UpdateCookieWeight(const TInsertCookie& insertCookie, i64 newWeight);
     void EndInsert(const TInsertCookie& insertCookie, TValuePtr value);
     void CancelInsert(const TInsertCookie& insertCookie, const TError& error);
     void Unregister(const TKey& key);

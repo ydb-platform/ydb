@@ -1,0 +1,740 @@
+{
+    "call_center": {
+        "ClusterType": "s3",
+        "path": "{{data}}/call_center/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["cc_call_center_sk"]
+        },
+        "schema": [
+            "StructType", [
+                 ["cc_call_center_id",  ["PgType", "text"]],
+                 ["cc_call_center_sk",  ["PgType", "int4"]],
+                 ["cc_city",  ["PgType", "text"]],
+                 ["cc_class",  ["PgType", "text"]],
+                 ["cc_closed_date_sk",  ["PgType", "int4"]],
+                 ["cc_company",  ["PgType", "int4"]],
+                 ["cc_company_name",  ["PgType", "text"]],
+                 ["cc_country",  ["PgType", "text"]],
+                 ["cc_county",  ["PgType", "text"]],
+                 ["cc_division",  ["PgType", "int4"]],
+                 ["cc_division_name",  ["PgType", "text"]],
+                 ["cc_employees",  ["PgType", "int4"]],
+                 ["cc_gmt_offset",  ["PgType", "numeric"]],
+                 ["cc_hours",  ["PgType", "text"]],
+                 ["cc_manager",  ["PgType", "text"]],
+                 ["cc_market_manager",  ["PgType", "text"]],
+                 ["cc_mkt_class",  ["PgType", "text"]],
+                 ["cc_mkt_desc",  ["PgType", "text"]],
+                 ["cc_mkt_id",  ["PgType", "int4"]],
+                 ["cc_name",  ["PgType", "text"]],
+                 ["cc_open_date_sk",  ["PgType", "int4"]],
+                 ["cc_rec_end_date",  ["PgType", "date"]],
+                 ["cc_rec_start_date",  ["PgType", "date"]],
+                 ["cc_sq_ft",  ["PgType", "int4"]],
+                 ["cc_state",  ["PgType", "text"]],
+                 ["cc_street_name",  ["PgType", "text"]],
+                 ["cc_street_number",  ["PgType", "text"]],
+                 ["cc_street_type",  ["PgType", "text"]],
+                 ["cc_suite_number",  ["PgType", "text"]],
+                 ["cc_tax_percentage",  ["PgType", "numeric"]],
+                 ["cc_zip",  ["PgType", "text"]]
+            ]
+        ]
+    },
+    "catalog_page": {
+        "ClusterType": "s3",
+        "path": "{{data}}/catalog_page/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["cp_catalog_page_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["cp_catalog_number",  ["PgType", "int4"]],
+                ["cp_catalog_page_id",  ["PgType", "text"]],
+                ["cp_catalog_page_number",  ["PgType", "int4"]],
+                ["cp_catalog_page_sk",  ["PgType", "int4"]],
+                ["cp_department",  ["PgType", "text"]],
+                ["cp_description",  ["PgType", "text"]],
+                ["cp_end_date_sk",  ["PgType", "int4"]],
+                ["cp_start_date_sk",  ["PgType", "int4"]],
+                ["cp_type",  ["PgType", "text"]]
+            ]
+        ]
+    },
+    "catalog_returns": {
+        "ClusterType": "s3",
+        "path": "{{data}}/catalog_returns/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["cr_item_sk", "cr_order_number"]
+        },
+        "schema": [
+            "StructType", [
+                ["cr_call_center_sk",  ["PgType", "int4"]],
+                ["cr_catalog_page_sk",  ["PgType", "int4"]],
+                ["cr_fee",  ["PgType", "numeric"]],
+                ["cr_item_sk",  ["PgType", "int4"]],
+                ["cr_net_loss",  ["PgType", "numeric"]],
+                ["cr_order_number",  ["PgType", "int4"]],
+                ["cr_reason_sk",  ["PgType", "int4"]],
+                ["cr_refunded_addr_sk",  ["PgType", "int4"]],
+                ["cr_refunded_cash",  ["PgType", "numeric"]],
+                ["cr_refunded_cdemo_sk",  ["PgType", "int4"]],
+                ["cr_refunded_customer_sk",  ["PgType", "int4"]],
+                ["cr_refunded_hdemo_sk",  ["PgType", "int4"]],
+                ["cr_return_amount",  ["PgType", "numeric"]],
+                ["cr_return_amt_inc_tax",  ["PgType", "numeric"]],
+                ["cr_return_quantity",  ["PgType", "int4"]],
+                ["cr_return_ship_cost",  ["PgType", "numeric"]],
+                ["cr_return_tax",  ["PgType", "numeric"]],
+                ["cr_returned_date_sk",  ["PgType", "int4"]],
+                ["cr_returned_time_sk",  ["PgType", "int4"]],
+                ["cr_returning_addr_sk",  ["PgType", "int4"]],
+                ["cr_returning_cdemo_sk",  ["PgType", "int4"]],
+                ["cr_returning_customer_sk",  ["PgType", "int4"]],
+                ["cr_returning_hdemo_sk",  ["PgType", "int4"]],
+                ["cr_reversed_charge",  ["PgType", "numeric"]],
+                ["cr_ship_mode_sk",  ["PgType", "int4"]],
+                ["cr_store_credit",  ["PgType", "numeric"]],
+                ["cr_warehouse_sk",  ["PgType", "int4"]]
+            ]
+        ]
+    },
+    "catalog_sales": {
+        "ClusterType": "s3",
+        "path": "{{data}}/catalog_sales/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["cs_item_sk", "cs_order_number"]
+        },
+        "schema": [
+            "StructType", [
+                ["cs_bill_addr_sk",["PgType","int4"]],
+                ["cs_bill_cdemo_sk",["PgType","int4"]],
+                ["cs_bill_customer_sk",["PgType","int4"]],
+                ["cs_bill_hdemo_sk",["PgType","int4"]],
+                ["cs_call_center_sk",["PgType","int4"]],
+                ["cs_catalog_page_sk",["PgType","int4"]],
+                ["cs_coupon_amt",["PgType","numeric"]],
+                ["cs_ext_discount_amt",["PgType","numeric"]],
+                ["cs_ext_list_price",["PgType","numeric"]],
+                ["cs_ext_sales_price",["PgType","numeric"]],
+                ["cs_ext_ship_cost",["PgType","numeric"]],
+                ["cs_ext_tax",["PgType","numeric"]],
+                ["cs_ext_wholesale_cost",["PgType","numeric"]],
+                ["cs_item_sk",["PgType","int4"]],
+                ["cs_list_price",["PgType","numeric"]],
+                ["cs_net_paid",["PgType","numeric"]],
+                ["cs_net_paid_inc_ship",["PgType","numeric"]],
+                ["cs_net_paid_inc_ship_tax",["PgType","numeric"]],
+                ["cs_net_paid_inc_tax",["PgType","numeric"]],
+                ["cs_net_profit",["PgType","numeric"]],
+                ["cs_order_number",["PgType","int4"]],
+                ["cs_promo_sk",["PgType","int4"]],
+                ["cs_quantity",["PgType","int4"]],
+                ["cs_sales_price",["PgType","numeric"]],
+                ["cs_ship_addr_sk",["PgType","int4"]],
+                ["cs_ship_cdemo_sk",["PgType","int4"]],
+                ["cs_ship_customer_sk",["PgType","int4"]],
+                ["cs_ship_date_sk",["PgType","int4"]],
+                ["cs_ship_hdemo_sk",["PgType","int4"]],
+                ["cs_ship_mode_sk",["PgType","int4"]],
+                ["cs_sold_date_sk",["PgType","int4"]],
+                ["cs_sold_time_sk",["PgType","int4"]],
+                ["cs_warehouse_sk",["PgType","int4"]],
+                ["cs_wholesale_cost",["PgType","numeric"]]
+            ]
+        ]
+    },
+    "customer": {
+        "ClusterType": "s3",
+        "path": "{{data}}/customer/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["c_customer_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["c_birth_country",["PgType","text"]],
+                ["c_birth_day",["PgType","int4"]],
+                ["c_birth_month",["PgType","int4"]],
+                ["c_birth_year",["PgType","int4"]],
+                ["c_current_addr_sk",["PgType","int4"]],
+                ["c_current_cdemo_sk",["PgType","int4"]],
+                ["c_current_hdemo_sk",["PgType","int4"]],
+                ["c_customer_id",["PgType","text"]],
+                ["c_customer_sk",["PgType","int4"]],
+                ["c_email_address",["PgType","text"]],
+                ["c_first_name",["PgType","text"]],
+                ["c_first_sales_date_sk",["PgType","int4"]],
+                ["c_first_shipto_date_sk",["PgType","int4"]],
+                ["c_last_name",["PgType","text"]],
+                ["c_last_review_date",["PgType","date"]],
+                ["c_login",["PgType","text"]],
+                ["c_preferred_cust_flag",["PgType","text"]],
+                ["c_salutation",["PgType","text"]]            
+            ]
+        ]
+    },
+    "customer_address": {
+        "ClusterType": "s3",
+        "path": "{{data}}/customer_address/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["ca_address_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["ca_address_id",["PgType","text"]],
+                ["ca_address_sk",["PgType","int4"]],
+                ["ca_city",["PgType","text"]],
+                ["ca_country",["PgType","text"]],
+                ["ca_county",["PgType","text"]],
+                ["ca_gmt_offset",["PgType","numeric"]],
+                ["ca_location_type",["PgType","text"]],
+                ["ca_state",["PgType","text"]],
+                ["ca_street_name",["PgType","text"]],
+                ["ca_street_number",["PgType","text"]],
+                ["ca_street_type",["PgType","text"]],
+                ["ca_suite_number",["PgType","text"]],
+                ["ca_zip",["PgType","text"]]
+            ]
+        ]
+    },
+    "customer_demographics": {
+        "ClusterType": "s3",
+        "path": "{{data}}/customer_demographics/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["cd_demo_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["cd_credit_rating",["PgType","text"]],
+                ["cd_demo_sk",["PgType","int4"]],
+                ["cd_dep_college_count",["PgType","int4"]],
+                ["cd_dep_count",["PgType","int4"]],
+                ["cd_dep_employed_count",["PgType","int4"]],
+                ["cd_education_status",["PgType","text"]],
+                ["cd_gender",["PgType","text"]],
+                ["cd_marital_status",["PgType","text"]],
+                ["cd_purchase_estimate",["PgType","int4"]]
+            ]
+        ]
+    },
+    "date_dim": {
+        "ClusterType": "s3",
+        "path": "{{data}}/date_dim/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["d_date_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["d_current_day",["PgType","text"]],
+                ["d_current_month",["PgType","text"]],
+                ["d_current_quarter",["PgType","text"]],
+                ["d_current_week",["PgType","text"]],
+                ["d_current_year",["PgType","text"]],
+                ["d_date",["PgType","date"]],
+                ["d_date_id",["PgType","text"]],
+                ["d_date_sk",["PgType","int4"]],
+                ["d_day_name",["PgType","text"]],
+                ["d_dom",["PgType","int4"]],
+                ["d_dow",["PgType","int4"]],
+                ["d_first_dom",["PgType","int4"]],
+                ["d_following_holiday",["PgType","text"]],
+                ["d_fy_quarter_seq",["PgType","int4"]],
+                ["d_fy_week_seq",["PgType","int4"]],
+                ["d_fy_year",["PgType","int4"]],
+                ["d_holiday",["PgType","text"]],
+                ["d_last_dom",["PgType","int4"]],
+                ["d_month_seq",["PgType","int4"]],
+                ["d_moy",["PgType","int4"]],
+                ["d_qoy",["PgType","int4"]],
+                ["d_quarter_name",["PgType","text"]],
+                ["d_quarter_seq",["PgType","int4"]],
+                ["d_same_day_lq",["PgType","int4"]],
+                ["d_same_day_ly",["PgType","int4"]],
+                ["d_week_seq",["PgType","int4"]],
+                ["d_weekend",["PgType","text"]],
+                ["d_year",["PgType","int4"]]
+            ]
+        ]
+    },
+    "household_demographics": {
+        "ClusterType": "s3",
+        "path": "{{data}}/household_demographics/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["hd_demo_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["hd_buy_potential",["PgType","text"]],
+                ["hd_demo_sk",["PgType","int4"]],
+                ["hd_dep_count",["PgType","int4"]],
+                ["hd_income_band_sk",["PgType","int4"]],
+                ["hd_vehicle_count",["PgType","int4"]]            
+            ]
+        ]
+    },
+    "income_band": {
+        "ClusterType": "s3",
+        "path": "{{data}}/income_band/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["ib_income_band_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["ib_income_band_sk",["PgType","int4"]],
+                ["ib_lower_bound",["PgType","int4"]],
+                ["ib_upper_bound",["PgType","int4"]]                        
+            ]
+        ]
+    },
+    "inventory": {
+        "ClusterType": "s3",
+        "path": "{{data}}/inventory/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["inv_date_sk", "inv_item_sk", "inv_warehouse_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["inv_date_sk",["PgType","int4"]],
+                ["inv_item_sk",["PgType","int4"]],
+                ["inv_quantity_on_hand",["PgType","int4"]],
+                ["inv_warehouse_sk",["PgType","int4"]]            
+            ]
+        ]
+    },
+    "item": {
+        "ClusterType": "s3",
+        "path": "{{data}}/item/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["i_item_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["i_brand",["PgType","text"]],
+                ["i_brand_id",["PgType","int4"]],
+                ["i_category",["PgType","text"]],
+                ["i_category_id",["PgType","int4"]],
+                ["i_class",["PgType","text"]],
+                ["i_class_id",["PgType","int4"]],
+                ["i_color",["PgType","text"]],
+                ["i_container",["PgType","text"]],
+                ["i_current_price",["PgType","numeric"]],
+                ["i_formulation",["PgType","text"]],
+                ["i_item_desc",["PgType","text"]],
+                ["i_item_id",["PgType","text"]],
+                ["i_item_sk",["PgType","int4"]],
+                ["i_manager_id",["PgType","int4"]],
+                ["i_manufact",["PgType","text"]],
+                ["i_manufact_id",["PgType","int4"]],
+                ["i_product_name",["PgType","text"]],
+                ["i_rec_end_date",["PgType","date"]],
+                ["i_rec_start_date",["PgType","date"]],
+                ["i_size",["PgType","text"]],
+                ["i_units",["PgType","text"]],
+                ["i_wholesale_cost",["PgType","numeric"]]            
+            ]
+        ]
+    },
+    "promotion": {
+        "ClusterType": "s3",
+        "path": "{{data}}/promotion/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["p_promo_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["p_channel_catalog",["PgType","text"]],
+                ["p_channel_demo",["PgType","text"]],
+                ["p_channel_details",["PgType","text"]],
+                ["p_channel_dmail",["PgType","text"]],
+                ["p_channel_email",["PgType","text"]],
+                ["p_channel_event",["PgType","text"]],
+                ["p_channel_press",["PgType","text"]],
+                ["p_channel_radio",["PgType","text"]],
+                ["p_channel_tv",["PgType","text"]],
+                ["p_cost",["PgType","numeric"]],
+                ["p_discount_active",["PgType","text"]],
+                ["p_end_date_sk",["PgType","int4"]],
+                ["p_item_sk",["PgType","int4"]],
+                ["p_promo_id",["PgType","text"]],
+                ["p_promo_name",["PgType","text"]],
+                ["p_promo_sk",["PgType","int4"]],
+                ["p_purpose",["PgType","text"]],
+                ["p_response_target",["PgType","int4"]],
+                ["p_start_date_sk",["PgType","int4"]]
+            ]
+        ]
+    },
+    "reason": {
+        "ClusterType": "s3",
+        "path": "{{data}}/reason/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["r_reason_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["r_reason_desc",["PgType","text"]],
+                ["r_reason_id",["PgType","text"]],
+                ["r_reason_sk",["PgType","int4"]]            
+            ]
+        ]
+    },
+    "ship_mode": {
+        "ClusterType": "s3",
+        "path": "{{data}}/ship_mode/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["sm_ship_mode_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["sm_carrier",["PgType","text"]],
+                ["sm_code",["PgType","text"]],
+                ["sm_contract",["PgType","text"]],
+                ["sm_ship_mode_id",["PgType","text"]],
+                ["sm_ship_mode_sk",["PgType","int4"]],
+                ["sm_type",["PgType","text"]]            
+            ]
+        ]
+    },
+    "store": {
+        "ClusterType": "s3",
+        "path": "{{data}}/store/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["s_store_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["s_city",["PgType","text"]],
+                ["s_closed_date_sk",["PgType","int4"]],
+                ["s_company_id",["PgType","int4"]],
+                ["s_company_name",["PgType","text"]],
+                ["s_country",["PgType","text"]],
+                ["s_county",["PgType","text"]],
+                ["s_division_id",["PgType","int4"]],
+                ["s_division_name",["PgType","text"]],
+                ["s_floor_space",["PgType","int4"]],
+                ["s_geography_class",["PgType","text"]],
+                ["s_gmt_offset",["PgType","numeric"]],
+                ["s_hours",["PgType","text"]],
+                ["s_manager",["PgType","text"]],
+                ["s_market_desc",["PgType","text"]],
+                ["s_market_id",["PgType","int4"]],
+                ["s_market_manager",["PgType","text"]],
+                ["s_number_employees",["PgType","int4"]],
+                ["s_rec_end_date",["PgType","date"]],
+                ["s_rec_start_date",["PgType","date"]],
+                ["s_state",["PgType","text"]],
+                ["s_store_id",["PgType","text"]],
+                ["s_store_name",["PgType","text"]],
+                ["s_store_sk",["PgType","int4"]],
+                ["s_street_name",["PgType","text"]],
+                ["s_street_number",["PgType","text"]],
+                ["s_street_type",["PgType","text"]],
+                ["s_suite_number",["PgType","text"]],
+                ["s_tax_precentage",["PgType","numeric"]],
+                ["s_zip",["PgType","text"]]            
+            ]
+        ]
+    },
+    "store_returns": {
+        "ClusterType": "s3",
+        "path": "{{data}}/store_returns/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_keys": ["sr_item_sk", "sr_ticket_number"]
+        },
+        "schema": [
+            "StructType", [
+                ["sr_addr_sk",["PgType","int4"]],
+                ["sr_cdemo_sk",["PgType","int4"]],
+                ["sr_customer_sk",["PgType","int4"]],
+                ["sr_fee",["PgType","numeric"]],
+                ["sr_hdemo_sk",["PgType","int4"]],
+                ["sr_item_sk",["PgType","int4"]],
+                ["sr_net_loss",["PgType","numeric"]],
+                ["sr_reason_sk",["PgType","int4"]],
+                ["sr_refunded_cash",["PgType","numeric"]],
+                ["sr_return_amt",["PgType","numeric"]],
+                ["sr_return_amt_inc_tax",["PgType","numeric"]],
+                ["sr_return_quantity",["PgType","int4"]],
+                ["sr_return_ship_cost",["PgType","numeric"]],
+                ["sr_return_tax",["PgType","numeric"]],
+                ["sr_return_time_sk",["PgType","int4"]],
+                ["sr_returned_date_sk",["PgType","int4"]],
+                ["sr_reversed_charge",["PgType","numeric"]],
+                ["sr_store_credit",["PgType","numeric"]],
+                ["sr_store_sk",["PgType","int4"]],
+                ["sr_ticket_number",["PgType","int4"]]            
+            ]
+        ]
+    },
+    "store_sales": {
+        "ClusterType": "s3",
+        "path": "{{data}}/store_sales/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["ss_item_sk", "ss_ticket_number"]
+        },
+        "schema": [
+            "StructType", [
+                ["ss_addr_sk",["PgType","int4"]],
+                ["ss_cdemo_sk",["PgType","int4"]],
+                ["ss_coupon_amt",["PgType","numeric"]],
+                ["ss_customer_sk",["PgType","int4"]],
+                ["ss_ext_discount_amt",["PgType","numeric"]],
+                ["ss_ext_list_price",["PgType","numeric"]],
+                ["ss_ext_sales_price",["PgType","numeric"]],
+                ["ss_ext_tax",["PgType","numeric"]],
+                ["ss_ext_wholesale_cost",["PgType","numeric"]],
+                ["ss_hdemo_sk",["PgType","int4"]],
+                ["ss_item_sk",["PgType","int4"]],
+                ["ss_list_price",["PgType","numeric"]],
+                ["ss_net_paid",["PgType","numeric"]],
+                ["ss_net_paid_inc_tax",["PgType","numeric"]],
+                ["ss_net_profit",["PgType","numeric"]],
+                ["ss_promo_sk",["PgType","int4"]],
+                ["ss_quantity",["PgType","int4"]],
+                ["ss_sales_price",["PgType","numeric"]],
+                ["ss_sold_date_sk",["PgType","int4"]],
+                ["ss_sold_time_sk",["PgType","int4"]],
+                ["ss_store_sk",["PgType","int4"]],
+                ["ss_ticket_number",["PgType","int4"]],
+                ["ss_wholesale_cost",["PgType","numeric"]]            
+            ]
+        ]
+    },
+    "time_dim": {
+        "ClusterType": "s3",
+        "path": "{{data}}/time_dim/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["t_time_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["t_am_pm",["PgType","text"]],
+                ["t_hour",["PgType","int4"]],
+                ["t_meal_time",["PgType","text"]],
+                ["t_minute",["PgType","int4"]],
+                ["t_second",["PgType","int4"]],
+                ["t_shift",["PgType","text"]],
+                ["t_sub_shift",["PgType","text"]],
+                ["t_time",["PgType","int4"]],
+                ["t_time_id",["PgType","text"]],
+                ["t_time_sk",["PgType","int4"]]            
+            ]
+        ]
+    },
+    "warehouse": {
+        "ClusterType": "s3",
+        "path": "{{data}}/warehouse/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_keys": ["w_warehouse_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["w_city",["PgType","text"]],
+                ["w_country",["PgType","text"]],
+                ["w_county",["PgType","text"]],
+                ["w_gmt_offset",["PgType","numeric"]],
+                ["w_state",["PgType","text"]],
+                ["w_street_name",["PgType","text"]],
+                ["w_street_number",["PgType","text"]],
+                ["w_street_type",["PgType","text"]],
+                ["w_suite_number",["PgType","text"]],
+                ["w_warehouse_id",["PgType","text"]],
+                ["w_warehouse_name",["PgType","text"]],
+                ["w_warehouse_sk",["PgType","int4"]],
+                ["w_warehouse_sq_ft",["PgType","int4"]],
+                ["w_zip",["PgType","text"]]            
+            ]
+        ]
+    },
+    "web_page": {
+        "ClusterType": "s3",
+        "path": "{{data}}/web_page/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["wp_web_page_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["wp_access_date_sk",["PgType","int4"]],
+                ["wp_autogen_flag",["PgType","text"]],
+                ["wp_char_count",["PgType","int4"]],
+                ["wp_creation_date_sk",["PgType","int4"]],
+                ["wp_customer_sk",["PgType","int4"]],
+                ["wp_image_count",["PgType","int4"]],
+                ["wp_link_count",["PgType","int4"]],
+                ["wp_max_ad_count",["PgType","int4"]],
+                ["wp_rec_end_date",["PgType","date"]],
+                ["wp_rec_start_date",["PgType","date"]],
+                ["wp_type",["PgType","text"]],
+                ["wp_url",["PgType","text"]],
+                ["wp_web_page_id",["PgType","text"]],
+                ["wp_web_page_sk",["PgType","int4"]]            
+            ]
+        ]
+    },
+    "web_returns": {
+        "ClusterType": "s3",
+        "path": "{{data}}/web_returns/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["wr_item_sk", "wr_order_number"]
+        },
+        "schema": [
+            "StructType", [
+                ["wr_account_credit",["PgType","numeric"]],
+                ["wr_fee",["PgType","numeric"]],
+                ["wr_item_sk",["PgType","int4"]],
+                ["wr_net_loss",["PgType","numeric"]],
+                ["wr_order_number",["PgType","int4"]],
+                ["wr_reason_sk",["PgType","int4"]],
+                ["wr_refunded_addr_sk",["PgType","int4"]],
+                ["wr_refunded_cash",["PgType","numeric"]],
+                ["wr_refunded_cdemo_sk",["PgType","int4"]],
+                ["wr_refunded_customer_sk",["PgType","int4"]],
+                ["wr_refunded_hdemo_sk",["PgType","int4"]],
+                ["wr_return_amt",["PgType","numeric"]],
+                ["wr_return_amt_inc_tax",["PgType","numeric"]],
+                ["wr_return_quantity",["PgType","int4"]],
+                ["wr_return_ship_cost",["PgType","numeric"]],
+                ["wr_return_tax",["PgType","numeric"]],
+                ["wr_returned_date_sk",["PgType","int4"]],
+                ["wr_returned_time_sk",["PgType","int4"]],
+                ["wr_returning_addr_sk",["PgType","int4"]],
+                ["wr_returning_cdemo_sk",["PgType","int4"]],
+                ["wr_returning_customer_sk",["PgType","int4"]],
+                ["wr_returning_hdemo_sk",["PgType","int4"]],
+                ["wr_reversed_charge",["PgType","numeric"]],
+                ["wr_web_page_sk",["PgType","int4"]]            
+            ]
+        ]
+    },
+    "web_sales": {
+        "ClusterType": "s3",
+        "path": "{{data}}/web_sales/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_key": ["ws_item_sk", "ws_order_number"]
+        },
+        "schema": [
+            "StructType", [
+                ["ws_bill_addr_sk",["PgType","int4"]],
+                ["ws_bill_cdemo_sk",["PgType","int4"]],
+                ["ws_bill_customer_sk",["PgType","int4"]],
+                ["ws_bill_hdemo_sk",["PgType","int4"]],
+                ["ws_coupon_amt",["PgType","numeric"]],
+                ["ws_ext_discount_amt",["PgType","numeric"]],
+                ["ws_ext_list_price",["PgType","numeric"]],
+                ["ws_ext_sales_price",["PgType","numeric"]],
+                ["ws_ext_ship_cost",["PgType","numeric"]],
+                ["ws_ext_tax",["PgType","numeric"]],
+                ["ws_ext_wholesale_cost",["PgType","numeric"]],
+                ["ws_item_sk",["PgType","int4"]],
+                ["ws_list_price",["PgType","numeric"]],
+                ["ws_net_paid",["PgType","numeric"]],
+                ["ws_net_paid_inc_ship",["PgType","numeric"]],
+                ["ws_net_paid_inc_ship_tax",["PgType","numeric"]],
+                ["ws_net_paid_inc_tax",["PgType","numeric"]],
+                ["ws_net_profit",["PgType","numeric"]],
+                ["ws_order_number",["PgType","int4"]],
+                ["ws_promo_sk",["PgType","int4"]],
+                ["ws_quantity",["PgType","int4"]],
+                ["ws_sales_price",["PgType","numeric"]],
+                ["ws_ship_addr_sk",["PgType","int4"]],
+                ["ws_ship_cdemo_sk",["PgType","int4"]],
+                ["ws_ship_customer_sk",["PgType","int4"]],
+                ["ws_ship_date_sk",["PgType","int4"]],
+                ["ws_ship_hdemo_sk",["PgType","int4"]],
+                ["ws_ship_mode_sk",["PgType","int4"]],
+                ["ws_sold_date_sk",["PgType","int4"]],
+                ["ws_sold_time_sk",["PgType","int4"]],
+                ["ws_warehouse_sk",["PgType","int4"]],
+                ["ws_web_page_sk",["PgType","int4"]],
+                ["ws_web_site_sk",["PgType","int4"]],
+                ["ws_wholesale_cost",["PgType","numeric"]]            
+            ]
+        ]
+    },
+    "web_site": {
+        "ClusterType": "s3",
+        "path": "{{data}}/web_site/",
+        "cluster": "yq-tpc-local",
+        "format": "parquet",
+        "constraints": {
+            "primary_keys": ["web_site_sk"]
+        },
+        "schema": [
+            "StructType", [
+                ["web_city",["PgType","text"]],
+                ["web_class",["PgType","text"]],
+                ["web_close_date_sk",["PgType","int4"]],
+                ["web_company_id",["PgType","int4"]],
+                ["web_company_name",["PgType","text"]],
+                ["web_country",["PgType","text"]],
+                ["web_county",["PgType","text"]],
+                ["web_gmt_offset",["PgType","numeric"]],
+                ["web_manager",["PgType","text"]],
+                ["web_market_manager",["PgType","text"]],
+                ["web_mkt_class",["PgType","text"]],
+                ["web_mkt_desc",["PgType","text"]],
+                ["web_mkt_id",["PgType","int4"]],
+                ["web_name",["PgType","text"]],
+                ["web_open_date_sk",["PgType","int4"]],
+                ["web_rec_end_date",["PgType","date"]],
+                ["web_rec_start_date",["PgType","date"]],
+                ["web_site_id",["PgType","text"]],
+                ["web_site_sk",["PgType","int4"]],
+                ["web_state",["PgType","text"]],
+                ["web_street_name",["PgType","text"]],
+                ["web_street_number",["PgType","text"]],
+                ["web_street_type",["PgType","text"]],
+                ["web_suite_number",["PgType","text"]],
+                ["web_tax_percentage",["PgType","numeric"]],
+                ["web_zip",["PgType","text"]]            
+            ]
+        ]
+    }
+}
+

@@ -11,9 +11,7 @@ from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 def kikimr():
     kikimr_conf = StreamingOverKikimrConfig(cloud_mode=True)
     kikimr = StreamingOverKikimr(kikimr_conf)
-    kikimr.control_plane.fq_config['control_plane_storage']['mapping'] = {
-        "common_tenant_name": ["/alpha"]
-    }
+    kikimr.control_plane.fq_config['control_plane_storage']['mapping'] = {"common_tenant_name": ["/alpha"]}
     kikimr.control_plane.fq_config['private_api']['loopback'] = True
     kikimr.control_plane.fq_config['nodes_manager']['enabled'] = True
     kikimr.start_mvp_mock_server()

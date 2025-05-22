@@ -10,8 +10,10 @@
 
 import inspect
 import math
+import random
 from collections import defaultdict
-from typing import NoReturn, Union
+from contextlib import contextmanager
+from typing import Any, NoReturn, Union
 from weakref import WeakKeyDictionary
 
 from hypothesis import Verbosity, settings
@@ -19,15 +21,17 @@ from hypothesis._settings import note_deprecation
 from hypothesis.errors import InvalidArgument, UnsatisfiedAssumption
 from hypothesis.internal.compat import BaseExceptionGroup
 from hypothesis.internal.conjecture.data import ConjectureData
+from hypothesis.internal.observability import TESTCASE_CALLBACKS
 from hypothesis.internal.reflection import get_pretty_function_description
 from hypothesis.internal.validation import check_type
 from hypothesis.reporting import report, verbose_report
 from hypothesis.utils.dynamicvariables import DynamicVariable
-from hypothesis.vendor.pretty import IDKey
+from hypothesis.vendor.pretty import IDKey, pretty
 
 
-def _calling_function_name(frame):
-    return frame.f_back.f_code.co_name
+def _calling_function_location(what: str, frame: Any) -> str:
+    where = frame.f_back
+    return f"{what}() in {where.f_code.co_name} (line {where.f_lineno})"
 
 
 def reject() -> NoReturn:
@@ -37,8 +41,11 @@ def reject() -> NoReturn:
             since="2023-09-25",
             has_codemod=False,
         )
-    f = _calling_function_name(inspect.currentframe())
-    raise UnsatisfiedAssumption(f"reject() in {f}")
+    where = _calling_function_location("reject", inspect.currentframe())
+    if currently_in_test_context():
+        count = current_build_context().data._observability_predicates[where]
+        count["unsatisfied"] += 1
+    raise UnsatisfiedAssumption(where)
 
 
 def assume(condition: object) -> bool:
@@ -54,9 +61,13 @@ def assume(condition: object) -> bool:
             since="2023-09-25",
             has_codemod=False,
         )
-    if not condition:
-        f = _calling_function_name(inspect.currentframe())
-        raise UnsatisfiedAssumption(f"failed to satisfy assume() in {f}")
+    if TESTCASE_CALLBACKS or not condition:
+        where = _calling_function_location("assume", inspect.currentframe())
+        if TESTCASE_CALLBACKS and currently_in_test_context():
+            predicates = current_build_context().data._observability_predicates
+            predicates[where]["satisfied" if condition else "unsatisfied"] += 1
+        if not condition:
+            raise UnsatisfiedAssumption(f"failed to satisfy {where}")
     return True
 
 
@@ -82,6 +93,38 @@ def current_build_context() -> "BuildContext":
     return context
 
 
+class RandomSeeder:
+    def __init__(self, seed):
+        self.seed = seed
+
+    def __repr__(self):
+        return f"RandomSeeder({self.seed!r})"
+
+
+class _Checker:
+    def __init__(self) -> None:
+        self.saw_global_random = False
+
+    def __call__(self, x):
+        self.saw_global_random |= isinstance(x, RandomSeeder)
+        return x
+
+
+@contextmanager
+def deprecate_random_in_strategy(fmt, *args):
+    _global_rand_state = random.getstate()
+    yield (checker := _Checker())
+    if _global_rand_state != random.getstate() and not checker.saw_global_random:
+        # raise InvalidDefinition
+        note_deprecation(
+            "Do not use the `random` module inside strategies; instead "
+            "consider  `st.randoms()`, `st.sampled_from()`, etc.  " + fmt.format(*args),
+            since="2024-02-05",
+            has_codemod=False,
+            stacklevel=1,
+        )
+
+
 class BuildContext:
     def __init__(self, data, *, is_final=False, close_on_capture=True):
         assert isinstance(data, ConjectureData)
@@ -95,26 +138,21 @@ class BuildContext:
         # The printer will discard duplicates which return different representations.
         self.known_object_printers = defaultdict(list)
 
-    def record_call(self, obj, func, args, kwargs, arg_slices=None):
-        name = get_pretty_function_description(func)
+    def record_call(self, obj, func, args, kwargs):
         self.known_object_printers[IDKey(obj)].append(
-            lambda obj, p, cycle: (
-                p.text("<...>")
-                if cycle
-                else p.repr_call(name, args, kwargs, arg_slices=arg_slices)
+            lambda obj, p, cycle, *, _func=func: p.maybe_repr_known_object_as_call(
+                obj, cycle, get_pretty_function_description(_func), args, kwargs
             )
         )
 
-    def prep_args_kwargs_from_strategies(self, arg_strategies, kwarg_strategies):
+    def prep_args_kwargs_from_strategies(self, kwarg_strategies):
         arg_labels = {}
-        all_s = [(None, s) for s in arg_strategies] + list(kwarg_strategies.items())
-        args = []
         kwargs = {}
-        for i, (k, s) in enumerate(all_s):
+        for k, s in kwarg_strategies.items():
             start_idx = self.data.index
-            obj = self.data.draw(s)
+            with deprecate_random_in_strategy("from {}={!r}", k, s) as check:
+                obj = check(self.data.draw(s, observe_as=f"generate:{k}"))
             end_idx = self.data.index
-            assert k is not None
             kwargs[k] = obj
 
             # This high up the stack, we can't see or really do much with the conjecture
@@ -124,10 +162,10 @@ class BuildContext:
             # pass a dict of such out so that the pretty-printer knows where to place
             # the which-parts-matter comments later.
             if start_idx != end_idx:
-                arg_labels[k or i] = (start_idx, end_idx)
+                arg_labels[k] = (start_idx, end_idx)
                 self.data.arg_slices.add((start_idx, end_idx))
 
-        return args, kwargs, arg_labels
+        return kwargs, arg_labels
 
     def __enter__(self):
         self.assign_variable = _current_build_context.with_value(self)
@@ -170,9 +208,11 @@ def should_note():
     return context.is_final or settings.default.verbosity >= Verbosity.verbose
 
 
-def note(value: str) -> None:
+def note(value: object) -> None:
     """Report this value for the minimal failing example."""
     if should_note():
+        if not isinstance(value, str):
+            value = pretty(value)
         report(value)
 
 
@@ -256,6 +296,11 @@ def target(observation: Union[int, float], *, label: str = "") -> Union[int, flo
             "Calling target() outside of a test is invalid.  "
             "Consider guarding this call with `if currently_in_test_context(): ...`"
         )
+    elif context.data.provider.avoid_realization:
+        # We could in principle realize this in the engine, but it seems more
+        # efficient to have our alternative backend optimize it for us.
+        # See e.g. https://github.com/pschanely/hypothesis-crosshair/issues/3
+        return observation  # pragma: no cover
     verbose_report(f"Saw target({observation!r}, {label=})")
 
     if label in context.data.target_observations:

@@ -66,7 +66,7 @@ TEST(TChecksumTest, TestStreams)
 {
     auto size = 0;
     for (const auto& test : Cases) {
-        size += test.Data.Size();
+        size += test.Data.size();
     }
     TBlob blob(GetRefCountedTypeCookie<TDefaultBlobTag>(), size);
 

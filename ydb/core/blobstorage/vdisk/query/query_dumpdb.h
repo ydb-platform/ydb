@@ -47,7 +47,7 @@ namespace NKikimr {
 
             // send result
             Result->SetResult(str.Str());
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie);
+            SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, HullCtx->VCtx, {});
             TThis::Die(ctx);
         }
 

@@ -23,71 +23,6 @@ class TDataShard;
  * for.
  */
 class TTableConflictsCache {
-    struct THashableKey {
-        TConstArrayRef<TCell> Cells;
-
-        template <typename H>
-        friend H AbslHashValue(H h, const THashableKey& key) {
-            h = H::combine(std::move(h), key.Cells.size());
-            for (const TCell& cell : key.Cells) {
-                h = H::combine(std::move(h), cell.IsNull());
-                if (!cell.IsNull()) {
-                    h = H::combine(std::move(h), cell.Size());
-                    h = H::combine_contiguous(std::move(h), cell.Data(), cell.Size());
-                }
-            }
-            return h;
-        }
-    };
-
-    struct TKeyHash {
-        using is_transparent = void;
-
-        size_t operator()(TConstArrayRef<TCell> key) const {
-            return absl::Hash<THashableKey>()(THashableKey{ key });
-        }
-    };
-
-    struct TKeyEq {
-        using is_transparent = void;
-
-        bool operator()(TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const {
-            if (a.size() != b.size()) {
-                return false;
-            }
-
-            const TCell* pa = a.data();
-            const TCell* pb = b.data();
-            if (pa == pb) {
-                return true;
-            }
-
-            size_t left = a.size();
-            while (left > 0) {
-                if (pa->IsNull()) {
-                    if (!pb->IsNull()) {
-                        return false;
-                    }
-                } else {
-                    if (pb->IsNull()) {
-                        return false;
-                    }
-                    if (pa->Size() != pb->Size()) {
-                        return false;
-                    }
-                    if (pa->Size() > 0 && ::memcmp(pa->Data(), pb->Data(), pa->Size()) != 0) {
-                        return false;
-                    }
-                }
-                ++pa;
-                ++pb;
-                --left;
-            }
-
-            return true;
-        }
-    };
-
     struct TWriteKey {
         TOwnedCellVec Key;
         absl::flat_hash_set<ui64> UncommittedWrites;
@@ -102,7 +37,8 @@ class TTableConflictsCache {
         absl::flat_hash_set<TWriteKey*> WriteKeys;
     };
 
-    using TWriteKeys = absl::flat_hash_map<TOwnedCellVec, std::unique_ptr<TWriteKey>, TKeyHash, TKeyEq>;
+    using TWriteKeys = absl::flat_hash_map<TOwnedCellVec, std::unique_ptr<TWriteKey>,
+        NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals>;
     using TUncommittedWrites = absl::flat_hash_map<ui64, std::unique_ptr<TUncommittedWrite>>;
     using TDistributedWrites = absl::flat_hash_map<ui64, std::unique_ptr<TDistributedWrite>>;
 
@@ -188,7 +124,7 @@ public:
             std::piecewise_construct,
             std::forward_as_tuple(localTid),
             std::forward_as_tuple(localTid));
-        Y_ABORT_UNLESS(res.second);
+        Y_ENSURE(res.second);
         return res.first->second;
     }
 

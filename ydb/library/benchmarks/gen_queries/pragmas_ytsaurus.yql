@@ -1,0 +1,10 @@
+use {{cluster_name}};
+pragma TablePathPrefix='{{table_path_prefix}}';
+pragma DqEngine="disable";
+pragma yt.HybridDqExecution="0";
+pragma AnsiOptionalAs;
+pragma AnsiInForEmptyOrNullableItemsCollections;
+pragma CompactGroupBy;
+pragma yt.QueryCacheMode = "disable";
+pragma FilterPushdownOverJoinOptionalSide;
+pragma RotateJoinTree="false";

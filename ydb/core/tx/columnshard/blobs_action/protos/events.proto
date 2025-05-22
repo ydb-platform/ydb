@@ -1,0 +1,21 @@
+import "ydb/library/actors/protos/actors.proto";
+
+package NKikimrColumnShardBlobOperationsProto;
+
+message TEvDeleteSharedBlobs {
+    optional uint64 SourceTabletId = 1;
+    optional NActorsProto.TActorId SourceActorId = 2;
+    optional string StorageId = 3;
+    repeated string BlobIds = 4;
+}
+
+message TEvDeleteSharedBlobsFinished {
+    optional uint64 TabletId = 1;
+    enum EStatus {
+        Success = 0;
+        NeedRetry = 1;
+        DestinationCurrenlyLocked = 2;
+    }
+
+    optional EStatus Status = 2;
+}

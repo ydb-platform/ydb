@@ -27,7 +27,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
                 << "TDropSubdomain TPropose"
-                << " operationId#" << OperationId;
+                << " operationId# " << OperationId;
     }
 
 public:

@@ -19,19 +19,19 @@ namespace {
 
 class TGranulesNormalizer::TNormalizerResult : public INormalizerChanges {
     std::vector<TChunkData> Chunks;
-    THashMap<ui64, ui64> Granule2Path;
+    THashMap<ui64, TInternalPathId> Granule2Path;
 
 private:
     void AddChunk(TChunkData&& chunk) {
         Chunks.push_back(std::move(chunk));
     }
 
-    TNormalizerResult(const THashMap<ui64, ui64>& g2p)
+    TNormalizerResult(const THashMap<ui64, TInternalPathId>& g2p)
         : Granule2Path(g2p)
     {}
 
 public:
-    bool Apply(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
+    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << "apply " << Chunks.size() << " chunks");
@@ -42,10 +42,14 @@ public:
 
             db.Table<Schema::IndexColumns>().Key(key.Index, key.GranuleId, key.ColumnIdx,
             key.PlanStep, key.TxId, key.PortionId, key.Chunk).Update(
-                NIceDb::TUpdate<Schema::IndexColumns::PathId>(granuleIt->second)
+                NIceDb::TUpdate<Schema::IndexColumns::PathId>(granuleIt->second.GetRawValue())
             );
         }
         return true;
+    }
+
+    ui64 GetSize() const override {
+        return Chunks.size();
     }
 
     static std::optional<std::vector<INormalizerChanges::TPtr>> Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -59,7 +63,7 @@ public:
             return std::nullopt;
         }
 
-        THashMap<ui64, ui64> granule2Path;
+        THashMap<ui64, TInternalPathId> granule2Path;
         {
             auto rowset = db.Table<Schema::IndexGranules>().Select();
             if (!rowset.IsReady()) {
@@ -67,7 +71,7 @@ public:
             }
 
             while (!rowset.EndOfSet()) {
-                ui64 pathId = rowset.GetValue<Schema::IndexGranules::PathId>();
+                const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexGranules::PathId>());
                 ui64 granuleId = rowset.GetValue<Schema::IndexGranules::Granule>();
                 Y_ABORT_UNLESS(granuleId != 0);
                 granule2Path[granuleId] = pathId;
@@ -126,28 +130,15 @@ public:
 
 };
 
-class TGranulesNormalizerTask : public INormalizerTask {
-    INormalizerChanges::TPtr Changes;
-public:
-    TGranulesNormalizerTask(const INormalizerChanges::TPtr& changes)
-        : Changes(changes)
-    {}
-
-    void Start(const TNormalizationController& /* controller */, const TNormalizationContext& nCtx) override {
-        TActorContext::AsActorContext().Send(nCtx.GetColumnshardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(Changes));
-    }
-};
-
-TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::Init(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>> TGranulesNormalizer::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     auto changes = TNormalizerResult::Init(controller, txc);
     if (!changes) {
         return TConclusionStatus::Fail("Not ready");;
     }
     std::vector<INormalizerTask::TPtr> tasks;
     for (auto&& c : *changes) {
-        tasks.emplace_back(std::make_shared<TGranulesNormalizerTask>(c));
+        tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(c));
     }
-    AtomicSet(ActiveTasksCount, tasks.size());
     return tasks;
 }
 

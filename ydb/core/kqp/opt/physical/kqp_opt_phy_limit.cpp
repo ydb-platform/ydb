@@ -37,9 +37,7 @@ TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqp
         return node; // already set?
     }
 
-    if (kqpCtx.Config.Get()->EnableSequentialReads) {
-        settings.SequentialInFlight = 1;
-    }
+    settings.SequentialInFlight = 1;
 
     TMaybeNode<TExprBase> limitValue;
     auto maybeTakeCount = take.Count().Maybe<TCoUint64>();
@@ -124,7 +122,9 @@ TExprBase KqpApplyLimitToOlapReadTable(TExprBase node, TExprContext& ctx, const 
         return node; // already set
     }
     if (direction == ESortDirection::Reverse) {
-        settings.SetReverse();
+        settings.SetSorting(ERequestSorting::DESC);
+    } else if (direction == ESortDirection::Forward) {
+        settings.SetSorting(ERequestSorting::ASC);
     }
 
     auto keySelector = topSort.KeySelectorLambda();

@@ -303,52 +303,9 @@ def parse_vdisk_storage_from_http_api(node_id, pdisk_id, vslot_id):
     return res
 
 
-def parse_vdisk_storage_legacy(host, pdisk_id, vslot_id):
-    page = 'actors/vdisks/vdisk%09u_%09u' % (pdisk_id, vslot_id)
-    data = common.fetch(page, dict(type='stat', dbname='LogoBlobs'), host, fmt='raw')
-    res = []
-    m = table_re.search(str(data))
-    for row in row_re.finditer(m.group(1)):
-        data = [
-            strip_small(m.group(2)) if m_datatext is None else int(m_datatext.group(1))
-            for m in cell_re.finditer(row.group(1))
-            for m_datatext in [datatext_re.search(m.group(1))]  # try to find data-text attr in <td>
-        ]
-        m = tabletid_re.match(data[0])
-        tablet_id = int(m.group(1))
-        channel = int(data[1])
-        size = data[3]
-        if not isinstance(size, int):
-            factor = None
-            if size.endswith('KiB'):
-                size = size[:-3]
-                factor = 1024.0
-            elif size.endswith('MiB'):
-                size = size[:-3]
-                factor = 1024.0**2
-            elif size.endswith('GiB'):
-                size = size[:-3]
-                factor = 1024.0**3
-            elif size.endswith('TiB'):
-                size = size[:-3]
-                factor = 1024.0**4
-            elif size.endswith('PiB'):
-                size = size[:-3]
-                factor = 1024.0**5
-            elif size.endswith('B'):
-                size = size[:-1]
-                factor = 1.0
-            size = int(float(size) * factor)
-        res.append((tablet_id, channel, size))
-    return res
-
-
 def parse_vdisk_storage(host, node_id, pdisk_id, vslot_id):
     try:
-        if common.connection_params.http:
-            return parse_vdisk_storage_from_http_api(node_id, pdisk_id, vslot_id)
-        else:
-            return parse_vdisk_storage_legacy(host, pdisk_id, vslot_id)
+        return parse_vdisk_storage_from_http_api(node_id, pdisk_id, vslot_id)
     except Exception as e:
         print('Failed to parse VDisk storage at host %s PDiskId# %d VSlotId# %d error# %s' % (host, pdisk_id, vslot_id, e), file=sys.stderr)
         return None

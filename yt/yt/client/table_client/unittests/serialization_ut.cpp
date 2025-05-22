@@ -1,9 +1,14 @@
+#include <yt/yt/client/table_client/helpers.h>
 #include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/library/formats/format.h>
 
+#include <yt/yt/library/named_value/named_value.h>
+
 #include <yt/yt/core/misc/blob_output.h>
+
 #include <yt/yt/core/ytree/convert.h>
+
 #include <yt/yt/core/test_framework/framework.h>
 
 namespace NYT::NTableClient {
@@ -21,7 +26,7 @@ TEST(TSchemaSerialization, ParseUsingNodeAndSerialize)
     EXPECT_EQ(1, std::ssize(schema.Columns()));
     EXPECT_EQ("a", schema.Columns()[0].Name());
     EXPECT_EQ(1, std::ssize(schema.DeletedColumns()));
-    EXPECT_EQ("b", schema.DeletedColumns()[0].StableName().Get());
+    EXPECT_EQ("b", schema.DeletedColumns()[0].StableName().Underlying());
 
     NYT::NFormats::TFormat format(NFormats::EFormatType::Json);
 
@@ -52,7 +57,7 @@ TEST(TSchemaSerialization, Cursor)
     EXPECT_EQ(1, std::ssize(schema.Columns()));
     EXPECT_EQ("a", schema.Columns()[0].Name());
     EXPECT_EQ(1, std::ssize(schema.DeletedColumns()));
-    EXPECT_EQ("b", schema.DeletedColumns()[0].StableName().Get());
+    EXPECT_EQ("b", schema.DeletedColumns()[0].StableName().Underlying());
 }
 
 TEST(TSchemaSerialization, Deleted)
@@ -63,7 +68,62 @@ TEST(TSchemaSerialization, Deleted)
     TTableSchema schema;
     EXPECT_THROW_WITH_SUBSTRING(
         Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(TString(schemaString)))),
-        "stable name should be set for a deleted column");
+        "Stable name should be set for a deleted column");
+}
+
+TEST(TInstantSerialization, YsonCompatibility)
+{
+    auto convert = [] (auto value) {
+        TUnversionedValue unversioned;
+        ToUnversionedValue(&unversioned, value, /*rowBuffer*/ nullptr);
+        auto node = NYTree::ConvertToNode(unversioned);
+        return NYTree::ConvertTo<TInstant>(node);
+    };
+
+    TInstant now = TInstant::Now();
+    TInstant lower = TInstant::TInstant::ParseIso8601("1970-03-01");
+    TInstant upper = TInstant::ParseIso8601("2100-01-01");
+
+    EXPECT_EQ(now, convert(now));
+    EXPECT_EQ(TInstant::MilliSeconds(now.MilliSeconds()), convert(now.MilliSeconds()));
+    EXPECT_EQ(lower, convert(lower));
+    EXPECT_EQ(TInstant::MilliSeconds(lower.MilliSeconds()), convert(lower.MilliSeconds()));
+    EXPECT_EQ(upper, convert(upper));
+    EXPECT_EQ(TInstant::MilliSeconds(upper.MilliSeconds()), convert(upper.MilliSeconds()));
+}
+
+TEST(TLegacyOwningKeySerialization, CompositeKeys)
+{
+    auto nameTable = New<TNameTable>();
+    nameTable->RegisterName("key0");
+
+    auto checkSerializeDeserialize = [] (auto&& value) {
+        TStringStream str;
+        NYson::TYsonWriter ysonWriter(&str);
+
+        Serialize(value, &ysonWriter);
+
+        auto node = NYTree::ConvertToNode(NYson::TYsonString(str.Str()));
+
+        using TValueType = std::decay_t<decltype(value)>;
+        TValueType result;
+        Deserialize(result, node);
+        EXPECT_EQ(value, result);
+    };
+
+#define CHECK_SERIALIZE_DESERIALIZE(x) do { SCOPED_TRACE(""); checkSerializeDeserialize(x);} while (0)
+
+    CHECK_SERIALIZE_DESERIALIZE(
+        NNamedValue::MakeRow(nameTable, {
+            {"key0", EValueType::Any, "[1; 2]"},
+        }));
+
+    CHECK_SERIALIZE_DESERIALIZE(
+        NNamedValue::MakeRow(nameTable, {
+            {"key0", EValueType::Composite, "[1; 2]"},
+        }));
+
+#undef CHECK_SERIALIZE_DESERIALIZE
 }
 
 ////////////////////////////////////////////////////////////////////////////////

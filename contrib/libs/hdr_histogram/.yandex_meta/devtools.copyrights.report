@@ -1,0 +1,72 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7a0c945c7fd9793c36bc3f1ca40fa797
+BELONGS ya.make
+    License text:
+         Copyright (c) 2012, 2013, 2014 Gil Tene
+         Copyright (c) 2014 Michael Barker
+         Copyright (c) 2014 Matt Warren
+         All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [16:19]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7c11f46ea34135c1e2037adce3f26a1a
+BELONGS ya.make
+    License text:
+         Copyright (c) 2012, 2013, 2014 Gil Tene
+         Copyright (c) 2014 Michael Barker
+         Copyright (c) 2014 Matt Warren
+         All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [16:19]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d958332c87382cbd5c3451af3cfc976d
+BELONGS ya.make
+    License text:
+         Copyright (c) 2012, 2013, 2014 Gil Tene
+         Copyright (c) 2014 Michael Barker
+         Copyright (c) 2014 Matt Warren
+         All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.txt [16:19]

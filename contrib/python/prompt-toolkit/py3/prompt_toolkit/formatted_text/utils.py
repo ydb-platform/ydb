@@ -4,6 +4,7 @@ Utilities for manipulating formatted text.
 When ``to_formatted_text`` has been called, we get a list of ``(style, text)``
 tuples. This file contains functions for manipulating such a list.
 """
+
 from __future__ import annotations
 
 from typing import Iterable, cast
@@ -88,8 +89,7 @@ def split_lines(
         parts = string.split("\n")
 
         for part in parts[:-1]:
-            if part:
-                line.append(cast(OneStyleAndTextTuple, (style, part, *mouse_handler)))
+            line.append(cast(OneStyleAndTextTuple, (style, part, *mouse_handler)))
             yield line
             line = []
 

@@ -8,18 +8,19 @@
 
 #include <yt/yt/client/ypath/public.h>
 
-#include <yt/yt/core/rpc/public.h>
+#include <yt/yt/client/hydra/public.h>
 
+#include <yt/yt/core/rpc/public.h>
 
 namespace NYT::NObjectClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! |#|-prefix.
-extern const TStringBuf ObjectIdPathPrefix;
-
 //! Function for temporary use: to gradually allow types supported in Sequoia.
 bool IsScalarType(NObjectClient::EObjectType type);
+
+//! Checks if the given type is a Sequoia node.
+bool IsSequoiaNode(NObjectClient::EObjectType type);
 
 //! Creates the YPath pointing to an object with a given #id.
 NYPath::TYPath FromObjectId(TObjectId id);
@@ -42,6 +43,9 @@ bool IsLogTableType(EObjectType type);
 //! Checks if the given type is tablet owner.
 bool IsTabletOwnerType(EObjectType type);
 
+//! Checks if the given type is chunk owner.
+bool IsChunkOwnerType(EObjectType type);
+
 //! Checks if the given type is cell.
 bool IsCellType(EObjectType type);
 
@@ -63,6 +67,12 @@ bool IsTableReplicaType(EObjectType type);
 //! Checks if the given type is a chaos replica.
 bool IsChaosTableReplicaType(EObjectType type);
 
+//! Checks if the given type is a replication card.
+bool IsReplicationCardType(EObjectType type);
+
+//! Checks if the given type is a chaos lease.
+bool IsChaosLeaseType(EObjectType type);
+
 //! Checks if the given type is a collocation.
 bool IsCollocationType(EObjectType type);
 
@@ -75,6 +85,18 @@ bool IsCypressTransactionType(EObjectType type);
 //! Checks if the given type is a system transaction.
 bool IsSystemTransactionType(EObjectType type);
 
+//! Checks if the given type if an upload transaction.
+bool IsUploadTransactionType(EObjectType type);
+
+//! Checks if the given type is an externalized Cypress transaction.
+bool IsExternalizedTransactionType(EObjectType type);
+
+//! Checks if node with the given type can contain other nodes.
+bool IsCompositeNodeType(EObjectType type);
+
+//! Checks if the given type is either Link or SequoiaLink.
+bool IsLinkType(EObjectType);
+
 //! Extracts the type component from #id.
 EObjectType TypeFromId(TObjectId id);
 
@@ -84,8 +106,11 @@ TCellTag CellTagFromId(TObjectId id);
 //! Extracts the counter component from #id.
 ui64 CounterFromId(TObjectId id);
 
-//! Extracts the hash component from #id.
-ui32 HashFromId(TObjectId id);
+//! Extracts Hydra revision from #id.
+NHydra::TRevision RevisionFromId(TObjectId id);
+
+//! Extracts the entropy component from #id.
+ui32 EntropyFromId(TObjectId id);
 
 //! Extracts Hydra revision from #id for non-Sequoia objects.
 NHydra::TVersion VersionFromId(TObjectId id);
@@ -105,12 +130,15 @@ EObjectType SchemaTypeFromType(EObjectType type);
 //! Returns the regular type for a given schema #type.
 EObjectType TypeFromSchemaType(EObjectType type);
 
+//! Formats object type into string (taking schemas into account).
+std::string FormatObjectType(EObjectType type);
+
 //! Constructs the id from its parts.
 TObjectId MakeId(
     EObjectType type,
     TCellTag cellTag,
     ui64 counter,
-    ui32 hash);
+    ui32 entropy);
 
 //! Creates a random id with given type and cell tag.
 TObjectId MakeRandomId(
@@ -129,19 +157,22 @@ bool IsWellKnownId(TObjectId id);
  */
 bool IsSequoiaId(TObjectId id);
 
+//! Returns |true| if a given #id corresponds to cypress transaction that is mirrored to Sequoia.
+bool IsCypressTransactionMirroredToSequoia(TTransactionId transactionId);
+
 //! Constructs the id for a regular object.
 TObjectId MakeRegularId(
     EObjectType type,
     TCellTag cellTag,
     NHydra::TVersion version,
-    ui32 hash);
+    ui32 entropy);
 
 //! Constructs the id for a regular Sequoia object.
 TObjectId MakeSequoiaId(
     EObjectType type,
     TCellTag cellTag,
     NTransactionClient::TTimestamp timestamp,
-    ui32 hash);
+    ui32 entropy);
 
 //! Constructs the id corresponding to well-known (usually singleton) entities.
 /*
@@ -178,15 +209,15 @@ bool IsGlobalCellId(TCellId cellId);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Relies on first 32 bits of object id to be pseudo-random,
-//! cf. TObjectManager::GenerateId.
-struct TDirectObjectIdHash
+//! Relies on first 32 bits of object id ("entropy") to be pseudo-random,
+//! cf. MakeRegularId.
+struct TObjectIdEntropyHash
 {
     size_t operator()(TObjectId id) const;
 };
 
-//! Cf. TDirectObjectIdHash
-struct TDirectVersionedObjectIdHash
+//! Cf. TObjectIdEntropyHash
+struct TVersionedObjectIdEntropyHash
 {
     size_t operator()(const TVersionedObjectId& id) const;
 };

@@ -18,6 +18,7 @@
 
 #include <boost/assert.hpp>
 #include <cstddef> // size_t
+#include <cstring> // memcpy
 #ifndef BOOST_NO_CWCHAR
 #include <cwchar> //  mbstate_t
 #endif
@@ -25,6 +26,7 @@
 #if defined(BOOST_NO_STDC_NAMESPACE)
 namespace std{
     using ::mbstate_t;
+    using ::memcpy;
 } // namespace std
 #endif
 
@@ -117,7 +119,7 @@ class mb_from_wchar
     bool m_full;
 
 public:
-    // make composible buy using templated constructor
+    // make composable by using templated constructor
     template<class T>
     mb_from_wchar(T start) :
         super_t(Base(static_cast< T >(start))),
@@ -129,10 +131,13 @@ public:
     // intel 7.1 doesn't like default copy constructor
     mb_from_wchar(const mb_from_wchar & rhs) :
         super_t(rhs.base_reference()),
+        m_mbs(rhs.m_mbs),
         m_bend(rhs.m_bend),
         m_bnext(rhs.m_bnext),
         m_full(rhs.m_full)
-    {}
+    {
+        std::memcpy(m_buffer, rhs.m_buffer, sizeof(m_buffer));
+    }
 };
 
 } // namespace iterators

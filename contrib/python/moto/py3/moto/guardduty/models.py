@@ -1,6 +1,7 @@
 from __future__ import unicode_literals
-from moto.core import BaseBackend, BaseModel, get_account_id
-from moto.core.utils import BackendDict, get_random_hex
+from moto.core import BaseBackend, BaseModel
+from moto.core.utils import BackendDict
+from moto.moto_api._internal import mock_random
 from datetime import datetime
 
 from .exceptions import DetectorNotFoundException, FilterNotFoundException
@@ -21,6 +22,7 @@ class GuardDutyBackend(BaseBackend):
             finding_publishing_frequency = "SIX_HOURS"
 
         detector = Detector(
+            account_id=self.account_id,
             created_at=datetime.now(),
             finding_publish_freq=finding_publishing_frequency,
             enabled=enable,
@@ -121,16 +123,17 @@ class Filter(BaseModel):
 class Detector(BaseModel):
     def __init__(
         self,
+        account_id,
         created_at,
         finding_publish_freq,
         enabled,
         datasources,
         tags,
     ):
-        self.id = get_random_hex(length=32)
+        self.id = mock_random.get_random_hex(length=32)
         self.created_at = created_at
         self.finding_publish_freq = finding_publish_freq
-        self.service_role = f"arn:aws:iam::{get_account_id()}:role/aws-service-role/guardduty.amazonaws.com/AWSServiceRoleForAmazonGuardDuty"
+        self.service_role = f"arn:aws:iam::{account_id}:role/aws-service-role/guardduty.amazonaws.com/AWSServiceRoleForAmazonGuardDuty"
         self.enabled = enabled
         self.updated_at = created_at
         self.datasources = datasources or {}

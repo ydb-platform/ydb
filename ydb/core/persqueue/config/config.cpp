@@ -1,6 +1,8 @@
 #include "config.h"
 #include <util/generic/hash_set.h>
 #include <util/string/printf.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+
 namespace NKikimr {
 
 bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool shouldHavePartitionsList, TString *error) {

@@ -89,6 +89,8 @@ struct StackInfo {
 
 static bool InsideSignalStack(void** ptr, const StackInfo* stack_info) {
   uintptr_t comparable_ptr = reinterpret_cast<uintptr_t>(ptr);
+  if (stack_info->sig_stack_high == kUnknownStackEnd)
+    return false;
   return (comparable_ptr >= stack_info->sig_stack_low &&
           comparable_ptr < stack_info->sig_stack_high);
 }
@@ -122,19 +124,20 @@ static void **NextStackFrame(void **old_frame_pointer, const void *uc,
       if (pre_signal_frame_pointer >= old_frame_pointer) {
         new_frame_pointer = pre_signal_frame_pointer;
       }
-      // Check that alleged frame pointer is actually readable. This is to
-      // prevent "double fault" in case we hit the first fault due to e.g.
-      // stack corruption.
-      if (!absl::debugging_internal::AddressIsReadable(
-              new_frame_pointer))
-        return nullptr;
-    }
   }
 #endif
 
   // The frame pointer should be 8-byte aligned.
   if ((reinterpret_cast<uintptr_t>(new_frame_pointer) & 7) != 0)
     return nullptr;
+
+  // Check that alleged frame pointer is actually readable. This is to
+  // prevent "double fault" in case we hit the first fault due to e.g.
+  // stack corruption.
+  if (!absl::debugging_internal::AddressIsReadable(
+          new_frame_pointer))
+    return nullptr;
+  }
 
   // Only check the size if both frames are in the same stack.
   if (InsideSignalStack(new_frame_pointer, stack_info) ==
@@ -173,6 +176,22 @@ static void **NextStackFrame(void **old_frame_pointer, const void *uc,
   }
 
   return new_frame_pointer;
+}
+
+// When PAC-RET (-mbranch-protection=pac-ret) is enabled, return addresses
+// stored on the stack will be signed, which means that pointer bits outside of
+// the VA range are potentially set. Since the stacktrace code is expected to
+// return normal code pointers, this function clears those bits.
+inline void* ClearPacBits(void* ptr) {
+  register void* x30 __asm__("x30") = ptr;
+  // The normal instruction for clearing PAC bits is XPACI, but for
+  // compatibility with ARM platforms that do not support pointer
+  // authentication, we use the hint space instruction XPACLRI instead. Hint
+  // space instructions behave as NOPs on unsupported platforms.
+#define ABSL_XPACLRI_HINT "hint #0x7;"
+  asm(ABSL_XPACLRI_HINT : "+r"(x30));  // asm("xpaclri" : "+r"(x30));
+#undef ABSL_XPACLRI_HINT
+  return x30;
 }
 
 template <bool IS_STACK_FRAMES, bool IS_WITH_CONTEXT>
@@ -216,7 +235,7 @@ static int UnwindImpl(void** result, int* sizes, int max_depth, int skip_count,
     if (skip_count > 0) {
       skip_count--;
     } else {
-      result[n] = prev_return_address;
+      result[n] = ClearPacBits(prev_return_address);
       if (IS_STACK_FRAMES) {
         sizes[n] = static_cast<int>(
             ComputeStackFrameSize(prev_frame_pointer, frame_pointer));

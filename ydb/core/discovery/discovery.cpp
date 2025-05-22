@@ -46,6 +46,16 @@ namespace NDiscovery {
         return false;
     }
 
+    bool CheckEndpointId(const TString& endpointId, const NKikimrStateStorage::TEndpointBoardEntry &entry) {
+        if (endpointId.empty() && !entry.HasEndpointId())
+            return true;
+
+        if (entry.HasEndpointId() && entry.GetEndpointId() == endpointId)
+            return true;
+
+        return false;
+    }
+
     bool IsSafeLocationMarker(TStringBuf location) {
         const ui8* isrc = reinterpret_cast<const ui8*>(location.data());
         for (auto idx : xrange(location.size())) {
@@ -128,6 +138,7 @@ namespace NDiscovery {
                 const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& prevInfoEntries,
                 TMap<TActorId, TEvStateStorage::TBoardInfoEntry> newInfoEntries,
                 TSet<TString> services,
+                TString endpointId,
                 const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse) {
         TMap<TActorId, TEvStateStorage::TBoardInfoEntry> infoEntries;
         if (prevInfoEntries.empty()) {
@@ -170,6 +181,9 @@ namespace NDiscovery {
                 continue;
             }
 
+            if (!CheckEndpointId(endpointId, entry)) {
+                continue;
+            }
             if (entry.GetSsl()) {
                 AddEndpoint(cachedMessageSsl, statesSsl, entry);
             } else {
@@ -185,7 +199,6 @@ namespace NDiscovery {
                 cachedMessageSsl.set_self_location(location);
             }
         }
-
         return {SerializeResult(cachedMessage), SerializeResult(cachedMessageSsl), std::move(infoEntries)};
     }
 }
@@ -199,11 +212,9 @@ namespace NDiscoveryPrivate {
 
         struct TEvRequest: public TEventLocal<TEvRequest, EvRequest> {
             const TString Database;
-            const ui32 StateStorageId;
 
-            TEvRequest(const TString& db, ui32 stateStorageId)
+            TEvRequest(const TString& db)
                 : Database(db)
-                , StateStorageId(stateStorageId)
             {
             }
         };
@@ -222,8 +233,9 @@ namespace NDiscoveryPrivate {
 
         THashMap<TString, TVector<TWaiter>> Requested;
         bool Scheduled = false;
+        TMaybe<TString> EndpointId;
 
-        auto Request(const TString& database, ui32 groupId) {
+        auto Request(const TString& database) {
             auto result = Requested.emplace(database, TVector<TWaiter>());
             if (result.second) {
                 auto mode = EBoardLookupMode::Second;
@@ -232,14 +244,14 @@ namespace NDiscoveryPrivate {
                 }
                 CLOG_D("Lookup"
                     << ": path# " << database);
-                Register(CreateBoardLookupActor(database, SelfId(), groupId, mode));
+                Register(CreateBoardLookupActor(database, SelfId(), mode));
             }
 
             return result.first;
         }
 
-        void Request(const TString& database, ui32 groupId, const TWaiter& waiter) {
-            auto it = Request(database, groupId);
+        void Request(const TString& database, const TWaiter& waiter) {
+            auto it = Request(database);
             it->second.push_back(waiter);
         }
 
@@ -266,7 +278,8 @@ namespace NDiscoveryPrivate {
 
             currentCachedMessage = std::make_shared<NDiscovery::TCachedMessageData>(
                 NDiscovery::CreateCachedMessage(
-                    currentCachedMessage->InfoEntries, std::move(msg->Updates), {}, NameserviceResponse)
+                    currentCachedMessage->InfoEntries, std::move(msg->Updates),
+                    {}, EndpointId.GetOrElse({}), NameserviceResponse)
             );
 
             auto it = Requested.find(path);
@@ -280,7 +293,8 @@ namespace NDiscoveryPrivate {
             const auto& path = msg->Path;
 
             auto newCachedData = std::make_shared<NDiscovery::TCachedMessageData>(
-                NDiscovery::CreateCachedMessage({}, std::move(msg->InfoEntries), {}, NameserviceResponse)
+                NDiscovery::CreateCachedMessage({}, std::move(msg->InfoEntries),
+                {}, EndpointId.GetOrElse({}), NameserviceResponse)
             );
             newCachedData->Status = msg->Status;
 
@@ -342,16 +356,16 @@ namespace NDiscoveryPrivate {
                 if (enableSubscriptions) {
                     cachedData = CachedNotAvailable.FindPtr(msg->Database);
                     if (cachedData == nullptr) {
-                        Request(msg->Database, msg->StateStorageId, {ev->Sender, ev->Cookie});
+                        Request(msg->Database, {ev->Sender, ev->Cookie});
                         return;
                     }
                 } else {
                     cachedData = OldCachedMessages.FindPtr(msg->Database);
                     if (cachedData == nullptr) {
-                        Request(msg->Database, msg->StateStorageId, {ev->Sender, ev->Cookie});
+                        Request(msg->Database, {ev->Sender, ev->Cookie});
                         return;
                     }
-                    Request(msg->Database, msg->StateStorageId);
+                    Request(msg->Database);
                 }
             }
 
@@ -359,6 +373,11 @@ namespace NDiscoveryPrivate {
         }
 
     public:
+        TDiscoveryCache() = default;
+        TDiscoveryCache(const TString& endpointId)
+            : EndpointId(endpointId)
+        {
+        }
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::DISCOVERY_CACHE_ACTOR;
         }
@@ -510,7 +529,7 @@ public:
                 return true;
             default:
                 return true;
-        } 
+        }
     }
 
     void MaybeReply() {
@@ -567,10 +586,9 @@ public:
             database.append("/").append(token);
         }
 
-        const auto stateStorageGroupId = domainInfo->DefaultStateStorageGroup;
         const auto reqPath = MakeLookupPath(database);
 
-        Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(reqPath, stateStorageGroupId), 0, ++LookupCookie);
+        Send(CacheId, new NDiscoveryPrivate::TEvPrivate::TEvRequest(reqPath), 0, ++LookupCookie);
         LookupResponse.Reset();
     }
 
@@ -609,8 +627,8 @@ IActor* CreateDiscoverer(
     return new TDiscoverer(f, database, replyTo, cacheId);
 }
 
-IActor* CreateDiscoveryCache() {
-    return new NDiscoveryPrivate::TDiscoveryCache();
+IActor* CreateDiscoveryCache(const TString& endpointId) {
+    return new NDiscoveryPrivate::TDiscoveryCache(endpointId);
 }
 
 }

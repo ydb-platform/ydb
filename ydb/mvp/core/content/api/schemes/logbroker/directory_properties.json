@@ -1,0 +1,12 @@
+{
+    "properties": {
+        "abcService": {
+            "$ref": "#/definitions/StringOrDefaultValue"
+        },
+        "responsible": {
+            "$ref": "#/definitions/StringArrayOrDefaultValue"
+        }
+    },
+    "title": "DirectoryProperties",
+    "type": "object"
+}

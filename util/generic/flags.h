@@ -9,7 +9,7 @@
 class IOutputStream;
 namespace NPrivate {
     void PrintFlags(IOutputStream& stream, ui64 value, size_t size);
-}
+} // namespace NPrivate
 
 /**
  * `TFlags` wrapper provides a type-safe mechanism for storing OR combinations
@@ -190,7 +190,7 @@ public:
         return *this;
     }
 
-    friend IOutputStream& operator<<(IOutputStream& stream, const TFlags& flags) {
+    friend IOutputStream& operator<<(IOutputStream& stream Y_LIFETIME_BOUND, const TFlags& flags) {
         ::NPrivate::PrintFlags(stream, static_cast<ui64>(flags.Value_), sizeof(TInt));
         return stream;
     }
@@ -217,16 +217,16 @@ private:
 };
 
 template <class T>
-struct TPodTraits<TFlags<T>> {
+struct TPodTraits<::TFlags<T>> {
     enum {
         IsPod = TTypeTraits<T>::IsPod
     };
 };
 
 template <class Enum>
-struct THash<TFlags<Enum>> {
+struct THash<::TFlags<Enum>> {
     size_t operator()(const TFlags<Enum>& flags) const noexcept {
-        return THash<typename TFlags<Enum>::TInt>()(flags);
+        return THash<typename ::TFlags<Enum>::TInt>()(flags);
     }
 };
 
@@ -237,7 +237,7 @@ struct THash<TFlags<Enum>> {
  * @param ENUM                          Name of the base enum type to use.
  */
 #define Y_DECLARE_FLAGS(FLAGS, ENUM) \
-    using FLAGS = TFlags<ENUM>
+    using FLAGS = ::TFlags<ENUM>
 
 /**
  * This macro declares global operator functions for enum base of `FLAGS` type.

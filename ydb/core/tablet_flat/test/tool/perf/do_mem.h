@@ -35,7 +35,7 @@ namespace NPerf {
         {
             const TCelled key(key_, *Table->Scheme->Keys, false);
 
-            Iter = TMemIt::Make(*Table, Table->Immediate(), key, seek, KeyCellDefaults, &Remap, nullptr);
+            Iter = TMemIter::Make(*Table, Table->Immediate(), key, seek, KeyCellDefaults, &Remap, nullptr);
         }
 
         ui64 Scan(ui64 items, TSponge &aggr) override
@@ -55,7 +55,7 @@ namespace NPerf {
         }
 
     private:
-        void Apply(TSponge &aggr) noexcept
+        void Apply(TSponge &aggr)
         {
             State.Reset(Remap.CellDefaults());
 
@@ -72,7 +72,7 @@ namespace NPerf {
         TIntrusivePtr<TMemTable> Table;
         TIntrusiveConstPtr<TKeyCellDefaults> KeyCellDefaults;
         TRemap Remap;
-        TAutoPtr<TMemIt> Iter;
+        TAutoPtr<TMemIter> Iter;
         TRowState State;
     };
 

@@ -6,7 +6,11 @@
 # Unignore all dirs
 !*/
 # Unignore all files inside canondata dir
-!*/canondata/*
+!**/canondata/**
+# Allow docker files
+!Dockerfile
+
+/canonization_show_res.log
 
 # C libraries
 *.so
@@ -24,8 +28,12 @@ __pycache__/
 *.pb.h
 *.pb.cc
 
+# Other generated
+*.fbs.h
+
 # MacOS specific
 .DS_Store
+*.dSYM
 
 # clangd cache
 /.cache
@@ -37,6 +45,8 @@ __pycache__/
 
 .idea/
 .vscode/
+.clangd
+.antlr/
 
 # KDevelop IDE
 *.kdev4
@@ -72,3 +82,14 @@ util/all_thread.cpp
 util/all_util.cpp
 util/charset/all_charset.cpp
 
+list_result.log
+bin/config.json
+
+.vs/
+
+# handy for local junk, which is not intended to appear in the repo
+junk/
+
+# YDB CLI configuration file location is `~/ydb/config/config.yaml`
+config/config.yaml
+path.bash.inc

@@ -23,7 +23,11 @@ TRetryingInvocationTimePolicy::TRetryingInvocationTimePolicy(
     const TOptions& options)
     : TDefaultInvocationTimePolicy(options)
     , Backoff_(options)
-{ }
+{
+    CachedBackoffDuration_.store(options.MinBackoff, std::memory_order::relaxed);
+    CachedBackoffMultiplier_.store(options.BackoffJitter, std::memory_order::relaxed);
+    CachedBackoffJitter_.store(options.BackoffJitter,std::memory_order::relaxed);
+}
 
 void TRetryingInvocationTimePolicy::ProcessResult(TError result)
 {
@@ -40,16 +44,17 @@ void TRetryingInvocationTimePolicy::ProcessResult(TError result)
 
 bool TRetryingInvocationTimePolicy::ShouldKickstart(const TOptions& newOptions)
 {
-    return ShouldKickstart(newOptions, std::nullopt);
+    return ShouldKickstart(newOptions, newOptions);
 }
 
 bool TRetryingInvocationTimePolicy::ShouldKickstart(
     const std::optional<NConcurrency::TPeriodicExecutorOptions>& periodicOptions,
-    const std::optional<TExponentialBackoffOptions>& /*backoffOptions*/)
+    const std::optional<TExponentialBackoffOptions>& backoffOptions)
 {
-    return !IsInBackoffMode() &&
-        periodicOptions &&
-        TDefaultInvocationTimePolicy::ShouldKickstart(*periodicOptions);
+    if (IsInBackoffMode()) {
+        return ShouldRestartBackoff(backoffOptions);
+    }
+    return periodicOptions && TDefaultInvocationTimePolicy::ShouldKickstart(*periodicOptions);
 }
 
 void TRetryingInvocationTimePolicy::SetOptions(TOptions newOptions)
@@ -66,24 +71,31 @@ void TRetryingInvocationTimePolicy::SetOptions(
     }
 
     if (backoffOptions) {
+        Backoff_.UpdateOptions(*backoffOptions);
+
+        if (!IsInBackoffMode() || ShouldRestartBackoff(backoffOptions)) {
+            Backoff_.Restart();
+        }
+
+        CachedBackoffDuration_.store(
+            Backoff_.GetBackoff(),
+            std::memory_order::relaxed);
         CachedBackoffMultiplier_.store(
             backoffOptions->BackoffMultiplier,
             std::memory_order::relaxed);
         CachedBackoffJitter_.store(
             backoffOptions->BackoffJitter,
             std::memory_order::relaxed);
-
-        Backoff_.UpdateOptions(*backoffOptions);
     }
 }
 
-TInstant TRetryingInvocationTimePolicy::NextDeadline()
+TInstant TRetryingInvocationTimePolicy::GenerateNextDeadline()
 {
     if (IsInBackoffMode()) {
         return TInstant::Now() + Backoff_.GetBackoff();
     }
 
-    return TDefaultInvocationTimePolicy::NextDeadline();
+    return TDefaultInvocationTimePolicy::GenerateNextDeadline();
 }
 
 bool TRetryingInvocationTimePolicy::IsOutOfBandProhibited()
@@ -110,6 +122,16 @@ std::tuple<TDuration, TDuration> TRetryingInvocationTimePolicy::GetBackoffInterv
 bool TRetryingInvocationTimePolicy::IsInBackoffMode() const
 {
     return Backoff_.GetInvocationIndex() > 0;
+}
+
+bool TRetryingInvocationTimePolicy::ShouldRestartBackoff(const std::optional<TExponentialBackoffOptions>& newBackoffOptions) const
+{
+    if (!newBackoffOptions) {
+        return false;
+    }
+
+    auto backoffOptions = Backoff_.GetOptions();
+    return newBackoffOptions->MinBackoff != backoffOptions.MinBackoff || newBackoffOptions->MaxBackoff != backoffOptions.MaxBackoff;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

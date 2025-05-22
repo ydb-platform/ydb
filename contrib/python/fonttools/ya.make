@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.47.2)
+VERSION(4.57.0)
 
 LICENSE(MIT)
 
@@ -23,8 +23,11 @@ PY_SRCS(
     fontTools/__main__.py
     fontTools/afmLib.py
     fontTools/agl.py
+    fontTools/cffLib/CFF2ToCFF.py
+    fontTools/cffLib/CFFToCFF2.py
     fontTools/cffLib/__init__.py
     fontTools/cffLib/specializer.py
+    fontTools/cffLib/transforms.py
     fontTools/cffLib/width.py
     fontTools/colorLib/__init__.py
     fontTools/colorLib/builder.py
@@ -41,6 +44,7 @@ PY_SRCS(
     fontTools/cu2qu/errors.py
     fontTools/cu2qu/ufo.py
     fontTools/designspaceLib/__init__.py
+    fontTools/designspaceLib/__main__.py
     fontTools/designspaceLib/split.py
     fontTools/designspaceLib/statNames.py
     fontTools/designspaceLib/types.py
@@ -83,6 +87,8 @@ PY_SRCS(
     fontTools/misc/filenames.py
     fontTools/misc/fixedTools.py
     fontTools/misc/intTools.py
+    fontTools/misc/iterTools.py
+    fontTools/misc/lazyTools.py
     fontTools/misc/loggingTools.py
     fontTools/misc/macCreatorType.py
     fontTools/misc/macRes.py
@@ -162,6 +168,7 @@ PY_SRCS(
     fontTools/ttLib/__main__.py
     fontTools/ttLib/macUtils.py
     fontTools/ttLib/removeOverlaps.py
+    fontTools/ttLib/reorderGlyphs.py
     fontTools/ttLib/scaleUpem.py
     fontTools/ttLib/sfnt.py
     fontTools/ttLib/standardGlyphOrder.py
@@ -213,6 +220,7 @@ PY_SRCS(
     fontTools/ttLib/tables/T_S_I__5.py
     fontTools/ttLib/tables/T_T_F_A_.py
     fontTools/ttLib/tables/TupleVariation.py
+    fontTools/ttLib/tables/V_A_R_C_.py
     fontTools/ttLib/tables/V_D_M_X_.py
     fontTools/ttLib/tables/V_O_R_G_.py
     fontTools/ttLib/tables/V_V_A_R_.py
@@ -293,6 +301,7 @@ PY_SRCS(
     fontTools/varLib/cff.py
     fontTools/varLib/errors.py
     fontTools/varLib/featureVars.py
+    fontTools/varLib/hvar.py
     fontTools/varLib/instancer/__init__.py
     fontTools/varLib/instancer/__main__.py
     fontTools/varLib/instancer/featureVars.py
@@ -307,6 +316,7 @@ PY_SRCS(
     fontTools/varLib/iup.py
     fontTools/varLib/merger.py
     fontTools/varLib/models.py
+    fontTools/varLib/multiVarStore.py
     fontTools/varLib/mutator.py
     fontTools/varLib/mvar.py
     fontTools/varLib/plot.py

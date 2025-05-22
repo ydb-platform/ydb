@@ -25,7 +25,7 @@ TEST(TThreadPoolTest, Configure)
         futures.push_back(callback.AsyncVia(threadPool->GetInvoker()).Run());
         if (i % 100 == 0) {
             threadCount = RandomNumber<size_t>(10) + 1;
-            threadPool->Configure(threadCount);
+            threadPool->SetThreadCount(threadCount);
             EXPECT_EQ(threadPool->GetThreadCount(), threadCount);
         }
     }
@@ -34,11 +34,11 @@ TEST(TThreadPoolTest, Configure)
         .Get();
 
     // Thread pool doesn't contain less than one thread whatever you configured.
-    threadPool->Configure(0);
+    threadPool->SetThreadCount(0);
     EXPECT_EQ(threadPool->GetThreadCount(), 1);
 
     // Thread pool doesn't contain more than maximal threads count whatever you configured.
-    threadPool->Configure(1e8);
+    threadPool->SetThreadCount(1e8);
     EXPECT_LE(threadPool->GetThreadCount(), 1e8);
 
     threadPool->Shutdown();

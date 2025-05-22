@@ -65,15 +65,16 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TGenerateTimestampOptions
-{ };
+{
+    std::optional<NObjectClient::TCellTag> ClockClusterTag;
+};
 
 class TGenerateTimestampCommand
     : public TTypedCommand<TGenerateTimestampOptions>
 {
     REGISTER_YSON_STRUCT_LITE(TGenerateTimestampCommand);
 
-    static void Register(TRegistrar /*registrar*/)
-    { }
+    static void Register(TRegistrar registrar);
 
 private:
     void DoExecute(ICommandContextPtr context) override;

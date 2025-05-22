@@ -1,0 +1,50 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["id";["DataType";"Int32"]];
+            ["k";["OptionalType";["DataType";"String"]]];
+            ["value";["OptionalType";["DataType";"Int64"]]]]
+        ];
+        "SortDirections"=[1];
+        "SortedBy"=["id"];
+        "SortedByTypes"=[["DataType";"Int32"]];
+        "SortMembers"=["id"];
+    };
+
+    "schema" = <"strict" = %true; "unique_keys" = %false>
+    [
+        {
+            "name" = "id";
+            "sort_order" = "ascending";
+            "type" = "int64";
+            "type_v3" = {"type_name" = "optional"; item = "int64"}
+        };
+        {
+            "name" = "k";
+            "type" = "string";
+            "type_v3" = {"type_name" = "optional"; item = "string"}
+        };
+        {
+            "name" = "value";
+            "type" = "int64";
+            "type_v3" = {"type_name" = "optional"; item = "int64"}
+        };
+    ];
+    "extended_stats" = [
+        {
+            "column_name" = "id";
+            "data_weight" = 44;
+            "num_unique_vals" = 11;
+        };
+        {
+            "column_name" = "k";
+            "data_weight" = 66;
+            "num_unique_vals" = 7;
+        };
+        {
+            "column_name" = "value";
+            "data_weight" = 44;
+            "num_unique_vals" = 6;
+        }
+    ];
+}

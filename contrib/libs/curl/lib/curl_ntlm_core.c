@@ -94,7 +94,7 @@
 
 #elif defined(USE_GNUTLS)
 
-#  include <nettle/des.h>
+#  error #include <nettle/des.h>
 
 #elif defined(USE_MBEDTLS)
 

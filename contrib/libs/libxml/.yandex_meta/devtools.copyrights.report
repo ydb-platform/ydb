@@ -1,0 +1,120 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 08efa3c94013ac497034b4a075fe0305
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: timsort.h at line 11, timsort.h at line 12, timsort.h at line 13
+    License text:
+         * Copyright (c) 2010-2017 Christopher Swenson.
+         * Copyright (c) 2012 Vojtech Fried.
+         * Copyright (c) 2012 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        timsort.h [11:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a7a8b33bff15256803051c5f91aa6cb
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: Copyright at line 5
+    License text:
+         Copyright (C) 1998-2012 Daniel Veillard.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        Copyright [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 41f08a133437a8daf97099b855f9d331
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: dict.c at line 5
+    License text:
+         * Copyright (C) 2003-2012 Daniel Veillard.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        dict.c [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 89b2a4590a8f55331e59165acb507704
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: list.c at line 4
+    License text:
+         * Copyright (C) 2000 Gary Pennington and Daniel Veillard.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        list.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9676d776411b97efbefa8bcfc18231a7
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: hash.c at line 6
+    License text:
+         * Copyright (C) 2000,2012 Bjorn Reese and Daniel Veillard.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        hash.c [6:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9b00401ab0adc0961decb25f02eb81cf
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: timsort.h at line 11, timsort.h at line 12, timsort.h at line 13
+    License text:
+         * Copyright (c) 2010-2017 Christopher Swenson.
+         * Copyright (c) 2012 Vojtech Fried.
+         * Copyright (c) 2012 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        timsort.h [11:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce61570a2cd9191ba30aa5190a27eeb3
+BELONGS ya.make
+FILE_INCLUDE Copyright found in files: timsort.h at line 11, timsort.h at line 12, timsort.h at line 13
+    License text:
+         * Copyright (c) 2010-2017 Christopher Swenson.
+         * Copyright (c) 2012 Vojtech Fried.
+         * Copyright (c) 2012 Google Inc. All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        timsort.h [11:13]

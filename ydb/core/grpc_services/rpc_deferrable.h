@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "grpc_request_proxy.h"
 #include "cancelation/cancelation.h"
 #include "cancelation/cancelation_event.h"
 #include "rpc_common/rpc_common.h"
@@ -10,10 +9,11 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/util/wilson.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 
@@ -63,10 +63,6 @@ public:
         return TRequest::GetProtoRequest(Request_);
     }
 
-    typename TRequest::TRequest* GetProtoRequestMut() {
-        return TRequest::GetProtoRequestMut(Request_);
-    }
-
     Ydb::Operations::OperationParams::OperationMode GetOperationMode() const {
         return GetProtoRequest()->operation_params().operation_mode();
     }
@@ -87,7 +83,7 @@ public:
         }
 
         auto selfId = ctx.SelfID;
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+        auto* actorSystem = ctx.ActorSystem();
         auto clientLostCb = [selfId, actorSystem]() {
             actorSystem->Send(selfId, new TRpcServices::TEvForgetOperation());
         };
@@ -201,13 +197,18 @@ protected:
     void Reply(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
     {
-        Request_->SendResult(status, message);
+        NYql::TIssues issues;
+        IssuesFromMessage(message, issues);
+        Request_->RaiseIssues(issues);
+        Request_->ReplyWithYdbStatus(status);
+        NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
         Request_->RaiseIssues(issues);
         Request_->ReplyWithYdbStatus(status);
+        NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
     }
 
@@ -219,13 +220,7 @@ protected:
 
     void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
         Request_->ReplyWithYdbStatus(status);
-        this->Die(ctx);
-    }
-
-    void ReplyWithResult(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext &ctx)
-    {
-        Request_->SendResult(status, message);
+        NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
     }
 
@@ -236,6 +231,7 @@ protected:
         const TActorContext& ctx)
     {
         Request_->SendResult(result, status, message);
+        NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
     }
 
@@ -244,12 +240,14 @@ protected:
                          const TResult& result,
                          const TActorContext& ctx) {
         Request_->SendResult(result, status);
+        NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
     }
 
     void ReplyOperation(Ydb::Operations::Operation& operation)
     {
         Request_->SendOperation(operation);
+        NWilson::EndSpanWithStatus(Span_, operation.status());
         this->PassAway();
     }
 

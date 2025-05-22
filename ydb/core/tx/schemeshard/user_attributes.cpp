@@ -53,9 +53,12 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
                 HANDLE_ATTR(VOLUME_SPACE_LIMIT_SSD_SYSTEM);
                 HANDLE_ATTR(FILESTORE_SPACE_LIMIT_SSD);
                 HANDLE_ATTR(FILESTORE_SPACE_LIMIT_HDD);
+                HANDLE_ATTR(FILESTORE_SPACE_LIMIT_SSD_SYSTEM);
                 HANDLE_ATTR(EXTRA_PATH_SYMBOLS_ALLOWED);
                 HANDLE_ATTR(DOCUMENT_API_VERSION);
                 HANDLE_ATTR(ASYNC_REPLICATION);
+                HANDLE_ATTR(ASYNC_REPLICA);
+                HANDLE_ATTR(INCREMENTAL_BACKUP);
 
             #undef HANDLE_ATTR
             return EAttribute::UNKNOWN;
@@ -128,6 +131,7 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
             case EAttribute::VOLUME_SPACE_LIMIT_SSD_SYSTEM:
             case EAttribute::FILESTORE_SPACE_LIMIT_SSD:
             case EAttribute::FILESTORE_SPACE_LIMIT_HDD:
+            case EAttribute::FILESTORE_SPACE_LIMIT_SSD_SYSTEM:
                 return CheckValueUint64(name, value, errStr);
             case EAttribute::EXTRA_PATH_SYMBOLS_ALLOWED:
                 return CheckValueStringWeak(name, value, errStr);
@@ -142,6 +146,12 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
                     errStr = Sprintf("UserAttributes: attribute '%s' can only be set during CreateChangefeed", name.c_str());
                     return false;
                 }
+                return CheckValueJson(name, value, errStr);
+            case EAttribute::ASYNC_REPLICA:
+                errStr = Sprintf("UserAttributes: attribute '%s' cannot be set", name.c_str());
+                return false;
+            case EAttribute::INCREMENTAL_BACKUP:
+                // TODO(enjection): check ops
                 return CheckValueJson(name, value, errStr);
         }
 
@@ -167,6 +177,7 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
             case EAttribute::VOLUME_SPACE_LIMIT_SSD_SYSTEM:
             case EAttribute::FILESTORE_SPACE_LIMIT_SSD:
             case EAttribute::FILESTORE_SPACE_LIMIT_HDD:
+            case EAttribute::FILESTORE_SPACE_LIMIT_SSD_SYSTEM:
             case EAttribute::EXTRA_PATH_SYMBOLS_ALLOWED:
                 return true;
             case EAttribute::DOCUMENT_API_VERSION:
@@ -180,6 +191,12 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
                     errStr = Sprintf("UserAttributes: attribute '%s' can only be set during CreateChangefeed", name.c_str());
                     return false;
                 }
+                return true;
+            case EAttribute::ASYNC_REPLICA:
+                errStr = Sprintf("UserAttributes: attribute '%s' cannot be set", name.c_str());
+                return false;
+            case EAttribute::INCREMENTAL_BACKUP:
+                // TODO(enjection): check ops
                 return true;
         }
 

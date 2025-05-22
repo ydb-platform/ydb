@@ -717,7 +717,7 @@ struct StringConverter<DATE_TYPE, enable_if_date<DATE_TYPE>> {
                                 arrow_vendored::date::days,
                                 std::chrono::milliseconds>::type;
 
-  static bool Convert(const DATE_TYPE& type, const char* s, size_t length,
+  static bool Convert(const DATE_TYPE& /* type */, const char* s, size_t length,
                       value_type* out) {
     if (length != 10) return false;
 

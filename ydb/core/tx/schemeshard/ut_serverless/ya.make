@@ -2,9 +2,9 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
-
 SIZE(MEDIUM)
+
+TIMEOUT(120)
 
 PEERDIR(
     library/cpp/getopt

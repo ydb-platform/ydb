@@ -1,7 +1,5 @@
 LIBRARY(yutil)
 
-SUBSCRIBER(g:util-subscribers)
-
 NEED_CHECK()
 
 NO_UTIL()
@@ -24,6 +22,7 @@ JOIN_SRCS(
     datetime/base.cpp
     datetime/constants.cpp
     datetime/cputimer.cpp
+    datetime/process_uptime.cpp
     datetime/systime.cpp
     datetime/uptime.cpp
 )
@@ -87,10 +86,10 @@ JOIN_SRCS(
     generic/array_size.cpp
     generic/bitmap.cpp
     generic/bitops.cpp
-    generic/bt_exception.cpp
     generic/buffer.cpp
     generic/cast.cpp
     generic/deque.cpp
+    generic/enum_cast.cpp
     generic/explicit_type.cpp
     generic/fastqueue.cpp
     generic/flags.cpp
@@ -195,7 +194,6 @@ JOIN_SRCS(
     stream/aligned.cpp
     stream/buffer.cpp
     stream/buffered.cpp
-    stream/debug.cpp
     stream/direct_io.cpp
     stream/file.cpp
     stream/format.cpp
@@ -249,13 +247,16 @@ IF (TSTRING_IS_STD_STRING)
     CFLAGS(GLOBAL -DTSTRING_IS_STD_STRING)
 ENDIF()
 
+IF (NO_CUSTOM_CHAR_PTR_STD_COMPARATOR)
+    CFLAGS(GLOBAL -DNO_CUSTOM_CHAR_PTR_STD_COMPARATOR)
+ENDIF()
+
 JOIN_SRCS(
     all_system_1.cpp
     system/atexit.cpp
     system/backtrace.cpp
     system/compat.cpp
     system/condvar.cpp
-    system/context.cpp
     system/daemon.cpp
     system/datetime.cpp
     system/defaults.c
@@ -264,7 +265,6 @@ JOIN_SRCS(
     system/env.cpp
     system/error.cpp
     system/event.cpp
-    system/execpath.cpp
     system/fasttime.cpp
     system/file.cpp
     system/file_lock.cpp
@@ -278,13 +278,20 @@ JOIN_SRCS(
     system/hp_timer.cpp
     system/info.cpp
 )
+IF (NOT OS_EMSCRIPTEN)
+JOIN_SRCS(
+    all_system_2.cpp
+    system/context.cpp
+    system/execpath.cpp
+)
+ENDIF()
 
 IF (OS_WINDOWS)
     SRCS(system/err.cpp)
 ENDIF()
 
 JOIN_SRCS(
-    all_system_2.cpp
+    all_system_3.cpp
     system/align.cpp
     system/byteorder.cpp
     system/cpu_id.cpp
@@ -293,7 +300,6 @@ JOIN_SRCS(
     system/interrupt_signals.cpp
     system/madvise.cpp
     system/maxlen.cpp
-    system/mem_info.cpp
     system/mincore.cpp
     system/mktemp.cpp
     system/mlock.cpp
@@ -306,7 +312,6 @@ JOIN_SRCS(
     system/rusage.cpp
     system/rwlock.cpp
     system/sanitizers.cpp
-    system/sem.cpp
     system/shellcommand.cpp
     system/shmat.cpp
     system/sigset.cpp
@@ -318,7 +323,6 @@ JOIN_SRCS(
     system/tempfile.cpp
     system/thread.cpp
     system/tls.cpp
-    system/types.cpp
     system/type_name.cpp
     system/unaligned_mem.cpp
     system/user.cpp
@@ -326,6 +330,14 @@ JOIN_SRCS(
     system/yassert.cpp
     system/yield.cpp
 )
+IF (NOT OS_EMSCRIPTEN)
+JOIN_SRCS(
+    all_system_4.cpp
+    system/mem_info.cpp
+    system/sem.cpp
+    system/types.cpp
+)
+ENDIF()
 
 SRC_C_NO_LTO(system/compiler.cpp)
 
@@ -380,6 +392,21 @@ JOIN_SRCS(
     thread/lfstack.cpp
     thread/pool.cpp
     thread/singleton.cpp
+)
+
+HEADERS(
+    datetime
+    digest
+    folder
+    generic
+    memory
+    network
+    random
+    stream
+    string
+    system
+    thread
+    EXCLUDE **/*_ut.h
 )
 
 END()

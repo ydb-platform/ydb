@@ -1,7 +1,9 @@
 #include "kqp_yql.h"
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
 namespace NYql {
 
@@ -156,10 +158,11 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             settings.ItemsLimit = tuple.Value().Cast().Ptr();
         } else if (name == TKqpReadTableSettings::ReverseSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.Reverse = true;
+            settings.SetSorting(ERequestSorting::DESC);
         } else if (name == TKqpReadTableSettings::SortedSettingName) {
-            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.Sorted = true;
+            if (settings.GetSorting() == ERequestSorting::NONE) {
+                settings.SetSorting(ERequestSorting::ASC);
+            }
         } else if (name == TKqpReadTableSettings::SequentialSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.SequentialInFlight = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
@@ -167,7 +170,10 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.ForcePrimary = true;
         } else if (name == TKqpReadTableSettings::GroupByFieldNames) {
-        } else {
+        } else if (name == TKqpReadTableSettings::TabletIdName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            settings.TabletId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
+        }else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
     }
@@ -219,7 +225,7 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
-    if (Reverse) {
+    if (IsReverse()) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
@@ -235,7 +241,7 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
-    if (Sorted) {
+    if (IsSorted()) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
@@ -250,6 +256,17 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                     .Build(SequentialSettingName)
                 .Value<TCoAtom>()
                     .Value(ToString(*SequentialInFlight))
+                    .Build()
+                .Done());
+    }
+
+    if (TabletId) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(TabletIdName)
+                .Value<TCoAtom>()
+                    .Value(ToString(*TabletId))
                     .Build()
                 .Done());
     }
@@ -280,6 +297,15 @@ TKqpUpsertRowsSettings TKqpUpsertRowsSettings::Parse(const TCoNameValueTupleList
         } else if (name == TKqpUpsertRowsSettings::IsUpdateSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.IsUpdate = true; 
+        } else if (name == TKqpUpsertRowsSettings::AllowInconsistentWritesSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.AllowInconsistentWrites = true;
+        } else if (name == TKqpUpsertRowsSettings::IsConditionalUpdateSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.IsConditionalUpdate = true;
+        } else if (name == TKqpUpsertRowsSettings::ModeSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
+            settings.Mode = tuple.Value().template Cast<TCoAtom>().Value();
         } else {
             YQL_ENSURE(false, "Unknown KqpUpsertRows setting name '" << name << "'");
         }
@@ -306,6 +332,59 @@ NNodes::TCoNameValueTupleList TKqpUpsertRowsSettings::BuildNode(TExprContext& ct
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(IsUpdateSettingName)
+                .Done());
+    }
+    if (IsConditionalUpdate) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(IsConditionalUpdateSettingName)
+                .Done());
+    }
+    if (AllowInconsistentWrites) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(AllowInconsistentWritesSettingName)
+                .Done());
+    }
+
+    if (!Mode.empty()) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(ModeSettingName)
+                .Value<TCoAtom>().Build(Mode)
+                .Done());
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
+TKqpDeleteRowsSettings TKqpDeleteRowsSettings::Parse(const NNodes::TCoNameValueTupleList& settingsList) {
+    TKqpDeleteRowsSettings settings;
+
+    for (const auto& tuple : settingsList) {
+        TStringBuf name = tuple.Name().Value();
+        
+        if (name == TKqpDeleteRowsSettings::IsConditionalDeleteSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.IsConditionalDelete = true;
+        } else {
+            YQL_ENSURE(false, "Unknown KqpDeleteRows setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
+NNodes::TCoNameValueTupleList TKqpDeleteRowsSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+    settings.reserve(1);
+
+    if (IsConditionalDelete) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(IsConditionalDeleteSettingName)
                 .Done());
     }
 
@@ -452,6 +531,96 @@ TString PrintKqpStageOnly(const TDqStageBase& stage, TExprContext& ctx) {
 
     auto newStage = ctx.ReplaceNodes(stage.Ptr(), replaces);
     return KqpExprToPrettyString(TExprBase(newStage), ctx);
+}
+
+TAutoPtr<IGraphTransformer> GetDqIntegrationPeepholeTransformer(bool beforeDqTransforms, TIntrusivePtr<TTypeAnnotationContext> typesCtx) {
+    TTransformationPipeline dqIntegrationPeepholePipeline(typesCtx);
+    for (auto* dqIntegration : GetUniqueIntegrations(*typesCtx)) {
+        dqIntegration->ConfigurePeepholePipeline(beforeDqTransforms, {}, &dqIntegrationPeepholePipeline);
+    }
+    return dqIntegrationPeepholePipeline.Build();
+}
+
+NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+
+    auto strategyTypeToString = [](const EStreamLookupStrategyType& type) {
+        switch (type) {
+            case EStreamLookupStrategyType::Unspecified:
+                break;
+            case EStreamLookupStrategyType::LookupRows:
+                return LookupStrategyName;
+            case EStreamLookupStrategyType::LookupJoinRows:
+                return LookupJoinStrategyName;
+            case EStreamLookupStrategyType::LookupSemiJoinRows:
+                return LookupSemiJoinStrategyName;
+        }
+
+        YQL_ENSURE(false, "Unspecified stream lookup startegy type: " << type);
+    };
+
+    settings.emplace_back(
+        Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(StrategySettingName)
+            .Value<TCoAtom>().Build(strategyTypeToString(Strategy))
+        .Done()
+    );
+
+    if (AllowNullKeysPrefixSize) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(AllowNullKeysSettingName)
+                .Value<TCoAtom>().Build(ToString(*AllowNullKeysPrefixSize))
+            .Done()
+        );
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
+TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameValueTupleList& list) {
+    TKqpStreamLookupSettings settings;
+
+    auto getLookupStrategyType = [](const TStringBuf& type) {
+        if (type == LookupStrategyName) {
+            return EStreamLookupStrategyType::LookupRows;
+        } else if (type == LookupJoinStrategyName) {
+            return EStreamLookupStrategyType::LookupJoinRows;
+        } else if (type == LookupSemiJoinStrategyName) {
+            return EStreamLookupStrategyType::LookupSemiJoinRows;
+        } else {
+            YQL_ENSURE(false, "Unknown stream lookup startegy type: " << type);
+        }
+    };
+
+    for (const auto& tuple : list) {
+        auto name = tuple.Name().Value();
+        if (name == StrategySettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.Strategy = getLookupStrategyType(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == AllowNullKeysSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.AllowNullKeysPrefixSize = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());
+        } else {
+            YQL_ENSURE(false, "Unknown KqpStreamLookup setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
+TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TKqlStreamLookupTable& node) {
+    return TKqpStreamLookupSettings::Parse(node.Settings());
+}
+
+TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TKqlStreamLookupIndex& node) {
+    return TKqpStreamLookupSettings::Parse(node.Settings());
+}
+
+TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TKqpCnStreamLookup& node) {
+    return TKqpStreamLookupSettings::Parse(node.Settings());
 }
 
 } // namespace NYql

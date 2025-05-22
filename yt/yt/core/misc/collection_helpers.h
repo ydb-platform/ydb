@@ -19,6 +19,11 @@ std::vector<typename T::key_type> GetKeys(
     size_t sizeLimit = std::numeric_limits<size_t>::max());
 
 template <class T>
+THashSet<typename T::key_type> GetKeySet(
+    const T& collection,
+    size_t sizeLimit = std::numeric_limits<size_t>::max());
+
+template <class T>
 std::vector<typename T::mapped_type> GetValues(
     const T& collection,
     size_t sizeLimit = std::numeric_limits<size_t>::max());
@@ -40,7 +45,10 @@ template <class TSource, class TTarget>
 void MergeFrom(TTarget* target, const TSource& source);
 
 template <class TMap, class TKeySet>
-TKeySet DropMissingKeys(TMap&& map, const TKeySet& set);
+[[nodiscard]] TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set);
+
+template <class TMap, class TKeySet>
+void DropMissingKeys(TMap&& map, TKeySet&& set);
 
 /*!
  * This function is supposed to replace a frequent pattern
@@ -93,6 +101,12 @@ auto InsertOrCrash(TContainer&& container, TArg&& arg);
  */
 template <class TContainer, class... TArgs>
 auto EmplaceOrCrash(TContainer&& container, TArgs&&... args);
+
+/*!
+ * This function emplaces default value at the given key.
+ */
+template <class TMap, class TKey>
+auto EmplaceDefault(TMap&& map, TKey&& key);
 
 /*!
  * This function is supposed to replace std::get<T>(variant)
@@ -153,6 +167,9 @@ void AssignVectorAt(std::vector<T>& vector, ssize_t index, T&& value, const T& d
 //! If vector size is not enough for vector[size] to exist, return defaultValue, otherwise return vector[size].
 template <class T>
 const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue = T());
+
+template <class T>
+i64 GetVectorMemoryUsage(const std::vector<T>& vector);
 
 ////////////////////////////////////////////////////////////////////////////////
 

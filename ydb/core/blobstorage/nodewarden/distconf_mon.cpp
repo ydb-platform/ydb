@@ -1,9 +1,94 @@
 #include "distconf.h"
+#include "node_warden_impl.h"
+
+#include <google/protobuf/util/json_util.h>
 
 namespace NKikimr::NStorage {
 
+    namespace {
+
+        class TInvokeRequestHandler : public TActorBootstrapped<TInvokeRequestHandler> {
+            std::unique_ptr<TEventHandle<NMon::TEvHttpInfo>> Event;
+
+        public:
+            TInvokeRequestHandler(std::unique_ptr<TEventHandle<NMon::TEvHttpInfo>>&& ev)
+                : Event(std::move(ev))
+            {}
+
+            void Bootstrap(TActorId parentId) {
+                Become(&TThis::StateFunc);
+
+                const auto& request = Event->Get()->Request;
+
+                // validate content type, we accept only JSON
+                TString contentType;
+                {
+                    const auto& headers = request.GetHeaders();
+                    if (const auto *header = headers.FindHeader("Content-Type")) {
+                        TStringBuf value = header->Value();
+                        contentType = value.NextTok(';');
+                    }
+                }
+                if (contentType != "application/json") {
+                    return FinishWithError("invalid or unset Content-Type");
+                }
+
+                // parse the record
+                auto ev = std::make_unique<TEvNodeConfigInvokeOnRoot>();
+                const auto status = google::protobuf::util::JsonStringToMessage(request.GetPostContent(), &ev->Record);
+                if (!status.ok()) {
+                    return FinishWithError("failed to parse JSON");
+                }
+                STLOG(PRI_DEBUG, BS_NODE, NWDC04, "sending TEvNodeConfigInvokeOnRoot", (Record, ev->Record));
+
+                // send it to the actor
+                const TActorId nondeliveryId = SelfId();
+                auto handle = std::make_unique<IEventHandle>(parentId, SelfId(), ev.release(),
+                    IEventHandle::FlagForwardOnNondelivery, 0, &nondeliveryId);
+                TActivationContext::Send(handle.release());
+            }
+
+            void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC39, "receive TEvNodeConfigInvokeOnRootResult", (Record, ev->Get()->Record));
+
+                TString data;
+                google::protobuf::util::MessageToJsonString(ev->Get()->Record, &data);
+
+                TStringStream s;
+                s << NMonitoring::HTTPOKJSON << data;
+
+                Send(Event->Sender, new NMon::TEvHttpInfoRes(s.Str(), Event->Get()->SubRequestId,
+                    NMon::TEvHttpInfoRes::Custom), 0, Event->Cookie);
+                PassAway();
+            }
+
+            void FinishWithError(TString error) {
+                Send(Event->Sender, new NMon::TEvHttpInfoRes(std::move(error), Event->Get()->SubRequestId,
+                    NMon::TEvHttpInfoRes::Html), 0, Event->Cookie);
+                PassAway();
+            }
+
+            void Handle(TEvents::TEvUndelivered::TPtr /*ev*/) {
+                FinishWithError("event delivery failed");
+            }
+
+            STRICT_STFUNC(StateFunc,
+                hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
+                hFunc(TEvents::TEvUndelivered, Handle);
+            )
+        };
+
+    } // anonymous
+
     void TDistributedConfigKeeper::Handle(NMon::TEvHttpInfo::TPtr ev) {
-        const TCgiParameters& cgi = ev->Get()->Request.GetParams();
+        const auto& request = ev->Get()->Request;
+        if (request.GetMethod() == HTTP_METHOD_POST) {
+            std::unique_ptr<TEventHandle<NMon::TEvHttpInfo>> evPtr(ev.Release());
+            Register(new TInvokeRequestHandler(std::move(evPtr)));
+            return;
+        }
+
+        const TCgiParameters& cgi = request.GetParams();
         NMon::TEvHttpInfoRes::EContentType contentType = NMon::TEvHttpInfoRes::Custom;
         TStringStream out;
 
@@ -53,7 +138,11 @@ namespace NKikimr::NStorage {
                 {"binding", getBinding()},
                 {"direct_bound_nodes", getDirectBoundNodes()},
                 {"root_state", TString(TStringBuilder() << RootState)},
+                {"error_reason", ErrorReason},
                 {"has_quorum", HasQuorum()},
+                {"scepter", Scepter ? NJson::TJsonMap{
+                    {"id", Scepter->Id},
+                } : NJson::TJsonValue{NJson::JSON_NULL}},
             };
 
             NJson::WriteJson(&out, &root);
@@ -64,6 +153,36 @@ namespace NKikimr::NStorage {
                         out << "Distributed config keeper";
                     }
                 }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Main operational parameters";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "<br/>";
+                    }
+                }
+
+                auto outputConfig = [&](const char *name, auto *config) {
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-heading") {
+                            out << name;
+                        }
+                        DIV_CLASS("panel-body") {
+                            if (config) {
+                                out << "<pre>";
+                                OutputPrettyMessage(out, *config);
+                                out << "</pre>";
+                            } else {
+                                out << "not defined";
+                            }
+                        }
+                    }
+                };
+                outputConfig("StorageConfig", StorageConfig ? &StorageConfig.value() : nullptr);
+                outputConfig("BaseConfig", &BaseConfig);
+                outputConfig("InitialConfig", &InitialConfig);
+                outputConfig("ProposedStorageConfig", ProposedStorageConfig ? &ProposedStorageConfig.value() : nullptr);
 
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
@@ -83,7 +202,23 @@ namespace NKikimr::NStorage {
                         }
                         out << "<br/>";
                         out << "RootState: " << RootState << "<br/>";
+                        if (ErrorReason) {
+                           out << "ErrorReason: " << ErrorReason << "<br/>";
+                        }
                         out << "Quorum: " << (HasQuorum() ? "yes" : "no") << "<br/>";
+                        out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Static <-> dynamic node interaction";
+                    }
+                    DIV_CLASS("panel-body") {
+                        out << "IsSelfStatic: " << (IsSelfStatic ? "true" : "false") << "<br/>";
+                        out << "ConnectedToStaticNode: " << ConnectedToStaticNode << "<br/>";
+                        out << "StaticNodeSessionId: " << StaticNodeSessionId << "<br/>";
+                        out << "ConnectedDynamicNodes: " << FormatList(ConnectedDynamicNodes) << "<br/>";
                     }
                 }
 

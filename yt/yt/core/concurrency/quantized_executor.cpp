@@ -21,46 +21,38 @@ public:
     TQuantizedExecutor(
         TString name,
         ICallbackProviderPtr callbackProvider,
-        int workerCount)
+        const TQuantizedExecutorOptions& options)
         : Name_(std::move(name))
-        , Logger(ConcurrencyLogger.WithTag("Executor: %v", Name_))
+        , CallbackProvider_(std::move(callbackProvider))
+        , Options_(options)
+        , Logger(ConcurrencyLogger().WithTag("Executor: %v", Name_))
         , ControlQueue_(New<TActionQueue>(Format("%vCtl", Name_)))
         , ControlInvoker_(ControlQueue_->GetInvoker())
-        , CallbackProvider_(std::move(callbackProvider))
-        , DesiredWorkerCount_(workerCount)
+        , DesiredThreadCount_(options.ThreadCount)
     {
-        VERIFY_INVOKER_THREAD_AFFINITY(ControlInvoker_, ControlThread);
-    }
-
-    void Initialize(TCallback<void()> workerInitializer) override
-    {
-        WorkerInitializer_ = std::move(workerInitializer);
-
-        BIND(&TQuantizedExecutor::DoReconfigure, MakeStrong(this))
-            .AsyncVia(ControlInvoker_)
-            .Run()
-            .Get()
-            .ThrowOnError();
+        YT_ASSERT_INVOKER_THREAD_AFFINITY(ControlInvoker_, ControlThread);
     }
 
     TFuture<void> Run(TDuration timeout) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         return BIND(&TQuantizedExecutor::StartQuantum, MakeStrong(this), timeout)
             .AsyncVia(ControlInvoker_)
             .Run();
     }
 
-    void Reconfigure(int workerCount) override
+    void SetThreadCount(int threadCount) override
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
-        DesiredWorkerCount_ = workerCount;
+        DesiredThreadCount_.store(threadCount);
     }
 
 private:
     const TString Name_;
+    const ICallbackProviderPtr CallbackProvider_;
+    const TQuantizedExecutorOptions Options_;
 
     const TLogger Logger;
 
@@ -68,14 +60,11 @@ private:
     const IInvokerPtr ControlInvoker_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, CallbackProviderLock_);
-    ICallbackProviderPtr CallbackProvider_;
-
-    TCallback<void()> WorkerInitializer_;
 
     std::vector<ISuspendableActionQueuePtr> Workers_;
     std::vector<IInvokerPtr> Invokers_;
-    std::atomic<int> ActiveWorkerCount_ = 0;
-    std::atomic<int> DesiredWorkerCount_ = 0;
+    std::atomic<int> ActiveThreadCount_ = 0;
+    std::atomic<int> DesiredThreadCount_ = 0;
 
     int QuantumIndex_ = 0;
 
@@ -88,49 +77,45 @@ private:
 
     void DoReconfigure()
     {
-        VERIFY_THREAD_AFFINITY(ControlThread);
+        YT_ASSERT_THREAD_AFFINITY(ControlThread);
         YT_VERIFY(!Running_);
 
-        int desiredWorkerCount = DesiredWorkerCount_.load();
-        if (ActiveWorkerCount_ == desiredWorkerCount) {
+        int desiredThreadCount = DesiredThreadCount_.load();
+        if (ActiveThreadCount_ == desiredThreadCount) {
             return;
         }
 
-        int currentWorkerCount = std::ssize(Workers_);
+        int currentThreadCount = std::ssize(Workers_);
 
-        YT_LOG_DEBUG("Updating worker count (WorkerCount: %v -> %v)",
-            currentWorkerCount,
-            desiredWorkerCount);
+        YT_LOG_DEBUG("Updating thread count (Count: %v -> %v)",
+            currentThreadCount,
+            desiredThreadCount);
 
-        if (desiredWorkerCount > currentWorkerCount) {
-            Workers_.reserve(desiredWorkerCount);
-            Invokers_.reserve(desiredWorkerCount);
-            for (int index = currentWorkerCount; index < desiredWorkerCount; ++index) {
-                auto worker = CreateSuspendableActionQueue(Format("%v:%v", Name_, index));
+        if (desiredThreadCount > currentThreadCount) {
+            Workers_.reserve(desiredThreadCount);
+            Invokers_.reserve(desiredThreadCount);
+            for (int index = currentThreadCount; index < desiredThreadCount; ++index) {
+                auto worker = CreateSuspendableActionQueue(
+                    /*threadName*/ Format("%v:%v", Name_, index),
+                    {.ThreadInitializer = Options_.ThreadInitializer});
 
                 // NB: #GetInvoker initializes queue.
                 Invokers_.push_back(worker->GetInvoker());
 
-                if (WorkerInitializer_) {
-                    BIND(WorkerInitializer_)
-                        .AsyncVia(Invokers_.back())
-                        .Run()
-                        .Get();
-                }
                 worker->Suspend(/*immediately*/ true)
                     .Get()
                     .ThrowOnError();
-                Workers_.emplace_back(std::move(worker));
+                Workers_.push_back(std::move(worker));
             }
         }
 
-        YT_VERIFY(std::ssize(Workers_) >= desiredWorkerCount);
-        ActiveWorkerCount_ = desiredWorkerCount;
+        YT_VERIFY(std::ssize(Workers_) >= desiredThreadCount);
+        ActiveThreadCount_ = desiredThreadCount;
     }
 
     TFuture<void> StartQuantum(TDuration timeout)
     {
-        VERIFY_THREAD_AFFINITY(ControlThread);
+        YT_ASSERT_THREAD_AFFINITY(ControlThread);
 
         DoReconfigure();
 
@@ -165,7 +150,7 @@ private:
 
     void FinishQuantum(int quantumIndex, bool immediately)
     {
-        VERIFY_THREAD_AFFINITY(ControlThread);
+        YT_ASSERT_THREAD_AFFINITY(ControlThread);
 
         if (!Running_ || quantumIndex != QuantumIndex_) {
             return;
@@ -186,7 +171,7 @@ private:
 
     TFuture<void> SuspendWorkers(bool immediately)
     {
-        VERIFY_THREAD_AFFINITY(ControlThread);
+        YT_ASSERT_THREAD_AFFINITY(ControlThread);
 
         std::vector<TFuture<void>> futures;
         futures.reserve(Workers_.size());
@@ -199,7 +184,7 @@ private:
 
     void ResumeWorkers()
     {
-        VERIFY_THREAD_AFFINITY(ControlThread);
+        YT_ASSERT_THREAD_AFFINITY(ControlThread);
 
         for (const auto& worker : Workers_) {
             worker->Resume();
@@ -208,14 +193,14 @@ private:
 
     void OnWorkerReady(int workerIndex, int quantumIndex)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         if (!Running_ || quantumIndex != QuantumIndex_) {
             return;
         }
 
         // Worker is disabled, do not schedule new callbacks to it.
-        if (workerIndex >= ActiveWorkerCount_) {
+        if (workerIndex >= ActiveThreadCount_) {
             return;
         }
 
@@ -245,7 +230,7 @@ private:
 
     void OnTimeoutReached(int quantumIndex)
     {
-        VERIFY_THREAD_AFFINITY(ControlThread);
+        YT_ASSERT_THREAD_AFFINITY(ControlThread);
 
         if (quantumIndex != QuantumIndex_) {
             return;
@@ -259,7 +244,7 @@ private:
 
     void OnQuantumFinished(int quantumIndex)
     {
-        VERIFY_THREAD_AFFINITY(ControlThread);
+        YT_ASSERT_THREAD_AFFINITY(ControlThread);
 
         YT_LOG_TRACE("Quantum finished (Index: %v)",
             quantumIndex);
@@ -274,12 +259,12 @@ private:
 IQuantizedExecutorPtr CreateQuantizedExecutor(
     TString name,
     ICallbackProviderPtr callbackProvider,
-    int workerCount)
+    TQuantizedExecutorOptions options)
 {
     return New<TQuantizedExecutor>(
         std::move(name),
         std::move(callbackProvider),
-        workerCount);
+        std::move(options));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

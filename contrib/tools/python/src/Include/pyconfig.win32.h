@@ -233,7 +233,9 @@ typedef int pid_t;
 #define Py_IS_NAN _isnan
 #define Py_IS_INFINITY(X) (!_finite(X) && !_isnan(X))
 #define Py_IS_FINITE(X) _finite(X)
+#ifndef __clang__
 #define copysign _copysign
+#endif
 
 /* VS 2010 and above already defines hypot as _hypot */
 #if _MSC_VER < 1600
@@ -666,6 +668,7 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 
 /* Define if you have waitpid.  */
 /* #undef HAVE_WAITPID */
+#define HAVE_SNPRINTF 1
 
 /* Define to 1 if you have the `wcscoll' function. */
 #ifndef MS_WINCE

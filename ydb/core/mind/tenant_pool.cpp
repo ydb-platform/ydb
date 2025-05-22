@@ -170,7 +170,7 @@ public:
             .MaxRetryTime = TDuration::Seconds(1),
         };
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, TenantSlotBroker.TabletId, pipeConfig);
-        TenantSlotBroker.Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        TenantSlotBroker.Pipe = ctx.Register(pipe);
 
         auto request = MakeHolder<TEvTenantSlotBroker::TEvRegisterPool>();
         ActorIdToProto(TenantSlotBroker.Pipe, request->Record.MutableClientId());
@@ -413,9 +413,7 @@ public:
 
         SubscribeForConfig(ctx);
 
-        auto domain = AppData(ctx)->DomainsInfo->GetDomainByName(DomainName);
-        Y_ABORT_UNLESS(domain);
-        TenantSlotBroker.TabletId = MakeTenantSlotBrokerID(domain->DefaultStateStorageGroup);
+        TenantSlotBroker.TabletId = MakeTenantSlotBrokerID();
 
         for (auto &pr : Config->StaticSlots) {
             TTenantInfo::TPtr tenant = new TTenantInfo(pr.second.GetTenantName());
@@ -830,7 +828,7 @@ public:
         NActors::TMon *mon = AppData(ctx)->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(actorsMonPage, "tenant_pool", "Tenant Pool", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+            mon->RegisterActorPage(actorsMonPage, "tenant_pool", "Tenant Pool", false, ctx.ActorSystem(), ctx.SelfID);
         }
 
         if (!Config->IsEnabled) {
@@ -839,8 +837,8 @@ public:
         }
 
         auto *local = CreateLocal(Config->LocalConfig.Get());
-        LocalID = ctx.ExecutorThread.RegisterActor(local, TMailboxType::ReadAsFilled, 0);
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(MakeLocalID(SelfId().NodeId()), LocalID);
+        LocalID = ctx.Register(local, TMailboxType::ReadAsFilled, 0);
+        ctx.ActorSystem()->RegisterLocalService(MakeLocalID(SelfId().NodeId()), LocalID);
 
         THashMap<TString, TTenantPoolConfig::TPtr> domainConfigs;
 
@@ -853,13 +851,13 @@ public:
         }
 
         auto domains = AppData(ctx)->DomainsInfo;
+        auto *domain = domains->GetDomain();
         for (auto &pr : domainConfigs) {
-            auto *domain = domains->GetDomainByName(pr.first);
-            Y_ABORT_UNLESS(domain, "unknown domain %s in Tenant Pool config", pr.first.data());
+            Y_ABORT_UNLESS(domain->Name == pr.first, "unknown domain %s in Tenant Pool config", pr.first.data());
             auto aid = ctx.RegisterWithSameMailbox(new TDomainTenantPool(pr.first, LocalID, pr.second));
             DomainTenantPools[pr.first] = aid;
-            auto serviceId = MakeTenantPoolID(SelfId().NodeId(), domain->DomainUid);
-            ctx.ExecutorThread.ActorSystem->RegisterLocalService(serviceId, aid);
+            auto serviceId = MakeTenantPoolID(SelfId().NodeId());
+            ctx.ActorSystem()->RegisterLocalService(serviceId, aid);
         }
 
         Become(&TThis::StateWork);

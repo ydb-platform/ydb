@@ -1,6 +1,7 @@
 """
 Nestedcompleter for completion of hierarchical data structures.
 """
+
 from __future__ import annotations
 
 from typing import Any, Iterable, Mapping, Set, Union
@@ -68,7 +69,7 @@ class NestedCompleter(Completer):
             elif isinstance(value, dict):
                 options[key] = cls.from_nested_dict(value)
             elif isinstance(value, set):
-                options[key] = cls.from_nested_dict({item: None for item in value})
+                options[key] = cls.from_nested_dict(dict.fromkeys(value))
             else:
                 assert value is None
                 options[key] = None

@@ -75,10 +75,10 @@ Y_UNIT_TEST_SUITE(TLegacy) {
                 TIntrusiveConstPtr<TRowScheme> scheme,
                 std::vector<ui64>& sizes)
         {
-            TPartDataStats stats = { };
+            TDataStats stats = { };
             TTestEnv env;
-            // TScreenedPartIndexIterator without screen previously was TPartIndexIterator
-            TScreenedPartIndexIterator idxIter(TPartView{part, nullptr, nullptr}, &env, scheme->Keys, nullptr, nullptr);
+            // TScreenedPartIndexIterator without screen previously was TPartGroupFlatIndexItererator
+            TStatsScreenedPartIterator idxIter(TPartView{part, nullptr, nullptr}, &env, scheme->Keys, nullptr, nullptr, 0, 0);
             sizes.clear();
 
             UNIT_ASSERT_VALUES_EQUAL(idxIter.Start(), EReady::Data);
@@ -145,9 +145,9 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
         auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TScreen> screen,
                             TIntrusiveConstPtr<TRowScheme> scheme, TIntrusiveConstPtr<NPage::TFrames> frames) -> std::pair<ui64, ui64> {
-            TPartDataStats stats = { };
+            TDataStats stats = { };
             TTestEnv env;
-            TScreenedPartIndexIterator idxIter(TPartView{part, screen, nullptr}, &env, scheme->Keys, std::move(frames), nullptr);
+            TStatsScreenedPartIterator idxIter(TPartView{part, screen, nullptr}, &env, scheme->Keys, std::move(frames), nullptr, 0, 0);
 
             UNIT_ASSERT_VALUES_EQUAL(idxIter.Start(), EReady::Data);
             while (idxIter.IsValid()) {
@@ -304,12 +304,12 @@ Y_UNIT_TEST_SUITE(TLegacy) {
                 TScreen::THole(4200, 100000)
                 });
 
-        TPartDataStats stats = { };
+        TDataStats stats = { };
         TTestEnv env;
         TStatsIterator stIter(lay2.RowScheme()->Keys);
         {
-            auto it1 = MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs2.At(0), screen2, nullptr}, &env, lay2.RowScheme()->Keys, nullptr, nullptr);
-            auto it2 = MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs1.At(0), screen1, nullptr}, &env, lay2.RowScheme()->Keys, nullptr, nullptr);
+            auto it1 = MakeHolder<TStatsScreenedPartIterator>(TPartView{eggs2.At(0), screen2, nullptr}, &env, lay2.RowScheme()->Keys, nullptr, nullptr, 0, 0);
+            auto it2 = MakeHolder<TStatsScreenedPartIterator>(TPartView{eggs1.At(0), screen1, nullptr}, &env, lay2.RowScheme()->Keys, nullptr, nullptr, 0, 0);
             UNIT_ASSERT_VALUES_EQUAL(it1->Start(), EReady::Data);
             UNIT_ASSERT_VALUES_EQUAL(it2->Start(), EReady::Data);
             stIter.Add(std::move(it1));

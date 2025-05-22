@@ -1,5 +1,10 @@
 items:
-  - name: Примеры использования
+  - name: Аутентификация
+    href: auth.md
+  - name: Примеры чтения и записи
     href: examples.md
+  - name: Kafka Connect
+    include: { mode: link, path: ./connect/toc_p.yaml }
   - name: Ограничения
     href: constraints.md
+  

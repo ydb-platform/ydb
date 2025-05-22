@@ -58,7 +58,7 @@ namespace NKikimr {
     {
         TLogoBlobsSnapshot::TIndexForwardIterator it(hullCtx, snapshot);
         for (const auto& item : extremeQueries) {
-            Y_ABORT_UNLESS(item.HasId());
+            Y_VERIFY_S(item.HasId(), hullCtx->VCtx->VDiskLogPrefix);
             const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(item.GetId());
             const TLogoBlobID& full = id.FullID();
 
@@ -103,7 +103,7 @@ namespace NKikimr {
             return CreateLevelIndexExtremeQueryActor(queryCtx, parentId,
                     std::move(fullSnap.LogoBlobsSnap), std::move(fullSnap.BarriersSnap), ev, std::move(result), replSchedulerId);
         } else {
-            Y_ABORT("Impossible case");
+            Y_ABORT_S(queryCtx->HullCtx->VCtx->VDiskLogPrefix << "Impossible case");
         }
     }
 
@@ -158,7 +158,7 @@ namespace NKikimr {
         LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_OTHER,
                 VDISKP(vctx->VDiskLogPrefix,
                     "TEvVDbStatResult: %s", result->ToString().data()));
-        SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie);
+        SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, vctx, {});
     }
 
     template <class TKey, class TMemRec>

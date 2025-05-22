@@ -3,6 +3,7 @@
 
 #include <yt/yt/core/http/client.h>
 #include <yt/yt/core/http/compression.h>
+#include <yt/yt/core/http/compression_detail.h>
 #include <yt/yt/core/http/config.h>
 #include <yt/yt/core/http/connection_pool.h>
 #include <yt/yt/core/http/helpers.h>
@@ -38,14 +39,15 @@
 namespace NYT::NHttp {
 namespace {
 
-using namespace NYT::NConcurrency;
-using namespace NYT::NNet;
-using namespace NYT::NCrypto;
-using namespace NYT::NLogging;
+using namespace NHttp::NDetail;
+using namespace NConcurrency;
+using namespace NNet;
+using namespace NCrypto;
+using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(THttpUrlParse, Simple)
+TEST(TParseUrlTest, Simple)
 {
     TString example = "https://user@google.com:12345/a/b/c?foo=bar&zog=%20";
     auto url = ParseUrl(example);
@@ -62,7 +64,7 @@ TEST(THttpUrlParse, Simple)
     ASSERT_THROW(ParseUrl(TStringBuf("\0", 1)), TErrorException);
 }
 
-TEST(THttpUrlParse, IPv4)
+TEST(TParseUrlTest, IPv4)
 {
     TString example = "https://1.2.3.4:12345/";
     auto url = ParseUrl(example);
@@ -71,7 +73,7 @@ TEST(THttpUrlParse, IPv4)
     ASSERT_EQ(*url.Port, 12345);
 }
 
-TEST(THttpUrlParse, IPv6)
+TEST(TParseUrlTest, IPv6)
 {
     TString example = "https://[::1]:12345/";
     auto url = ParseUrl(example);
@@ -82,7 +84,7 @@ TEST(THttpUrlParse, IPv6)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(THttpCookie, ParseCookie)
+TEST(TParseCookiesTest, ParseCookie)
 {
     TString cookieString = "yandexuid=706216621492423338; yandex_login=prime; _ym_d=1529669659; Cookie_check=1; _ym_isad=1;some_cookie_name= some_cookie_value ; abracadabra=";
     auto cookie = ParseCookies(cookieString);
@@ -97,40 +99,40 @@ TEST(THttpCookie, ParseCookie)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<TString> ToVector(const TCompactVector<TString, 1>& v)
+std::vector<std::string> ToVector(const auto& v)
 {
-    return std::vector<TString>(v.begin(), v.end());
+    return {v.begin(), v.end()};
 }
 
-TEST(THttpHeaders, Simple)
+TEST(THeadersTest, Simple)
 {
     auto headers = New<THeaders>();
 
     headers->Set("X-Test", "F");
 
-    ASSERT_EQ(std::vector<TString>{{"F"}}, ToVector(headers->GetAll("X-Test")));
-    ASSERT_EQ(TString{"F"}, headers->GetOrThrow("X-Test"));
-    ASSERT_EQ(TString{"F"}, *headers->Find("X-Test"));
+    ASSERT_EQ(std::vector<std::string>{{"F"}}, ToVector(headers->GetAll("X-Test")));
+    ASSERT_EQ(std::string("F"), headers->GetOrThrow("X-Test"));
+    ASSERT_EQ(std::string("F"), *headers->Find("X-Test"));
 
     ASSERT_THROW(headers->GetAll("X-Test2"), TErrorException);
     ASSERT_THROW(headers->GetOrThrow("X-Test2"), TErrorException);
     ASSERT_FALSE(headers->Find("X-Test2"));
 
     headers->Add("X-Test", "H");
-    std::vector<TString> expected = {"F", "H"};
+    std::vector<std::string> expected = {"F", "H"};
     ASSERT_EQ(expected, ToVector(headers->GetAll("X-Test")));
 
     headers->Set("X-Test", "J");
-    ASSERT_EQ(std::vector<TString>{{"J"}}, ToVector(headers->GetAll("X-Test")));
+    ASSERT_EQ(std::vector<std::string>{{"J"}}, ToVector(headers->GetAll("X-Test")));
 }
 
-TEST(THttpHeaders, HeaderCaseIsIrrelevant)
+TEST(THeadersTest, HeaderCaseIsIrrelevant)
 {
     auto headers = New<THeaders>();
 
     headers->Set("x-tEsT", "F");
-    ASSERT_EQ(TString("F"), headers->GetOrThrow("x-test"));
-    ASSERT_EQ(TString("F"), headers->GetOrThrow("X-Test"));
+    ASSERT_EQ(std::string("F"), headers->GetOrThrow("x-test"));
+    ASSERT_EQ(std::string("F"), headers->GetOrThrow("X-Test"));
 
     TString buffer;
     TStringOutput output(buffer);
@@ -140,8 +142,7 @@ TEST(THttpHeaders, HeaderCaseIsIrrelevant)
     ASSERT_EQ(expected, buffer);
 }
 
-
-TEST(THttpHeaders, MessedUpHeaderValuesAreNotAllowed)
+TEST(THeadersTest, MessedUpHeaderValuesAreNotAllowed)
 {
     auto headers = New<THeaders>();
 
@@ -156,6 +157,11 @@ struct TFakeConnection
 {
     TString Input;
     TString Output;
+
+    TConnectionId GetId() const override
+    {
+        return {};
+    }
 
     bool SetNoDelay() override
     {
@@ -199,6 +205,11 @@ struct TFakeConnection
         return true;
     }
 
+    bool IsReusable() const override
+    {
+        return true;
+    }
+
     TFuture<void> Abort() override
     {
         THROW_ERROR_EXCEPTION("Not implemented");
@@ -214,12 +225,12 @@ struct TFakeConnection
         THROW_ERROR_EXCEPTION("Not implemented");
     }
 
-    const TNetworkAddress& LocalAddress() const override
+    const TNetworkAddress& GetLocalAddress() const override
     {
         THROW_ERROR_EXCEPTION("Not implemented");
     }
 
-    const TNetworkAddress& RemoteAddress() const override
+    const TNetworkAddress& GetRemoteAddress() const override
     {
         THROW_ERROR_EXCEPTION("Not implemented");
     }
@@ -445,8 +456,7 @@ TEST(THttpOutputTest, LargeResponse)
         "\r\n"
         "0\r\n"
         "\r\n",
-        Size
-    ));
+        Size));
 
     if (TStringBuf(fake->LargeRef.Begin(), fake->LargeRef.Size()) != body) {
         ADD_FAILURE() << "Wrong large chunk";
@@ -1025,7 +1035,7 @@ TEST_P(THttpServerTest, ResponseStreaming)
     Sleep(TDuration::MilliSeconds(10));
 }
 
-const auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 class TCancelingHandler
     : public IHttpHandler
@@ -1068,7 +1078,7 @@ TEST_P(THttpServerTest, RequestCancel)
     Server->AddHandler("/cancel", handler);
     Server->Start();
 
-    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto connection = WaitFor(dialer->Dial(TNetworkAddress::CreateIPv6Loopback(TestPort)))
         .ValueOrThrow();
     WaitFor(connection->Write(TSharedRef::FromString("POST /cancel HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")))
@@ -1107,7 +1117,7 @@ TEST_P(THttpServerTest, RequestHangUp)
     Server->AddHandler("/validating", validating);
     Server->Start();
 
-    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto connection = WaitFor(dialer->Dial(TNetworkAddress::CreateIPv6Loopback(TestPort)))
         .ValueOrThrow();
     WaitFor(connection->Write(TSharedRef::FromString("POST /validating HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n")))
@@ -1134,7 +1144,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
     Server->AddHandler("/echo", New<TEchoHttpHandler>());
     Server->Start();
 
-    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
 
     // Many requests.
     {
@@ -1148,7 +1158,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
 
         auto response = New<THttpInput>(
             connection,
-            connection->RemoteAddress(),
+            connection->GetRemoteAddress(),
             Poller->GetInvoker(),
             EMessageType::Response,
             New<THttpIOConfig>());
@@ -1182,7 +1192,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
 
         auto response = New<THttpInput>(
             connection,
-            connection->RemoteAddress(),
+            connection->GetRemoteAddress(),
             Poller->GetInvoker(),
             EMessageType::Response,
             New<THttpIOConfig>());
@@ -1218,7 +1228,7 @@ TEST_P(THttpServerTest, ReuseConnections)
     Server->AddHandler("/echo", New<TEchoHttpHandler>());
     Server->Start();
 
-    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto dialerMock = New<TDialerMock>(dialer);
     auto clientConfig = New<NHttp::TClientConfig>();
     clientConfig->MaxIdleConnections = 2;
@@ -1253,7 +1263,7 @@ TEST_P(THttpServerTest, DropConnectionsByTimeout)
     Server->AddHandler("/echo", New<TEchoHttpHandler>());
     Server->Start();
 
-    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto dialerMock = New<TDialerMock>(dialer);
     auto clientConfig = New<NHttp::TClientConfig>();
     clientConfig->MaxIdleConnections = 1;
@@ -1290,7 +1300,7 @@ TEST_P(THttpServerTest, ConnectionsDropRoutine)
     Server->AddHandler("/echo", New<TEchoHttpHandler>());
     Server->Start();
 
-    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger);
+    auto dialer = NNet::CreateDialer(New<TDialerConfig>(), Poller, HttpLogger());
     auto dialerMock = New<TDialerMock>(dialer);
     auto clientConfig = New<NHttp::TClientConfig>();
     clientConfig->MaxIdleConnections = 1;
@@ -1366,6 +1376,21 @@ TEST(THttpHandlerMatchingTest, Simple)
     EXPECT_EQ(h3.Get(), handlers3->Match(TStringBuf("/a")).Get());
     EXPECT_EQ(h2.Get(), handlers3->Match(TStringBuf("/a/")).Get());
     EXPECT_EQ(h2.Get(), handlers3->Match(TStringBuf("/a/b")).Get());
+
+    {
+        auto handlers = New<TRequestPathMatcher>();
+        handlers->Add("/{$}", h1);
+        handlers->Add("/a/{$}", h2);
+        handlers->Add("/a/b", h3);
+
+        EXPECT_EQ(h1.Get(), handlers->Match(TStringBuf("/")).Get());
+        EXPECT_EQ(h2.Get(), handlers->Match(TStringBuf("/a")).Get());
+        EXPECT_EQ(h2.Get(), handlers->Match(TStringBuf("/a/")).Get());
+        EXPECT_EQ(h3.Get(), handlers->Match(TStringBuf("/a/b")).Get());
+        EXPECT_FALSE(handlers->Match(TStringBuf("/a/b/")).Get());
+        EXPECT_FALSE(handlers->Match(TStringBuf("/a/c")).Get());
+        EXPECT_FALSE(handlers->Match(TStringBuf("/d")).Get());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1394,65 +1419,21 @@ TEST(TRangeHeadersTest, Test)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTestOutputStream
-    : public NConcurrency::IAsyncOutputStream
-{
-    std::exception_ptr Exception;
-    TError Error;
+class TCompressionTest
+    : public ::testing::Test
+{ };
 
-    TFuture<void> Return()
-    {
-        if (Exception) {
-            std::rethrow_exception(Exception);
-        }
-
-        return MakeFuture(Error);
-    }
-
-    TFuture<void> Write(const TSharedRef& /*buffer*/) override
-    {
-        return Return();
-    }
-
-    TFuture<void> Close() override
-    {
-        return Return();
-    }
-};
-
-DEFINE_REFCOUNTED_TYPE(TTestOutputStream)
-
-TEST(TCompression, Segfault)
-{
-    auto out = New<TTestOutputStream>();
-    auto compression = CreateCompressingAdapter(out, "br");
-
-    out->Error = TError("Write failed");
-    try {
-        Y_UNUSED(compression->Write(TSharedRef::FromString("hello")));
-        Y_UNUSED(compression->Close());
-    } catch (const std::exception& ) {
-    }
-
-    for (;;) {
-        try {
-            Y_UNUSED(compression->Write(TSharedRef::FromString("hello")));
-        } catch (const std::exception& ) {
-            break;
-        }
-    }
-}
-
-TEST(TCompression, StreamFlush)
+TEST_W(TCompressionTest, Flush)
 {
     constexpr int IterationCount = 10;
-    for (const auto& compression : GetSupportedCompressions()) {
-        if (compression == IdentityContentEncoding) {
+    for (const auto& encoding : GetSupportedContentEncodings()) {
+        if (encoding == IdentityContentEncoding) {
             continue;
         }
+
         TStringStream stringStream;
         auto asyncStream = CreateAsyncAdapter(static_cast<IOutputStream*>(&stringStream));
-        auto compressionStream = CreateCompressingAdapter(asyncStream, compression);
+        auto compressionStream = CreateCompressingAdapter(asyncStream, encoding, GetCurrentInvoker());
         auto previousLength = stringStream.Size();
         for (int i = 0; i < IterationCount; ++i) {
             WaitFor(compressionStream->Write(TSharedRef("x", 1, nullptr)))
@@ -1460,13 +1441,70 @@ TEST(TCompression, StreamFlush)
             WaitFor(compressionStream->Flush())
                 .ThrowOnError();
             EXPECT_GT(stringStream.Size(), previousLength)
-                << "Output for stream " << compression << " has not grown on iteration " << i;
+                << "Output for stream " << encoding << " has not grown on iteration " << i;
             previousLength = stringStream.Size();
         }
         WaitFor(compressionStream->Close())
             .ThrowOnError();
         WaitFor(asyncStream->Close())
             .ThrowOnError();
+    }
+}
+
+TEST_W(TCompressionTest, Roundtrip)
+{
+    constexpr size_t Size = 1000;
+    for (const auto& encoding : GetSupportedContentEncodings()) {
+        if (encoding == IdentityContentEncoding) {
+            continue;
+        }
+
+        TString payload;
+        for (size_t i = 0; i < Size; i++) {
+            payload.push_back('a' + RandomNumber<size_t>(26));
+        }
+
+        auto compressedPayload = [&] {
+            TStringStream compressedStream;
+            auto asyncCompressedStream = CreateAsyncAdapter(static_cast<IOutputStream*>(&compressedStream));
+            auto compressingStream = CreateCompressingAdapter(asyncCompressedStream, encoding, GetCurrentInvoker());
+            size_t offset = 0;
+            while (offset < payload.size()) {
+                size_t len = RandomNumber<size_t>(std::min(payload.size() - offset, static_cast<size_t>(100))) + 1;
+                WaitFor(compressingStream->Write(TSharedRef(payload.data() + offset, len, nullptr)))
+                    .ThrowOnError();
+                offset += len;
+            }
+
+            WaitFor(compressingStream->Close())
+                .ThrowOnError();
+            WaitFor(asyncCompressedStream->Close())
+                .ThrowOnError();
+
+            return compressedStream.Str();
+        }();
+
+        auto decompressedPayload = [&] {
+            TString decompressedPayload;
+            TStringInput compressedStream(compressedPayload);
+            auto asyncCompressedStream = CreateAsyncAdapter(static_cast<IInputStream*>(&compressedStream), GetCurrentInvoker());
+            auto asyncZeroCopyCompressedStream = CreateZeroCopyAdapter(asyncCompressedStream, 1_KB);
+            auto decompressingStream = CreateDecompressingAdapter(asyncZeroCopyCompressedStream, encoding, GetCurrentInvoker());
+            while (true) {
+                size_t len = RandomNumber<size_t>(100) + 1;
+                auto buffer = TSharedMutableRef::Allocate(len);
+                auto bytes = WaitFor(decompressingStream->Read(buffer))
+                    .ValueOrThrow();
+                if (bytes == 0) {
+                    break;
+                }
+                decompressedPayload += TStringBuf(buffer.data(), buffer.data() + bytes);
+            }
+
+            return decompressedPayload;
+        }();
+
+        EXPECT_EQ(payload, decompressedPayload);
     }
 }
 

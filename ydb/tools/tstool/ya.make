@@ -1,7 +1,5 @@
 PY3_PROGRAM(tstool)
 
-OWNER(alexvru)
-
 PY_MAIN(tstool)
 
 PY_SRCS(

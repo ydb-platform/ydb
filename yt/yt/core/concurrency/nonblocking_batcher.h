@@ -2,14 +2,13 @@
 
 #include <yt/yt/core/actions/future.h>
 
-#include <queue>
 #include <vector>
 
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(ETNonblockingBatcherTimerState,
+DEFINE_ENUM(ENonblockingBatcherTimerState,
     (Initial)
     (Started)
     (Finished)
@@ -93,8 +92,12 @@ public:
 
     void UpdateSettings(TDuration batchDuration, TBatchLimiter batchLimiter, bool allowEmptyBatches);
 
+    //! Flush all prepared and in-progress batches and set active promises with error.
+    //! Used to clear batcher at the end of its lifetime.
+    std::vector<TBatch> Drain();
+
 private:
-    using ETimerState = ETNonblockingBatcherTimerState;
+    using ETimerState = ENonblockingBatcherTimerState;
 
     TBatchLimiter BatchLimiter_;
     TDuration BatchDuration_;
@@ -105,7 +108,7 @@ private:
     TBatchLimiter CurrentBatchLimiter_;
 
     ETimerState TimerState_ = ETimerState::Initial;
-    std::queue<TBatch> Batches_;
+    std::deque<TBatch> Batches_;
     std::deque<TPromise<TBatch>> Promises_;
     TDelayedExecutorCookie BatchFlushCookie_;
     ui64 FlushGeneration_ = 0;

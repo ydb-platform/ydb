@@ -1,4 +1,6 @@
 items:
+  - name: Authentication
+    href: auth.md
   - name: Usage examples
     href: examples.md
   - name: Constraints

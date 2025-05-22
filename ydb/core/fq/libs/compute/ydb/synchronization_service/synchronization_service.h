@@ -3,7 +3,7 @@
 #include <ydb/core/fq/libs/config/protos/compute.pb.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/library/ycloud/impl/grpc_service_settings.h>
+#include <ydb/library/grpc/actor_client/grpc_service_settings.h>
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 #include <ydb/core/fq/libs/signer/signer.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>

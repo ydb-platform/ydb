@@ -1,0 +1,54 @@
+--- a/include/boost/iostreams/detail/codecvt_helper.hpp	(index)
++++ b/include/boost/iostreams/detail/codecvt_helper.hpp	(working tree)
+@@ -106,15 +106,15 @@ public:
+         return do_unshift(state, first2, last2, next2);
+     }
+ 
+-    bool always_noconv() const throw() { return do_always_noconv(); }
++    bool always_noconv() const noexcept { return do_always_noconv(); }
+ 
+-    int max_length() const throw() { return do_max_length(); }
++    int max_length() const noexcept { return do_max_length(); }
+ 
+-    int encoding() const throw() { return do_encoding(); }
++    int encoding() const noexcept { return do_encoding(); }
+ 
+     int length( BOOST_IOSTREAMS_CODECVT_CV_QUALIFIER State& state, 
+                 const Extern* first1, const Extern* last1,
+-                std::size_t len2 ) const throw()
++                std::size_t len2 ) const noexcept
+     {
+         return do_length(state, first1, last1, len2);
+     }
+@@ -139,15 +139,15 @@ protected:
+         return std::codecvt_base::ok;
+     }
+ 
+-    virtual bool do_always_noconv() const throw() { return true; }
++    virtual bool do_always_noconv() const noexcept { return true; }
+ 
+-    virtual int do_max_length() const throw() { return 1; }
++    virtual int do_max_length() const noexcept { return 1; }
+ 
+-    virtual int do_encoding() const throw() { return 1; }
++    virtual int do_encoding() const noexcept { return 1; }
+ 
+     virtual int do_length( BOOST_IOSTREAMS_CODECVT_CV_QUALIFIER State&, 
+                            const Extern* first1, const Extern* last1,
+-                           std::size_t len2 ) const throw()
++                           std::size_t len2 ) const noexcept
+     {
+         return (std::min)(static_cast<std::size_t>(last1 - first1), len2);
+     }
+@@ -203,9 +203,9 @@ struct codecvt_helper : std::codecvt<Intern, Extern, State> {
+     #endif
+         { }
+ #ifdef BOOST_IOSTREAMS_NO_CODECVT_MAX_LENGTH
+-    int max_length() const throw() { return do_max_length(); }
++    int max_length() const noexcept { return do_max_length(); }
+ protected:
+-    virtual int do_max_length() const throw() { return 1; }
++    virtual int do_max_length() const noexcept { return 1; }
+ #endif
+ };
+ 

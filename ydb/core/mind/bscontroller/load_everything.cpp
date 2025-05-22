@@ -1,4 +1,8 @@
 #include "impl.h"
+#include "console_interaction.h"
+#include "group_geometry_info.h"
+
+#include <ydb/library/yaml_config/yaml_config.h>
 
 namespace NKikimr {
 namespace NBsController {
@@ -69,8 +73,8 @@ public:
             if (!state.IsReady())
                 return false;
             if (state.IsValid()) {
-                Self->NextGroupID = state.GetValue<T::NextGroupID>();
-                Self->NextVirtualGroupId = state.GetValueOrDefault<T::NextVirtualGroupId>();
+                Self->NextGroupID = TGroupId::FromValue(state.GetValue<T::NextGroupID>());
+                Self->NextVirtualGroupId = TGroupId::FromValue(state.GetValueOrDefault<T::NextVirtualGroupId>());
                 Self->NextStoragePoolId = state.GetValue<T::NextStoragePoolId>();
                 Self->NextOperationLogIndex = state.GetValueOrDefault<T::NextOperationLogIndex>(1);
                 Self->DefaultMaxSlots = state.GetValue<T::DefaultMaxSlots>();
@@ -91,6 +95,22 @@ public:
                 Self->SysViewChangedSettings = true;
                 Self->UseSelfHealLocalPolicy = state.GetValue<T::UseSelfHealLocalPolicy>();
                 Self->TryToRelocateBrokenDisksLocallyFirst = state.GetValue<T::TryToRelocateBrokenDisksLocallyFirst>();
+                if (state.HaveValue<T::YamlConfig>()) {
+                    Self->YamlConfig = DecompressYamlConfig(state.GetValue<T::YamlConfig>());
+                    Self->YamlConfigHash = GetSingleConfigHash(*Self->YamlConfig);
+                }
+                if (state.HaveValue<T::StorageYamlConfig>()) {
+                    Self->StorageYamlConfig = DecompressStorageYamlConfig(state.GetValue<T::StorageYamlConfig>());
+                    Self->StorageYamlConfigVersion = NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0);
+                    Self->StorageYamlConfigHash = NYaml::GetConfigHash(*Self->StorageYamlConfig);
+                }
+                if (state.HaveValue<T::ExpectedStorageYamlConfigVersion>()) {
+                    Self->ExpectedStorageYamlConfigVersion = state.GetValue<T::ExpectedStorageYamlConfigVersion>();
+                }
+                if (state.HaveValue<T::ShredState>()) {
+                    Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
+                }
+                Self->EnableConfigV2 = state.GetValue<T::EnableConfigV2>();
             }
         }
 
@@ -120,9 +140,9 @@ public:
                 const auto groupId = groupStoragePool.GetValue<Table::GroupId>();
                 const auto boxId = groupStoragePool.GetValue<Table::BoxId>();
                 const auto storagePoolId = groupStoragePool.GetValue<Table::StoragePoolId>();
-                const bool inserted = groupToStoragePool.try_emplace(groupId, boxId, storagePoolId).second;
+                const bool inserted = groupToStoragePool.try_emplace(TGroupId::FromValue(groupId), boxId, storagePoolId).second;
                 Y_ABORT_UNLESS(inserted);
-                Self->StoragePoolGroups.emplace(TBoxStoragePoolId(boxId, storagePoolId), groupId);
+                Self->StoragePoolGroups.emplace(TBoxStoragePoolId(boxId, storagePoolId), TGroupId::FromValue(groupId));
                 if (!groupStoragePool.Next()) {
                     return false;
                 }
@@ -193,8 +213,8 @@ public:
                                                    groups.GetValueOrDefault<T::DesiredVDiskCategory>(NKikimrBlobStorage::TVDiskKind::Default),
                                                    groups.GetValueOrDefault<T::EncryptionMode>(),
                                                    groups.GetValueOrDefault<T::LifeCyclePhase>(),
-                                                   groups.GetValueOrDefault<T::MainKeyId>(nullptr),
-                                                   groups.GetValueOrDefault<T::EncryptedGroupKey>(nullptr),
+                                                   groups.GetValueOrDefault<T::MainKeyId>(),
+                                                   groups.GetValueOrDefault<T::EncryptedGroupKey>(),
                                                    groups.GetValueOrDefault<T::GroupKeyNonce>(),
                                                    groups.GetValueOrDefault<T::MainKeyVersion>(),
                                                    groups.GetValueOrDefault<T::Down>(),
@@ -321,8 +341,9 @@ public:
                     disks.GetValue<T::Guid>(), getOpt(T::SharedWithOs()), getOpt(T::ReadCentric()),
                     disks.GetValueOrDefault<T::NextVSlotId>(), disks.GetValue<T::PDiskConfig>(), boxId,
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
-                    disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::ExpectedSerial>(),
-                    disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage);
+                    disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
+                    disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage,
+                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>());
 
                 if (!disks.Next())
                     return false;
@@ -352,6 +373,7 @@ public:
         }
 
         // VSlots
+        const TMonotonic mono = TActivationContext::Monotonic();
         Self->VSlots.clear();
         {
             using T = Schema::VSlot;
@@ -364,7 +386,7 @@ public:
                 Y_ABORT_UNLESS(pdisk);
 
                 const TGroupId groupId = slot.GetValue<T::GroupID>();
-                Y_ABORT_UNLESS(groupId);
+                Y_ABORT_UNLESS(groupId.GetRawId());
 
                 auto& x = Self->AddVSlot(vslotId, pdisk, groupId, slot.GetValueOrDefault<T::GroupPrevGeneration>(),
                     slot.GetValue<T::GroupGeneration>(), slot.GetValue<T::Category>(), slot.GetValue<T::RingIdx>(),
@@ -374,6 +396,7 @@ public:
                 if (x.LastSeenReady != TInstant::Zero()) {
                     Self->NotReadyVSlotIds.insert(x.VSlotId);
                 }
+                x.VDiskStatusTimestamp = mono;
 
                 if (!slot.Next()) {
                     return false;
@@ -408,7 +431,7 @@ public:
                 return false;
             }
             while (!table.EndOfSet()) {
-                const TVDiskID key(table.GetValue<Table::GroupID>(), table.GetValue<Table::GroupGeneration>(),
+                const TVDiskID key(TGroupId::FromValue(table.GetValue<Table::GroupID>()), table.GetValue<Table::GroupGeneration>(),
                     table.GetValue<Table::Ring>(), table.GetValue<Table::FailDomain>(), table.GetValue<Table::VDisk>());
                 if (TVSlotInfo *slot = Self->FindVSlot(key)) {
                     slot->Metrics = table.GetValueOrDefault<Table::Metrics>();
@@ -430,7 +453,7 @@ public:
                 return false;
             }
             while (groupLatencies.IsValid()) {
-                const TGroupId groupId = groupLatencies.GetValue<Table::GroupId>();
+                const TGroupId groupId = TGroupId::FromValue(groupLatencies.GetValue<Table::GroupId>());
                 if (TGroupInfo *groupInfo = Self->FindGroup(groupId)) {
                     if (groupLatencies.HaveValue<Table::PutTabletLogLatencyUs>()) {
                         groupInfo->LatencyStats.PutTabletLog = TDuration::MicroSeconds(groupLatencies.GetValue<Table::PutTabletLogLatencyUs>());
@@ -449,14 +472,6 @@ public:
                     return false;
                 }
             }
-        }
-
-        // primitive garbage collection for obsolete metrics
-        for (const auto& key : pdiskMetricsToDelete) {
-            db.Table<Schema::PDiskMetrics>().Key(key).Delete();
-        }
-        for (const auto& key : vdiskMetricsToDelete) {
-            db.Table<Schema::VDiskMetrics>().Key(key).Delete();
         }
 
         // apply storage pool stats
@@ -497,9 +512,42 @@ public:
             }
         }
 
+        THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {
             group->CalculateGroupStatus();
+
+            group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+                const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
+                if (inserted) {
+                    if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
+                        it->second = TGroupGeometryInfo(group->Topology->GType, jt->second.GetGroupGeometry());
+                    } else {
+                        Y_DEBUG_ABORT();
+                    }
+                }
+                return it->second;
+            });
+        }
+
+        // primitive garbage collection for obsolete metrics
+        for (const auto& key : pdiskMetricsToDelete) {
+            db.Table<Schema::PDiskMetrics>().Key(key).Delete();
+        }
+        for (const auto& key : vdiskMetricsToDelete) {
+            db.Table<Schema::VDiskMetrics>().Key(key).Delete();
+        }
+
+        // issue all sys view updates just after the start
+        for (const auto& [pdiskId, _] : Self->PDisks) {
+            Self->SysViewChangedPDisks.insert(pdiskId);
+        }
+        for (const auto& [vdiskId, _] : Self->VSlots) {
+            Self->SysViewChangedVSlots.insert(vdiskId);
+        }
+        for (const auto& [groupId, _] : Self->GroupMap) {
+            Self->SysViewChangedGroups.insert(groupId);
         }
 
         return true;
@@ -508,6 +556,9 @@ public:
     void Complete(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE03, "TTxLoadEverything Complete");
         Self->LoadFinished();
+        if (!Self->SelfManagementEnabled) {
+            Self->ConsoleInteraction->Start();
+        }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");
     }
 };

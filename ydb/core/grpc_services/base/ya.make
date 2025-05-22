@@ -11,9 +11,10 @@ PEERDIR(
     ydb/core/base
     ydb/core/grpc_services/counters
     ydb/core/grpc_streaming
+    ydb/core/jaeger_tracing
     ydb/public/api/protos
-    ydb/public/sdk/cpp/client/resources
-    ydb/library/yql/public/issue
+    ydb/public/sdk/cpp/src/client/resources
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

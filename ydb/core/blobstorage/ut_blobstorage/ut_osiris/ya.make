@@ -4,9 +4,7 @@ FORK_SUBTESTS()
 
 SIZE(LARGE)
 
-TIMEOUT(3600)
-
-TAG(ya:fat)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 SRCS(
     osiris.cpp
@@ -16,9 +14,8 @@ PEERDIR(
     ydb/core/blobstorage/ut_blobstorage/lib
 )
 
-REQUIREMENTS(
-    cpu:4
-    ram:32
-)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32)
+ENDIF()
 
 END()

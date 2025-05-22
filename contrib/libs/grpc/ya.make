@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.54.2)
+VERSION(1.54.3)
 
-ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.54.2.tar.gz)
+ORIGINAL_SOURCE(https://github.com/grpc/grpc/archive/v1.54.3.tar.gz)
 
 LICENSE(
     Apache-2.0 AND

@@ -65,8 +65,14 @@ public:
         TArrayRef<const TCell> Key;
     };
 
+    int CompareKeys(TArrayRef<const TCell> a, TArrayRef<const TCell> b) const {
+        Y_DEBUG_ABORT_UNLESS(a.size() == KeyTypes.size());
+        Y_DEBUG_ABORT_UNLESS(b.size() == KeyTypes.size());
+        return CompareTypedCellVectors(a.data(), b.data(), KeyTypes.data(), KeyTypes.size());
+    }
+
     template<class TPoint>
-    bool PointLessThanLeftBorder(const TPoint& a, const TKeyRangeEntry& b) const noexcept {
+    bool PointLessThanLeftBorder(const TPoint& a, const TKeyRangeEntry& b) const {
         Y_DEBUG_ABORT_UNLESS(a.Key.size() == KeyTypes.size());
         Y_DEBUG_ABORT_UNLESS(b.FromKey.size() == KeyTypes.size());
         if (int cmp = CompareTypedCellVectors(a.Key.data(), b.FromKey.data(), KeyTypes.data(), KeyTypes.size())) {
@@ -76,7 +82,7 @@ public:
     }
 
     template<class TPoint>
-    bool RightBorderLessThanPoint(const TKeyRangeEntry& a, const TPoint& b) const noexcept {
+    bool RightBorderLessThanPoint(const TKeyRangeEntry& a, const TPoint& b) const {
         Y_DEBUG_ABORT_UNLESS(b.Key.size() == KeyTypes.size());
         if (!a.ToKey) {
             // the left ends at +inf
@@ -89,23 +95,23 @@ public:
         return !a.ToInclusive;
     }
 
-    bool operator()(const TSearchPoint& a, const TKeyRangeEntry& b) const noexcept {
+    bool operator()(const TSearchPoint& a, const TKeyRangeEntry& b) const {
         return PointLessThanLeftBorder(a, b);
     }
 
-    bool operator()(const TKeyRangeEntry& a, const TSearchPoint& b) const noexcept {
+    bool operator()(const TKeyRangeEntry& a, const TSearchPoint& b) const {
         return RightBorderLessThanPoint(a, b);
     }
 
-    bool operator()(const TKeyRangeEntry& a, const TLowerBound& b) const noexcept {
+    bool operator()(const TKeyRangeEntry& a, const TLowerBound& b) const {
         return RightBorderLessThanPoint(a, b);
     }
 
-    bool operator()(const TLowerBoundReverse& a, const TKeyRangeEntry& b) const noexcept {
+    bool operator()(const TLowerBoundReverse& a, const TKeyRangeEntry& b) const {
         return PointLessThanLeftBorder(a, b);
     }
 
-    bool operator()(const TKeyRangeEntry& a, const TKeyRangeEntry& b) const noexcept {
+    bool operator()(const TKeyRangeEntry& a, const TKeyRangeEntry& b) const {
         Y_DEBUG_ABORT_UNLESS(b.FromKey.size() == KeyTypes.size());
         if (!a.ToKey) {
             // the left ends at +inf
@@ -137,7 +143,7 @@ private:
 
     class TChunk : public TIntrusiveListItem<TChunk> {
     public:
-        TChunk(size_t size) noexcept
+        TChunk(size_t size)
             : Next_(Data())
             , Left_(size)
         {
@@ -145,7 +151,7 @@ private:
             Y_DEBUG_ABORT_UNLESS(AlignUp(Left_) == Left_, "Chunk size is not properly aligned");
         }
 
-        void* Allocate(size_t len) noexcept {
+        void* Allocate(size_t len) {
             Y_DEBUG_ABORT_UNLESS(AlignUp(len) == len, "Chunk allocation is not aligned");
 
             if (len > Left_) {
@@ -158,7 +164,7 @@ private:
             return ptr;
         }
 
-        bool Deallocate(void* ptr, size_t len) noexcept {
+        bool Deallocate(void* ptr, size_t len) {
             Y_DEBUG_ABORT_UNLESS(AlignUp(len) == len, "Chunk allocation is not aligned");
 
             if (Used() < len) {
@@ -200,11 +206,11 @@ private:
     };
 
 public:
-    ~TSpecialMemoryPool() noexcept {
+    ~TSpecialMemoryPool() {
         Clear();
     }
 
-    void Clear() noexcept {
+    void Clear() {
         Current = nullptr;
         while (!Chunks.Empty()) {
             TChunk* chunk = Chunks.PopBack();
@@ -249,7 +255,7 @@ public:
         return ptr;
     }
 
-    void Deallocate(void* ptr, size_t len) noexcept {
+    void Deallocate(void* ptr, size_t len) {
         len = AlignUp(len);
         Y_DEBUG_ABORT_UNLESS(Current, "Deallocate from an empty pool, possible bug");
         Y_DEBUG_ABORT_UNLESS(TotalUsed_ >= len, "Used memory underflow, possible bug");
@@ -311,9 +317,30 @@ struct TKeyRangeCacheConfig {
     size_t MaxBytes = 128 * 1024; // maximum 128KB by default
 };
 
+class TKeyRangeCache;
+struct TKeyRangeCacheNeedGCTag;
+
+class TKeyRangeCacheNeedGCList final
+    : public TSimpleRefCount<TKeyRangeCacheNeedGCList>
+{
+public:
+    ~TKeyRangeCacheNeedGCList();
+
+    void Add(TKeyRangeCache* cache);
+
+    void RunGC();
+
+private:
+    using TListItem = TIntrusiveListItem<TKeyRangeCache, TKeyRangeCacheNeedGCTag>;
+    TIntrusiveList<TKeyRangeCache, TKeyRangeCacheNeedGCTag> List;
+};
+
 class TKeyRangeCache final
     : public TSimpleRefCount<TKeyRangeCache>
+    , public TIntrusiveListItem<TKeyRangeCache, TKeyRangeCacheNeedGCTag>
 {
+    friend class TKeyRangeCacheNeedGCList;
+
 private:
     template<class T>
     class TAccountingAllocator
@@ -341,7 +368,7 @@ private:
             return TBase::allocate(n);
         }
 
-        void deallocate(T* ptr, size_t n) noexcept {
+        void deallocate(T* ptr, size_t n) {
             auto size = sizeof(T) * n;
             Y_DEBUG_ABORT_UNLESS(*UsedMemory >= size);
             *UsedMemory -= size;
@@ -387,7 +414,8 @@ public:
     };
 
 public:
-    TKeyRangeCache(const TKeyCellDefaults& keyDefaults, const TKeyRangeCacheConfig& config);
+    TKeyRangeCache(const TKeyCellDefaults& keyDefaults, const TKeyRangeCacheConfig& config,
+        const TIntrusivePtr<TKeyRangeCacheNeedGCList>& gcList = nullptr);
 
     ~TKeyRangeCache();
 
@@ -515,6 +543,13 @@ public:
     void Invalidate(const_iterator it);
 
     /**
+     * Invalidates the specified key from the entry.
+     * Entry may or may not become invalidated after this call.
+     * The key doesn't need to be previously allocated with AllocateKey.
+     */
+    void InvalidateKey(const_iterator it, TArrayRef<const TCell> key);
+
+    /**
      * Marks the specified entry as most recently used
      */
     void Touch(const_iterator it);
@@ -554,6 +589,7 @@ private:
 private:
     const TKeyCellDefaults& KeyCellDefaults;
     const TKeyRangeCacheConfig Config;
+    const TIntrusivePtr<TKeyRangeCacheNeedGCList> GCList;
     THolder<TSpecialMemoryPool> Pool;
     size_t UsedHeapMemory = 0;
     TContainer Entries;

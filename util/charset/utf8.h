@@ -16,39 +16,40 @@ inline unsigned char UTF8LeadByteMask(size_t utf8_rune_len) {
 }
 
 inline size_t UTF8RuneLen(const unsigned char lead_byte) {
-    //b0XXXXXXX
+    // b0XXXXXXX
     if ((lead_byte & 0x80) == 0x00) {
         return 1;
     }
-    //b110XXXXX
+    // b110XXXXX
     if ((lead_byte & 0xe0) == 0xc0) {
         return 2;
     }
-    //b1110XXXX
+    // b1110XXXX
     if ((lead_byte & 0xf0) == 0xe0) {
         return 3;
     }
-    //b11110XXX
+    // b11110XXX
     if ((lead_byte & 0xf8) == 0xf0) {
         return 4;
     }
-    //b10XXXXXX
+    // b10XXXXXX
     return 0;
 }
 
 inline size_t UTF8RuneLenByUCS(wchar32 rune) {
-    if (rune < 0x80)
+    if (rune < 0x80) {
         return 1U;
-    else if (rune < 0x800)
+    } else if (rune < 0x800) {
         return 2U;
-    else if (rune < 0x10000)
+    } else if (rune < 0x10000) {
         return 3U;
-    else if (rune < 0x200000)
+    } else if (rune < 0x200000) {
         return 4U;
-    else if (rune < 0x4000000)
+    } else if (rune < 0x4000000) {
         return 5U;
-    else
+    } else {
         return 6U;
+    }
 }
 
 inline void PutUTF8LeadBits(wchar32& rune, unsigned char c, size_t len) {
@@ -73,7 +74,7 @@ inline RECODE_RESULT GetUTF8CharLen(size_t& n, const unsigned char* p, const uns
     Y_ASSERT(p < e); // since p < e then we will check RECODE_EOINPUT only for n > 1 (see calls of this functions)
     switch (UTF8RuneLen(*p)) {
         case 0:
-            return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in first byte
+            return RECODE_BROKENSYMBOL; // [BROKENSYMBOL] in first byte
 
         case 1:
             n = 1;
@@ -193,37 +194,45 @@ inline RECODE_RESULT SafeReadUTF8Char(wchar32& rune, size_t& rune_len, const uns
     wchar32 _rune;
 
     size_t _len = UTF8RuneLen(*s);
-    if (s + _len > end)
-        return RECODE_EOINPUT; //[EOINPUT]
-    if (_len == 0)
-        return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in first byte
-    _rune = *s++;                   //[00000000 0XXXXXXX]
+    if (s + _len > end) {
+        return RECODE_EOINPUT; // [EOINPUT]
+    }
+    if (_len == 0) {
+        return RECODE_BROKENSYMBOL; // [BROKENSYMBOL] in first byte
+    }
+    _rune = *s++; // [00000000 0XXXXXXX]
 
     if (_len > 1) {
         _rune &= UTF8LeadByteMask(_len);
         unsigned char ch = *s++;
-        if (!IsUTF8ContinuationByte(ch))
-            return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in second byte
-        PutUTF8SixBits(_rune, ch);      //[00000XXX XXYYYYYY]
+        if (!IsUTF8ContinuationByte(ch)) {
+            return RECODE_BROKENSYMBOL; // [BROKENSYMBOL] in second byte
+        }
+        PutUTF8SixBits(_rune, ch); // [00000XXX XXYYYYYY]
         if (_len > 2) {
             ch = *s++;
-            if (!IsUTF8ContinuationByte(ch))
-                return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in third byte
-            PutUTF8SixBits(_rune, ch);      //[XXXXYYYY YYZZZZZZ]
+            if (!IsUTF8ContinuationByte(ch)) {
+                return RECODE_BROKENSYMBOL; // [BROKENSYMBOL] in third byte
+            }
+            PutUTF8SixBits(_rune, ch); // [XXXXYYYY YYZZZZZZ]
             if (_len > 3) {
                 ch = *s;
-                if (!IsUTF8ContinuationByte(ch))
-                    return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in fourth byte
-                PutUTF8SixBits(_rune, ch);      //[XXXYY YYYYZZZZ ZZQQQQQQ]
-                if (!IsValidUTF8Rune<4, strictMode>(_rune))
+                if (!IsUTF8ContinuationByte(ch)) {
+                    return RECODE_BROKENSYMBOL; // [BROKENSYMBOL] in fourth byte
+                }
+                PutUTF8SixBits(_rune, ch); // [XXXYY YYYYZZZZ ZZQQQQQQ]
+                if (!IsValidUTF8Rune<4, strictMode>(_rune)) {
                     return RECODE_BROKENSYMBOL;
+                }
             } else {
-                if (!IsValidUTF8Rune<3, strictMode>(_rune))
+                if (!IsValidUTF8Rune<3, strictMode>(_rune)) {
                     return RECODE_BROKENSYMBOL;
+                }
             }
         } else {
-            if (!IsValidUTF8Rune<2, strictMode>(_rune))
+            if (!IsValidUTF8Rune<2, strictMode>(_rune)) {
                 return RECODE_BROKENSYMBOL;
+            }
         }
     }
     rune_len = _len;
@@ -241,10 +250,10 @@ Y_FORCE_INLINE RECODE_RESULT ReadUTF8CharAndAdvance(wchar32& rune, const unsigne
     switch (UTF8RuneLen(*p)) {
         case 0:
             rune = BROKEN_RUNE;
-            return RECODE_BROKENSYMBOL; //[BROKENSYMBOL] in first byte
+            return RECODE_BROKENSYMBOL; // [BROKENSYMBOL] in first byte
 
         case 1:
-            rune = *p; //[00000000 0XXXXXXX]
+            rune = *p; // [00000000 0XXXXXXX]
             ++p;
             return RECODE_OK;
 
@@ -255,8 +264,8 @@ Y_FORCE_INLINE RECODE_RESULT ReadUTF8CharAndAdvance(wchar32& rune, const unsigne
                 rune = BROKEN_RUNE;
                 return RECODE_BROKENSYMBOL;
             } else {
-                PutUTF8LeadBits(rune, *p++, 2); //[00000000 000XXXXX]
-                PutUTF8SixBits(rune, *p++);     //[00000XXX XXYYYYYY]
+                PutUTF8LeadBits(rune, *p++, 2); // [00000000 000XXXXX]
+                PutUTF8SixBits(rune, *p++);     // [00000XXX XXYYYYYY]
                 if (!IsValidUTF8Rune<2, strictMode>(rune)) {
                     p -= 2;
                     rune = BROKEN_RUNE;
@@ -271,9 +280,9 @@ Y_FORCE_INLINE RECODE_RESULT ReadUTF8CharAndAdvance(wchar32& rune, const unsigne
                 rune = BROKEN_RUNE;
                 return RECODE_BROKENSYMBOL;
             } else {
-                PutUTF8LeadBits(rune, *p++, 3); //[00000000 0000XXXX]
-                PutUTF8SixBits(rune, *p++);     //[000000XX XXYYYYYY]
-                PutUTF8SixBits(rune, *p++);     //[XXXXYYYY YYZZZZZZ]
+                PutUTF8LeadBits(rune, *p++, 3); // [00000000 0000XXXX]
+                PutUTF8SixBits(rune, *p++);     // [000000XX XXYYYYYY]
+                PutUTF8SixBits(rune, *p++);     // [XXXXYYYY YYZZZZZZ]
                 // check for overlong encoding and surrogates
                 if (!IsValidUTF8Rune<3, strictMode>(rune)) {
                     p -= 3;
@@ -289,10 +298,10 @@ Y_FORCE_INLINE RECODE_RESULT ReadUTF8CharAndAdvance(wchar32& rune, const unsigne
                 rune = BROKEN_RUNE;
                 return RECODE_BROKENSYMBOL;
             } else {
-                PutUTF8LeadBits(rune, *p++, 4); //[00000000 00000000 00000XXX]
-                PutUTF8SixBits(rune, *p++);     //[00000000 0000000X XXYYYYYY]
-                PutUTF8SixBits(rune, *p++);     //[00000000 0XXXYYYY YYZZZZZZ]
-                PutUTF8SixBits(rune, *p++);     //[000XXXYY YYYYZZZZ ZZQQQQQQ]
+                PutUTF8LeadBits(rune, *p++, 4); // [00000000 00000000 00000XXX]
+                PutUTF8SixBits(rune, *p++);     // [00000000 0000000X XXYYYYYY]
+                PutUTF8SixBits(rune, *p++);     // [00000000 0XXXYYYY YYZZZZZZ]
+                PutUTF8SixBits(rune, *p++);     // [000XXXYY YYYYZZZZ ZZQQQQQQ]
                 if (!IsValidUTF8Rune<4, strictMode>(rune)) {
                     p -= 4;
                     rune = BROKEN_RUNE;
@@ -315,23 +324,26 @@ Y_FORCE_INLINE RECODE_RESULT ReadUTF8CharAndAdvance(wchar32& rune, const unsigne
 inline RECODE_RESULT SafeWriteUTF8Char(wchar32 rune, size_t& rune_len, unsigned char* s, size_t tail) {
     rune_len = 0;
     if (rune < 0x80) {
-        if (tail <= 0)
+        if (tail <= 0) {
             return RECODE_EOOUTPUT;
+        }
         *s = static_cast<unsigned char>(rune);
         rune_len = 1;
         return RECODE_OK;
     }
     if (rune < 0x800) {
-        if (tail <= 1)
+        if (tail <= 1) {
             return RECODE_EOOUTPUT;
+        }
         *s++ = static_cast<unsigned char>(0xC0 | (rune >> 6));
         *s = static_cast<unsigned char>(0x80 | (rune & 0x3F));
         rune_len = 2;
         return RECODE_OK;
     }
     if (rune < 0x10000) {
-        if (tail <= 2)
+        if (tail <= 2) {
             return RECODE_EOOUTPUT;
+        }
         *s++ = static_cast<unsigned char>(0xE0 | (rune >> 12));
         *s++ = static_cast<unsigned char>(0x80 | ((rune >> 6) & 0x3F));
         *s = static_cast<unsigned char>(0x80 | (rune & 0x3F));
@@ -339,8 +351,9 @@ inline RECODE_RESULT SafeWriteUTF8Char(wchar32 rune, size_t& rune_len, unsigned 
         return RECODE_OK;
     }
     /*if (rune < 0x200000)*/ {
-        if (tail <= 3)
+        if (tail <= 3) {
             return RECODE_EOOUTPUT;
+        }
         *s++ = static_cast<unsigned char>(0xF0 | ((rune >> 18) & 0x07));
         *s++ = static_cast<unsigned char>(0x80 | ((rune >> 12) & 0x3F));
         *s++ = static_cast<unsigned char>(0x80 | ((rune >> 6) & 0x3F));
@@ -388,7 +401,7 @@ inline void WriteUTF8Char(wchar32 rune, size_t& rune_len, unsigned char* s) {
     }
 }
 
-TStringBuf SubstrUTF8(const TStringBuf str, size_t pos, size_t len);
+TStringBuf SubstrUTF8(const TStringBuf str Y_LIFETIME_BOUND, size_t pos, size_t len);
 
 enum EUTF8Detect {
     NotUTF8,
@@ -429,3 +442,11 @@ bool ToUpperUTF8Impl(const char* beg, size_t n, TString& newString);
 TString ToUpperUTF8(const TString& s);
 TString ToUpperUTF8(TStringBuf s);
 TString ToUpperUTF8(const char* s);
+
+//! cut utf-8 string to fit into |size| bytes
+void Utf8TruncateInplace(TString& s, size_t size);
+//! cut on a valid utf-8 sequence less or equal |size|
+void Utf8TruncateInplaceRobust(TString& s, size_t size);
+[[nodiscard]] TStringBuf Utf8Truncate(TStringBuf sb Y_LIFETIME_BOUND, size_t size);
+//! on error returns the longest valid utf8 sequence
+[[nodiscard]] TStringBuf Utf8TruncateRobust(TStringBuf sb Y_LIFETIME_BOUND, size_t size) noexcept;

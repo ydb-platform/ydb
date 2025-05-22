@@ -33,18 +33,18 @@ void YPathJoinImpl(TStringBuilder* builder, TFirstArg&& firstLiteral, TArgs&&...
 } // namespace NDetail
 
 template <typename ...TArgs>
-TYPath YPathJoin(const TYPath& path, TArgs&&... literals)
+TYPath YPathJoin(TYPathBuf path, TArgs&&... literals)
 {
     TStringBuilder builder;
 
-    auto tryGetLength = [] (const auto& literal) {
+    auto estimateLength = [] (const auto& literal) {
         if constexpr (requires { literal.length(); }) {
             return literal.length();
         } else {
             return 1;
         }
     };
-    builder.Reserve(path.length() + (sizeof...(literals) + ... + tryGetLength(literals)));
+    builder.Reserve(path.length() + (sizeof...(literals) + ... + estimateLength(literals)));
 
     builder.AppendString(path);
     NDetail::YPathJoinImpl(&builder, literals...);

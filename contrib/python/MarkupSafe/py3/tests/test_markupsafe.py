@@ -1,9 +1,16 @@
+from __future__ import annotations
+
+import typing as t
+
 import pytest
 
+from markupsafe import escape
+from markupsafe import escape_silent
 from markupsafe import Markup
+from markupsafe import soft_str
 
 
-def test_adding(escape):
+def test_adding() -> None:
     unsafe = '<script type="application/x-some-script">alert("foo");</script>'
     safe = Markup("<em>username</em>")
     assert unsafe + safe == str(escape(unsafe)) + str(safe)
@@ -22,22 +29,22 @@ def test_adding(escape):
         ("%.2f", 3.14, "3.14"),
     ),
 )
-def test_string_interpolation(template, data, expect):
+def test_string_interpolation(template: str, data: t.Any, expect: str) -> None:
     assert Markup(template) % data == expect
 
 
-def test_type_behavior():
+def test_type_behavior() -> None:
     assert type(Markup("foo") + "bar") is Markup
     x = Markup("foo")
     assert x.__html__() is x
 
 
-def test_html_interop():
+def test_html_interop() -> None:
     class Foo:
-        def __html__(self):
+        def __html__(self) -> str:
             return "<em>awesome</em>"
 
-        def __str__(self):
+        def __str__(self) -> str:
             return "awesome"
 
     assert Markup(Foo()) == "<em>awesome</em>"
@@ -46,18 +53,18 @@ def test_html_interop():
 
 
 @pytest.mark.parametrize("args", ["foo", 42, ("foo", 42)])
-def test_missing_interpol(args):
+def test_missing_interpol(args: t.Any) -> None:
     with pytest.raises(TypeError):
-        Markup("<em></em>") % args
+        assert Markup("<em></em>") % args
 
 
-def test_tuple_interpol():
+def test_tuple_interpol() -> None:
     result = Markup("<em>%s:%s</em>") % ("<foo>", "<bar>")
     expect = Markup("<em>&lt;foo&gt;:&lt;bar&gt;</em>")
     assert result == expect
 
 
-def test_dict_interpol():
+def test_dict_interpol() -> None:
     result = Markup("<em>%(foo)s</em>") % {"foo": "<foo>"}
     expect = Markup("<em>&lt;foo&gt;</em>")
     assert result == expect
@@ -67,13 +74,13 @@ def test_dict_interpol():
     assert result == expect
 
 
-def test_escaping(escape):
+def test_escaping() -> None:
     assert escape("\"<>&'") == "&#34;&lt;&gt;&amp;&#39;"
     assert (
         Markup(
             "<!-- outer comment -->"
             "<em>Foo &amp; Bar"
-            "<!-- inner comment about <em> -->"
+            " <!-- inner comment about <em> -->\n "
             "</em>"
             "<!-- comment\nwith\nnewlines\n-->"
             "<meta content='tag\nwith\nnewlines'>"
@@ -82,7 +89,7 @@ def test_escaping(escape):
     )
 
 
-def test_unescape():
+def test_unescape() -> None:
     assert Markup("&lt;test&gt;").unescape() == "<test>"
 
     result = Markup("jack & tavi are cooler than mike &amp; russ").unescape()
@@ -97,7 +104,7 @@ def test_unescape():
     assert twice == expect
 
 
-def test_format():
+def test_format() -> None:
     result = Markup("<em>{awesome}</em>").format(awesome="<awesome>")
     assert result == "<em>&lt;awesome&gt;</em>"
 
@@ -108,39 +115,39 @@ def test_format():
     assert result == "<bar/>"
 
 
-def test_format_map():
+def test_format_map() -> None:
     result = Markup("<em>{value}</em>").format_map({"value": "<value>"})
     assert result == "<em>&lt;value&gt;</em>"
 
 
-def test_formatting_empty():
+def test_formatting_empty() -> None:
     formatted = Markup("{}").format(0)
     assert formatted == Markup("0")
 
 
-def test_custom_formatting():
+def test_custom_formatting() -> None:
     class HasHTMLOnly:
-        def __html__(self):
+        def __html__(self) -> Markup:
             return Markup("<foo>")
 
     class HasHTMLAndFormat:
-        def __html__(self):
+        def __html__(self) -> Markup:
             return Markup("<foo>")
 
-        def __html_format__(self, spec):
+        def __html_format__(self, spec: str) -> Markup:
             return Markup("<FORMAT>")
 
     assert Markup("{0}").format(HasHTMLOnly()) == Markup("<foo>")
     assert Markup("{0}").format(HasHTMLAndFormat()) == Markup("<FORMAT>")
 
 
-def test_complex_custom_formatting():
+def test_complex_custom_formatting() -> None:
     class User:
-        def __init__(self, id, username):
+        def __init__(self, id: int, username: str) -> None:
             self.id = id
             self.username = username
 
-        def __html_format__(self, format_spec):
+        def __html_format__(self, format_spec: str) -> Markup:
             if format_spec == "link":
                 return Markup('<a href="/user/{0}">{1}</a>').format(
                     self.id, self.__html__()
@@ -150,7 +157,7 @@ def test_complex_custom_formatting():
 
             return self.__html__()
 
-        def __html__(self):
+        def __html__(self) -> Markup:
             return Markup("<span class=user>{0}</span>").format(self.username)
 
     user = User(1, "foo")
@@ -159,43 +166,43 @@ def test_complex_custom_formatting():
     assert result == expect
 
 
-def test_formatting_with_objects():
+def test_formatting_with_objects() -> None:
     class Stringable:
-        def __str__(self):
+        def __str__(self) -> str:
             return "строка"
 
     assert Markup("{s}").format(s=Stringable()) == Markup("строка")
 
 
-def test_escape_silent(escape, escape_silent):
+def test_escape_silent() -> None:
     assert escape_silent(None) == Markup()
     assert escape(None) == Markup(None)
     assert escape_silent("<foo>") == Markup("&lt;foo&gt;")
 
 
-def test_splitting():
+def test_splitting() -> None:
     expect = [Markup("a"), Markup("b")]
     assert Markup("a b").split() == expect
     assert Markup("a b").rsplit() == expect
     assert Markup("a\nb").splitlines() == expect
 
 
-def test_mul():
+def test_mul() -> None:
     assert Markup("a") * 3 == Markup("aaa")
 
 
-def test_escape_return_type(escape):
+def test_escape_return_type() -> None:
     assert isinstance(escape("a"), Markup)
     assert isinstance(escape(Markup("a")), Markup)
 
     class Foo:
-        def __html__(self):
+        def __html__(self) -> str:
             return "<strong>Foo</strong>"
 
     assert isinstance(escape(Foo()), Markup)
 
 
-def test_soft_str(soft_str):
-    assert type(soft_str("")) is str
-    assert type(soft_str(Markup())) is Markup
-    assert type(soft_str(15)) is str
+def test_soft_str() -> None:
+    assert type(soft_str("")) is str  # noqa: E721
+    assert type(soft_str(Markup())) is Markup  # noqa: E721
+    assert type(soft_str(15)) is str  # noqa: E721

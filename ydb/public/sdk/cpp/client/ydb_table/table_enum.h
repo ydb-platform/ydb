@@ -1,8 +1,10 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <limits>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NTable {
 
 //! Column family compression codec
@@ -28,6 +30,7 @@ enum class EIndexType {
     GlobalSync,
     GlobalAsync,
     GlobalUnique,
+    GlobalVectorKMeansTree,
 
     Unknown = std::numeric_limits<int>::max()
 };

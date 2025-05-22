@@ -24,4 +24,10 @@ std::optional<T> TryParseValue(NYson::TYsonPullParserCursor* cursor);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool ParseListUntilIndex(NYson::TYsonPullParserCursor* cursor, int targetIndex);
+bool ParseMapOrAttributesUntilKey(NYson::TYsonPullParserCursor* cursor, TStringBuf key);
+TString ParseAnyValue(NYson::TYsonPullParserCursor* cursor);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NYTree

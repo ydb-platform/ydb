@@ -1,14 +1,10 @@
-from __future__ import unicode_literals
 from unittest import TestCase
 
 import requests
 import requests_mock
 import time
 
-try:
-    from urlparse import urlparse, parse_qs
-except ImportError:
-    from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs
 
 from oauthlib.oauth2.rfc6749.errors import InvalidGrantError
 from requests_oauthlib import OAuth2Session
@@ -330,5 +326,62 @@ class EbayComplianceFixTest(TestCase):
         token = self.fixed_session.fetch_token(
             "https://api.ebay.com/identity/v1/oauth2/token",
             authorization_response="https://i.b/?code=hello",
+        )
+        assert token["token_type"] == "Bearer"
+
+
+def access_and_refresh_token_request_compliance_fix_test(session, client_secret):
+    def _non_compliant_header(url, headers, body):
+        headers["X-Client-Secret"] = client_secret
+        return url, headers, body
+
+    session.register_compliance_hook("access_token_request", _non_compliant_header)
+    session.register_compliance_hook("refresh_token_request", _non_compliant_header)
+    return session
+
+
+class RefreshTokenRequestComplianceFixTest(TestCase):
+    value_to_test_for = "value_to_test_for"
+
+    def setUp(self):
+        mocker = requests_mock.Mocker()
+        mocker.post(
+            "https://example.com/token",
+            request_headers={"X-Client-Secret": self.value_to_test_for},
+            json={
+                "access_token": "this is the access token",
+                "expires_in": 7200,
+                "token_type": "Bearer",
+            },
+            headers={"Content-Type": "application/json"},
+        )
+        mocker.post(
+            "https://example.com/refresh",
+            request_headers={"X-Client-Secret": self.value_to_test_for},
+            json={
+                "access_token": "this is the access token",
+                "expires_in": 7200,
+                "token_type": "Bearer",
+            },
+            headers={"Content-Type": "application/json"},
+        )
+        mocker.start()
+        self.addCleanup(mocker.stop)
+
+        session = OAuth2Session()
+        self.fixed_session = access_and_refresh_token_request_compliance_fix_test(
+            session, self.value_to_test_for
+        )
+
+    def test_access_token(self):
+        token = self.fixed_session.fetch_token(
+            "https://example.com/token",
+            authorization_response="https://i.b/?code=hello",
+        )
+        assert token["token_type"] == "Bearer"
+
+    def test_refresh_token(self):
+        token = self.fixed_session.refresh_token(
+            "https://example.com/refresh",
         )
         assert token["token_type"] == "Bearer"

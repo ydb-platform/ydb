@@ -4,7 +4,9 @@
 #include <util/system/condvar.h>
 #include <util/system/info.h>
 
-#define SINGLE_THREAD 0
+#include <bit>
+
+#define SINGLE_THREAD 1
 
 namespace {
 
@@ -62,15 +64,8 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
     for (const auto& vslot : response.GetStatus(0).GetBaseConfig().GetVSlot()) {
         const TVDiskID vdiskId(vslot.GetGroupId(), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
             vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
-
-        const TActorId sender = env.Runtime->AllocateEdgeActor(1);
-        auto ev = std::make_unique<TEvBlobStorage::TEvControllerGroupReconfigureWipe>();
-        auto *slotId = ev->Record.MutableVSlotId();
-        slotId->CopyFrom(vslot.GetVSlotId());
-        env.Runtime->SendToPipe(env.TabletId, sender, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
-        auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerGroupReconfigureWipeResult>(sender);
-        Y_ABORT_UNLESS(response->Get()->Record.GetStatus() == NKikimrProto::OK);
-
+        const auto& v = vslot.GetVSlotId();
+        env.Wipe(v.GetNodeId(), v.GetPDiskId(), v.GetVSlotId(), vdiskId);
         env.Sim(TDuration::Seconds(30));
     }
 
@@ -248,7 +243,7 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
                     v.push_back(1 << i); // main
                 } else {
                     for (ui32 j = 1; j < (1 << type.TotalPartCount()); ++j) {
-                        if (PopCount(j) <= 1) {
+                        if (std::popcount(j) <= 1) {
                             v.push_back(j); // handoff
                         }
                     }

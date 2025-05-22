@@ -7,7 +7,8 @@ using namespace NYT::NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int main() {
+int main()
+{
     NYT::NProfiling::TProfiler profiler{"/foo"};
     auto gauge = profiler.Gauge("/bar");
     gauge.Update(1.0);

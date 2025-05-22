@@ -8,6 +8,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/net_classifier_updater.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/protos/netclassifier.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -236,7 +237,7 @@ private:
         NActors::TMon* mon = AppData(Ctx())->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage * page = mon->RegisterIndexPage("actors", "Actors");
-            mon->RegisterActorPage(page, "netclassifier", "NetClassifier", false, Ctx().ExecutorThread.ActorSystem, Ctx().SelfID);
+            mon->RegisterActorPage(page, "netclassifier", "NetClassifier", false, Ctx().ActorSystem(), Ctx().SelfID);
         }
 
         ProcessEnqueuedEvents();

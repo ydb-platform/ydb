@@ -22,6 +22,7 @@ DEFINE_ENUM(ETransactionState,
     (FlushedModifications)
     (Aborting)
     (Aborted)
+    (AbortFailed)
     (Detached)
 );
 
@@ -47,6 +48,8 @@ public:
         i64 sequenceNumberSourceId,
         TStringBuf capitalizedCreationReason);
 
+    void Initialize();
+
     // ITransaction implementation.
     NApi::IConnectionPtr GetConnection() override;
     NApi::IClientPtr GetClient() const override;
@@ -58,10 +61,10 @@ public:
     NTransactionClient::EDurability GetDurability() const override;
     TDuration GetTimeout() const override;
 
-    TFuture<void> Ping(const NApi::TTransactionPingOptions& options = {}) override;
+    TFuture<void> Ping(const NApi::TPrerequisitePingOptions& options = {}) override;
     TFuture<NApi::TTransactionFlushResult> Flush() override;
     TFuture<NApi::TTransactionCommitResult> Commit(const NApi::TTransactionCommitOptions&) override;
-    TFuture<void> Abort(const NApi::TTransactionAbortOptions& options = {}) override;
+    TFuture<void> Abort(const NApi::TTransactionAbortOptions& options) override;
     void Detach() override;
     void RegisterAlienTransaction(const ITransactionPtr& transaction) override;
 
@@ -77,14 +80,32 @@ public:
         TSharedRange<NApi::TRowModification> modifications,
         const NApi::TModifyRowsOptions& options) override;
 
-    using TQueueTransactionMixin::AdvanceConsumer;
-    TFuture<void> AdvanceConsumer(
+    using TQueueTransactionMixin::AdvanceQueueConsumer;
+    TFuture<void> AdvanceQueueConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         int partitionIndex,
         std::optional<i64> oldOffset,
         i64 newOffset,
-        const TAdvanceConsumerOptions& options) override;
+        const TAdvanceQueueConsumerOptions& options) override;
+
+    TFuture<TPushQueueProducerResult> PushQueueProducer(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
+        NTableClient::TNameTablePtr nameTable,
+        const std::vector<TSharedRef>& serializedRows,
+        const TPushQueueProducerOptions& options) override;
+
+    TFuture<TPushQueueProducerResult> PushQueueProducer(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        NQueueClient::TQueueProducerEpoch epoch,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TUnversionedRow> rows,
+        const TPushQueueProducerOptions& options) override;
 
     // IClientBase implementation.
     TFuture<NApi::ITransactionPtr> StartTransaction(
@@ -108,11 +129,11 @@ public:
         const TMultiLookupOptions& options) override;
 
     TFuture<NApi::TSelectRowsResult> SelectRows(
-        const TString& query,
+        const std::string& query,
         const NApi::TSelectRowsOptions& options) override;
 
     TFuture<NYson::TYsonString> ExplainQuery(
-        const TString& query,
+        const std::string& query,
         const NApi::TExplainQueryOptions& options) override;
 
     TFuture<NApi::TPullRowsResult> PullRows(
@@ -216,6 +237,14 @@ public:
         const NYPath::TYPath& path,
         const NApi::TJournalWriterOptions& options) override;
 
+    TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteSessionStartOptions& options = {}) override;
+
+    TFuture<void> FinishDistributedWriteSession(
+        const TDistributedWriteSessionWithResults& sessionWithResults,
+        const TDistributedWriteSessionFinishOptions& options = {}) override;
+
     // Custom methods.
 
     //! Returns proxy address this transaction is sticking to.
@@ -260,7 +289,7 @@ private:
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     ETransactionState State_ = ETransactionState::Active;
-    const TPromise<void> AbortPromise_ = NewPromise<void>();
+    TPromise<void> AbortPromise_;
     std::vector<NApi::ITransactionPtr> AlienTransactions_;
 
     THashSet<NObjectClient::TCellId> AdditionalParticipantCellIds_;

@@ -1,6 +1,5 @@
 #include "columnar.h"
-
-#include <yt/yt/client/table_client/row_base.h>
+#include "helpers.h"
 
 #include <yt/yt/library/numeric/algorithm_helpers.h>
 
@@ -127,22 +126,6 @@ void CopyBitmapRangeToBitmapImpl(
         SafeWriteQword(currentQwordOutput, dst.End(), buildOutputQWord(qword1, qword2));
         ++currentQwordInput;
         ++currentQwordOutput;
-    }
-}
-
-bool GetBit(TRef bitmap, i64 index)
-{
-    return (bitmap[index >> 3] & (1U << (index & 7))) != 0;
-}
-
-void SetBit(TMutableRef bitmap, i64 index, bool value)
-{
-    auto& byte = bitmap[index >> 3];
-    auto mask = (1U << (index & 7));
-    if (value) {
-        byte |= mask;
-    } else {
-        byte &= ~mask;
     }
 }
 
@@ -404,7 +387,7 @@ void BuildDictionaryIndexesFromDictionaryIndexesWithZeroNull(
     const auto* currentInput = beginInput;
     auto* currentOutput = dst.Begin();
     while (currentInput < endInput) {
-        // NB: null becomes FFFFFFFF.
+        // NB: Null becomes FFFFFFFF.
         *currentOutput++ = (*currentInput++) - 1;
     }
 }
@@ -453,7 +436,7 @@ void BuildIotaDictionaryIndexesFromRleIndexes(
                 break;
             }
             ++currentRleIndex;
-            thresholdIndex = currentRleIndex < static_cast<i64>(rleIndexes.Size())
+            thresholdIndex = currentRleIndex < std::ssize(rleIndexes)
                 ? std::min(static_cast<i64>(rleIndexes[currentRleIndex]), endIndex)
                 : endIndex;
             ++currentValue;
@@ -735,7 +718,7 @@ i64 CountTotalStringLengthInRleDictionaryIndexesWithZeroNull(
     i64 result = 0;
     while (currentIndex < endIndex) {
         ++currentRleIndex;
-        auto thresholdIndex = currentRleIndex < static_cast<i64>(rleIndexes.Size()) ? static_cast<i64>(rleIndexes[currentRleIndex]) : Max<i64>();
+        auto thresholdIndex = currentRleIndex < std::ssize(rleIndexes) ? static_cast<i64>(rleIndexes[currentRleIndex]) : Max<i64>();
         auto currentDictionaryIndex = *currentInput++;
         auto newIndex = std::min(endIndex, thresholdIndex);
         if (currentDictionaryIndex != 0) {
@@ -755,7 +738,7 @@ i64 TranslateRleIndex(
 
     return BinarySearch(
         static_cast<i64>(0),
-        static_cast<i64>(rleIndexes.size()),
+        std::ssize(rleIndexes),
         [&] (i64 k) {
             return static_cast<i64>(rleIndexes[k]) <= index;
         }) - 1;

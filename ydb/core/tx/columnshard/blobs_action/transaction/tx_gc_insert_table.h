@@ -5,10 +5,10 @@
 namespace NKikimr::NColumnShard {
 class TTxInsertTableCleanup: public TTransactionBase<TColumnShard> {
 private:
-    THashSet<TWriteId> WriteIdsToAbort;
+    THashSet<TInsertWriteId> WriteIdsToAbort;
     std::shared_ptr<NOlap::IBlobsDeclareRemovingAction> BlobsAction;
 public:
-    TTxInsertTableCleanup(TColumnShard* self, THashSet<TWriteId>&& writeIdsToAbort)
+    TTxInsertTableCleanup(TColumnShard* self, THashSet<TInsertWriteId>&& writeIdsToAbort)
         : TBase(self)
         , WriteIdsToAbort(std::move(writeIdsToAbort)) {
         Y_ABORT_UNLESS(WriteIdsToAbort.size() || self->InsertTable->GetAborted().size());

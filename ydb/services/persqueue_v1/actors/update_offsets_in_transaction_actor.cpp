@@ -61,7 +61,22 @@ void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx
     ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(req->tx().id());
 
     ev->Record.MutableRequest()->MutableTopicOperations()->SetConsumer(req->consumer());
-    *ev->Record.MutableRequest()->MutableTopicOperations()->MutableTopics() = req->topics();
+
+    for (const auto& topic : req->topics()) {
+        auto* newTopic = ev->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
+        newTopic->set_path(topic.path());
+
+        for (const auto& partition : topic.partitions()) {
+            auto* newPartition = newTopic->add_partitions();
+            newPartition->set_partition_id(partition.partition_id());
+
+            for (const auto& offsetsRange : partition.partition_offsets()) {
+                auto* newOffsetsRange = newPartition->add_partition_offsets();
+                newOffsetsRange->set_start(offsetsRange.start());
+                newOffsetsRange->set_end(offsetsRange.end());
+            }
+        }
+    }
 
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
 }
@@ -69,7 +84,7 @@ void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx
 void TUpdateOffsetsInTransactionActor::Handle(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
                                               const NActors::TActorContext& ctx)
 {
-    const auto& record = ev->Get()->Record.GetRef();
+    const auto& record = ev->Get()->Record;
     SetCost(record.GetConsumedRu());
     AddServerHintsIfAny(record);
 

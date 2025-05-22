@@ -73,8 +73,8 @@ namespace NSwapCheck {
 
     template <class T, class = void>
     struct TSwapSelector {
-        static inline void Swap(T& l, T& r) noexcept(std::is_nothrow_move_constructible<T>::value&&
-                                                         std::is_nothrow_move_assignable<T>::value) {
+        static inline void Swap(T& l, T& r) noexcept(std::is_nothrow_move_constructible<T>::value &&
+                                                     std::is_nothrow_move_assignable<T>::value) {
             T tmp(std::move(l));
             l = std::move(r);
             r = std::move(tmp);
@@ -94,7 +94,7 @@ namespace NSwapCheck {
             l.swap(r);
         }
     };
-}
+} // namespace NSwapCheck
 
 /*
  * DoSwap better than ::Swap in member functions...

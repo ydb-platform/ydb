@@ -7,6 +7,7 @@ import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 package NKikimrScheme;
 option java_package = "ru.yandex.kikimr.proto";
@@ -52,8 +53,8 @@ message TEvModifySchemeTransaction {
     optional uint64 TxId = 2;
     optional uint64 TabletId = 3;
     optional string Owner = 5;
-    optional bool FailOnExist = 6; // depricated, TModifyScheme.FailOnExist is recomended
-    optional string UserToken = 7; // serialized NACLib::TUserToken
+    optional bool FailOnExist = 6; // deprecated, TModifyScheme.FailOnExist is recomended
+    optional string UserToken = 7 [(Ydb.sensitive) = true]; // serialized NACLib::TUserToken
     optional string PeerName = 8;
 }
 
@@ -106,12 +107,13 @@ message TEvDescribeSchemeResult {
     optional string Reason = 2;
     optional string Path = 3;
     optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
-    optional fixed64 PathOwner = 5;
+    optional fixed64 DEPRECATED_PathOwner = 5;  // replaced by PathOwnerId
     optional fixed64 PathId = 6;
 
     optional string LastExistedPrefixPath = 7;
     optional fixed64 LastExistedPrefixPathId = 8;
     optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
+
     optional fixed64 PathOwnerId = 10;
 }
 
@@ -142,13 +144,36 @@ message TEvUpdateConfigResult {
 
 message TEvLogin {
     optional string User = 1;
-    optional string Password = 2;
+    optional string Password = 2 [(Ydb.sensitive) = true];
     optional string ExternalAuth = 3;
+    optional uint64 ExpiresAfterMs = 4;
+    optional string PeerName = 5;  // IP address actually, same as TEvModifySchemeTransaction.PeerName
 }
 
 message TEvLoginResult {
     optional string Error = 1;
-    optional string Token = 2;
+    optional string Token = 2;  // signed jwt token
+    optional string SanitizedToken = 3;  // sanitized token without signature
+    optional bool IsAdmin = 4;
+}
+
+message TEvListUsers {
+
+}
+
+message TEvListUsersResult {
+    message TUser {
+        optional string Name = 1;
+        optional bool IsEnabled = 2;
+        optional bool IsLockedOut = 3;
+        optional uint64 CreatedAt = 4;
+        optional uint64 LastSuccessfulAttemptAt = 5;
+        optional uint64 LastFailedAttemptAt = 6;
+        optional uint32 FailedAttemptCount = 7;
+        optional string PasswordHash = 8; // JSON with type, salt and password hash
+    }
+
+    repeated TUser Users = 1;
 }
 
 // Sending actor registers itself to be notified when tx completes
@@ -186,6 +211,8 @@ message TSchemeLimits {
 
     optional uint64 MaxExports = 16;
     optional uint64 MaxImports = 17;
+
+    optional uint64 MaxColumnTableColumns = 18;
 }
 
 message TEvInitTenantSchemeShard {
@@ -263,6 +290,7 @@ message TMigrateColumn {
     optional uint32 DefaultKind = 8;
     optional bytes DefaultValue = 9;
     optional bool NotNull = 10;
+    optional bool IsBuildInProgress = 12;
 }
 
 message TMigratePartition {
@@ -359,6 +387,7 @@ message TEvSyncTenantSchemeShard {
     optional uint64 TenantSysViewProcessor = 9;
     optional uint64 TenantStatisticsAggregator = 11;
     optional fixed64 TenantGraphShard = 12;
+    optional uint64 TenantBackupController = 13;
 
     optional string TenantRootACL = 10;
 }
@@ -381,6 +410,7 @@ message TEvUpdateTenantSchemeShard {
     optional uint64 TenantSysViewProcessor = 11;
     optional uint64 TenantStatisticsAggregator = 16;
     optional fixed64 TenantGraphShard = 18;
+    optional uint64 TenantBackupController = 19;
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 12;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14;
@@ -407,4 +437,41 @@ message TEvFindTabletSubDomainPathIdResult {
     optional uint64 TabletId = 2; // DataShard tablet id
     optional uint64 SchemeShardId = 3; // OwnerId of the subdomain
     optional uint64 SubDomainPathId = 4; // LocalPathId of the subdomain
+}
+
+message TEvOwnerActorAck {
+}
+
+message TEvTenantDataErasureRequest {
+    optional uint64 Generation = 1;
+}
+
+message TEvTenantDataErasureResponse {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        COMPLETED = 1;
+        IN_PROGRESS = 2;
+    }
+
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 Generation = 2;
+    optional EStatus Status = 3;
+}
+
+message TEvDataErasureInfoRequest {
+}
+
+message TEvDataErasureInfoResponse {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        COMPLETED = 1;
+        IN_PROGRESS_TENANT = 2;
+        IN_PROGRESS_BSC = 3;
+    }
+
+    optional EStatus Status = 1;
+    optional uint64 Generation = 2;
+}
+
+message TEvDataErasureManualStartupRequest {
 }

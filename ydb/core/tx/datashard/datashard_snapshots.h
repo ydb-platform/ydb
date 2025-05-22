@@ -135,30 +135,17 @@ public:
 
     TRowVersion GetImmediateWriteEdge() const;
     TRowVersion GetImmediateWriteEdgeReplied() const;
-    void SetImmediateWriteEdge(const TRowVersion& version, TTransactionContext& txc);
+    void SetImmediateWriteEdge(NIceDb::TNiceDb& db, const TRowVersion& version);
     bool PromoteImmediateWriteEdge(const TRowVersion& version, TTransactionContext& txc);
     bool PromoteImmediateWriteEdgeReplied(const TRowVersion& version);
+    void RestoreImmediateWriteEdge(const TRowVersion& version, const TRowVersion& replied);
 
     TRowVersion GetUnprotectedReadEdge() const;
     bool PromoteUnprotectedReadEdge(const TRowVersion& version);
-
-    bool GetPerformedUnprotectedReads() const;
-    bool IsPerformedUnprotectedReadsCommitted() const;
-    void SetPerformedUnprotectedReads(bool performedUnprotectedReads, TTransactionContext& txc);
+    void RestoreUnprotectedReadEdge(const TRowVersion& version);
 
     std::pair<TRowVersion, bool> GetFollowerReadEdge() const;
     bool PromoteFollowerReadEdge(const TRowVersion& version, bool repeatable, TTransactionContext& txc);
-
-    EMvccState GetMvccState() const {
-        return MvccState;
-    }
-
-    bool IsMvccEnabled() const {
-        // Note: mvcc is disabled during MvccUnspecified
-        return MvccState == EMvccState::MvccEnabled;
-    }
-
-    bool ChangeMvccState(ui64 step, ui64 txId, TTransactionContext& txc, EMvccState state);
 
     ui64 GetKeepSnapshotTimeout() const;
     TDuration GetCleanupSnapshotPeriod() const;
@@ -200,7 +187,6 @@ public:
     bool RefreshSnapshotExpireTime(const TSnapshotKey& key, TInstant now);
 
     TDuration CleanupTimeout() const;
-    bool HasExpiringSnapshots() const;
     bool RemoveExpiredSnapshots(TInstant now, TTransactionContext& txc);
 
     void PersistAddSnapshot(NIceDb::TNiceDb& db, const TSnapshotKey& key, const TString& name, ui64 flags, TDuration timeout);
@@ -208,7 +194,6 @@ public:
     void PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSnapshotKey& key);
     void PersistRemoveAllSnapshots(NIceDb::TNiceDb& db);
 
-    void Fix_KIKIMR_12289(NTable::TDatabase& db);
     void Fix_KIKIMR_14259(NTable::TDatabase& db);
     void EnsureRemovedRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to);
 
@@ -221,10 +206,7 @@ private:
     TDataShard* const Self;
     TRowVersion MinWriteVersion;
 
-    EMvccState MvccState = EMvccState::MvccUnspecified;
     ui64 KeepSnapshotTimeout = 0;
-    bool PerformedUnprotectedReads = false;
-    ui64 PerformedUnprotectedReadsUncommitted = 0;
     TRowVersion IncompleteEdge = TRowVersion::Min();
     TRowVersion CompleteEdge = TRowVersion::Min();
     TRowVersion LowWatermark = TRowVersion::Min();

@@ -233,6 +233,14 @@ namespace NDatetime {
         return cctz::get_weekday(day);
     }
 
+    /** Returns the weekday by day.
+     * @param[in] second is a given seconds
+     * @return a weekday (enum)
+     */
+    CONSTEXPR_M TWeekday GetWeekday(const TCivilSecond& second) noexcept {
+        return cctz::get_weekday(second);
+    }
+
     /** Returns the TCivilDay that strictly follows or precedes the given
       * civil_day, and that falls on the given weekday.
       * @code

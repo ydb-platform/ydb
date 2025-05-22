@@ -1,6 +1,6 @@
 #pragma once
 #include "test_client.h"
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <library/cpp/yson/writer.h>
 
 namespace NKikimr::NKqp {
@@ -16,10 +16,12 @@ public:
 private:
     NActors::TTestActorRuntime* Runtime;
     NActors::NLog::EPriority Priority = NActors::NLog::EPriority::PRI_DEBUG;
-    std::vector<std::vector<NKikimrServices::EServiceKikimr>> Services = {KqpServices, CSServices};
+    THashMap<TString, std::vector<NKikimrServices::EServiceKikimr>> Services;
 public:
     TLoggerInit(NActors::TTestActorRuntime* runtime)
         : Runtime(runtime) {
+        Services.emplace("KQP", KqpServices);
+        Services.emplace("CS", CSServices);
     }
     TLoggerInit(NActors::TTestActorRuntime& runtime)
         : Runtime(&runtime) {
@@ -29,12 +31,20 @@ public:
     ~TLoggerInit() {
         Initialize();
     }
-    TLoggerInit& SetComponents(const std::vector<NKikimrServices::EServiceKikimr> services) {
-        Services = { services };
+    TLoggerInit& Clear() {
+        Services.clear();
         return *this;
     }
-    TLoggerInit& AddComponents(const std::vector<NKikimrServices::EServiceKikimr> services) {
-        Services.emplace_back(services);
+    TLoggerInit& SetComponents(const std::vector<NKikimrServices::EServiceKikimr> services, const TString& name) {
+        Services[name] = services;
+        return *this;
+    }
+    TLoggerInit& AddComponents(const std::vector<NKikimrServices::EServiceKikimr> services, const TString& name) {
+        AFL_VERIFY(Services.emplace(name, services).second);
+        return *this;
+    }
+    TLoggerInit& RemoveComponents(const TString& name) {
+        Services.erase(name);
         return *this;
     }
     TLoggerInit& SetPriority(const NActors::NLog::EPriority priority) {
@@ -44,6 +54,10 @@ public:
 };
 
 class THelper {
+private:
+    inline static const TString DefaultAuthToken = "root@builtin";
+    YDB_ACCESSOR(TString, AuthToken, DefaultAuthToken);
+
 protected:
     void WaitForSchemeOperation(TActorId sender, ui64 txId);
     void PrintResultSet(const NYdb::TResultSet& resultSet, NYson::TYsonWriter& writer) const;
@@ -61,6 +75,10 @@ public:
 
     void SetUseQueryService(bool use = true) {
         UseQueryService = use;
+    }
+
+    void ResetAuthToken() {
+        AuthToken = DefaultAuthToken;
     }
 
     void DropTable(const TString& tablePath);

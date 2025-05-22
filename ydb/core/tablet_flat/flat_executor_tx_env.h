@@ -20,33 +20,58 @@ namespace NTabletFlatExecutor {
         { }
 
     protected: /* NTable::IPages, page collection backend implementation */
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
         {
             return NTable::MemTableRefLookup(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return { true, Lookup(partStore->Locate(lob, ref), ref) };
+            const TSharedData* page = Lookup(partStore->Locate(lob, ref), ref);
+
+            if (!page && ReadMissingReferences) {
+                MissingReferencesSize_ += Max<ui64>(1, part->GetPageSize(lob, ref));
+            }
+
+            return { !ReadMissingReferences, page };
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId page, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return Lookup(partStore->PageCollections.at(groupId.Index).Get(), page);
+            return Lookup(partStore->PageCollections.at(groupId.Index).Get(), pageId);
+        }
+
+        void EnableReadMissingReferences() {
+            ReadMissingReferences = true;
+        }
+
+        void DisableReadMissingReferences() {
+            ReadMissingReferences = false;
+            MissingReferencesSize_ = 0;
+        }
+
+        ui64 MissingReferencesSize() const
+        { 
+            return MissingReferencesSize_;
         }
 
     private:
-        const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId id) noexcept
+        const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId pageId)
         {
-            return Cache.Lookup(id, info);
+            return Cache.Lookup(pageId, info);
         }
 
     public:
         TPrivatePageCache& Cache;
+    
+    private:
+        bool ReadMissingReferences = false;
+
+        ui64 MissingReferencesSize_ = 0;
     };
 
     struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting {
@@ -111,7 +136,7 @@ namespace NTabletFlatExecutor {
 
         using TPageCollectionReadEnv::TPageCollectionReadEnv;
 
-        bool HasChanges() const noexcept
+        bool HasChanges() const
         {
             return
                 DropSnap
@@ -123,7 +148,7 @@ namespace NTabletFlatExecutor {
         }
 
     protected:
-        void OnRollbackChanges() noexcept override {
+        void OnRollbackChanges() override {
             MakeSnap.clear();
             DropSnap.Reset();
             BorrowUpdates.clear();
@@ -137,7 +162,7 @@ namespace NTabletFlatExecutor {
 
         void DropSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override
         {
-            Y_ABORT_UNLESS(!DropSnap, "only one snapshot per transaction");
+            Y_ENSURE(!DropSnap, "only one snapshot per transaction");
 
             DropSnap.Reset(new TBorrowSnap{ snap });
         }
@@ -161,7 +186,7 @@ namespace NTabletFlatExecutor {
             const ui32 source = proto.GetSourceTable();
 
             for (auto &part : proto.GetParts()) {
-                Y_ABORT_UNLESS(part.HasBundle(), "Cannot find attached hotdogs in borrow");
+                Y_ENSURE(part.HasBundle(), "Cannot find attached hotdogs in borrow");
 
                 LoanBundle.emplace_back(new TLoanBundle(source, tableId, lender,
                         TPageCollectionProtoHelper::MakePageCollectionComponents(part.GetBundle(), /* unsplit */ true)));
@@ -178,7 +203,7 @@ namespace NTabletFlatExecutor {
 
         void CleanupLoan(const TLogoId &bundle, ui64 from) override
         {
-            Y_ABORT_UNLESS(!DropSnap, "must not drop snapshot and update loan in same transaction");
+            Y_ENSURE(!DropSnap, "must not drop snapshot and update loan in same transaction");
             BorrowUpdates[bundle].StoppedLoans.push_back(from);
         }
 
@@ -187,6 +212,20 @@ namespace NTabletFlatExecutor {
             LoanConfirmation.insert(std::make_pair(bundle, TLoanConfirmation{borrow}));
         }
 
+        void EnableReadMissingReferences() override
+        {
+            TPageCollectionReadEnv::EnableReadMissingReferences();
+        }
+
+        void DisableReadMissingReferences() override
+        {
+            TPageCollectionReadEnv::DisableReadMissingReferences();
+        }
+
+        ui64 MissingReferencesSize() const override
+        {
+            return TPageCollectionReadEnv::MissingReferencesSize();
+        }
     protected:
         NTable::TDatabase& DB;
 

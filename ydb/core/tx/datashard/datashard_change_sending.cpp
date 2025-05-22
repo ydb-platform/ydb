@@ -51,7 +51,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
     struct TLoadResult {
         NTable::EReady Ready;
-        IChangeRecord::TPtr Record;
+        TIntrusivePtr<NKikimr::NDataShard::TChangeRecord> Record;
 
         TLoadResult() = default;
         TLoadResult(NTable::EReady ready)
@@ -59,7 +59,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
         {
         }
 
-        explicit TLoadResult(NTable::EReady ready, IChangeRecord::TPtr record)
+        explicit TLoadResult(NTable::EReady ready, TIntrusivePtr<NKikimr::NDataShard::TChangeRecord> record)
             : Ready(ready)
             , Record(record)
         {
@@ -78,7 +78,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
             return NTable::EReady::Gone;
         }
 
-        Y_VERIFY_S(basic.IsValid() && details.IsValid(), "Inconsistent basic and details"
+        Y_ENSURE(basic.IsValid() && details.IsValid(), "Inconsistent basic and details"
             << ", basic.IsValid: " << basic.IsValid()
             << ", details.IsValid: " << details.IsValid()
             << ", order: " << order);
@@ -115,13 +115,13 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
             .WithSource(source);
 
         if constexpr (HaveLock) {
-            Y_ABORT_UNLESS(commited);
+            Y_ENSURE(commited);
             builder
                 .WithGroup(commited->Group)
                 .WithStep(commited->Step)
                 .WithTxId(commited->TxId);
         } else {
-            Y_ABORT_UNLESS(!commited);
+            Y_ENSURE(!commited);
             builder
                 .WithGroup(basic.template GetValue<typename TBasicTable::Group>())
                 .WithStep(basic.template GetValue<typename TBasicTable::PlanStep>())
@@ -274,7 +274,7 @@ private:
     static constexpr size_t MemLimit = 512_KB;
     size_t MemUsage = 0;
 
-    THashMap<TActorId, TVector<IChangeRecord::TPtr>> RecordsToSend;
+    THashMap<TActorId, TVector<TChangeRecord::TPtr>> RecordsToSend;
     THashMap<TActorId, TVector<ui64>> RecordsToForget;
 
 }; // TTxRequestChangeRecords
@@ -286,7 +286,7 @@ class TDataShard::TTxRemoveChangeRecords: public TTransactionBase<TDataShard> {
                 ChangeExchangeSplit = true;
             } else {
                 for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
-                    if (Self->SplitSrcSnapshotSender.Acked(dstTabletId)) {
+                    if (Self->SplitSrcSnapshotSender.Acked(dstTabletId) && !Self->ChangeSenderActivator.Acked(dstTabletId)) {
                         ActivationList.insert(dstTabletId);
                     }
                 }
@@ -329,7 +329,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRemoveChangeRecords Complete"
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRemoveChangeRecords Complete"
             << ": removed# " << RemovedCount
             << ", left# " << Self->ChangeRecordsToRemove.size()
             << ", at tablet# " << Self->TabletID());
@@ -346,9 +346,7 @@ public:
         }
 
         for (const auto dstTabletId : ActivationList) {
-            if (!Self->ChangeSenderActivator.Acked(dstTabletId)) {
-                Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
-            }
+            Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
         }
 
         Self->CheckStateChange(ctx);
@@ -374,16 +372,16 @@ public:
     }
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Execute"
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxChangeExchangeSplitAck Execute"
             << ", at tablet# " << Self->TabletID());
 
-        Y_ABORT_UNLESS(!Self->ChangesQueue);
+        Y_ENSURE(!Self->ChangesQueue);
 
         Self->ChangeExchangeSplitter.Ack();
-        Y_ABORT_UNLESS(Self->ChangeExchangeSplitter.Done());
+        Y_ENSURE(Self->ChangeExchangeSplitter.Done());
 
         for (const auto dstTabletId : Self->ChangeSenderActivator.GetDstSet()) {
-            if (Self->SplitSrcSnapshotSender.Acked(dstTabletId)) {
+            if (Self->SplitSrcSnapshotSender.Acked(dstTabletId) && !Self->ChangeSenderActivator.Acked(dstTabletId)) {
                 ActivationList.insert(dstTabletId);
             }
         }
@@ -396,9 +394,7 @@ public:
             << ", at tablet# " << Self->TabletID());
 
         for (const auto dstTabletId : ActivationList) {
-            if (!Self->ChangeSenderActivator.Acked(dstTabletId)) {
-                Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
-            }
+            Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);
         }
     }
 

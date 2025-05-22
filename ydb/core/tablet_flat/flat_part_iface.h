@@ -24,9 +24,9 @@ namespace NTable {
     struct ISaver {
         using TGlobId = NPageCollection::TGlobId;
 
-        virtual void Save(TSharedData raw, NPage::TGroupId groupId) noexcept = 0;
-        virtual TLargeObj Save(TRowId, ui32 tag, const TGlobId &glob) noexcept = 0;
-        virtual TLargeObj Save(TRowId, ui32 tag, TArrayRef<const char> blob) noexcept = 0;
+        virtual void Save(TSharedData raw, NPage::TGroupId groupId) = 0;
+        virtual TLargeObj Save(TRowId, ui32 tag, const TGlobId &glob) = 0;
+        virtual TLargeObj Save(TRowId, ui32 tag, TArrayRef<const char> blob) = 0;
     };
 
     class IPageWriter {
@@ -36,10 +36,10 @@ namespace NTable {
 
         virtual ~IPageWriter() = default;
         virtual TPageId Write(TSharedData page, EPage type, ui32 group) = 0;
-        virtual TPageId WriteOuter(TSharedData) noexcept = 0;
+        virtual TPageId WriteOuter(TSharedData) = 0;
         virtual void WriteInplace(TPageId page, TArrayRef<const char> body) = 0;
-        virtual NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept = 0;
-        virtual void Finish(TString overlay) noexcept = 0;
+        virtual NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) = 0;
+        virtual void Finish(TString overlay) = 0;
     };
 
     struct IPages {
@@ -66,14 +66,14 @@ namespace NTable {
             const TSharedData *Page;
         };
 
-        virtual TResult Locate(const TMemTable*, ui64 ref, ui32 tag) noexcept = 0;
-        virtual TResult Locate(const TPart*, ui64 ref, ELargeObj lob) noexcept = 0;
-        virtual const TSharedData* TryGetPage(const TPart* part, TPageId id, TGroupId groupId = { }) = 0;
+        virtual TResult Locate(const TMemTable*, ui64 ref, ui32 tag) = 0;
+        virtual TResult Locate(const TPart*, ui64 ref, ELargeObj lob) = 0;
+        virtual const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) = 0;
 
         /**
          * Hook for cleaning up env on DB.RollbackChanges()
          */
-        virtual void OnRollbackChanges() noexcept {
+        virtual void OnRollbackChanges() {
             // nothing by default
         }
     };

@@ -13,7 +13,11 @@ static constexpr ui64 RWFAppendCheck = (ui64)RWF_APPEND;
 #undef RWF_APPEND
 #endif
 
+#if !defined(_musl_)
 #include <linux/fs.h>
+#else
+#include <sys/mount.h>
+#endif
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -46,7 +50,13 @@ void DetectFileParameters(TString path, ui64 &outDiskSizeBytes, bool &outIsBlock
                 outDiskSizeBytes = stats.st_size;
             } else if (S_ISBLK(stats.st_mode)) {
                 outIsBlockDevice = true;
-                if (ioctl(file, BLKGETSIZE64, &outDiskSizeBytes) < 0) {
+                if (off64_t off = lseek64(file, 0, SEEK_END); off != (off64_t)-1) {
+                    outDiskSizeBytes = off;
+                } else if (long size = 0; !ioctl(file, BLKGETSIZE64, &size)) {
+                    outDiskSizeBytes = size;
+                } else if (!ioctl(file, BLKGETSIZE, &size)) {
+                    outDiskSizeBytes = size * 512;
+                } else {
                     ythrow yexception() << "Can't get device size, errno# " << errno << ", strerror(errno)# "
                         << strerror(errno) << Endl;
                 }

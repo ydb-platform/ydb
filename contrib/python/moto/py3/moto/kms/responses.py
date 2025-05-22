@@ -2,8 +2,8 @@ import base64
 import json
 import os
 import re
+import warnings
 
-from moto.core import get_account_id
 from moto.core.responses import BaseResponse
 from moto.kms.utils import RESERVED_ALIASES
 from .models import kms_backends
@@ -16,6 +16,9 @@ from .exceptions import (
 
 
 class KmsResponse(BaseResponse):
+    def __init__(self):
+        super().__init__(service_name="kms")
+
     @property
     def parameters(self):
         params = json.loads(self.body)
@@ -28,7 +31,7 @@ class KmsResponse(BaseResponse):
 
     @property
     def kms_backend(self):
-        return kms_backends[self.region]
+        return kms_backends[self.current_account][self.region]
 
     def _display_arn(self, key_id):
         if key_id.startswith("arn:"):
@@ -39,9 +42,7 @@ class KmsResponse(BaseResponse):
         else:
             id_type = "key/"
 
-        return "arn:aws:kms:{region}:{account}:{id_type}{key_id}".format(
-            region=self.region, account=get_account_id(), id_type=id_type, key_id=key_id
-        )
+        return f"arn:aws:kms:{self.region}:{self.current_account}:{id_type}{key_id}"
 
     def _validate_cmk_id(self, key_id):
         """Determine whether a CMK ID exists.
@@ -50,8 +51,11 @@ class KmsResponse(BaseResponse):
         - key ARN
         """
         is_arn = key_id.startswith("arn:") and ":key/" in key_id
+        # https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html
+        # "Notice that multi-Region keys have a distinctive key ID that begins with mrk-. You can use the mrk- prefix to
+        # identify MRKs programmatically."
         is_raw_key_id = re.match(
-            r"^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$",
+            r"^(mrk-)?[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$",
             key_id,
             re.IGNORECASE,
         )
@@ -108,14 +112,23 @@ class KmsResponse(BaseResponse):
         """https://docs.aws.amazon.com/kms/latest/APIReference/API_CreateKey.html"""
         policy = self.parameters.get("Policy")
         key_usage = self.parameters.get("KeyUsage")
-        customer_master_key_spec = self.parameters.get("CustomerMasterKeySpec")
+        key_spec = self.parameters.get("KeySpec") or self.parameters.get(
+            "CustomerMasterKeySpec"
+        )
         description = self.parameters.get("Description")
         tags = self.parameters.get("Tags")
+        multi_region = self.parameters.get("MultiRegion")
 
         key = self.kms_backend.create_key(
-            policy, key_usage, customer_master_key_spec, description, tags, self.region
+            policy, key_usage, key_spec, description, tags, multi_region
         )
         return json.dumps(key.to_dict())
+
+    def replicate_key(self):
+        key_id = self.parameters.get("KeyId")
+        self._validate_key_id(key_id)
+        replica_region = self.parameters.get("ReplicaRegion")
+        self.kms_backend.replicate_key(key_id, replica_region)
 
     def update_key_description(self):
         """https://docs.aws.amazon.com/kms/latest/APIReference/API_UpdateKeyDescription.html"""
@@ -222,7 +235,7 @@ class KmsResponse(BaseResponse):
                 "An alias with the name arn:aws:kms:{region}:{account_id}:{alias_name} "
                 "already exists".format(
                     region=self.region,
-                    account_id=get_account_id(),
+                    account_id=self.current_account,
                     alias_name=alias_name,
                 )
             )
@@ -257,11 +270,7 @@ class KmsResponse(BaseResponse):
                 # TODO: add creation date and last updated in response_aliases
                 response_aliases.append(
                     {
-                        "AliasArn": "arn:aws:kms:{region}:{account_id}:{alias_name}".format(
-                            region=region,
-                            account_id=get_account_id(),
-                            alias_name=alias_name,
-                        ),
+                        "AliasArn": f"arn:aws:kms:{region}:{self.current_account}:{alias_name}",
                         "AliasName": alias_name,
                         "TargetKeyId": target_key_id,
                     }
@@ -273,11 +282,7 @@ class KmsResponse(BaseResponse):
             if not exsisting:
                 response_aliases.append(
                     {
-                        "AliasArn": "arn:aws:kms:{region}:{account_id}:{reserved_alias}".format(
-                            region=region,
-                            account_id=get_account_id(),
-                            reserved_alias=reserved_alias,
-                        ),
+                        "AliasArn": f"arn:aws:kms:{region}:{self.current_account}:{reserved_alias}",
                         "AliasName": reserved_alias,
                     }
                 )
@@ -598,6 +603,114 @@ class KmsResponse(BaseResponse):
         response_entropy = base64.b64encode(entropy).decode("utf-8")
 
         return json.dumps({"Plaintext": response_entropy})
+
+    def sign(self):
+        """https://docs.aws.amazon.com/kms/latest/APIReference/API_Sign.html"""
+        key_id = self.parameters.get("KeyId")
+        message = self.parameters.get("Message")
+        message_type = self.parameters.get("MessageType")
+        grant_tokens = self.parameters.get("GrantTokens")
+        signing_algorithm = self.parameters.get("SigningAlgorithm")
+
+        self._validate_key_id(key_id)
+
+        if grant_tokens:
+            warnings.warn(
+                "The GrantTokens-parameter is not yet implemented for client.sign()"
+            )
+
+        if signing_algorithm != "RSASSA_PSS_SHA_256":
+            warnings.warn(
+                "The SigningAlgorithm-parameter is ignored hardcoded to RSASSA_PSS_SHA_256 for client.sign()"
+            )
+
+        if isinstance(message, str):
+            message = message.encode("utf-8")
+
+        if message == b"":
+            raise ValidationException(
+                "1 validation error detected: Value at 'Message' failed to satisfy constraint: Member must have length greater than or equal to 1"
+            )
+
+        if not message_type:
+            message_type = "RAW"
+
+        key_id, signature, signing_algorithm = self.kms_backend.sign(
+            key_id=key_id,
+            message=message,
+            signing_algorithm=signing_algorithm,
+        )
+
+        signature_blob_response = base64.b64encode(signature).decode("utf-8")
+
+        return json.dumps(
+            {
+                "KeyId": key_id,
+                "Signature": signature_blob_response,
+                "SigningAlgorithm": signing_algorithm,
+            }
+        )
+
+    def verify(self):
+        """https://docs.aws.amazon.com/kms/latest/APIReference/API_Verify.html"""
+        key_id = self.parameters.get("KeyId")
+        message = self.parameters.get("Message")
+        message_type = self.parameters.get("MessageType")
+        signature = self.parameters.get("Signature")
+        signing_algorithm = self.parameters.get("SigningAlgorithm")
+        grant_tokens = self.parameters.get("GrantTokens")
+
+        self._validate_key_id(key_id)
+
+        if grant_tokens:
+            warnings.warn(
+                "The GrantTokens-parameter is not yet implemented for client.verify()"
+            )
+
+        if message_type == "DIGEST":
+            warnings.warn(
+                "The MessageType-parameter DIGEST is not yet implemented for client.verify()"
+            )
+
+        if signing_algorithm != "RSASSA_PSS_SHA_256":
+            warnings.warn(
+                "The SigningAlgorithm-parameter is ignored hardcoded to RSASSA_PSS_SHA_256 for client.verify()"
+            )
+
+        if not message_type:
+            message_type = "RAW"
+
+        if isinstance(message, str):
+            message = message.encode("utf-8")
+
+        if message == b"":
+            raise ValidationException(
+                "1 validation error detected: Value at 'Message' failed to satisfy constraint: Member must have length greater than or equal to 1"
+            )
+
+        if isinstance(signature, str):
+            # we return base64 signatures, when signing
+            signature = base64.b64decode(signature.encode("utf-8"))
+
+        if signature == b"":
+            raise ValidationException(
+                "1 validation error detected: Value at 'Signature' failed to satisfy constraint: Member must have length greater than or equal to 1"
+            )
+
+        key_arn, signature_valid, signing_algorithm = self.kms_backend.verify(
+            key_id=key_id,
+            message=message,
+            signature=signature,
+            signing_algorithm=signing_algorithm,
+        )
+
+        return json.dumps(
+            {
+                "KeyId": key_arn,
+                "SignatureValid": signature_valid,
+                "SigningAlgorithm": signing_algorithm,
+            }
+        )
 
 
 def _assert_default_policy(policy_name):

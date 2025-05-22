@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ydb/core/protos/grpc_pq_old.pb.h"
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 
 #include "kafka.h"
 
@@ -165,7 +165,7 @@ public:
 
         static constexpr TKafkaVersions PresentVersions = VersionsAlways;
         static constexpr TKafkaVersions TaggedVersions = VersionsNever;
-        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsAlways;
         static constexpr TKafkaVersions FlexibleVersions = VersionsAlways;
     };
     ValueMeta::Type Value;

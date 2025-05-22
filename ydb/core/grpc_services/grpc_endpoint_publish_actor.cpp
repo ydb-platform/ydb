@@ -29,7 +29,6 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         if (!domainInfo)
             return;
 
-        auto statestorageGroupId = domainInfo->DefaultStateStorageGroup;
         auto assignedPath = MakeEndpointsBoardPath(database);
         TString payload;
         NKikimrStateStorage::TEndpointBoardEntry entry;
@@ -49,12 +48,15 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         if (Description->TargetNameOverride) {
             entry.SetTargetNameOverride(Description->TargetNameOverride);
         }
+        if (Description->EndpointId) {
+            entry.SetEndpointId(Description->EndpointId);
+        }
         for (const auto &service : Description->ServedServices)
             entry.AddServices(service);
 
         Y_ABORT_UNLESS(entry.SerializeToString(&payload));
 
-        PublishActor = Register(CreateBoardPublishActor(assignedPath, payload, SelfId(), statestorageGroupId, 0, true));
+        PublishActor = Register(CreateBoardPublishActor(assignedPath, payload, SelfId(), 0, true));
     }
 
     void PassAway() override {

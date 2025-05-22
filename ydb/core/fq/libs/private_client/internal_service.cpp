@@ -38,7 +38,7 @@ public:
                 .DiscoveryEndpoint(privateApiConfig.GetTaskServiceEndpoint())
                 .CredentialsProviderFactory(credentialsProviderFactory({.SaKeyFile = privateApiConfig.GetSaKeyFile(), .IamEndpoint = privateApiConfig.GetIamEndpoint()}))
                 .SslCredentials(NYdb::TSslCredentials(privateApiConfig.GetSecureTaskService()))
-                .Database(privateApiConfig.GetTaskServiceDatabase() ? privateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
+                .Database(privateApiConfig.GetTaskServiceDatabase() ? privateApiConfig.GetTaskServiceDatabase() : std::optional<std::string>()),
             counters)
     {
     }

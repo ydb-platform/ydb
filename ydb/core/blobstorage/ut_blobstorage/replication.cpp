@@ -1,8 +1,15 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
+
 #include <util/system/info.h>
+#include <util/stream/null.h>
+
+#include "ut_helpers.h"
 
 #define SINGLE_THREAD 1
+
+#define Ctest Cnull
 
 enum class EState {
     OK,
@@ -10,7 +17,8 @@ enum class EState {
     OFFLINE,
 };
 
-TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::vector<EState>& states) {
+TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::vector<EState>& states,
+        bool detainReplication = false) {
     TStringStream s;
     IOutputStream& log = SINGLE_THREAD ? Cerr : s;
 
@@ -32,13 +40,14 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
     };
 
     ui32 cleanNodeId;
-    for (cleanNodeId = 1; cleanNodeId <= states.size(); ++cleanNodeId) {
+    ui32 nodeCount = states.size();
+    for (cleanNodeId = 1; cleanNodeId <= nodeCount; ++cleanNodeId) {
         if (states[cleanNodeId - 1] != EState::OFFLINE) {
             break;
         }
     }
     TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-        .NodeCount = (ui32)states.size(),
+        .NodeCount = nodeCount,
         .Erasure = erasure,
         .PrepareRuntime = prepareRuntime,
         .ControllerNodeId = cleanNodeId,
@@ -46,10 +55,13 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
     env.CreateBoxAndPool(1, 1);
     env.Sim(TDuration::Minutes(1));
 
-    auto groups = env.GetGroups();
-    Y_ABORT_UNLESS(groups.size() == 1);
+    auto baseConfig = env.FetchBaseConfig();
+    Y_ABORT_UNLESS(baseConfig.GroupSize() == 1);
+    ui32 groupId = baseConfig.GetGroup(0).GetGroupId();
 
-    auto groupInfo = env.GetGroupInfo(groups.front());
+    auto groupInfo = env.GetGroupInfo(groupId);
+    const auto& topology = groupInfo->GetTopology();
+    std::vector<ui32> pdiskLayout = MakePDiskLayout(baseConfig, topology, groupId);
     std::vector<TActorId> queues;
     for (ui32 i = 0; i < groupInfo->GetTotalVDisksNum(); ++i) {
         queues.push_back(env.CreateQueueActor(groupInfo->GetVDiskId(i), NKikimrBlobStorage::EVDiskQueueId::GetFastRead, 0));
@@ -61,7 +73,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
     {
         TActorId edge = env.Runtime->AllocateEdgeActor(1);
         env.Runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, groups.front(), new TEvBlobStorage::TEvPut(id, data, TInstant::Max(),
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max(),
                 NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticMaxThroughput));
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge);
@@ -116,7 +128,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
     {
         TActorId edge = env.Runtime->AllocateEdgeActor(1);
         env.Runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, groups.front(), new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, id.Channel(),
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvCollectGarbage(id.TabletID(), 1, 0, id.Channel(),
                 true, id.Generation(), Max<ui32>(), new TVector<TLogoBlobID>(1, id), nullptr, TInstant::Max(), false));
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge);
@@ -126,7 +138,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
     auto checkBlob = [&] {
         TActorId edge = env.Runtime->AllocateEdgeActor(cleanNodeId);
         env.Runtime->WrapInActorContext(edge, [&] {
-            SendToBSProxy(edge, groups.front(), new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead));
         });
         auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
@@ -207,16 +219,22 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         }
     }
 
+    std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> detainedMsgs;
+
     filterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
         if (ev->Type == TEvBlobStorage::EvVGet && states[ev->Recipient.NodeId() - 1] == EState::OFFLINE) {
             env.Runtime->Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::Disconnected).release(), nodeId);
+            return false;
+        }
+        if (ev->Type == TEvBlobStorage::EvReplFinished && detainReplication) {
+            detainedMsgs.emplace_back(nodeId, std::move(ev));
             return false;
         }
         return true;
     };
 
     env.Initialize();
-    env.Sim(TDuration::Seconds(150));
+    env.Sim(TDuration::Minutes(360));
 
     const NKikimrProto::EReplyStatus status = checkBlob();
     log << "checkBlob status# " << NKikimrProto::EReplyStatus_Name(status) << Endl;
@@ -224,6 +242,21 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         Y_ABORT_UNLESS(status == NKikimrProto::OK);
     } else {
         Y_ABORT_UNLESS(status == NKikimrProto::ERROR || status == NKikimrProto::OK);
+    }
+
+    if (detainReplication) {
+        ui64 vdisksWithStuckRepl = env.AggregateVDiskCounters(env.StoragePoolName, nodeCount, nodeCount,
+                groupId, pdiskLayout, "repl", "ReplMadeNoProgress", false);
+        UNIT_ASSERT_VALUES_UNEQUAL(vdisksWithStuckRepl, 0);
+        env.Runtime->FilterFunction = {};
+        for (auto& [nodeId, ev] : detainedMsgs) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        checkBlob();
+        env.Sim(TDuration::Minutes(360));
+        vdisksWithStuckRepl = env.AggregateVDiskCounters(env.StoragePoolName, nodeCount, nodeCount,
+                groupId, pdiskLayout, "repl", "ReplMadeNoProgress", false);
+        UNIT_ASSERT_VALUES_EQUAL(vdisksWithStuckRepl, 0);
     }
 
     return s.Str();
@@ -317,5 +350,233 @@ Y_UNIT_TEST_SUITE(Replication) {
     using E = EState;
     Y_UNIT_TEST(Phantoms_mirror3dc_special) {
         DoTestCase(TBlobStorageGroupType::ErasureMirror3dc, {E::OK, E::FORMAT, E::OK, E::OK, E::OFFLINE, E::OK, E::OK, E::OFFLINE, E::OK});
+    }
+
+    Y_UNIT_TEST(ReplStuck_mirror3dc) {
+        DoTestCase(TBlobStorageGroupType::ErasureMirror3dc, {E::OK, E::FORMAT, E::OK, E::OK, E::OFFLINE, E::OK, E::OK, E::OFFLINE, E::OK}, true);
+    }
+}
+
+struct TTestCtx : public TTestCtxBase {
+public:
+    TTestCtx(TBlobStorageGroupType erasure, ui64 pdiskSize, ui32 groupsCount)
+        : TTestCtxBase(TEnvironmentSetup::TSettings{
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
+            .PDiskSize = pdiskSize,
+            .PDiskChunkSize = 32_MB,
+            .TrackSharedQuotaInPDiskMock = true,
+        })
+        , PDiskSize(pdiskSize)
+        , GroupsCount(groupsCount)
+    {}
+
+    void Initialize() override {
+        Env->CreateBoxAndPool(GroupsCount, GroupsCount);
+        Env->Sim(TDuration::Minutes(1));
+
+        BaseConfig = Env->FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(BaseConfig.GroupSize(), GroupsCount);
+        for (const auto& group : BaseConfig.GetGroup()) {
+            Groups.push_back(group.GetGroupId());
+        }
+
+        AllocateEdgeActor();
+        for (const ui32 groupId : Groups) {
+            GetGroupStatus(groupId);
+        }
+    }
+
+public:
+    ui64 PDiskSize;
+    ui32 GroupsCount;
+    std::vector<ui32> Groups;
+};
+
+Y_UNIT_TEST_SUITE(ReplicationSpace) {
+
+    struct TVDiskStats {
+        double Occupancy;
+        bool IsReplicated;
+    };
+
+    TVDiskID VDiskIdFromVSlot(const NKikimrBlobStorage::TBaseConfig::TVSlot& vslot) {
+        return TVDiskID(vslot.GetGroupId(), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
+                vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());;
+    }
+
+    void TestSpace(ui64 diskSize, ui64 blobSize, float usedSpaceFraction, bool donorMode) {
+        TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3dc;
+        TTestCtx ctx(erasure, diskSize, 2);
+        ctx.Initialize();
+
+        // disable self-heal
+        ctx.Env->UpdateSettings(false, donorMode, false);
+
+        ui64 perDiskDataSize = diskSize * usedSpaceFraction;
+        ui64 dataSize = perDiskDataSize;
+
+        // assure that all groups are green
+        for (ui32 groupId : ctx.Groups) {
+            auto status = ctx.GetGroupStatus(groupId);
+            UNIT_ASSERT(status->Get()->Status == NKikimrProto::OK);
+            Ctest << "Group# " << groupId << " Status# " << status->Get()->ToString() << Endl;
+            UNIT_ASSERT(!status->Get()->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceCyan));
+        }
+
+        // write data
+        for (ui32 groupId : ctx.Groups) {
+            ctx.WriteCompressedData(TTestCtxBase::TDataProfile{
+                .GroupId = groupId,
+                .TotalSize = dataSize,
+                .BlobSize = blobSize,
+                .DelayBetweenPuts = TDuration::Seconds(1),
+                .Erasure = erasure,
+                .CookieStrategy = TTestCtxBase::TDataProfile::ECookieStrategy::WithSamePlacement,
+            });
+            Ctest << "Data written for group " << groupId << Endl;
+        }
+
+        // wait for compaction to finish
+        ctx.Env->Sim(TDuration::Minutes(360));
+
+        // assure that all groups are green
+        for (ui32 groupId : ctx.Groups) {
+            auto status = ctx.GetGroupStatus(groupId);
+            UNIT_ASSERT(status->Get()->Status == NKikimrProto::OK);
+            Ctest << "Group# " << groupId << " Status# " << status->Get()->ToString() << Endl;
+            UNIT_ASSERT(!status->Get()->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceCyan));
+        }
+
+        auto getVDiskStats = [&](const TVDiskID& vdiskId) -> TVDiskStats {
+            double occupancy;
+            bool isReplicated;
+            ctx.Env->WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
+                ctx.Env->Runtime->Send(new IEventHandle(queueId, ctx.Edge, new TEvBlobStorage::TEvVStatus()), queueId.NodeId());
+                auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(ctx.Edge, false, TInstant::Max());
+                occupancy = 1 - res->Get()->Record.GetApproximateFreeSpaceShare();
+                isReplicated = res->Get()->Record.GetReplicated();
+            });
+    
+            return { occupancy, isReplicated };
+        };
+
+        TVDiskID chosenVDiskId;
+        ui32 chosenPDiskId = 0;
+        ui32 chosenNodeId = 0;
+
+        // reassign vdisk
+        {
+            // choose pdisk with low space
+            ctx.FetchBaseConfig();
+            for (const auto& vslot : ctx.BaseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == ctx.Groups[0]) {
+                    TVDiskStats stats = getVDiskStats(VDiskIdFromVSlot(vslot));
+                    Ctest << "VDisk# " << VDiskIdFromVSlot(vslot).ToString() << " " << stats.Occupancy << " " << stats.IsReplicated << Endl;
+                    if (stats.Occupancy > 1 - usedSpaceFraction) {
+                        chosenNodeId = vslot.GetVSlotId().GetNodeId();
+                        chosenPDiskId = vslot.GetVSlotId().GetPDiskId();
+                        break;
+                    }
+                }
+            }
+            UNIT_ASSERT(chosenNodeId != 0);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            for (const auto& vslot : ctx.BaseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == ctx.Groups[1]) {
+                    TVDiskID vdiskId = VDiskIdFromVSlot(vslot);
+                    TVDiskStats stats = getVDiskStats(vdiskId);
+                    if (stats.Occupancy > 1 - usedSpaceFraction) {
+                        chosenVDiskId = vdiskId;
+                        NKikimrBlobStorage::TReassignGroupDisk* cmd = request.AddCommand()->MutableReassignGroupDisk();
+                        cmd->SetGroupId(vslot.GetGroupId());
+                        cmd->SetGroupGeneration(vslot.GetGroupGeneration());
+                        cmd->SetFailRealmIdx(vslot.GetFailRealmIdx());
+                        cmd->SetFailDomainIdx(vslot.GetFailDomainIdx());
+                        cmd->SetVDiskIdx(vslot.GetVDiskIdx());
+                        auto* target = cmd->MutableTargetPDiskId();
+                        target->SetNodeId(chosenNodeId);
+                        target->SetPDiskId(chosenPDiskId);
+                        break;
+                    }
+                }
+            }
+            auto res = ctx.Env->Invoke(request);
+            UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
+            UNIT_ASSERT_C(res.GetStatus(0).GetSuccess(), res.GetStatus(0).GetErrorDescription());
+        }
+
+        Ctest << "Chosen PDisk# [" << chosenNodeId << ":" << chosenPDiskId <<
+                "] chosen VDiskId# " << chosenVDiskId.ToString() << Endl;
+
+        // wait for replication to stuck
+        ctx.Env->Sim(TDuration::Minutes(360));
+
+        // check that all groups are YELLOW at worst
+        for (ui32 groupId : ctx.Groups) {
+            auto status = ctx.GetGroupStatus(groupId);
+            UNIT_ASSERT(status->Get()->Status == NKikimrProto::OK);
+            Ctest << "Group# " << groupId << " Status# " << status->Get()->ToString() << Endl;
+            UNIT_ASSERT(!status->Get()->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpacePreOrange));
+        }
+
+        // disable donor mode to free space immediately
+        ctx.Env->UpdateSettings(false, false, false);
+
+        // reassign second vdisk from chosen pdisk
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            for (const auto& vslot : ctx.BaseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == ctx.Groups[0]) {
+                    if (vslot.GetVSlotId().GetNodeId() == chosenNodeId && vslot.GetVSlotId().GetPDiskId() == chosenPDiskId) {
+                        NKikimrBlobStorage::TReassignGroupDisk* cmd = request.AddCommand()->MutableReassignGroupDisk();
+                        cmd->SetGroupId(vslot.GetGroupId());
+                        cmd->SetGroupGeneration(vslot.GetGroupGeneration());
+                        cmd->SetFailRealmIdx(vslot.GetFailRealmIdx());
+                        cmd->SetFailDomainIdx(vslot.GetFailDomainIdx());
+                        cmd->SetVDiskIdx(vslot.GetVDiskIdx());
+                        break;
+                    }
+                }
+            }
+            auto res = ctx.Env->Invoke(request);
+            UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
+            UNIT_ASSERT_C(res.GetStatus(0).GetSuccess(), res.GetStatus(0).GetErrorDescription());
+        }
+
+        Ctest << "Evicting second VDisk" << Endl;
+    
+        // wait for replication
+        ctx.Env->Sim(TDuration::Hours(12));
+
+        // check that chosen VDisk finished replication
+        {
+            ctx.FetchBaseConfig();
+            for (const auto& vslot : ctx.BaseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() == ctx.Groups[1]) {
+                    TVDiskID vdiskId = VDiskIdFromVSlot(vslot);
+                    TVDiskStats stats = getVDiskStats(vdiskId);
+                    UNIT_ASSERT_C(stats.IsReplicated, "Unreplicated VDiskId# " << vdiskId.ToString()
+                            << " Occupancy# " << stats.Occupancy);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(HugeBlobsWithDonor) {
+        TestSpace(4_GB, 8_MB, 0.5, true);
+    }
+
+    Y_UNIT_TEST(SmallBlobsWithDonor) {
+        TestSpace(4_GB, 100_KB, 0.5, true);
+    }
+
+    Y_UNIT_TEST(HugeBlobsNoDonor) {
+        TestSpace(4_GB, 8_MB, 0.5, false);
+    }
+
+    Y_UNIT_TEST(SmallBlobsNoDonor) {
+        TestSpace(4_GB, 100_KB, 0.5, false);
     }
 }

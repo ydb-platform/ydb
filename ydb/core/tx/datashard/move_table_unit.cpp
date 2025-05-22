@@ -43,10 +43,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (tx->GetSchemeTxType() != TSchemaOperation::ETypeMoveTable) {
             return EExecutionStatus::Executed;
@@ -60,20 +60,27 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         ChangeRecords.clear();
-        if (!DataShard.LoadChangeRecords(db, ChangeRecords)) {
-            return EExecutionStatus::Restart;
-        }
 
+        auto changesQueue = DataShard.TakeChangesQueue();
         auto lockChangeRecords = DataShard.TakeLockChangeRecords();
         auto committedLockChangeRecords = DataShard.TakeCommittedLockChangeRecords();
 
+        if (!DataShard.LoadChangeRecords(db, ChangeRecords)) {
+            DataShard.SetChangesQueue(std::move(changesQueue));
+            DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
+            DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
+            return EExecutionStatus::Restart;
+        }
+
         if (!DataShard.LoadLockChangeRecords(db)) {
+            DataShard.SetChangesQueue(std::move(changesQueue));
             DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
             DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
             return EExecutionStatus::Restart;
         }
 
         if (!DataShard.LoadChangeRecordCommits(db, ChangeRecords)) {
+            DataShard.SetChangesQueue(std::move(changesQueue));
             DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
             DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
             return EExecutionStatus::Restart;
@@ -99,7 +106,7 @@ public:
     void Complete(TOperation::TPtr, const TActorContext& ctx) override {
         DataShard.CreateChangeSender(ctx);
         DataShard.MaybeActivateChangeSender(ctx);
-        DataShard.EnqueueChangeRecords(std::move(ChangeRecords));
+        DataShard.EnqueueChangeRecords(std::move(ChangeRecords), 0, true);
     }
 };
 

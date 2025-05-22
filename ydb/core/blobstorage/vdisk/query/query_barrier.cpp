@@ -33,8 +33,8 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_VDISK_GC,
                     VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                             "TEvVGetBarrierResult: %s", Result->ToString().data()));
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie);
-            ctx.Send(ParentId, new TEvents::TEvActorDied);
+            SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, HullCtx->VCtx, {});
+            ctx.Send(ParentId, new TEvents::TEvGone);
             Die(ctx);
         }
 

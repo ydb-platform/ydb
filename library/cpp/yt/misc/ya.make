@@ -6,11 +6,11 @@ SRCS(
     guid.cpp
     source_location.cpp
     thread_name.cpp
-    variant.cpp
 )
 
 PEERDIR(
     library/cpp/yt/exception
+    library/cpp/yt/assert
 )
 
 CHECK_DEPENDENT_DIRS(

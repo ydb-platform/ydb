@@ -1,8 +1,12 @@
 #include "propagating_storage.h"
 
-#include <library/cpp/yt/small_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+
+#include <library/cpp/yt/memory/leaky_singleton.h>
+
+#include <yt/yt/core/misc/static_ring_queue.h>
 
 namespace NYT::NConcurrency {
 
@@ -176,6 +180,8 @@ void TPropagatingStorage::EnsureUnique()
     Impl_ = Impl_->Clone();
 }
 
+static YT_DEFINE_GLOBAL(TFlsSlot<TPropagatingStorage>, PropagatingStorageSlot);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPropagatingStorageManager
@@ -183,17 +189,27 @@ class TPropagatingStorageManager
 public:
     static TPropagatingStorageManager* Get()
     {
-        return Singleton<TPropagatingStorageManager>();
+        return LeakySingleton<TPropagatingStorageManager>();
     }
 
-    TPropagatingStorage& GetCurrentPropagatingStorage()
+    TPropagatingStorage& CurrentPropagatingStorage()
     {
-        return *Slot_;
+        return *PropagatingStorageSlot();
     }
 
-    const TPropagatingStorage& GetPropagatingStorage(const TFls& fls)
+    const TPropagatingStorage& GetCurrentPropagatingStorage()
     {
-        return *Slot_.Get(fls);
+        if (const auto& slot = PropagatingStorageSlot(); slot.IsInitialized()) {
+            return *slot;
+        } else {
+            static const TPropagatingStorage empty;
+            return empty;
+        }
+    }
+
+    const TPropagatingStorage* TryGetPropagatingStorage(const TFls& fls)
+    {
+        return PropagatingStorageSlot().Get(fls);
     }
 
     void InstallGlobalSwitchHandler(TPropagatingStorageGlobalSwitchHandler handler)
@@ -207,16 +223,19 @@ public:
 
     TPropagatingStorage SwitchPropagatingStorage(TPropagatingStorage newStorage)
     {
-        auto& storage = *Slot_;
+        const auto& oldStorage = GetCurrentPropagatingStorage();
+        if (oldStorage.IsNull() && newStorage.IsNull()) {
+            return TPropagatingStorage();
+        }
         int count = SwitchHandlerCount_.load(std::memory_order::acquire);
         for (int index = 0; index < count; ++index) {
-            SwitchHandlers_[index](storage, newStorage);
+            SwitchHandlers_[index](oldStorage, newStorage);
         }
-        return std::exchange(storage, std::move(newStorage));
+        return std::exchange(CurrentPropagatingStorage(), std::move(newStorage));
     }
 
 private:
-    TFlsSlot<TPropagatingStorage> Slot_;
+    DECLARE_LEAKY_SINGLETON_FRIEND()
 
     NThreading::TForkAwareSpinLock Lock_;
 
@@ -228,14 +247,19 @@ private:
     Y_DECLARE_SINGLETON_FRIEND()
 };
 
-TPropagatingStorage& GetCurrentPropagatingStorage()
+TPropagatingStorage& CurrentPropagatingStorage()
+{
+    return TPropagatingStorageManager::Get()->CurrentPropagatingStorage();
+}
+
+const TPropagatingStorage& GetCurrentPropagatingStorage()
 {
     return TPropagatingStorageManager::Get()->GetCurrentPropagatingStorage();
 }
 
-const TPropagatingStorage& GetPropagatingStorage(const TFls& fls)
+const TPropagatingStorage* TryGetPropagatingStorage(const TFls& fls)
 {
-    return TPropagatingStorageManager::Get()->GetPropagatingStorage(fls);
+    return TPropagatingStorageManager::Get()->TryGetPropagatingStorage(fls);
 }
 
 void InstallGlobalPropagatingStorageSwitchHandler(TPropagatingStorageGlobalSwitchHandler handler)

@@ -2,7 +2,7 @@
 #include "defs.h"
 
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/cms/console/config_item_info.h>
+#include <ydb/core/config/init/init.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -12,6 +12,8 @@
     WITH_SCOPED(tmp, NKikimr::NConsole::NHttp::TCollapsedRef(__stream, target, text __VA_OPT__(,) __VA_ARGS__))
 
 namespace NKikimr::NConsole::NHttp {
+
+using namespace NConfig;
 
 struct TCollapsedRef {
     template <class... TClasses>

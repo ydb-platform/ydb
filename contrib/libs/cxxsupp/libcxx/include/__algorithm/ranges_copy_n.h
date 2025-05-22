@@ -25,21 +25,22 @@
 #  pragma GCC system_header
 #endif
 
+_LIBCPP_PUSH_MACROS
+#include <__undef_macros>
+
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if _LIBCPP_STD_VER > 17
+#if _LIBCPP_STD_VER >= 20
 
 namespace ranges {
 
 template <class _Ip, class _Op>
 using copy_n_result = in_out_result<_Ip, _Op>;
 
-namespace __copy_n {
-struct __fn {
-
+struct __copy_n {
   template <class _InIter, class _DiffType, class _OutIter>
-  _LIBCPP_HIDE_FROM_ABI constexpr static
-  copy_n_result<_InIter, _OutIter> __go(_InIter __first, _DiffType __n, _OutIter __result) {
+  _LIBCPP_HIDE_FROM_ABI constexpr static copy_n_result<_InIter, _OutIter>
+  __go(_InIter __first, _DiffType __n, _OutIter __result) {
     while (__n != 0) {
       *__result = *__first;
       ++__first;
@@ -50,28 +51,29 @@ struct __fn {
   }
 
   template <random_access_iterator _InIter, class _DiffType, random_access_iterator _OutIter>
-  _LIBCPP_HIDE_FROM_ABI constexpr static
-  copy_n_result<_InIter, _OutIter> __go(_InIter __first, _DiffType __n, _OutIter __result) {
+  _LIBCPP_HIDE_FROM_ABI constexpr static copy_n_result<_InIter, _OutIter>
+  __go(_InIter __first, _DiffType __n, _OutIter __result) {
     auto __ret = std::__copy<_RangeAlgPolicy>(__first, __first + __n, __result);
     return {__ret.first, __ret.second};
   }
 
   template <input_iterator _Ip, weakly_incrementable _Op>
     requires indirectly_copyable<_Ip, _Op>
-  _LIBCPP_HIDE_FROM_ABI constexpr
-  copy_n_result<_Ip, _Op> operator()(_Ip __first, iter_difference_t<_Ip> __n, _Op __result) const {
+  _LIBCPP_HIDE_FROM_ABI constexpr copy_n_result<_Ip, _Op>
+  operator()(_Ip __first, iter_difference_t<_Ip> __n, _Op __result) const {
     return __go(std::move(__first), __n, std::move(__result));
   }
 };
-} // namespace __copy_n
 
 inline namespace __cpo {
-  inline constexpr auto copy_n = __copy_n::__fn{};
+inline constexpr auto copy_n = __copy_n{};
 } // namespace __cpo
 } // namespace ranges
 
-#endif // _LIBCPP_STD_VER > 17
+#endif // _LIBCPP_STD_VER >= 20
 
 _LIBCPP_END_NAMESPACE_STD
+
+_LIBCPP_POP_MACROS
 
 #endif // _LIBCPP___ALGORITHM_RANGES_COPY_N_H

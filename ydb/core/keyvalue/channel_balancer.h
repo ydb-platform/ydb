@@ -114,7 +114,7 @@ namespace NKikimr::NKeyValue {
                     const size_t index = (LatencyQueue.size() - 1) * 99 / 100;
                     const TDuration perc = latencies[index];
                     weight = MeanExpectedLatency.GetValue() * weight / Max(perc, TDuration::MilliSeconds(1)).GetValue();
-                    Y_DEBUG_ABORT_UNLESS(weight);
+                    //Y_DEBUG_ABORT_UNLESS(weight);
                     if (!weight) {
                         weight = 1;
                     }

@@ -1,4 +1,3 @@
-from moto.core import get_account_id
 from moto.core.utils import camelcase_to_underscores
 from moto.ec2.utils import add_tag_specification
 from ._base_response import EC2BaseResponse
@@ -12,6 +11,12 @@ class VPCs(EC2BaseResponse):
             else "2016-11-15"
         )
 
+    def create_default_vpc(self):
+        vpc = self.ec2_backend.create_default_vpc()
+        doc_date = self._get_doc_date()
+        template = self.response_template(CREATE_VPC_RESPONSE)
+        return template.render(vpc=vpc, doc_date=doc_date)
+
     def create_vpc(self):
         cidr_block = self._get_param("CidrBlock")
         tags = self._get_multi_param("TagSpecification")
@@ -19,13 +24,19 @@ class VPCs(EC2BaseResponse):
         amazon_provided_ipv6_cidr_block = self._get_param(
             "AmazonProvidedIpv6CidrBlock"
         ) in ["true", "True"]
+        ipv6_cidr_block_network_border_group = self._get_param(
+            "Ipv6CidrBlockNetworkBorderGroup"
+        )
+        # if network group is not specified, use the region of the VPC
+        if not ipv6_cidr_block_network_border_group:
+            ipv6_cidr_block_network_border_group = self.region
         if tags:
             tags = tags[0].get("Tag")
-
         vpc = self.ec2_backend.create_vpc(
             cidr_block,
             instance_tenancy,
             amazon_provided_ipv6_cidr_block=amazon_provided_ipv6_cidr_block,
+            ipv6_cidr_block_network_border_group=ipv6_cidr_block_network_border_group,
             tags=tags,
         )
         doc_date = self._get_doc_date()
@@ -49,7 +60,7 @@ class VPCs(EC2BaseResponse):
             else "2016-11-15"
         )
         template = self.response_template(DESCRIBE_VPCS_RESPONSE)
-        return template.render(vpcs=vpcs, doc_date=doc_date)
+        return template.render(vpcs=vpcs, doc_date=doc_date, region=self.region)
 
     def modify_vpc_tenancy(self):
         vpc_id = self._get_param("VpcId")
@@ -205,6 +216,22 @@ class VPCs(EC2BaseResponse):
         template = self.response_template(CREATE_VPC_END_POINT)
         return template.render(vpc_end_point=vpc_end_point)
 
+    def modify_vpc_endpoint(self):
+        vpc_id = self._get_param("VpcEndpointId")
+        add_subnets = self._get_multi_param("AddSubnetId")
+        add_route_tables = self._get_multi_param("AddRouteTableId")
+        remove_route_tables = self._get_multi_param("RemoveRouteTableId")
+        policy_doc = self._get_param("PolicyDocument")
+        self.ec2_backend.modify_vpc_endpoint(
+            vpc_id=vpc_id,
+            policy_doc=policy_doc,
+            add_subnets=add_subnets,
+            add_route_tables=add_route_tables,
+            remove_route_tables=remove_route_tables,
+        )
+        template = self.response_template(MODIFY_VPC_END_POINT)
+        return template.render()
+
     def describe_vpc_endpoint_services(self):
         vpc_end_point_services = self.ec2_backend.describe_vpc_endpoint_services(
             dry_run=self._get_bool_param("DryRun"),
@@ -225,7 +252,7 @@ class VPCs(EC2BaseResponse):
         )
         template = self.response_template(DESCRIBE_VPC_ENDPOINT_RESPONSE)
         return template.render(
-            vpc_end_points=vpc_end_points, account_id=get_account_id()
+            vpc_end_points=vpc_end_points, account_id=self.current_account
         )
 
     def delete_vpc_endpoints(self):
@@ -446,6 +473,8 @@ DESCRIBE_VPCS_RESPONSE = """
                     <ipv6CidrBlockState>
                         <state>{{assoc.cidr_block_state.state}}</state>
                     </ipv6CidrBlockState>
+                    <networkBorderGroup>{{ assoc.ipv6_cidr_block_network_border_group }}</networkBorderGroup>
+                    <ipv6Pool>{{ assoc.ipv6_pool }}</ipv6Pool>
                 </item>
               {% endfor %}
             </ipv6CidrBlockAssociationSet>
@@ -595,6 +624,10 @@ CREATE_VPC_END_POINT = """ <CreateVpcEndpointResponse xmlns="http://monitoring.a
         <creationTimestamp>{{ vpc_end_point.created_at }}</creationTimestamp>
     </vpcEndpoint>
 </CreateVpcEndpointResponse>"""
+
+MODIFY_VPC_END_POINT = """<ModifyVpcEndpointResponse xmlns="http://monitoring.amazonaws.com/doc/2010-08-01/">
+    <return>true</return>
+</ModifyVpcEndpointResponse>"""
 
 DESCRIBE_VPC_ENDPOINT_SERVICES_RESPONSE = """<DescribeVpcEndpointServicesResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
     <requestId>19a9ff46-7df6-49b8-9726-3df27527089d</requestId>

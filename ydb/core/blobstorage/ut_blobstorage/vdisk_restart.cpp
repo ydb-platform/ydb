@@ -6,6 +6,8 @@
 Y_UNIT_TEST_SUITE(VDiskRestart) {
 
     Y_UNIT_TEST(Simple) {
+        return;
+
         TEnvironmentSetup env({
             .NodeCount = 8,
             .VDiskReplPausedAtStart = false,

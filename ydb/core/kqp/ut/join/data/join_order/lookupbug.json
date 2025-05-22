@@ -1,0 +1,35 @@
+{
+  "op_name":"LeftJoin (MapJoin)",
+  "args":
+    [
+      {
+        "op_name":"InnerJoin (MapJoin)",
+        "args":
+          [
+            {
+              "op_name":"InnerJoin (MapJoin)",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"browsers"
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"quotas_browsers_relation"
+                  }
+                ]
+            },
+            {
+              "op_name":"TablePointLookup",
+              "table":"quota"
+            }
+          ]
+      },
+      {
+        "op_name":"TableLookup",
+        "table":"browser_groups"
+      }
+    ]
+}
+

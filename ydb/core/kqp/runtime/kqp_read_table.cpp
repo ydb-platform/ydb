@@ -3,7 +3,7 @@
 
 #include <ydb/core/engine/mkql_keys.h>
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
 #include <ydb/core/kqp/common/kqp_types.h>
 
@@ -23,22 +23,8 @@ TTableId ParseTableId(const TRuntimeNode& node) {
     return TTableId(ownerId, tableId, sysViewInfo, schemeVersion);
 }
 
-bool StructHoldsPgType(const TStructType& structType, ui32 index) {
-    return (structType.GetMemberType(index)->GetKind() == TType::EKind::Pg);
-}
-
-NScheme::TTypeInfo UnwrapPgTypeFromStruct(const TStructType& structType, ui32 index) {
-    TPgType* type = AS_TYPE(TPgType, structType.GetMemberType(index));
-    return NScheme::TTypeInfo(NScheme::NTypeIds::Pg, NPg::TypeDescFromPgTypeId(type->GetTypeId()));
-}
-
-NUdf::TDataTypeId UnwrapDataTypeFromStruct(const TStructType& structType, ui32 index) {
-    if (structType.GetMemberType(index)->GetKind() == TType::EKind::Optional) {
-        auto type = AS_TYPE(TDataType, AS_TYPE(TOptionalType, structType.GetMemberType(index))->GetItemType());
-        return type->GetSchemeType();
-    } else {
-        return AS_TYPE(TDataType, structType.GetMemberType(index))->GetSchemeType();
-    }
+NScheme::TTypeInfo UnwrapTypeInfoFromStruct(const TStructType& structType, ui32 index) {
+    return NScheme::TypeInfoFromMiniKQLType(structType.GetMemberType(index));
 }
 
 } // namespace NKqp
@@ -287,7 +273,7 @@ public:
         new StoreInst(init, fields, &ctx.Func->getEntryBlock().back());
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TKqpScanWideReadTableWrapperBase::DoCalculate));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TKqpScanWideReadTableWrapperBase::DoCalculate>());
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { self->getType(), ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
@@ -424,7 +410,7 @@ public:
         new StoreInst(init, fields, &ctx.Func->getEntryBlock().back());
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TKqpScanBlockReadTableWrapperBase::DoCalculate));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TKqpScanBlockReadTableWrapperBase::DoCalculate>());
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { self->getType(), ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);

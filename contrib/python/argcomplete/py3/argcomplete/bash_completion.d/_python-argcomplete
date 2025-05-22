@@ -1,5 +1,6 @@
 #compdef -default-
 
+# argcomplete global completion loader for zsh and bash
 # Copyright 2012-2023, Andrey Kislyuk and argcomplete contributors.
 # Licensed under the Apache License. See https://github.com/kislyuk/argcomplete for more info.
 
@@ -46,9 +47,9 @@ __python_argcomplete_run() {
 
 __python_argcomplete_run_inner() {
     if [[ -z "${_ARC_DEBUG-}" ]]; then
-        "$@" 8>&1 9>&2 1>/dev/null 2>&1
+        "$@" 8>&1 9>&2 1>/dev/null 2>&1 </dev/null
     else
-        "$@" 8>&1 9>&2 1>&9 2>&1
+        "$@" 8>&1 9>&2 1>&9 2>&1 </dev/null
     fi
 }
 
@@ -76,6 +77,7 @@ __python_argcomplete_scan_head() {
     local file="$1"
     local target="$2"
 
+    local REPLY
     if [[ -n "${ZSH_VERSION-}" ]]; then
         read -r -k 1024 -u 0 < "$file";
     else
@@ -144,6 +146,7 @@ _python_argcomplete_global() {
         __python_argcomplete_expand_tilde_by_ref executable
     else
         executable="${words[1]}"
+        __python_argcomplete_expand_tilde_by_ref executable
         req_argv=( "${words[@]:1}" )
     fi
 

@@ -5,6 +5,7 @@
 
 #include <util/generic/xrange.h>
 #include <util/random/shuffle.h>
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
@@ -20,13 +21,13 @@ TS3Mock::TSettings::TSettings()
 }
 
 TS3Mock::TSettings::TSettings(ui16 port)
-    : HttpOptions(TOptions(port).SetThreads(1))
+    : HttpOptions(THttpServer::TOptions(port).SetThreads(1))
     , CorruptETags(false)
     , RejectUploadParts(false)
 {
 }
 
-TS3Mock::TSettings& TS3Mock::TSettings::WithHttpOptions(const TOptions& opts) {
+TS3Mock::TSettings& TS3Mock::TSettings::WithHttpOptions(const THttpServer::TOptions& opts) {
     HttpOptions = opts;
     return *this;
 }
@@ -147,6 +148,59 @@ bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method
         headers.OutTo(&params.Output);
         params.Output << "\r\n";
     }
+    params.Output.Flush();
+
+    return true;
+}
+
+TString BuildContentXML(const TString& path) {
+    return Sprintf(R"(
+                <Contents>
+                    <Key>%s</Key>
+                </Contents>
+        )", path.c_str());
+}
+
+TString BuildContentListXML(const TVector<TString>& paths) {
+    TString result;
+    for (const auto& path : paths) {
+        result += BuildContentXML(path);
+    }
+    return result;
+}
+
+TString BuildListObjectsXML(const TVector<TString>& paths, const TStringBuf bucketName) {
+    return Sprintf(R"(
+            <?xml version="1.0" encoding="UTF-8"?>
+            <ListBucketResult>
+                <Name>%s</Name>
+                <IsTruncated>false</IsTruncated>
+                %s
+            </ListBucketResult>
+        )", bucketName.data(), BuildContentListXML(paths).c_str());
+}
+
+bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf bucketName, const TString& prefix) {
+    Cerr << "S3_MOCK::HttpServeList: " << prefix << Endl;
+    params.Output << "HTTP/1.1 200 Ok\r\n";
+    THttpHeaders headers;
+
+    TVector<TString> paths;
+    for (const auto& [key, value] : Parent->Data) {
+        TFsPath path = key;
+        if (path.IsSubpathOf(TStringBuilder() << bucketName << "/" << prefix)) {
+            paths.push_back(path);
+        }
+    }
+
+    TString xml = BuildListObjectsXML(paths, bucketName);
+
+    headers.AddHeader("Content-Type", "application/xml");
+    headers.AddHeader("Content-Length", xml.length());
+    headers.OutTo(&params.Output);
+
+    params.Output << xml;
+    params.Output << "\r\n";
     params.Output.Flush();
 
     return true;
@@ -366,7 +420,9 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
 
     case EMethod::Head:
     case EMethod::Get:
-        if (Parent->Data.contains(pathStr)) {
+        if (queryParams.Has("prefix")) {
+            return HttpServeList(params, pathStr, queryParams.Get("prefix"));
+        } else if (Parent->Data.contains(pathStr)) {
             return HttpServeRead(params, method, pathStr);
         } else {
             return HttpNotFound(params, "NoSuchKey");
@@ -388,23 +444,31 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     }
 }
 
+bool TS3Mock::Start() {
+    return HttpServer.Start();
+}
+
+const char* TS3Mock::GetError() {
+    return HttpServer.GetError();
+}
+
 TS3Mock::TS3Mock(const TSettings& settings)
-    : THttpServer(this, settings.HttpOptions)
-    , Settings(settings)
+    : Settings(settings)
+    , HttpServer(this, settings.HttpOptions)
 {
 }
 
 TS3Mock::TS3Mock(THashMap<TString, TString>&& data, const TSettings& settings)
-    : THttpServer(this, settings.HttpOptions)
-    , Settings(settings)
+    : Settings(settings)
     , Data(std::move(data))
+    , HttpServer(this, settings.HttpOptions)
 {
 }
 
 TS3Mock::TS3Mock(const THashMap<TString, TString>& data, const TSettings& settings)
-    : THttpServer(this, settings.HttpOptions)
-    , Settings(settings)
+    : Settings(settings)
     , Data(data)
+    , HttpServer(this, settings.HttpOptions)
 {
 }
 

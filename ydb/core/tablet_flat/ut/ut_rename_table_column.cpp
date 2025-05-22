@@ -236,7 +236,7 @@ struct TEnv : public NFake::TRunner {
         return pipeConfig;
     }
 
-    const ui32 Tablet = MakeTabletID(0, 0, 1);
+    const ui64 Tablet = MakeTabletID(false, 1) & 0xFFFF'FFFF;
     const TActorId Edge;
 };
 

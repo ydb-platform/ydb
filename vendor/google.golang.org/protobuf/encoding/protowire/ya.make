@@ -2,10 +2,10 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-SRCS(wire.go)
+VERSION(v1.36.5)
 
-GO_TEST_SRCS(wire_test.go)
+SRCS(
+    wire.go
+)
 
 END()
-
-RECURSE(gotest)

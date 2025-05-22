@@ -1,17 +1,18 @@
 #pragma once
-
-#include <ydb/core/viewer/json/json.h>
-
-#include <ydb/core/tablet/defs.h>
-#include <ydb/library/actors/core/defs.h>
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/event.h>
 #include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/tablet/defs.h>
+#include <ydb/core/viewer/json/json.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
-#include <util/system/hostname.h>
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/defs.h>
+#include <ydb/library/actors/core/event.h>
+#include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
+
+using TTabletId = ui64;
 
 inline TActorId MakeViewerID(ui32 node) {
     char x[12] = {'v','i','e','w','e','r'};
@@ -23,7 +24,8 @@ struct TEvViewer {
         // requests
         EvViewerRequest = EventSpaceBegin(TKikimrEvents::ES_VIEWER),
         EvViewerResponse,
-
+        EvUpdateSharedCacheTabletRequest,
+        EvUpdateSharedCacheTabletResponse,
         EvEnd
     };
 
@@ -35,6 +37,45 @@ struct TEvViewer {
 
     struct TEvViewerResponse : TEventPB<TEvViewerResponse, NKikimrViewer::TEvViewerResponse, EvViewerResponse> {
         TEvViewerResponse() = default;
+    };
+
+    struct TEvUpdateSharedCacheTabletRequest : TEventLocal<TEvUpdateSharedCacheTabletRequest, EvUpdateSharedCacheTabletRequest> {
+        TTabletId TabletId;
+        std::unique_ptr<IEventBase> Request;
+
+        TEvUpdateSharedCacheTabletRequest(TTabletId tabletId, std::unique_ptr<IEventBase> request)
+            : TabletId(tabletId)
+            , Request(std::move(request))
+        {}
+    };
+
+    struct TEvUpdateSharedCacheTabletResponse : TEventLocal<TEvUpdateSharedCacheTabletResponse, EvUpdateSharedCacheTabletResponse> {
+        std::variant<
+            std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse>> Response;
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse> response)
+            : Response(std::move(response))
+        {}
     };
 };
 
@@ -51,7 +92,7 @@ struct TRequestSettings {
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
     TString Format;
     std::optional<bool> StaticNodesOnly;
-    bool DistributedMerge = false;
+    std::vector<i32> FieldsRequired;
 
     bool Followers = true; // hive tablet info
     bool Metrics = true; // hive tablet info
@@ -59,6 +100,88 @@ struct TRequestSettings {
 };
 
 IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig);
+
+struct TRequestState {
+    std::variant<std::monostate, const NMon::TEvHttpInfo*, const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*> Request;
+    NWilson::TTraceId TraceId;
+
+    TRequestState() = default;
+
+    TRequestState(const NMon::TEvHttpInfo* request)
+        : Request(request)
+    {}
+
+    TRequestState(const NMon::TEvHttpInfo* request, NWilson::TTraceId traceId)
+        : Request(request)
+        , TraceId(traceId)
+    {}
+
+    TRequestState(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request)
+        : Request(request)
+    {}
+
+    TRequestState(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request, NWilson::TTraceId traceId)
+        : Request(request)
+        , TraceId(traceId)
+    {}
+
+    bool HasHeader(TStringBuf name) const {
+        if (auto* request = std::get_if<const NMon::TEvHttpInfo*>(&Request)) {
+            return (*request)->Request.GetHeaders().HasHeader(name);
+        }
+        if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
+            return NHttp::THeaders((*request)->Request->Headers).Has(name);
+        }
+        return false;
+    }
+
+    TString GetHeader(TStringBuf name) const {
+        if (auto* request = std::get_if<const NMon::TEvHttpInfo*>(&Request)) {
+            auto header = (*request)->Request.GetHeaders().FindHeader(name);
+            return header ? header->Value() : TString();
+        }
+        if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
+            return TString(NHttp::THeaders((*request)->Request->Headers).Get(name));
+        }
+        return {};
+    }
+
+    TString GetRemoteAddr() const {
+        if (auto* request = std::get_if<const NMon::TEvHttpInfo*>(&Request)) {
+            return (*request)->Request.GetRemoteAddr();
+        }
+        if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
+            return (*request)->Request->Address->ToString();
+        }
+        return {};
+    }
+
+    TString GetUri() const {
+        if (auto* request = std::get_if<const NMon::TEvHttpInfo*>(&Request)) {
+            return TString((*request)->Request.GetUri());
+        }
+        if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
+            return TString((*request)->Request->URL);
+        }
+        return {};
+    }
+
+    TString GetUserTokenObject() const {
+        if (auto* request = std::get_if<const NMon::TEvHttpInfo*>(&Request)) {
+            return (*request)->UserToken;
+        }
+        if (auto* request = std::get_if<const NHttp::TEvHttpProxy::TEvHttpIncomingRequest*>(&Request)) {
+            return (*request)->UserToken;
+        }
+        return {};
+    }
+
+    explicit operator bool() const {
+        return Request.index() != 0;
+    }
+};
+
+struct TViewerSharedCacheState;
 
 class IViewer {
 public:
@@ -153,42 +276,47 @@ public:
         NKikimrViewer::EObjectType objectType,
         const TContentHandler& handler) = 0;
 
-    virtual TString GetCORS(const NMon::TEvHttpInfo* request) = 0;
-    virtual TString GetHTTPOK(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPOKJSON(const NMon::TEvHttpInfo* request, TString response = {}) = 0;
-    virtual TString GetHTTPGATEWAYTIMEOUT(const NMon::TEvHttpInfo* request) = 0;
-    virtual TString GetHTTPBADREQUEST(const NMon::TEvHttpInfo* request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GetHTTPOK(const TRequestState& request, TString contentType = {}, TString response = {}, TInstant lastModified = {}) = 0;
+    virtual TString GetChunkedHTTPOK(const TRequestState& request, TString contentType = {}) = 0;
+
+    TString GetHTTPOKJSON(const TRequestState& request, TString response = {}, TInstant lastModified = {}) {
+        return GetHTTPOK(request, "application/json", response, lastModified);
+    }
+
+    TString GetHTTPOKYAML(const TRequestState& request, TString response = {}, TInstant lastModified = {}) {
+        return GetHTTPOK(request, "application/yaml", response, lastModified);
+    }
+
+    TString GetHTTPOKTEXT(const TRequestState& request, TString response = {}, TInstant lastModified = {}) {
+        return GetHTTPOK(request, "text/plain", response, lastModified);
+    }
+
+    virtual TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GetHTTPBADREQUEST(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GetHTTPFORBIDDEN(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GetHTTPNOTFOUND(const TRequestState& request) = 0;
+    virtual TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GetHTTPFORWARD(const TRequestState& request, const TString& location) = 0;
+    virtual bool CheckAccessAdministration(const TRequestState& request) = 0;
+    virtual void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) = 0;
+    virtual TString MakeForward(const TRequestState& request, const std::vector<ui32>& nodes) = 0;
+
+    virtual void AddRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
+    virtual void EndRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
+    virtual TActorId FindRunningQuery(const TString& queryId) = 0;
+
+    virtual NJson::TJsonValue GetCapabilities() = 0;
+    virtual int GetCapabilityVersion(const TString& name) = 0;
+
+    void UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> ev);
+    void DeleteOldSharedCacheData();
+    std::shared_ptr<TViewerSharedCacheState> CreateSharedCacheState();
+    std::shared_ptr<TViewerSharedCacheState> SharedCacheState = CreateSharedCacheState();
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);
 void SetupDBVirtualHandlers(IViewer* viewer);
 void SetupKqpContentHandler(IViewer* viewer);
-
-template <typename RequestType>
-struct TJsonRequestSchema {
-    static TString GetSchema() { return TString(); }
-};
-
-template <typename RequestType>
-struct TJsonRequestSummary {
-    static TString GetSummary() { return TString(); }
-};
-
-template <typename RequestType>
-struct TJsonRequestDescription {
-    static TString GetDescription() { return TString(); }
-};
-
-template <typename RequestType>
-struct TJsonRequestParameters {
-    static TString GetParameters() { return TString(); }
-};
-
-static const char HTTPOKJSON[] = "HTTP/1.1 200 Ok\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; charset=utf-8\r\nConnection: Close\r\n\r\n";
-static const char HTTPOKTEXT[] = "HTTP/1.1 200 Ok\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: Close\r\n\r\n";
-static const char HTTPFORBIDDENJSON[] = "HTTP/1.1 403 Forbidden\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; charset=utf-8\r\nConnection: Close\r\n\r\n";
-static const char HTTPGATEWAYTIMEOUT[] = "HTTP/1.1 504 Gateway Time-out\r\nConnection: Close\r\n\r\nGateway Time-out\r\n";
-static const char HTTPBADREQUEST[] = "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\nBad Request\r\n";
 
 template <typename ValueType, typename OutputIteratorType>
 void GenericSplitIds(TStringBuf source, char delim, OutputIteratorType it) {
@@ -249,5 +377,4 @@ NKikimrViewer::EFlag GetFlagFromUsage(double usage);
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag);
 NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag);
 
-} // NViewer
-} // NKikimr
+}

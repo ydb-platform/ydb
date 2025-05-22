@@ -13,7 +13,7 @@ class TDataShardUserDb;
 
 class TKeyValidator {
 public:
-    TKeyValidator(const TDataShard& self, const NTable::TDatabase& db);
+    TKeyValidator(const TDataShard& self);
 
     struct TColumnWriteMeta {
         NTable::TColumn Column;
@@ -24,12 +24,19 @@ public:
     void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeInfo>& keyTypes, const TVector<TColumnWriteMeta>& columns, bool isPureEraseOp);
     
     struct TValidateOptions {
-        ui64 LockTxId;
-        ui64 LockNodeId;
-        bool IsRepeatableSnapshot;
+        bool IsLockTxId;
+        bool IsLockNodeId;
+        bool UsesMvccSnapshot;
         bool IsImmediateTx;
+        bool IsWriteTx;
+        const NTable::TScheme& Scheme;
 
-        TValidateOptions(const TDataShardUserDb& userDb);
+        TValidateOptions(ui64 LockTxId,
+                         ui32 LockNodeId,
+                         bool usesMvccSnapshot,
+                         bool isImmediateTx,
+                         bool isWriteTx,
+                         const NTable::TScheme& scheme);
     };
 
     bool IsValidKey(TKeyDesc& key, const TValidateOptions& options) const;
@@ -41,7 +48,6 @@ public:
     const NMiniKQL::IEngineFlat::TValidationInfo& GetInfo() const;
 private:
     const TDataShard& Self;
-    const NTable::TDatabase& Db;
 
     NMiniKQL::IEngineFlat::TValidationInfo Info;
 };

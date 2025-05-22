@@ -15,7 +15,7 @@ void ReplyPersQueueError(
     const TActorContext& ctx,
     ui64 tabletId,
     const TString& topicName,
-    TMaybe<ui32> partition,
+    TMaybe<TPartitionId> partition,
     NKikimr::TTabletCountersBase& counters,
     NKikimrServices::EServiceKikimr service,
     const ui64 responseCookie,

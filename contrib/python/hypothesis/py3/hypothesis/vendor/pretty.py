@@ -62,6 +62,7 @@ Inheritance diagram:
 :license: BSD License.
 """
 
+import ast
 import datetime
 import re
 import struct
@@ -69,7 +70,7 @@ import sys
 import types
 import warnings
 from collections import defaultdict, deque
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from enum import Flag
 from io import StringIO
 from math import copysign, isnan
@@ -141,8 +142,6 @@ class RepresentationPrinter:
         self.group_stack = [root_group]
         self.group_queue = GroupQueue(root_group)
         self.indentation = 0
-
-        self.snans = 0
 
         self.stack = []
         self.singleton_pprinters = {}
@@ -357,12 +356,6 @@ class RepresentationPrinter:
 
     def flush(self):
         """Flush data that is left in the buffer."""
-        if self.snans:
-            # Reset self.snans *before* calling breakable(), which might flush()
-            snans = self.snans
-            self.snans = 0
-            self.breakable("  ")
-            self.text(f"# Saw {snans} signaling NaN" + "s" * (snans > 1))
         for data in self.buffer:
             self.output_width += data.output(self.output, self.output_width)
         self.buffer.clear()
@@ -372,6 +365,29 @@ class RepresentationPrinter:
         assert isinstance(self.output, StringIO)
         self.flush()
         return self.output.getvalue()
+
+    def maybe_repr_known_object_as_call(self, obj, cycle, name, args, kwargs):
+        # pprint this object as a call, _unless_ the call would be invalid syntax
+        # and the repr would be valid and there are not comments on arguments.
+        if cycle:
+            return self.text("<...>")
+        # Since we don't yet track comments for sub-argument parts, we omit the
+        # "if no comments" condition here for now.  Add it when we revive
+        # https://github.com/HypothesisWorks/hypothesis/pull/3624/
+        with suppress(Exception):
+            # Check whether the repr is valid syntax:
+            ast.parse(repr(obj))
+            # Given that the repr is valid syntax, check the call:
+            p = RepresentationPrinter()
+            p.stack = self.stack.copy()
+            p.known_object_printers = self.known_object_printers
+            p.repr_call(name, args, kwargs)
+            # If the call is not valid syntax, use the repr
+            try:
+                ast.parse(p.getvalue())
+            except Exception:
+                return _repr_pprint(obj, self, cycle)
+        return self.repr_call(name, args, kwargs)
 
     def repr_call(
         self,
@@ -423,6 +439,7 @@ class RepresentationPrinter:
                         self.text(leading_comment)
                     self.break_()
                 else:
+                    assert leading_comment is None  # only passed by top-level report
                     self.breakable(" " if i else "")
                 if k:
                     self.text(f"{k}=")
@@ -722,19 +739,31 @@ def _exception_pprint(obj, p, cycle):
             p.pretty(arg)
 
 
+def _repr_integer(obj, p, cycle):
+    if abs(obj) < 1_000_000_000:
+        p.text(repr(obj))
+    elif abs(obj) < 10**640:
+        # add underscores for integers over ten decimal digits
+        p.text(f"{obj:#_d}")
+    else:
+        # for very very large integers, use hex because power-of-two bases are cheaper
+        # https://docs.python.org/3/library/stdtypes.html#integer-string-conversion-length-limitation
+        p.text(f"{obj:#_x}")
+
+
 def _repr_float_counting_nans(obj, p, cycle):
-    if isnan(obj) and hasattr(p, "snans"):
+    if isnan(obj):
         if struct.pack("!d", abs(obj)) != struct.pack("!d", float("nan")):
-            p.snans += 1
-        if copysign(1.0, obj) == -1.0:
-            p.text("-nan")
-            return
+            show = hex(*struct.unpack("Q", struct.pack("d", obj)))
+            return p.text(f"struct.unpack('d', struct.pack('Q', {show}))[0]")
+        elif copysign(1.0, obj) == -1.0:
+            return p.text("-nan")
     p.text(repr(obj))
 
 
 #: printers for builtin types
 _type_pprinters = {
-    int: _repr_pprint,
+    int: _repr_integer,
     float: _repr_float_counting_nans,
     str: _repr_pprint,
     tuple: _seq_pprinter_factory("(", ")", tuple),
@@ -747,7 +776,7 @@ _type_pprinters = {
     type: _type_pprint,
     types.FunctionType: _function_pprint,
     types.BuiltinFunctionType: _function_pprint,
-    types.MethodType: _repr_pprint,
+    types.MethodType: _function_pprint,
     datetime.datetime: _repr_pprint,
     datetime.timedelta: _repr_pprint,
     BaseException: _exception_pprint,
@@ -764,7 +793,7 @@ def for_type_by_name(type_module, type_name, func):
     """Add a pretty printer for a type specified by the module and name of a
     type rather than the type object itself."""
     key = (type_module, type_name)
-    oldfunc = _deferred_type_pprinters.get(key, None)
+    oldfunc = _deferred_type_pprinters.get(key)
     _deferred_type_pprinters[key] = func
     return oldfunc
 

@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "fresh_segment.h"
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
@@ -204,7 +204,8 @@ namespace NKikimr {
         buffer = TRope::CopySpaceOptimized(std::move(buffer), 128, *Arena);
         const ui64 fullDataSize = key.LogoBlobID().BlobSize();
         const size_t delta = buffer.size();
-        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena);
+        TRope blob = TDiskBlob::Create(fullDataSize, partId, HullCtx->VCtx->Top->GType.TotalPartCount(), std::move(buffer), *Arena,
+            HullCtx->AddHeader);
         FreshDataMemConsumer.Add(delta);
         const ui32 blobSize = blob.GetSize();
 
@@ -215,7 +216,7 @@ namespace NKikimr {
         }
 
         // get the last extent and put the rope to its end
-        Y_ABORT_UNLESS(RopeExtents);
+        Y_VERIFY_S(RopeExtents, HullCtx->VCtx->VDiskLogPrefix);
         auto& extent = RopeExtents.back();
         TRope& rope = extent[LastRopeExtentSize++];
         rope = std::move(blob);
@@ -223,9 +224,9 @@ namespace NKikimr {
         // calculate buffer id from the rope address; the address is immutable during fresh segment lifetime, so we can
         // use it directly
         uintptr_t bufferId = reinterpret_cast<uintptr_t>(&rope);
-        Y_ABORT_UNLESS((bufferId & 0x7) == 0);
+        Y_VERIFY_S((bufferId & 0x7) == 0, HullCtx->VCtx->VDiskLogPrefix);
         bufferId >>= 3;
-        Y_ABORT_UNLESS(bufferId < (ui64(1) << 62));
+        Y_VERIFY_S(bufferId < (ui64(1) << 62), HullCtx->VCtx->VDiskLogPrefix);
         memRec.SetMemBlob(bufferId, blobSize);
 
         Put(lsn, key, memRec);
@@ -234,7 +235,7 @@ namespace NKikimr {
     template <>
     inline const TRope& TFreshIndexAndData<TKeyLogoBlob, TMemRecLogoBlob>::GetLogoBlobData(const TMemPart& memPart) const {
         const TRope& rope = *reinterpret_cast<const TRope*>(memPart.BufferId << 3);
-        Y_ABORT_UNLESS(rope.GetSize() == memPart.Size);
+        Y_VERIFY_S(rope.GetSize() == memPart.Size, HullCtx->VCtx->VDiskLogPrefix);
         return rope;
     }
 
@@ -249,14 +250,14 @@ namespace NKikimr {
         auto dataSize = memRec.DataSize();
         switch (type) {
             case TBlobType::MemBlob:
-                Y_ABORT_UNLESS(dataSize);
+                Y_VERIFY_S(dataSize, HullCtx->VCtx->VDiskLogPrefix);
                 MemDataSize += AlignUp(dataSize, 8u);
                 break;
             case TBlobType::DiskBlob:
-                Y_ABORT_UNLESS(!memRec.HasData());
+                Y_VERIFY_S(!memRec.HasData(), HullCtx->VCtx->VDiskLogPrefix);
                 break;
             case TBlobType::HugeBlob:
-                Y_ABORT_UNLESS(memRec.HasData());
+                Y_VERIFY_S(memRec.HasData(), HullCtx->VCtx->VDiskLogPrefix);
                 HugeDataSize += memRec.DataSize();
                 break;
             default:
@@ -276,7 +277,7 @@ namespace NKikimr {
                 TDiskDataExtractor extr;
                 const TDiskPart& part = memRec.GetDiskData(&extr, nullptr)->SwearOne();
                 if (part.Size) {
-                    Y_ABORT_UNLESS(part.ChunkIdx);
+                    Y_VERIFY_S(part.ChunkIdx, HullCtx->VCtx->VDiskLogPrefix);
                     chunks.insert(part.ChunkIdx);
                 }
             }
@@ -295,7 +296,7 @@ namespace NKikimr {
                 TDiskDataExtractor extr;
                 const TDiskPart& part = memRec.GetDiskData(&extr, nullptr)->SwearOne();
                 bool inserted = hugeBlobs.insert(part).second;
-                Y_ABORT_UNLESS(inserted);
+                Y_VERIFY_S(inserted, HullCtx->VCtx->VDiskLogPrefix);
             }
             it.Next();
         }
@@ -378,7 +379,7 @@ namespace NKikimr {
         template <class TRecordMerger>
         void PutToMerger(const TMemRec &memRec, ui64 lsn, TRecordMerger *merger) {
             TKey key = It.GetValue().Key;
-            if (merger->HaveToMergeData() && memRec.HasData() && memRec.GetType() == TBlobType::MemBlob) {
+            if (merger->HaveToMergeData() && memRec.GetType() == TBlobType::MemBlob) {
                 const TMemPart p = memRec.GetMemData();
                 const TRope& rope = Seg->GetLogoBlobData(p);
                 merger->AddFromFresh(memRec, &rope, key, lsn);
@@ -591,6 +592,12 @@ namespace NKikimr {
         TForwardIterator(const THullCtxPtr &hullCtx, const TContType *data)
             : TBase(hullCtx, (data ? data->IndexAndData.Get() : nullptr), (data ? data->SnapLsn : 0))
         {}
+
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            heap.Add(this);
+        }
+
     };
 
     template <class TKey, class TMemRec>
@@ -602,6 +609,12 @@ namespace NKikimr {
         TBackwardIterator(const THullCtxPtr &hullCtx, const TContType *data)
             : TBase(hullCtx, (data ? data->IndexAndData.Get() : nullptr), (data ? data->SnapLsn : 0))
         {}
+
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            heap.Add(this);
+        }
+
     };
     /////////////////////////////////////////////////////////////////////////////////////////
     // TFreshSegmentSnapshot
@@ -630,6 +643,7 @@ namespace NKikimr {
         using TBase::Next;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
     template <class TKey, class TMemRec>
@@ -654,6 +668,7 @@ namespace NKikimr {
         using TBase::Prev;
         using TBase::Valid;
         using TBase::Seek;
+        using TBase::PutToHeap;
     };
 
     template <class TKey, class TMemRec>
@@ -687,8 +702,8 @@ namespace NKikimr {
             struct {
                 std::vector<std::pair<TKey, TMemRec>>& Recs;
 
-                void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64) {
-                    Y_DEBUG_ABORT_UNLESS(false, "should not be called");
+                void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64, const void*) {
+                    Y_DEBUG_ABORT("should not be called");
                 }
 
                 void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) {

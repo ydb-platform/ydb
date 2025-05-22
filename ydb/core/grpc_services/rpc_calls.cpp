@@ -75,8 +75,8 @@ std::pair<TString, TString> SplitPath(const TString& path) {
     return {path.substr(0, splitPos), path.substr(splitPos + 1)};
 }
 
-void RefreshTokenSendRequest(const TActorContext& ctx, IEventBase* refreshTokenRequest) {
-    ctx.Send(CreateGRpcRequestProxyId(), refreshTokenRequest);
+void RefreshTokenSendRequest(const TActorContext& ctx, IEventBase* refreshTokenRequest, NWilson::TTraceId traceId) {
+    ctx.Send(CreateGRpcRequestProxyId(), refreshTokenRequest, 0, 0, std::move(traceId));
 }
 
 void RefreshTokenReplyUnauthenticated(TActorId recipient, TActorId sender, NYql::TIssues&& issues) {

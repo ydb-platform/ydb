@@ -5,6 +5,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -18,7 +19,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TInitializeBuildIndex TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -60,7 +61,7 @@ public:
 
         NKikimrTxDataShard::TFlatSchemeTransaction txTemplate;
         auto initiate = txTemplate.MutableInitiateBuildIndex();
-        PathIdFromPathId(pathId, initiate->MutablePathId());
+        pathId.ToProto(initiate->MutablePathId());
         initiate->SetSnapshotName("Snapshot0");
         initiate->SetTableSchemaVersion(tableInfo->AlterVersion + 1);
 
@@ -88,7 +89,9 @@ public:
             found = true;
 
             Y_ABORT_UNLESS(index->AlterData);
-            context.SS->DescribeTableIndex(childPathId, childName, index->AlterData, *initiate->MutableIndexDescription());
+            context.SS->DescribeTableIndex(childPathId, childName, index->AlterData, false, false,
+                *initiate->MutableIndexDescription()
+            );
         }
 
         txState->ClearShardsInProgress();
@@ -126,7 +129,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TInitializeBuildIndex TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -232,7 +235,7 @@ public:
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    DebugHint() << " ProgressState"
                                << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet" << ssId);
+                               << ", at tablet# " << ssId);
 
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
             LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

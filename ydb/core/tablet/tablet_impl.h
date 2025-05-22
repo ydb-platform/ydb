@@ -30,6 +30,7 @@ struct TEvTabletBase {
         EvFollowerRetry = EvBlockBlobStorageResult + 512,
         EvTrySyncFollower,
         EvTryBuildFollowerGraph,
+        EvLogGcRetry,
 
         EvEnd
     };
@@ -109,6 +110,7 @@ struct TEvTabletBase {
         const TLogoBlobID EntryId;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
+        THashMap<ui32, float> ApproximateFreeSpaceShareByChannel;
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
         const TString ErrorReason;
@@ -122,6 +124,7 @@ struct TEvTabletBase {
                 const TLogoBlobID &entryId,
                 TVector<ui32>&& yellowMoveChannels,
                 TVector<ui32>&& yellowStopChannels,
+                THashMap<ui32, float>&& approximateFreeSpaceShareByChannel,
                 NMetrics::TTabletThroughputRawValue&& written,
                 NMetrics::TTabletIopsRawValue&& writtenOps,
                 const TString &reason = TString())
@@ -129,6 +132,7 @@ struct TEvTabletBase {
             , EntryId(entryId)
             , YellowMoveChannels(std::move(yellowMoveChannels))
             , YellowStopChannels(std::move(yellowStopChannels))
+            , ApproximateFreeSpaceShareByChannel(std::move(approximateFreeSpaceShareByChannel))
             , GroupWrittenBytes(std::move(written))
             , GroupWrittenOps(std::move(writtenOps))
             , ErrorReason(reason)
@@ -164,6 +168,8 @@ struct TEvTabletBase {
             , TabletId(tabletId)
         {}
     };
+
+    struct TEvLogGcRetry : public TEventLocal<TEvLogGcRetry, EvLogGcRetry> {};
 };
 
 }

@@ -14,10 +14,11 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NIam {
 constexpr TStringBuf DEFAULT_ENDPOINT = "iam.api.cloud.yandex.net";
+constexpr bool DEFAULT_ENABLE_SSL = true;
 
 constexpr TStringBuf DEFAULT_HOST = "169.254.169.254";
 constexpr ui32 DEFAULT_PORT = 80;
@@ -36,6 +37,7 @@ struct TIamEndpoint {
     TString Endpoint = TString(NIam::DEFAULT_ENDPOINT);
     TDuration RefreshPeriod = NIam::DEFAULT_REFRESH_PERIOD;
     TDuration RequestTimeout = NIam::DEFAULT_REQUEST_TIMEOUT;
+    bool EnableSsl = NIam::DEFAULT_ENABLE_SSL;
 };
 
 struct TIamJwtFilename : TIamEndpoint { TString JwtFilename; };
@@ -88,7 +90,7 @@ private:
         {
             NYdbGrpc::TGRpcClientConfig grpcConf;
             grpcConf.Locator = IamEndpoint_.Endpoint;
-            grpcConf.EnableSsl = true;
+            grpcConf.EnableSsl = IamEndpoint_.EnableSsl;
             Connection_ = THolder<NYdbGrpc::TServiceConnection<TService>>(Client->CreateGRpcServiceConnection<TService>(grpcConf).release());
         }
 
@@ -166,7 +168,7 @@ private:
 
                     RequestInflight_ = false;
                     sleepDuration = std::min(BackoffTimeout_, BACKOFF_MAX);
-                    BackoffTimeout_ *= 2;
+                    BackoffTimeout_ = std::min(BackoffTimeout_ * 2, BACKOFF_MAX);
                 }
 
                 Sleep(sleepDuration);

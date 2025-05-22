@@ -1,62 +1,77 @@
 #include "column_record.h"
+
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/tx/columnshard/common/scalars.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 namespace NKikimr::NOlap {
 
-TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo& indexInfo) {
-    auto field = indexInfo.ArrowColumnFieldOptional(context.GetAddress().GetColumnId());
-    if (context.GetMetaProto().HasNumRows()) {
-        NumRows = context.GetMetaProto().GetNumRows();
+TConclusionStatus TChunkMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexColumnMeta& proto) {
+    if (proto.HasNumRows()) {
+        RecordsCount = proto.GetNumRows();
     }
-    if (context.GetMetaProto().HasRawBytes()) {
-        RawBytes = context.GetMetaProto().GetRawBytes();
+    if (proto.HasRawBytes()) {
+        RawBytes = proto.GetRawBytes();
     }
-    if (context.GetMetaProto().HasMinValue()) {
-        AFL_VERIFY(field)("field_id", context.GetAddress().GetColumnId())("field_name", indexInfo.GetColumnName(context.GetAddress().GetColumnId()));
-        Min = ConstantToScalar(context.GetMetaProto().GetMinValue(), field->type());
-    }
-    if (context.GetMetaProto().HasMaxValue()) {
-        AFL_VERIFY(field)("field_id", context.GetAddress().GetColumnId())("field_name", indexInfo.GetColumnName(context.GetAddress().GetColumnId()));
-        Max = ConstantToScalar(context.GetMetaProto().GetMaxValue(), field->type());
-    }
+    return TConclusionStatus::Success();
 }
 
-TChunkMeta::TChunkMeta(const std::shared_ptr<arrow::Array>& column, const ui32 columnId, const TIndexInfo& indexInfo)
-    : TBase(column, indexInfo.GetMinMaxIdxColumns().contains(columnId), indexInfo.IsSortedColumn(columnId))
-{
+TChunkMeta::TChunkMeta(const TColumnChunkLoadContextV1& context) {
+    DeserializeFromProto(context.GetMetaProto()).Validate();
+}
+
+TChunkMeta::TChunkMeta(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column)
+    : TBase(column) {
 }
 
 NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexColumnMeta meta;
-    if (NumRows) {
-        meta.SetNumRows(*NumRows);
-    }
-    if (RawBytes) {
-        meta.SetRawBytes(*RawBytes);
-    }
-    if (HasMinMax()) {
-        ScalarToConstant(*Min, *meta.MutableMinValue());
-        ScalarToConstant(*Max, *meta.MutableMaxValue());
-    }
+    meta.SetNumRows(RecordsCount);
+    meta.SetRawBytes(RawBytes);
     return meta;
 }
 
-TColumnRecord::TColumnRecord(const TColumnChunkLoadContext& loadContext, const TIndexInfo& info)
-    : Meta(loadContext, info)
+TColumnRecord::TColumnRecord(const TColumnChunkLoadContextV1& loadContext)
+    : Meta(loadContext)
     , ColumnId(loadContext.GetAddress().GetColumnId())
     , Chunk(loadContext.GetAddress().GetChunk())
-    , BlobRange(loadContext.GetBlobRange())
-{
+    , BlobRange(loadContext.GetBlobRange()) {
 }
 
-TColumnRecord::TColumnRecord(const TChunkAddress& address, const std::shared_ptr<arrow::Array>& column, const TIndexInfo& info)
-    : Meta(column, address.GetColumnId(), info)
+TColumnRecord::TColumnRecord(const TChunkAddress& address, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column)
+    : Meta(column)
     , ColumnId(address.GetColumnId())
-    , Chunk(address.GetChunk())
-{
+    , Chunk(address.GetChunk()) {
 }
 
+NKikimrColumnShardDataSharingProto::TColumnRecord TColumnRecord::SerializeToProto() const {
+    NKikimrColumnShardDataSharingProto::TColumnRecord result;
+    result.SetColumnId(ColumnId);
+    result.SetChunkIdx(Chunk);
+    *result.MutableMeta() = Meta.SerializeToProto();
+    *result.MutableBlobRange() = BlobRange.SerializeToProto();
+    return result;
 }
+
+NKikimr::TConclusionStatus TColumnRecord::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto) {
+    ColumnId = proto.GetColumnId();
+    Chunk = proto.GetChunkIdx();
+    {
+        auto parse = Meta.DeserializeFromProto(proto.GetMeta());
+        if (!parse) {
+            return parse;
+        }
+    }
+    {
+        auto parsed = TBlobRangeLink16::BuildFromProto(proto.GetBlobRange());
+        if (!parsed) {
+            return parsed;
+        }
+        BlobRange = parsed.DetachResult();
+    }
+    return TConclusionStatus::Success();
+}
+
+}   // namespace NKikimr::NOlap

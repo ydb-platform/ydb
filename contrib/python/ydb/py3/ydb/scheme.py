@@ -19,10 +19,15 @@ class SchemeEntryType(enum.IntEnum):
     RTMR_VOLUME = 5
     BLOCK_STORE_VOLUME = 6
     COORDINATION_NODE = 7
+    COLUMN_STORE = 12
     COLUMN_TABLE = 13
     SEQUENCE = 15
     REPLICATION = 16
     TOPIC = 17
+    EXTERNAL_TABLE = 18
+    EXTERNAL_DATA_SOURCE = 19
+    VIEW = 20
+    RESOURCE_POOL = 21
 
     @classmethod
     def _missing_(cls, value):
@@ -53,6 +58,14 @@ class SchemeEntryType(enum.IntEnum):
         :return: True if scheme entry is a column table and False otherwise
         """
         return entry == SchemeEntryType.COLUMN_TABLE
+
+    @staticmethod
+    def is_column_store(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a column store and False otherwise
+        """
+        return entry == SchemeEntryType.COLUMN_STORE
 
     @staticmethod
     def is_row_table(entry):
@@ -94,6 +107,38 @@ class SchemeEntryType(enum.IntEnum):
         """
         return entry == SchemeEntryType.DATABASE or entry == SchemeEntryType.DIRECTORY
 
+    @staticmethod
+    def is_external_table(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is an external table and False otherwise
+        """
+        return entry == SchemeEntryType.EXTERNAL_TABLE
+
+    @staticmethod
+    def is_external_data_source(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is an external data source and False otherwise
+        """
+        return entry == SchemeEntryType.EXTERNAL_DATA_SOURCE
+
+    @staticmethod
+    def is_external_view(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a view and False otherwise
+        """
+        return entry == SchemeEntryType.VIEW
+
+    @staticmethod
+    def is_external_resource_pool(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a resource pool and False otherwise
+        """
+        return entry == SchemeEntryType.RESOURCE_POOL
+
 
 class SchemeEntry(object):
     __slots__ = (
@@ -127,6 +172,12 @@ class SchemeEntry(object):
         :return: True if scheme entry is a directory and False otherwise
         """
         return SchemeEntryType.is_directory(self.type)
+
+    def is_column_store(self):
+        """
+        :return: True if scheme entry is a column store and False otherwise
+        """
+        return SchemeEntryType.is_column_store(self.type)
 
     def is_table(self):
         """
@@ -169,6 +220,30 @@ class SchemeEntry(object):
         :return: True if scheme entry is a coordination node and False otherwise
         """
         return SchemeEntryType.is_coordination_node(self.type)
+
+    def is_external_table(self):
+        """
+        :return: True if scheme entry is an external table and False otherwise
+        """
+        return SchemeEntryType.is_external_table(self.type)
+
+    def is_external_data_source(self):
+        """
+        :return: True if scheme entry is an external data source and False otherwise
+        """
+        return SchemeEntryType.is_external_data_source(self.type)
+
+    def is_view(self):
+        """
+        :return: True if scheme entry is a view and False otherwise
+        """
+        return SchemeEntryType.is_view(self.type)
+
+    def is_resource_pool(self):
+        """
+        :return: True if scheme entry is a resource pool and False otherwise
+        """
+        return SchemeEntryType.is_resource_pool(self.type)
 
 
 class Directory(SchemeEntry):

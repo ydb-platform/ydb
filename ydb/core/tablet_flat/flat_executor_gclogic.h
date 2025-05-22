@@ -6,6 +6,7 @@
 #include <util/generic/set.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -23,7 +24,7 @@ struct TGCTime {
     inline void Clear() { Generation = Step = 0; }
     static TGCTime Infinity() { return TGCTime(std::numeric_limits<ui32>::max(), std::numeric_limits<ui32>::max()); }
 
-    explicit operator bool() const noexcept { return Valid(); }
+    explicit operator bool() const { return Valid(); }
 };
 
 struct TGCLogEntry {
@@ -42,13 +43,16 @@ public:
     TGCLogEntry SnapshotLog(ui32 step);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);
     void OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext &ctx);                 // notification about log commit - could send GC to blob storage
-    void OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);             // notification on any garbage collection results
+    TDuration OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);         // notification on any garbage collection results
     void ApplyLogEntry(TGCLogEntry &entry);                                                      // apply one log entry, used during recovery and also from WriteToLog
     void ApplyLogSnapshot(TGCLogEntry &snapshot, const  TVector<std::pair<ui32, ui64>> &barriers);
     void HoldBarrier(ui32 step);                                // holds GC on no more than this step for channels specified
     void ReleaseBarrier(ui32 step);
     ui32 GetActiveGcBarrier();
     void FollowersSyncComplete(bool isBoot);
+    void SendCollectGarbage(const TActorContext& executor);
+    bool HasGarbageBefore(TGCTime snapshotTime);
+    void RetryGcRequests(ui32 channel, const TActorContext& ctx);
 
     struct TIntrospection {
         ui64 UncommitedEntries;
@@ -84,15 +88,23 @@ protected:
         TGCTime CollectSent;
         TGCTime KnownGcBarrier;
         TGCTime CommitedGcBarrier;
+        TGCTime MinUncollectedTime;
         ui32 GcCounter;
         ui32 GcWaitFor;
 
+        // retry failed GC logic
+        ui32 TryCounter;
+        TBackoffTimer BackoffTimer;
+        bool PendingRetry;
+        ui32 FailCount;
+
         inline TChannelInfo();
-        void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
         void SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& executor);
         void SendCollectGarbageEntry(const TActorContext &ctx, TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep, ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation);
         void OnCollectGarbageSuccess();
         void OnCollectGarbageFailure();
+        TDuration TryScheduleGcRequestRetries();
+        void RetryGcRequests(const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx);
     };
 
     ui32 SnapshotStep;
@@ -105,7 +117,6 @@ protected:
     bool AllowGarbageCollection;
 
     void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
-    void SendCollectGarbage(const TActorContext& executor);
     static inline void MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source);
     static inline void MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source);
     static inline TVector<TLogoBlobID>* CreateVector(const TVector<TLogoBlobID>& source);

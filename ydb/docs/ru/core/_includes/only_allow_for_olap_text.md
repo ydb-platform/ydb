@@ -1,0 +1,1 @@
+Поддерживается только для [колоночных](../concepts/datamodel/table.md#column-oriented-tables) таблиц.

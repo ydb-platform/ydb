@@ -1,17 +1,14 @@
 # don't import any costly modules
-import sys
 import os
+import sys
 
-
-is_pypy = '__pypy__' in sys.builtin_module_names
+report_url = (
+    "https://github.com/pypa/setuptools/issues/new?template=distutils-deprecation.yml"
+)
 
 
 def warn_distutils_present():
     if 'distutils' not in sys.modules:
-        return
-    if is_pypy and sys.version_info < (3, 7):
-        # PyPy for 3.6 unconditionally imports distutils, so bypass the warning
-        # https://foss.heptapod.net/pypy/pypy/-/blob/be829135bc0d758997b3566062999ee8b23872b4/lib-python/3/site.py#L250
         return
     import warnings
 
@@ -30,7 +27,12 @@ def clear_distutils():
         return
     import warnings
 
-    warnings.warn("Setuptools is replacing distutils.")
+    warnings.warn(
+        "Setuptools is replacing distutils. Support for replacing "
+        "an already imported distutils is deprecated. In the future, "
+        "this condition will fail. "
+        f"Register concerns at {report_url}"
+    )
     mods = [
         name
         for name in sys.modules
@@ -45,6 +47,16 @@ def enabled():
     Allow selection of distutils by environment variable.
     """
     which = os.environ.get('SETUPTOOLS_USE_DISTUTILS', 'local')
+    if which == 'stdlib':
+        import warnings
+
+        warnings.warn(
+            "Reliance on distutils from stdlib is deprecated. Users "
+            "must rely on setuptools to provide the distutils module. "
+            "Avoid importing distutils or import setuptools first, "
+            "and avoid setting SETUPTOOLS_USE_DISTUTILS=stdlib. "
+            f"Register concerns at {report_url}"
+        )
     return which == 'local'
 
 
@@ -78,7 +90,7 @@ def do_override():
 
 
 class _TrivialRe:
-    def __init__(self, *patterns):
+    def __init__(self, *patterns) -> None:
         self._patterns = patterns
 
     def match(self, string):
@@ -90,7 +102,7 @@ class DistutilsMetaFinder:
         # optimization: only consider top level modules and those
         # found in the CPython test suite.
         if path is not None and not fullname.startswith('test.'):
-            return
+            return None
 
         method_name = 'spec_for_{fullname}'.format(**locals())
         method = getattr(self, method_name, lambda: None)
@@ -98,7 +110,7 @@ class DistutilsMetaFinder:
 
     def spec_for_distutils(self):
         if self.is_cpython():
-            return
+            return None
 
         import importlib
         import importlib.abc
@@ -115,7 +127,7 @@ class DistutilsMetaFinder:
             #   setuptools from the path but only after the hook
             #   has been loaded. Ref #2980.
             # In either case, fall back to stdlib behavior.
-            return
+            return None
 
         class DistutilsLoader(importlib.abc.Loader):
             def create_module(self, spec):
@@ -204,10 +216,10 @@ def add_shim():
 
 
 class shim:
-    def __enter__(self):
+    def __enter__(self) -> None:
         insert_shim()
 
-    def __exit__(self, exc, value, tb):
+    def __exit__(self, exc: object, value: object, tb: object) -> None:
         _remove_shim()
 
 

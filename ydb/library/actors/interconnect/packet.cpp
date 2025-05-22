@@ -16,6 +16,7 @@ ui32 TEventHolder::Fill(IEventHandle& ev) {
     ForwardRecipient = ev.GetForwardOnNondeliveryRecipient();
     EventActuallySerialized = 0;
     Descr.Checksum = 0;
+    ZcTransferId = 0;
 
     if (ev.HasBuffer()) {
         Buffer = ev.ReleaseChainBuffer();
@@ -23,6 +24,7 @@ ui32 TEventHolder::Fill(IEventHandle& ev) {
     } else if (ev.HasEvent()) {
         Event.Reset(ev.ReleaseBase());
         EventSerializedSize = Event->CalculateSerializedSize();
+        Y_ABORT_UNLESS(Event->IsSerializable());
     } else {
         EventSerializedSize = 0;
     }

@@ -1,37 +1,48 @@
 RECURSE(
     accessor
-    actors
     aclib
+    actors
+    analytics
     arrow_clickhouse
     arrow_kernels
     arrow_parquet
     backup
-    binary_json
+    benchmarks
+    breakpad
     chunks_limiter
-    dynumber
+    drr
     folder_service
+    formats
+    fyamlcpp
+    global_plugins
     grpc
     http_proxy
     keys
-    login
+    lockfree_bucket
     logger
+    login
     mkql_proto
     naming_conventions
+    ncloud
     pdisk_io
     persqueue
+    planner
     pretty_types_print
     protobuf_printer
     query_actor
     schlab
     security
+    shop
+    signal_backtrace
+    signals
     table_creator
     testlib
     time_series_vec
     wilson_ids
     workload
-    yaml_config
     workload
     yaml_config
+    yaml_json
     ycloud
     yql
 )

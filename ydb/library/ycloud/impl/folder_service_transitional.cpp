@@ -2,14 +2,14 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/api/client/yc_private/resourcemanager/transitional/folder_service.grpc.pb.h>
 #include "folder_service_transitional.h"
-#include "grpc_service_client.h"
-#include "grpc_service_cache.h"
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
+#include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 
 namespace NCloud {
 
 using namespace NKikimr;
 
-class TFolderServiceTransitional : public NActors::TActor<TFolderServiceTransitional>, TGrpcServiceClient<yandex::cloud::priv::resourcemanager::v1::transitional::FolderService> {
+class TFolderServiceTransitional : public NActors::TActor<TFolderServiceTransitional>, NGrpcActorClient::TGrpcServiceClient<yandex::cloud::priv::resourcemanager::v1::transitional::FolderService> {
     using TThis = TFolderServiceTransitional;
     using TBase = NActors::TActor<TFolderServiceTransitional>;
 
@@ -46,7 +46,7 @@ IActor* CreateFolderServiceTransitional(const TFolderServiceTransitionalSettings
 
 IActor* CreateFolderServiceTransitionalWithCache(const TFolderServiceTransitionalSettings& settings) {
     IActor* folderServiceTransitional = CreateFolderServiceTransitional(settings);
-    folderServiceTransitional = CreateGrpcServiceCache<TEvFolderServiceTransitional::TEvListFolderRequest, TEvFolderServiceTransitional::TEvListFolderResponse>(folderServiceTransitional);
+    folderServiceTransitional = NGrpcActorClient::CreateGrpcServiceCache<TEvFolderServiceTransitional::TEvListFolderRequest, TEvFolderServiceTransitional::TEvListFolderResponse>(folderServiceTransitional);
     return folderServiceTransitional;
 }
 

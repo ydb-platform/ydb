@@ -1,8 +1,8 @@
 #include "tvm_service.h"
 
-#include <library/cpp/yt/memory/new.h>
-
 #include <yt/yt/library/tvm/tvm_base.h>
+
+#include <library/cpp/yt/memory/new.h>
 
 namespace NYT::NAuth {
 
@@ -20,7 +20,7 @@ public:
         , DstServiceId_(std::move(destServiceId))
     { }
 
-    TString IssueServiceTicket() override
+    std::string IssueServiceTicket() override
     {
         return TvmService_->GetServiceTicket(DstServiceId_);
     }
@@ -43,11 +43,11 @@ IServiceTicketAuthPtr CreateServiceTicketAuth(
 
 IServiceTicketAuthPtr CreateServiceTicketAuth(
     ITvmServicePtr tvmService,
-    TString dstServiceAlias)
+    std::string dstServiceAlias)
 {
     YT_VERIFY(tvmService);
 
-    return New<TServiceTicketAuth<TString>>(std::move(tvmService), std::move(dstServiceAlias));
+    return New<TServiceTicketAuth<std::string>>(std::move(tvmService), std::move(dstServiceAlias));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

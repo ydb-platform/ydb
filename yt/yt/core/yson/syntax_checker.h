@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/misc/error.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 namespace NYT::NYson {
 

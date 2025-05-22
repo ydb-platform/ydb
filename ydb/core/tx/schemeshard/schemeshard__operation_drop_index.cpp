@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_path_element.h"
+
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include "schemeshard_impl.h"
 
@@ -20,7 +21,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TDropIndexAtMainTable TConfigureParts"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -84,7 +85,7 @@ public:
             context.SS->FillSeqNo(tx, seqNo);
 
             auto notice = tx.MutableDropIndexNotice();
-            PathIdFromPathId(pathId, notice->MutablePathId());
+            pathId.ToProto(notice->MutablePathId());
             notice->SetTableSchemaVersion(table->AlterVersion + 1);
 
             bool found = false;
@@ -97,11 +98,11 @@ public:
                 }
 
                 Y_VERIFY_S(!found, "Too many indexes are planned to drop"
-                    << ": found# " << PathIdFromPathId(notice->GetIndexPathId())
+                    << ": found# " << TPathId::FromProto(notice->GetIndexPathId())
                     << ", another# " << childPathId);
                 found = true;
 
-                PathIdFromPathId(childPathId, notice->MutableIndexPathId());
+                childPathId.ToProto(notice->MutableIndexPathId());
             }
 
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
@@ -128,7 +129,7 @@ private:
     TString DebugHint() const override {
         return TStringBuilder()
             << "TDropIndexAtMainTable TPropose"
-            << " operationId#" << OperationId;
+            << " operationId# " << OperationId;
     }
 
 public:
@@ -473,21 +474,22 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
         result.push_back(CreateDropTableIndex(NextPartId(nextId, result), indexDropping));
     }
 
-    for (const auto& items: indexPath.Base()->GetChildren()) {
-        Y_ABORT_UNLESS(context.SS->PathsById.contains(items.second));
-        auto implPath = context.SS->PathsById.at(items.second);
-        if (implPath->Dropped()) {
+    for (const auto& [childName, childPathId] : indexPath.Base()->GetChildren()) {
+        TPath child = indexPath.Child(childName);
+        if (child.IsDeleted()) {
             continue;
         }
 
-        auto implTable = context.SS->PathsById.at(items.second);
-        Y_ABORT_UNLESS(implTable->IsTable());
+        Y_ABORT_UNLESS(child.Base()->IsTable());
 
         auto implTableDropping = TransactionTemplate(indexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
         auto operation = implTableDropping.MutableDrop();
-        operation->SetName(items.first);
+        operation->SetName(child.LeafName());
 
         result.push_back(CreateDropTable(NextPartId(nextId, result), implTableDropping));
+        if (auto reject = CascadeDropTableChildren(result, nextId, child)) {
+            return {reject};
+        }
     }
 
     return result;

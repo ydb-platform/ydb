@@ -68,6 +68,9 @@ struct TQueryAction {
     PROBE(KqpCompileServiceReplyFromCache, GROUPS("KQP"), \
         TYPES(), \
         NAMES()) \
+    PROBE(KqpCompileServiceReplyStatements, GROUPS("KQP"), \
+        TYPES(), \
+        NAMES()) \
     PROBE(KqpCompileServiceReplyError, GROUPS("KQP"), \
         TYPES(), \
         NAMES()) \

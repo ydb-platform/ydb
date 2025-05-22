@@ -12,7 +12,6 @@ Y_UNIT_TEST_SUITE(TSequence) {
     Y_UNIT_TEST(CreateTableWithDefaultFromSequence) {
         TPortManager pm;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -24,7 +23,6 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         // runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -70,7 +68,6 @@ Y_UNIT_TEST_SUITE(TSequence) {
     Y_UNIT_TEST(SequencesIndex) {
         TPortManager pm;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -82,7 +79,6 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         // runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -125,8 +121,8 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 "{ items { int64_value: 7 } items { uint32_value: 7 } }, "
                 "{ items { int64_value: 8 } items { uint32_value: 8 } }, "
                 "{ items { int64_value: 9 } items { uint32_value: 9 } }");
-        }  
-        
+        }
+
         {
             TString result = KqpSimpleExec(runtime, "SELECT * FROM `/Root/table-5` view by_i1value;");
             UNIT_ASSERT_VALUES_EQUAL(
@@ -140,13 +136,12 @@ Y_UNIT_TEST_SUITE(TSequence) {
                 "{ items { int64_value: 7 } items { uint32_value: 7 } }, "
                 "{ items { int64_value: 8 } items { uint32_value: 8 } }, "
                 "{ items { int64_value: 9 } items { uint32_value: 9 } }");
-        }            
+        }
     }
 
     Y_UNIT_TEST(CreateTableWithDefaultFromSequenceFromSelect) {
         TPortManager pm;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -158,7 +153,6 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         // runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 
@@ -213,7 +207,6 @@ Y_UNIT_TEST_SUITE(TSequence) {
     Y_UNIT_TEST(CreateTableWithDefaultFromSequenceBadRequest) {
         TPortManager pm;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableSequences(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -225,7 +218,6 @@ Y_UNIT_TEST_SUITE(TSequence) {
 
         // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         // runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
-        runtime.GetAppData().AllowReadTableImmediate = true;
 
         InitRoot(server, sender);
 

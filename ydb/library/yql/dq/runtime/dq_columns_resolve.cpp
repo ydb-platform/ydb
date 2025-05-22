@@ -1,6 +1,6 @@
 #include "dq_columns_resolve.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql::NDq {
 

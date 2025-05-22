@@ -77,7 +77,7 @@ TEST(TProcTest, TestParseMemoryMappings)
     EXPECT_EQ(smaps[1].End, 0x7fbb7b278000u);
     EXPECT_EQ(smaps[1].Permissions, EMemoryMappingPermission::Read | EMemoryMappingPermission::Execute | EMemoryMappingPermission::Private);
     EXPECT_EQ(smaps[1].Offset, 0xffu);
-    EXPECT_EQ(smaps[1].DeviceId, 1048637);
+    EXPECT_EQ(smaps[1].DeviceId, NFS::TDeviceId(0, 0x13d));
     EXPECT_EQ(*smaps[1].INode, 406536u);
     EXPECT_EQ(*smaps[1].Path, "/lib/x86_64-linux-gnu/ld-2.28.so");
     EXPECT_EQ(smaps[1].Statistics.Size, 156_KB);
@@ -126,41 +126,38 @@ TEST(TProcTest, CgroupList)
     }
 }
 
-TEST(TProcTest, DiskStat)
+TEST(TProcTest, BlockDeviceStat)
 {
     {
-        auto parsed = ParseDiskStat("259       1 nvme0n1 372243 70861 50308550 175935 635314 559065 105338106 2777004 0 415304 3236956 38920 4 80436632 905059");
-        EXPECT_EQ(parsed.MajorNumber, 259);
-        EXPECT_EQ(parsed.MinorNumber, 1);
-        EXPECT_EQ(parsed.DeviceName, "nvme0n1");
-
-        EXPECT_EQ(parsed.ReadsCompleted, 372243);
-        EXPECT_EQ(parsed.ReadsMerged, 70861);
-        EXPECT_EQ(parsed.SectorsRead, 50308550);
-        EXPECT_EQ(parsed.TimeSpentReading, TDuration::MilliSeconds(175935));
-
-        EXPECT_EQ(parsed.WritesCompleted, 635314);
-
-        EXPECT_EQ(parsed.DiscardsCompleted, 38920);
-        EXPECT_EQ(parsed.DiscardsMerged, 4);
-        EXPECT_EQ(parsed.SectorsDiscarded, 80436632);
-        EXPECT_EQ(parsed.TimeSpentDiscarding, TDuration::MilliSeconds(905059));
+        auto stat = ParseBlockDeviceStat("509883438 87421933 206345875260 1643399993 1892382802 4495364138 837307482336 2391271400 0 2964131914 3304110410 0 0 0 0 81921472 3564406312");
+        EXPECT_EQ(stat.ReadsCompleted, 509883438ll);
+        EXPECT_EQ(stat.ReadsMerged, 87421933ll);
+        EXPECT_EQ(stat.SectorsRead, 206345875260ll);
+        EXPECT_EQ(stat.TimeSpentReading, TDuration::MilliSeconds(1643399993ul));
+        EXPECT_EQ(stat.WritesCompleted, 1892382802ll);
+        EXPECT_EQ(stat.WritesMerged, 4495364138ll);
+        EXPECT_EQ(stat.SectorsWritten, 837307482336ll);
+        EXPECT_EQ(stat.TimeSpentWriting, TDuration::MilliSeconds(2391271400ul));
+        EXPECT_EQ(stat.IOCurrentlyInProgress, 0ll);
+        EXPECT_EQ(stat.TimeSpentDoingIO, TDuration::MilliSeconds(2964131914ul));
+        EXPECT_EQ(stat.WeightedTimeSpentDoingIO, TDuration::MilliSeconds(3304110410ul));
+        EXPECT_EQ(stat.DiscardsCompleted, 0ll);
+        EXPECT_EQ(stat.DiscardsMerged, 0ll);
+        EXPECT_EQ(stat.SectorsDiscarded, 0ll);
+        EXPECT_EQ(stat.TimeSpentDiscarding, TDuration::MilliSeconds(0ul));
+        EXPECT_EQ(stat.FlushesCompleted, 81921472ll);
+        EXPECT_EQ(stat.TimeSpentFlushing, TDuration::MilliSeconds(3564406312ul));
     }
     {
-        auto parsed = ParseDiskStat("259       1 nvme0n1 372243 trash 50308550 trash");
-        EXPECT_EQ(parsed.MajorNumber, 259);
-        EXPECT_EQ(parsed.MinorNumber, 1);
-        EXPECT_EQ(parsed.DeviceName, "nvme0n1");
-
-        EXPECT_EQ(parsed.ReadsCompleted, 372243);
-        EXPECT_EQ(parsed.ReadsMerged, 0);
-        EXPECT_EQ(parsed.SectorsRead, 50308550);
-        EXPECT_EQ(parsed.TimeSpentReading, TDuration::MilliSeconds(0));
-    }
-    {
-        auto stats = GetDiskStats();
         for (const TString& disk : ListDisks()) {
-            EXPECT_TRUE(IsIn(stats, disk));
+            auto stat = GetBlockDeviceStat(disk);
+            EXPECT_TRUE(stat);
+            auto deviceId = GetBlockDeviceId(disk);
+            EXPECT_NE(deviceId.first, NFS::UnnamedDeviceMajor) << "disk=" << disk;
+            auto deviceName = GetBlockDeviceName(deviceId);
+            EXPECT_EQ(deviceName, disk);
+            stat = GetBlockDeviceStat(deviceId);
+            EXPECT_TRUE(stat);
         }
     }
 }

@@ -17,7 +17,5 @@ namespace NGRpcService {
             const NTabletFlatScheme::TSchemeChanges& fullScheme,
             const TString& tableName);
 
-    bool IsSuperUser(const NACLib::TUserToken& userToken, const TAppData& appData);
-
 } // namespace NKikimr
 } // namespace NGRpcService

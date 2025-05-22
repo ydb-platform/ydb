@@ -20,6 +20,10 @@ class TSslContext
 public:
     TSslContext();
 
+    void Reset();
+    void Commit(TInstant time = TInstant::Zero());
+    TInstant GetCommitTime() const;
+
     void UseBuiltinOpenSslX509Store();
 
     void SetCipherList(const TString& list);

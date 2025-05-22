@@ -21,6 +21,7 @@
 
 #include "ColumnWriter.hh"
 #include "Timezone.hh"
+#include "Utils.hh"
 
 #include <memory>
 
@@ -42,48 +43,56 @@ namespace orc {
     double bloomFilterFalsePositiveProb;
     BloomFilterVersion bloomFilterVersion;
     std::string timezone;
+    WriterMetrics* metrics;
+    bool useTightNumericVector;
+    uint64_t outputBufferCapacity;
+    uint64_t memoryBlockSize;
+    bool alignBlockBoundToRowGroup;
 
-    WriterOptionsPrivate() :
-                            fileVersion(FileVersion::v_0_12()) { // default to Hive_0_12
-      stripeSize = 64 * 1024 * 1024; // 64M
-      compressionBlockSize = 64 * 1024; // 64K
+    WriterOptionsPrivate() : fileVersion(FileVersion::v_0_12()) {  // default to Hive_0_12
+      stripeSize = 64 * 1024 * 1024;                               // 64M
+      compressionBlockSize = 64 * 1024;                            // 64K
       rowIndexStride = 10000;
-      compression = CompressionKind_ZLIB;
+      compression = CompressionKind_ZSTD;
       compressionStrategy = CompressionStrategy_SPEED;
       memoryPool = getDefaultPool();
       paddingTolerance = 0.0;
       errorStream = &std::cerr;
       dictionaryKeySizeThreshold = 0.0;
       enableIndex = true;
-      bloomFilterFalsePositiveProb = 0.05;
+      bloomFilterFalsePositiveProb = 0.01;
       bloomFilterVersion = UTF8;
-      //Writer timezone uses "GMT" by default to get rid of potential issues
-      //introduced by moving timestamps between different timezones.
-      //Explictly set the writer timezone if the use case depends on it.
+      // Writer timezone uses "GMT" by default to get rid of potential issues
+      // introduced by moving timestamps between different timezones.
+      // Explictly set the writer timezone if the use case depends on it.
       timezone = "GMT";
+      metrics = nullptr;
+      useTightNumericVector = false;
+      outputBufferCapacity = 1024 * 1024;
+      memoryBlockSize = 64 * 1024;  // 64K
+      alignBlockBoundToRowGroup = false;
     }
   };
 
-  WriterOptions::WriterOptions():
-    privateBits(std::unique_ptr<WriterOptionsPrivate>
-                (new WriterOptionsPrivate())) {
+  WriterOptions::WriterOptions()
+      : privateBits_(std::unique_ptr<WriterOptionsPrivate>(new WriterOptionsPrivate())) {
     // PASS
   }
 
-  WriterOptions::WriterOptions(const WriterOptions& rhs):
-    privateBits(std::unique_ptr<WriterOptionsPrivate>
-                (new WriterOptionsPrivate(*(rhs.privateBits.get())))) {
+  WriterOptions::WriterOptions(const WriterOptions& rhs)
+      : privateBits_(std::unique_ptr<WriterOptionsPrivate>(
+            new WriterOptionsPrivate(*(rhs.privateBits_.get())))) {
     // PASS
   }
 
   WriterOptions::WriterOptions(WriterOptions& rhs) {
     // swap privateBits with rhs
-    privateBits.swap(rhs.privateBits);
+    privateBits_.swap(rhs.privateBits_);
   }
 
   WriterOptions& WriterOptions::operator=(const WriterOptions& rhs) {
     if (this != &rhs) {
-      privateBits.reset(new WriterOptionsPrivate(*(rhs.privateBits.get())));
+      privateBits_.reset(new WriterOptionsPrivate(*(rhs.privateBits_.get())));
     }
     return *this;
   }
@@ -92,8 +101,7 @@ namespace orc {
     // PASS
   }
   RleVersion WriterOptions::getRleVersion() const {
-    if(privateBits->fileVersion == FileVersion::v_0_11())
-    {
+    if (privateBits_->fileVersion == FileVersion::v_0_11()) {
       return RleVersion_1;
     }
 
@@ -101,158 +109,204 @@ namespace orc {
   }
 
   WriterOptions& WriterOptions::setStripeSize(uint64_t size) {
-    privateBits->stripeSize = size;
+    privateBits_->stripeSize = size;
     return *this;
   }
 
   uint64_t WriterOptions::getStripeSize() const {
-    return privateBits->stripeSize;
+    return privateBits_->stripeSize;
   }
 
   WriterOptions& WriterOptions::setCompressionBlockSize(uint64_t size) {
-    privateBits->compressionBlockSize = size;
+    if (size >= (1 << 23)) {
+      throw std::invalid_argument("Compression block size cannot be greater or equal than 8M");
+    }
+    privateBits_->compressionBlockSize = size;
     return *this;
   }
 
   uint64_t WriterOptions::getCompressionBlockSize() const {
-    return privateBits->compressionBlockSize;
+    return privateBits_->compressionBlockSize;
   }
 
   WriterOptions& WriterOptions::setRowIndexStride(uint64_t stride) {
-    privateBits->rowIndexStride = stride;
-    privateBits->enableIndex = (stride != 0);
+    privateBits_->rowIndexStride = stride;
+    privateBits_->enableIndex = (stride != 0);
     return *this;
   }
 
   uint64_t WriterOptions::getRowIndexStride() const {
-    return privateBits->rowIndexStride;
+    return privateBits_->rowIndexStride;
   }
 
   WriterOptions& WriterOptions::setDictionaryKeySizeThreshold(double val) {
-    privateBits->dictionaryKeySizeThreshold = val;
+    privateBits_->dictionaryKeySizeThreshold = val;
     return *this;
   }
 
   double WriterOptions::getDictionaryKeySizeThreshold() const {
-    return privateBits->dictionaryKeySizeThreshold;
+    return privateBits_->dictionaryKeySizeThreshold;
   }
 
   WriterOptions& WriterOptions::setFileVersion(const FileVersion& version) {
     // Only Hive_0_11 and Hive_0_12 version are supported currently
     if (version.getMajor() == 0 && (version.getMinor() == 11 || version.getMinor() == 12)) {
-      privateBits->fileVersion = version;
+      privateBits_->fileVersion = version;
       return *this;
     }
     if (version == FileVersion::UNSTABLE_PRE_2_0()) {
-      *privateBits->errorStream << "Warning: ORC files written in "
-                                << FileVersion::UNSTABLE_PRE_2_0().toString()
-                                << " will not be readable by other versions of the software."
-                                << " It is only for developer testing.\n";
-      privateBits->fileVersion = version;
+      *privateBits_->errorStream << "Warning: ORC files written in "
+                                 << FileVersion::UNSTABLE_PRE_2_0().toString()
+                                 << " will not be readable by other versions of the software."
+                                 << " It is only for developer testing.\n";
+      privateBits_->fileVersion = version;
       return *this;
     }
     throw std::logic_error("Unsupported file version specified.");
   }
 
   FileVersion WriterOptions::getFileVersion() const {
-    return privateBits->fileVersion;
+    return privateBits_->fileVersion;
   }
 
   WriterOptions& WriterOptions::setCompression(CompressionKind comp) {
-    privateBits->compression = comp;
+    privateBits_->compression = comp;
     return *this;
   }
 
   CompressionKind WriterOptions::getCompression() const {
-    return privateBits->compression;
+    return privateBits_->compression;
   }
 
-  WriterOptions& WriterOptions::setCompressionStrategy(
-    CompressionStrategy strategy) {
-    privateBits->compressionStrategy = strategy;
+  WriterOptions& WriterOptions::setCompressionStrategy(CompressionStrategy strategy) {
+    privateBits_->compressionStrategy = strategy;
     return *this;
   }
 
   CompressionStrategy WriterOptions::getCompressionStrategy() const {
-    return privateBits->compressionStrategy;
+    return privateBits_->compressionStrategy;
   }
 
   bool WriterOptions::getAlignedBitpacking() const {
-    return privateBits->compressionStrategy == CompressionStrategy ::CompressionStrategy_SPEED;
+    return privateBits_->compressionStrategy == CompressionStrategy ::CompressionStrategy_SPEED;
   }
 
   WriterOptions& WriterOptions::setPaddingTolerance(double tolerance) {
-    privateBits->paddingTolerance = tolerance;
+    privateBits_->paddingTolerance = tolerance;
     return *this;
   }
 
   double WriterOptions::getPaddingTolerance() const {
-    return privateBits->paddingTolerance;
+    return privateBits_->paddingTolerance;
   }
 
   WriterOptions& WriterOptions::setMemoryPool(MemoryPool* memoryPool) {
-    privateBits->memoryPool = memoryPool;
+    privateBits_->memoryPool = memoryPool;
     return *this;
   }
 
   MemoryPool* WriterOptions::getMemoryPool() const {
-    return privateBits->memoryPool;
+    return privateBits_->memoryPool;
   }
 
   WriterOptions& WriterOptions::setErrorStream(std::ostream& errStream) {
-    privateBits->errorStream = &errStream;
+    privateBits_->errorStream = &errStream;
     return *this;
   }
 
   std::ostream* WriterOptions::getErrorStream() const {
-    return privateBits->errorStream;
+    return privateBits_->errorStream;
   }
 
   bool WriterOptions::getEnableIndex() const {
-    return privateBits->enableIndex;
+    return privateBits_->enableIndex;
   }
 
   bool WriterOptions::getEnableDictionary() const {
-    return privateBits->dictionaryKeySizeThreshold > 0.0;
+    return privateBits_->dictionaryKeySizeThreshold > 0.0;
   }
 
-  WriterOptions& WriterOptions::setColumnsUseBloomFilter(
-    const std::set<uint64_t>& columns) {
-    privateBits->columnsUseBloomFilter = columns;
+  WriterOptions& WriterOptions::setColumnsUseBloomFilter(const std::set<uint64_t>& columns) {
+    privateBits_->columnsUseBloomFilter = columns;
     return *this;
   }
 
   bool WriterOptions::isColumnUseBloomFilter(uint64_t column) const {
-    return privateBits->columnsUseBloomFilter.find(column) !=
-           privateBits->columnsUseBloomFilter.end();
+    return privateBits_->columnsUseBloomFilter.find(column) !=
+           privateBits_->columnsUseBloomFilter.end();
   }
 
   WriterOptions& WriterOptions::setBloomFilterFPP(double fpp) {
-    privateBits->bloomFilterFalsePositiveProb = fpp;
+    privateBits_->bloomFilterFalsePositiveProb = fpp;
     return *this;
   }
 
   double WriterOptions::getBloomFilterFPP() const {
-    return privateBits->bloomFilterFalsePositiveProb;
+    return privateBits_->bloomFilterFalsePositiveProb;
   }
 
   // delibrately not provide setter to write bloom filter version because
   // we only support UTF8 for now.
   BloomFilterVersion WriterOptions::getBloomFilterVersion() const {
-    return privateBits->bloomFilterVersion;
+    return privateBits_->bloomFilterVersion;
   }
 
   const Timezone& WriterOptions::getTimezone() const {
-    return getTimezoneByName(privateBits->timezone);
+    return getTimezoneByName(privateBits_->timezone);
   }
 
   const std::string& WriterOptions::getTimezoneName() const {
-    return privateBits->timezone;
+    return privateBits_->timezone;
   }
 
   WriterOptions& WriterOptions::setTimezoneName(const std::string& zone) {
-    privateBits->timezone = zone;
+    privateBits_->timezone = zone;
     return *this;
+  }
+
+  WriterMetrics* WriterOptions::getWriterMetrics() const {
+    return privateBits_->metrics;
+  }
+
+  WriterOptions& WriterOptions::setWriterMetrics(WriterMetrics* metrics) {
+    privateBits_->metrics = metrics;
+    return *this;
+  }
+
+  WriterOptions& WriterOptions::setUseTightNumericVector(bool useTightNumericVector) {
+    privateBits_->useTightNumericVector = useTightNumericVector;
+    return *this;
+  }
+
+  bool WriterOptions::getUseTightNumericVector() const {
+    return privateBits_->useTightNumericVector;
+  }
+
+  WriterOptions& WriterOptions::setOutputBufferCapacity(uint64_t capacity) {
+    privateBits_->outputBufferCapacity = capacity;
+    return *this;
+  }
+
+  uint64_t WriterOptions::getOutputBufferCapacity() const {
+    return privateBits_->outputBufferCapacity;
+  }
+
+  WriterOptions& WriterOptions::setMemoryBlockSize(uint64_t capacity) {
+    privateBits_->memoryBlockSize = capacity;
+    return *this;
+  }
+
+  uint64_t WriterOptions::getMemoryBlockSize() const {
+    return privateBits_->memoryBlockSize;
+  }
+
+  WriterOptions& WriterOptions::setAlignBlockBoundToRowGroup(bool alignBlockBoundToRowGroup) {
+    privateBits_->alignBlockBoundToRowGroup = alignBlockBoundToRowGroup;
+    return *this;
+  }
+
+  bool WriterOptions::getAlignBlockBoundToRowGroup() const {
+    return privateBits_->alignBlockBoundToRowGroup;
   }
 
   Writer::~Writer() {
@@ -260,40 +314,41 @@ namespace orc {
   }
 
   class WriterImpl : public Writer {
-  private:
-    std::unique_ptr<ColumnWriter> columnWriter;
-    std::unique_ptr<BufferedOutputStream> compressionStream;
-    std::unique_ptr<BufferedOutputStream> bufferedStream;
-    std::unique_ptr<StreamsFactory> streamsFactory;
-    OutputStream* outStream;
-    WriterOptions options;
-    const Type& type;
-    uint64_t stripeRows, totalRows, indexRows;
-    uint64_t currentOffset;
-    proto::Footer fileFooter;
-    proto::PostScript postScript;
-    proto::StripeInformation stripeInfo;
-    proto::Metadata metadata;
+   private:
+    std::unique_ptr<ColumnWriter> columnWriter_;
+    std::unique_ptr<BufferedOutputStream> compressionStream_;
+    std::unique_ptr<BufferedOutputStream> bufferedStream_;
+    std::unique_ptr<StreamsFactory> streamsFactory_;
+    OutputStream* outStream_;
+    WriterOptions options_;
+    const Type& type_;
+    uint64_t stripeRows_, totalRows_, indexRows_;
+    uint64_t currentOffset_;
+    proto::Footer fileFooter_;
+    proto::PostScript postScript_;
+    proto::StripeInformation stripeInfo_;
+    proto::Metadata metadata_;
 
     static const char* magicId;
     static const WriterId writerId;
+    bool useTightNumericVector_;
+    int32_t stripesAtLastFlush_;
+    uint64_t lastFlushOffset_;
 
-  public:
-    WriterImpl(
-               const Type& type,
-               OutputStream* stream,
-               const WriterOptions& options);
+   public:
+    WriterImpl(const Type& type, OutputStream* stream, const WriterOptions& options);
 
-    std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size)
-                                                            const override;
+    std::unique_ptr<ColumnVectorBatch> createRowBatch(uint64_t size) const override;
 
     void add(ColumnVectorBatch& rowsToAdd) override;
 
     void close() override;
 
-    void addUserMetadata(const std::string name, const std::string value) override;
+    void addUserMetadata(const std::string& name, const std::string& value) override;
 
-  private:
+    uint64_t writeIntermediateFooter() override;
+
+   private:
     void init();
     void initStripe();
     void writeStripe();
@@ -301,157 +356,176 @@ namespace orc {
     void writeFileFooter();
     void writePostscript();
     void buildFooterType(const Type& t, proto::Footer& footer, uint32_t& index);
-    static proto::CompressionKind convertCompressionKind(
-                                                  const CompressionKind& kind);
+    static proto::CompressionKind convertCompressionKind(const CompressionKind& kind);
   };
 
-  const char * WriterImpl::magicId = "ORC";
+  const char* WriterImpl::magicId = "ORC";
 
   const WriterId WriterImpl::writerId = WriterId::ORC_CPP_WRITER;
 
-  WriterImpl::WriterImpl(
-                         const Type& t,
-                         OutputStream* stream,
-                         const WriterOptions& opts) :
-                         outStream(stream),
-                         options(opts),
-                         type(t) {
-    streamsFactory = createStreamsFactory(options, outStream);
-    columnWriter = buildWriter(type, *streamsFactory, options);
-    stripeRows = totalRows = indexRows = 0;
-    currentOffset = 0;
+  WriterImpl::WriterImpl(const Type& t, OutputStream* stream, const WriterOptions& opts)
+      : outStream_(stream), options_(opts), type_(t) {
+    streamsFactory_ = createStreamsFactory(options_, outStream_);
+    columnWriter_ = buildWriter(type_, *streamsFactory_, options_);
+    stripeRows_ = totalRows_ = indexRows_ = 0;
+    currentOffset_ = 0;
+    stripesAtLastFlush_ = 0;
+    lastFlushOffset_ = 0;
+
+    useTightNumericVector_ = opts.getUseTightNumericVector();
+
+    if (options_.getCompressionBlockSize() % options_.getMemoryBlockSize() != 0) {
+      throw std::invalid_argument(
+          "Compression block size must be a multiple of memory block size.");
+    }
 
     // compression stream for stripe footer, file footer and metadata
-    compressionStream = createCompressor(
-                                  options.getCompression(),
-                                  outStream,
-                                  options.getCompressionStrategy(),
-                                  1 * 1024 * 1024, // buffer capacity: 1M
-                                  options.getCompressionBlockSize(),
-                                  *options.getMemoryPool());
+    compressionStream_ = createCompressor(
+        options_.getCompression(), outStream_, options_.getCompressionStrategy(),
+        options_.getOutputBufferCapacity(), options_.getCompressionBlockSize(),
+        options_.getMemoryBlockSize(), *options_.getMemoryPool(), options_.getWriterMetrics());
 
     // uncompressed stream for post script
-    bufferedStream.reset(new BufferedOutputStream(
-                                            *options.getMemoryPool(),
-                                            outStream,
-                                            1024, // buffer capacity: 1024 bytes
-                                            options.getCompressionBlockSize()));
+    bufferedStream_.reset(new BufferedOutputStream(*options_.getMemoryPool(), outStream_,
+                                                   1024,  // buffer capacity: 1024 bytes
+                                                   options_.getCompressionBlockSize(),
+                                                   options_.getWriterMetrics()));
 
     init();
   }
 
-  std::unique_ptr<ColumnVectorBatch> WriterImpl::createRowBatch(uint64_t size)
-                                                                         const {
-    return type.createRowBatch(size, *options.getMemoryPool());
+  std::unique_ptr<ColumnVectorBatch> WriterImpl::createRowBatch(uint64_t size) const {
+    return type_.createRowBatch(size, *options_.getMemoryPool(), false, useTightNumericVector_);
   }
 
   void WriterImpl::add(ColumnVectorBatch& rowsToAdd) {
-    if (options.getEnableIndex()) {
+    if (options_.getEnableIndex()) {
       uint64_t pos = 0;
       uint64_t chunkSize = 0;
-      uint64_t rowIndexStride = options.getRowIndexStride();
+      uint64_t rowIndexStride = options_.getRowIndexStride();
       while (pos < rowsToAdd.numElements) {
-        chunkSize = std::min(rowsToAdd.numElements - pos,
-                             rowIndexStride - indexRows);
-        columnWriter->add(rowsToAdd, pos, chunkSize, nullptr);
+        chunkSize = std::min(rowsToAdd.numElements - pos, rowIndexStride - indexRows_);
+        columnWriter_->add(rowsToAdd, pos, chunkSize, nullptr);
 
         pos += chunkSize;
-        indexRows += chunkSize;
-        stripeRows += chunkSize;
+        indexRows_ += chunkSize;
+        stripeRows_ += chunkSize;
 
-        if (indexRows >= rowIndexStride) {
-          columnWriter->createRowIndexEntry();
-          indexRows = 0;
+        if (indexRows_ >= rowIndexStride) {
+          if (options_.getAlignBlockBoundToRowGroup()) {
+            columnWriter_->finishStreams();
+          }
+          columnWriter_->createRowIndexEntry();
+          indexRows_ = 0;
         }
       }
     } else {
-      stripeRows += rowsToAdd.numElements;
-      columnWriter->add(rowsToAdd, 0, rowsToAdd.numElements, nullptr);
+      stripeRows_ += rowsToAdd.numElements;
+      columnWriter_->add(rowsToAdd, 0, rowsToAdd.numElements, nullptr);
     }
 
-    if (columnWriter->getEstimatedSize() >= options.getStripeSize()) {
+    if (columnWriter_->getEstimatedSize() >= options_.getStripeSize()) {
       writeStripe();
     }
   }
 
   void WriterImpl::close() {
-    if (stripeRows > 0) {
+    if (stripeRows_ > 0) {
       writeStripe();
     }
     writeMetadata();
     writeFileFooter();
     writePostscript();
-    outStream->close();
+    outStream_->close();
   }
 
-  void WriterImpl::addUserMetadata(const std::string name, const std::string value){
-    proto::UserMetadataItem* userMetadataItem = fileFooter.add_metadata();
-    userMetadataItem->set_name(TString(name));
-    userMetadataItem->set_value(TString(value));
+  uint64_t WriterImpl::writeIntermediateFooter() {
+    if (stripeRows_ > 0) {
+      writeStripe();
+    }
+    if (stripesAtLastFlush_ != fileFooter_.stripes_size()) {
+      writeMetadata();
+      writeFileFooter();
+      writePostscript();
+      stripesAtLastFlush_ = fileFooter_.stripes_size();
+      outStream_->flush();
+      lastFlushOffset_ = outStream_->getLength();
+      currentOffset_ = lastFlushOffset_;
+      // init stripe now that we adjusted the currentOffset
+      initStripe();
+    }
+    return lastFlushOffset_;
+  }
+
+  void WriterImpl::addUserMetadata(const std::string& name, const std::string& value) {
+    proto::UserMetadataItem* userMetadataItem = fileFooter_.add_metadata();
+    userMetadataItem->set_name(name);
+    userMetadataItem->set_value(value);
   }
 
   void WriterImpl::init() {
     // Write file header
     const static size_t magicIdLength = strlen(WriterImpl::magicId);
-    outStream->write(WriterImpl::magicId, magicIdLength);
-    currentOffset += magicIdLength;
+    {
+      SCOPED_STOPWATCH(options_.getWriterMetrics(), IOBlockingLatencyUs, IOCount);
+      outStream_->write(WriterImpl::magicId, magicIdLength);
+    }
+    currentOffset_ += magicIdLength;
 
     // Initialize file footer
-    fileFooter.set_headerlength(currentOffset);
-    fileFooter.set_contentlength(0);
-    fileFooter.set_numberofrows(0);
-    fileFooter.set_rowindexstride(
-                          static_cast<uint32_t>(options.getRowIndexStride()));
-    fileFooter.set_writer(writerId);
-    fileFooter.set_softwareversion(ORC_VERSION);
+    fileFooter_.set_header_length(currentOffset_);
+    fileFooter_.set_content_length(0);
+    fileFooter_.set_number_of_rows(0);
+    fileFooter_.set_row_index_stride(static_cast<uint32_t>(options_.getRowIndexStride()));
+    fileFooter_.set_writer(writerId);
+    fileFooter_.set_software_version(ORC_VERSION);
 
     uint32_t index = 0;
-    buildFooterType(type, fileFooter, index);
+    buildFooterType(type_, fileFooter_, index);
 
     // Initialize post script
-    postScript.set_footerlength(0);
-    postScript.set_compression(
-                  WriterImpl::convertCompressionKind(options.getCompression()));
-    postScript.set_compressionblocksize(options.getCompressionBlockSize());
+    postScript_.set_footer_length(0);
+    postScript_.set_compression(WriterImpl::convertCompressionKind(options_.getCompression()));
+    postScript_.set_compression_block_size(options_.getCompressionBlockSize());
 
-    postScript.add_version(options.getFileVersion().getMajor());
-    postScript.add_version(options.getFileVersion().getMinor());
+    postScript_.add_version(options_.getFileVersion().getMajor());
+    postScript_.add_version(options_.getFileVersion().getMinor());
 
-    postScript.set_writerversion(WriterVersion_ORC_135);
-    postScript.set_magic("ORC");
+    postScript_.set_writer_version(WriterVersion_ORC_135);
+    postScript_.set_magic("ORC");
 
     // Initialize first stripe
     initStripe();
   }
 
   void WriterImpl::initStripe() {
-    stripeInfo.set_offset(currentOffset);
-    stripeInfo.set_indexlength(0);
-    stripeInfo.set_datalength(0);
-    stripeInfo.set_footerlength(0);
-    stripeInfo.set_numberofrows(0);
+    stripeInfo_.set_offset(currentOffset_);
+    stripeInfo_.set_index_length(0);
+    stripeInfo_.set_data_length(0);
+    stripeInfo_.set_footer_length(0);
+    stripeInfo_.set_number_of_rows(0);
 
-    stripeRows = indexRows = 0;
+    stripeRows_ = indexRows_ = 0;
   }
 
   void WriterImpl::writeStripe() {
-    if (options.getEnableIndex() && indexRows != 0) {
-      columnWriter->createRowIndexEntry();
-      indexRows = 0;
+    if (options_.getEnableIndex() && indexRows_ != 0) {
+      columnWriter_->createRowIndexEntry();
+      indexRows_ = 0;
     } else {
-      columnWriter->mergeRowGroupStatsIntoStripeStats();
+      columnWriter_->mergeRowGroupStatsIntoStripeStats();
     }
 
     // dictionary should be written before any stream is flushed
-    columnWriter->writeDictionary();
+    columnWriter_->writeDictionary();
 
     std::vector<proto::Stream> streams;
     // write ROW_INDEX streams
-    if (options.getEnableIndex()) {
-      columnWriter->writeIndex(streams);
+    if (options_.getEnableIndex()) {
+      columnWriter_->writeIndex(streams);
     }
     // write streams like PRESENT, DATA, etc.
-    columnWriter->flush(streams);
+    columnWriter_->flush(streams);
 
     // generate and write stripe footer
     proto::StripeFooter stripeFooter;
@@ -460,28 +534,28 @@ namespace orc {
     }
 
     std::vector<proto::ColumnEncoding> encodings;
-    columnWriter->getColumnEncoding(encodings);
+    columnWriter_->getColumnEncoding(encodings);
 
     for (uint32_t i = 0; i < encodings.size(); ++i) {
       *stripeFooter.add_columns() = encodings[i];
     }
 
-    stripeFooter.set_writertimezone(TString(options.getTimezoneName()));
+    stripeFooter.set_writer_timezone(options_.getTimezoneName());
 
     // add stripe statistics to metadata
-    proto::StripeStatistics* stripeStats = metadata.add_stripestats();
+    proto::StripeStatistics* stripeStats = metadata_.add_stripe_stats();
     std::vector<proto::ColumnStatistics> colStats;
-    columnWriter->getStripeStatistics(colStats);
+    columnWriter_->getStripeStatistics(colStats);
     for (uint32_t i = 0; i != colStats.size(); ++i) {
-      *stripeStats->add_colstats() = colStats[i];
+      *stripeStats->add_col_stats() = colStats[i];
     }
     // merge stripe stats into file stats and clear stripe stats
-    columnWriter->mergeStripeStatsIntoFileStats();
+    columnWriter_->mergeStripeStatsIntoFileStats();
 
-    if (!stripeFooter.SerializeToZeroCopyStream(compressionStream.get())) {
+    if (!stripeFooter.SerializeToZeroCopyStream(compressionStream_.get())) {
       throw std::logic_error("Failed to write stripe footer.");
     }
-    uint64_t footerLength = compressionStream->flush();
+    uint64_t footerLength = compressionStream_->flush();
 
     // calculate data length and index length
     uint64_t dataLength = 0;
@@ -496,149 +570,147 @@ namespace orc {
     }
 
     // update stripe info
-    stripeInfo.set_indexlength(indexLength);
-    stripeInfo.set_datalength(dataLength);
-    stripeInfo.set_footerlength(footerLength);
-    stripeInfo.set_numberofrows(stripeRows);
+    stripeInfo_.set_index_length(indexLength);
+    stripeInfo_.set_data_length(dataLength);
+    stripeInfo_.set_footer_length(footerLength);
+    stripeInfo_.set_number_of_rows(stripeRows_);
 
-    *fileFooter.add_stripes() = stripeInfo;
+    *fileFooter_.add_stripes() = stripeInfo_;
 
-    currentOffset = currentOffset + indexLength + dataLength + footerLength;
-    totalRows += stripeRows;
+    currentOffset_ = currentOffset_ + indexLength + dataLength + footerLength;
+    totalRows_ += stripeRows_;
 
-    columnWriter->reset();
+    columnWriter_->reset();
 
     initStripe();
   }
 
   void WriterImpl::writeMetadata() {
-    if (!metadata.SerializeToZeroCopyStream(compressionStream.get())) {
+    if (!metadata_.SerializeToZeroCopyStream(compressionStream_.get())) {
       throw std::logic_error("Failed to write metadata.");
     }
-    postScript.set_metadatalength(compressionStream.get()->flush());
+    postScript_.set_metadata_length(compressionStream_.get()->flush());
   }
 
   void WriterImpl::writeFileFooter() {
-    fileFooter.set_contentlength(currentOffset - fileFooter.headerlength());
-    fileFooter.set_numberofrows(totalRows);
+    fileFooter_.set_content_length(currentOffset_ - fileFooter_.header_length());
+    fileFooter_.set_number_of_rows(totalRows_);
 
     // update file statistics
     std::vector<proto::ColumnStatistics> colStats;
-    columnWriter->getFileStatistics(colStats);
+    columnWriter_->getFileStatistics(colStats);
+    fileFooter_.clear_statistics();
     for (uint32_t i = 0; i != colStats.size(); ++i) {
-      *fileFooter.add_statistics() = colStats[i];
+      *fileFooter_.add_statistics() = colStats[i];
     }
 
-    if (!fileFooter.SerializeToZeroCopyStream(compressionStream.get())) {
+    if (!fileFooter_.SerializeToZeroCopyStream(compressionStream_.get())) {
       throw std::logic_error("Failed to write file footer.");
     }
-    postScript.set_footerlength(compressionStream->flush());
+    postScript_.set_footer_length(compressionStream_->flush());
   }
 
   void WriterImpl::writePostscript() {
-    if (!postScript.SerializeToZeroCopyStream(bufferedStream.get())) {
+    if (!postScript_.SerializeToZeroCopyStream(bufferedStream_.get())) {
       throw std::logic_error("Failed to write post script.");
     }
-    unsigned char psLength =
-                      static_cast<unsigned char>(bufferedStream->flush());
-    outStream->write(&psLength, sizeof(unsigned char));
+    unsigned char psLength = static_cast<unsigned char>(bufferedStream_->flush());
+    SCOPED_STOPWATCH(options_.getWriterMetrics(), IOBlockingLatencyUs, IOCount);
+    outStream_->write(&psLength, sizeof(unsigned char));
   }
 
-  void WriterImpl::buildFooterType(
-                                   const Type& t,
-                                   proto::Footer& footer,
-                                   uint32_t & index) {
+  void WriterImpl::buildFooterType(const Type& t, proto::Footer& footer, uint32_t& index) {
     proto::Type protoType;
-    protoType.set_maximumlength(static_cast<uint32_t>(t.getMaximumLength()));
+    protoType.set_maximum_length(static_cast<uint32_t>(t.getMaximumLength()));
     protoType.set_precision(static_cast<uint32_t>(t.getPrecision()));
     protoType.set_scale(static_cast<uint32_t>(t.getScale()));
 
     switch (t.getKind()) {
-    case BOOLEAN: {
-      protoType.set_kind(proto::Type_Kind_BOOLEAN);
-      break;
-    }
-    case BYTE: {
-      protoType.set_kind(proto::Type_Kind_BYTE);
-      break;
-    }
-    case SHORT: {
-      protoType.set_kind(proto::Type_Kind_SHORT);
-      break;
-    }
-    case INT: {
-      protoType.set_kind(proto::Type_Kind_INT);
-      break;
-    }
-    case LONG: {
-      protoType.set_kind(proto::Type_Kind_LONG);
-      break;
-    }
-    case FLOAT: {
-      protoType.set_kind(proto::Type_Kind_FLOAT);
-      break;
-    }
-    case DOUBLE: {
-      protoType.set_kind(proto::Type_Kind_DOUBLE);
-      break;
-    }
-    case STRING: {
-      protoType.set_kind(proto::Type_Kind_STRING);
-      break;
-    }
-    case BINARY: {
-      protoType.set_kind(proto::Type_Kind_BINARY);
-      break;
-    }
-    case TIMESTAMP: {
-      protoType.set_kind(proto::Type_Kind_TIMESTAMP);
-      break;
-    }
-    case TIMESTAMP_INSTANT: {
-      protoType.set_kind(proto::Type_Kind_TIMESTAMP_INSTANT);
-      break;
-    }
-    case LIST: {
-      protoType.set_kind(proto::Type_Kind_LIST);
-      break;
-    }
-    case MAP: {
-      protoType.set_kind(proto::Type_Kind_MAP);
-      break;
-    }
-    case STRUCT: {
-      protoType.set_kind(proto::Type_Kind_STRUCT);
-      break;
-    }
-    case UNION: {
-      protoType.set_kind(proto::Type_Kind_UNION);
-      break;
-    }
-    case DECIMAL: {
-      protoType.set_kind(proto::Type_Kind_DECIMAL);
-      break;
-    }
-    case DATE: {
-      protoType.set_kind(proto::Type_Kind_DATE);
-      break;
-    }
-    case VARCHAR: {
-      protoType.set_kind(proto::Type_Kind_VARCHAR);
-      break;
-    }
-    case CHAR: {
-      protoType.set_kind(proto::Type_Kind_CHAR);
-      break;
-    }
-    default:
-      throw std::logic_error("Unknown type.");
+      case BOOLEAN: {
+        protoType.set_kind(proto::Type_Kind_BOOLEAN);
+        break;
+      }
+      case BYTE: {
+        protoType.set_kind(proto::Type_Kind_BYTE);
+        break;
+      }
+      case SHORT: {
+        protoType.set_kind(proto::Type_Kind_SHORT);
+        break;
+      }
+      case INT: {
+        protoType.set_kind(proto::Type_Kind_INT);
+        break;
+      }
+      case LONG: {
+        protoType.set_kind(proto::Type_Kind_LONG);
+        break;
+      }
+      case FLOAT: {
+        protoType.set_kind(proto::Type_Kind_FLOAT);
+        break;
+      }
+      case DOUBLE: {
+        protoType.set_kind(proto::Type_Kind_DOUBLE);
+        break;
+      }
+      case STRING: {
+        protoType.set_kind(proto::Type_Kind_STRING);
+        break;
+      }
+      case BINARY: {
+        protoType.set_kind(proto::Type_Kind_BINARY);
+        break;
+      }
+      case TIMESTAMP: {
+        protoType.set_kind(proto::Type_Kind_TIMESTAMP);
+        break;
+      }
+      case TIMESTAMP_INSTANT: {
+        protoType.set_kind(proto::Type_Kind_TIMESTAMP_INSTANT);
+        break;
+      }
+      case LIST: {
+        protoType.set_kind(proto::Type_Kind_LIST);
+        break;
+      }
+      case MAP: {
+        protoType.set_kind(proto::Type_Kind_MAP);
+        break;
+      }
+      case STRUCT: {
+        protoType.set_kind(proto::Type_Kind_STRUCT);
+        break;
+      }
+      case UNION: {
+        protoType.set_kind(proto::Type_Kind_UNION);
+        break;
+      }
+      case DECIMAL: {
+        protoType.set_kind(proto::Type_Kind_DECIMAL);
+        break;
+      }
+      case DATE: {
+        protoType.set_kind(proto::Type_Kind_DATE);
+        break;
+      }
+      case VARCHAR: {
+        protoType.set_kind(proto::Type_Kind_VARCHAR);
+        break;
+      }
+      case CHAR: {
+        protoType.set_kind(proto::Type_Kind_CHAR);
+        break;
+      }
+      default:
+        throw std::logic_error("Unknown type.");
     }
 
     for (auto& key : t.getAttributeKeys()) {
       const auto& value = t.getAttributeValue(key);
       auto protoAttr = protoType.add_attributes();
-      protoAttr->set_key(TString(key));
-      protoAttr->set_value(TString(value));
+      protoAttr->set_key(key);
+      protoAttr->set_value(value);
     }
 
     int pos = static_cast<int>(index);
@@ -647,28 +719,20 @@ namespace orc {
     for (uint64_t i = 0; i < t.getSubtypeCount(); ++i) {
       // only add subtypes' field names if this type is STRUCT
       if (t.getKind() == STRUCT) {
-        footer.mutable_types(pos)->add_fieldnames(TString(t.getFieldName(i)));
+        footer.mutable_types(pos)->add_field_names(t.getFieldName(i));
       }
       footer.mutable_types(pos)->add_subtypes(++index);
       buildFooterType(*t.getSubtype(i), footer, index);
     }
   }
 
-  proto::CompressionKind WriterImpl::convertCompressionKind(
-                                      const CompressionKind& kind) {
+  proto::CompressionKind WriterImpl::convertCompressionKind(const CompressionKind& kind) {
     return static_cast<proto::CompressionKind>(kind);
   }
 
-  std::unique_ptr<Writer> createWriter(
-                                       const Type& type,
-                                       OutputStream* stream,
+  std::unique_ptr<Writer> createWriter(const Type& type, OutputStream* stream,
                                        const WriterOptions& options) {
-    return std::unique_ptr<Writer>(
-                                   new WriterImpl(
-                                            type,
-                                            stream,
-                                            options));
+    return std::unique_ptr<Writer>(new WriterImpl(type, stream, options));
   }
 
-}
-
+}  // namespace orc

@@ -1,0 +1,28 @@
+title: Essentials docs
+service: yql
+
+ci:
+  secret: sec-01g9mj0b528x9wg348pdh5nv8n
+  runtime:
+    sandbox:
+      owner: YQL
+
+  actions:
+    # определение экшена, который будет вызван при пулл-реквесте,
+    # затрагивающим вашу документацию
+    docs:
+      title: Deploy docs
+      flow: deploy-pr-docs
+      triggers:
+        - on: pr
+
+  flows:
+    deploy-pr-docs:
+      jobs:
+        deploy:
+          title: Deploy docs
+          task: common/docs/deploy
+          input:
+            targets: yql/essentials/docs
+            arcanum_review_id: ${context.launch_pull_request_info.pull_request.id}
+            notify: true # оставлять комментарий к ПР с ссылкой на выложенную документацию

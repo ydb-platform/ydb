@@ -10,7 +10,7 @@
 
 Например:
 
-``` bash
+```bash
 {{ ydb-cli }} -p mydb1 scheme ls -l
 ```
 
@@ -20,11 +20,11 @@
 
 Опция `--profile` (`-p`) может быть не единственной среди параметров соединения в командной строке, например:
 
-``` bash
+```bash
 {{ ydb-cli }} -p mydb1 -d /local2 scheme ls -l
 ```
 
-``` bash
+```bash
 {{ ydb-cli }} -p mydb1 --user alex scheme ls -l
 ```
 

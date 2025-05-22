@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
             backend.Commit();
         }
 
-        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
         strategy.Start({ });
 
         const ui64 rowsPerTx = 16 * 1024;
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
             backend.Commit();
         }
 
-        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
         strategy.Start({ });
 
         // Insert some rows
@@ -175,7 +175,6 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
 
         // Don't expect any tasks or change requests
         UNIT_ASSERT(!broker.HasPending());
-        UNIT_ASSERT(!backend.PendingReads);
         UNIT_ASSERT(!backend.StartedCompactions);
         UNIT_ASSERT(!backend.CheckChangesFlag());
     }
@@ -200,12 +199,11 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
             backend.Commit();
         }
 
-        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
         strategy.Start({ });
 
         // Don't expect any tasks or change requests
         UNIT_ASSERT(!broker.HasPending());
-        UNIT_ASSERT(!backend.PendingReads);
         UNIT_ASSERT(!backend.StartedCompactions);
         UNIT_ASSERT(!backend.CheckChangesFlag());
 
@@ -241,7 +239,6 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
 
         // Don't expect any tasks or change requests
         UNIT_ASSERT(!broker.HasPending());
-        UNIT_ASSERT(!backend.PendingReads);
         UNIT_ASSERT(!backend.StartedCompactions);
         UNIT_ASSERT(!backend.CheckChangesFlag());
 
@@ -321,7 +318,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
             backend.Commit();
         }
 
-        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
         strategy.Start({ });
 
         // Insert some rows
@@ -436,7 +433,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
             backend.Commit();
         }
 
-        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
         strategy.Start({ });
 
         // Insert some rows
@@ -513,7 +510,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
             backend.Commit();
         }
 
-        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
         strategy.Start({ });
 
         // Insert some rows at v1
@@ -634,7 +631,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
             backend.Commit();
         }
 
-        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
         strategy.Start({ });
 
         // Insert some rows at v1
@@ -672,7 +669,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
         }
 
         // Start a new strategy
-        TGenCompactionStrategy strategy2(Table, &backend, &broker, &time, "suffix");
+        TGenCompactionStrategy strategy2(Table, &backend, &broker, &time, &logger, "suffix");
         strategy2.Start({ });
 
         // We expect a forced compaction to be pending right now
@@ -725,7 +722,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
             backend.Commit();
         }
 
-        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, &logger, "suffix");
         strategy.Start({ });
 
         // Insert some rows at v1
@@ -766,7 +763,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
         backend.TabletId++;
 
         // Start a new strategy
-        TGenCompactionStrategy strategy2(Table, &backend, &broker, &time, "suffix");
+        TGenCompactionStrategy strategy2(Table, &backend, &broker, &time, &logger, "suffix");
         strategy2.Start({ });
 
         // We expect nothing to be pending right now

@@ -51,13 +51,9 @@ public:
             return;
         }
 
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        auto domain = dinfo->Domains.begin()->second;
-        ui32 group = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
-
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
-        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(group), pipeConfig);
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(), pipeConfig);
         CmsPipe = ctx.RegisterWithSameMailbox(pipe);
 
         SendRequest(ctx);
@@ -81,6 +77,7 @@ private:
             auto request = MakeHolder<TEvConsole::TEvNotifyOperationCompletionRequest>();
             request->Record.MutableRequest()->set_id(response.operation().id());
             request->Record.SetUserToken(this->Request_->GetSerializedToken());
+            request->Record.SetPeerName(this->Request_->GetPeerName());
 
             NTabletPipe::SendData(ctx, CmsPipe, request.Release());
         } else {
@@ -147,6 +144,7 @@ private:
         auto request = MakeHolder<TCmsRequest>();
         request->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
         request->Record.SetUserToken(this->Request_->GetSerializedToken());
+        request->Record.SetPeerName(this->Request_->GetPeerName());
         NTabletPipe::SendData(ctx, CmsPipe, request.Release());
     }
 };

@@ -118,16 +118,13 @@ namespace NKikimr {
             CurSegIt.template PutToMerger<TRecordMerger>(merger);
         }
 
+        template <class THeap>
+        void PutToHeap(THeap& heap) {
+            heap.Add(this);
+        }
+
         const TLevelSegment *GetCurSstPtr() const {
             return CurSegIt.GetSstPtr();
-        }
-
-        const TRec &operator*() const {
-            return CurSegIt.operator*();
-        }
-
-        const TRec *operator->() const {
-            return CurSegIt.operator->();
         }
 
         bool operator ==(const TReadIterator &it) const {

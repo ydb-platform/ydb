@@ -33,7 +33,7 @@ public:
     static TKeyBound FromRow(TRow&& row, bool isInclusive, bool isUpper);
 
     //! Construct from a given row without checking presence of types Min, Max and Bottom.
-    //! NB: in debug mode value type check is still performed, but results in YT_ABORT().
+    //! NB: In debug mode value type check is still performed, but results in YT_ABORT().
     static TKeyBound FromRowUnchecked(const TRow& row, bool isInclusive, bool isUpper);
 
     //! Same as previous but for rvalue refs.
@@ -119,8 +119,7 @@ public:
     TOwningKeyBound ToOwning() const;
 };
 
-void FormatValue(TStringBuilderBase* builder, const TKeyBound& keyBound, TStringBuf format);
-TString ToString(const TKeyBound& keyBound);
+void FormatValue(TStringBuilderBase* builder, const TKeyBound& keyBound, TStringBuf spec);
 
 void Serialize(const TKeyBound& keyBound, NYson::IYsonConsumer* consumer);
 
@@ -133,8 +132,7 @@ public:
     operator TKeyBound() const;
 };
 
-void FormatValue(TStringBuilderBase* builder, const TOwningKeyBound& keyBound, TStringBuf format);
-TString ToString(const TOwningKeyBound& keyBound);
+void FormatValue(TStringBuilderBase* builder, const TOwningKeyBound& keyBound, TStringBuf spec);
 
 void Serialize(const TOwningKeyBound& keyBound, NYson::IYsonConsumer* consumer);
 void Deserialize(TOwningKeyBound& keyBound, const NYTree::INodePtr& node);
@@ -152,7 +150,7 @@ bool operator ==(const TOwningKeyBound& lhs, const TOwningKeyBound& rhs);
 std::pair<int, bool> GetBoundPrefixAndInclusiveness(TUnversionedRow row, bool isUpper, int keyLength);
 
 //! Convert legacy key bound expressed as a row possibly containing Min/Max to owning key bound.
-//! NB: key length is needed to properly distinguish if K + [min] is an inclusive K or exclusive K.
+//! NB: Key length is needed to properly distinguish if K + [min] is an inclusive K or exclusive K.
 TOwningKeyBound KeyBoundFromLegacyRow(TUnversionedRow row, bool isUpper, int keyLength);
 
 //! Same as previous, but non-owning variant over row buffer.

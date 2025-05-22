@@ -1,15 +1,20 @@
 /*
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 
 #include "Adaptor.hh"
@@ -24,8 +29,8 @@ namespace orc {
   static const int32_t DEC_64_TABLE[] = {0, 0, 0, -1, 0, 1, 2, 3};
 
   static const int32_t SIZE_OF_SHORT = 2;
-  static const int32_t SIZE_OF_INT   = 4;
-  static const int32_t SIZE_OF_LONG  = 8;
+  static const int32_t SIZE_OF_INT = 4;
+  static const int32_t SIZE_OF_LONG = 8;
 
   static std::string toHex(uint64_t val) {
     std::ostringstream out;
@@ -39,45 +44,37 @@ namespace orc {
     return out.str();
   }
 
-  class MalformedInputException: public ParseError {
-  public:
-    MalformedInputException(int64_t off
-                            ) :ParseError("MalformedInputException at " +
-                                          toString(off)) {
-    }
+  class MalformedInputException : public ParseError {
+   public:
+    MalformedInputException(int64_t off)
+        : ParseError("MalformedInputException at " + toString(off)) {}
 
-    MalformedInputException(int64_t off, const std::string& msg
-                            ): ParseError("MalformedInputException " + msg +
-                                          " at " + toString(off)) {
-    }
+    MalformedInputException(int64_t off, const std::string& msg)
+        : ParseError("MalformedInputException " + msg + " at " + toString(off)) {}
 
-    MalformedInputException(const MalformedInputException& other
-                            ): ParseError(other.what()) {
-    }
+    MalformedInputException(const MalformedInputException& other) : ParseError(other.what()) {}
 
-    virtual ~MalformedInputException() noexcept;
+    ~MalformedInputException() noexcept override;
   };
 
   MalformedInputException::~MalformedInputException() noexcept {
     // PASS
   }
 
-  uint64_t lzoDecompress(const char *inputAddress,
-                         const char *inputLimit,
-                         char *outputAddress,
-                         char *outputLimit) {
+  uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress,
+                         char* outputLimit) {
     // nothing compresses to nothing
     if (inputAddress == inputLimit) {
       return 0;
     }
 
     // maximum offset in buffers to which it's safe to write long-at-a-time
-    char * const fastOutputLimit = outputLimit - SIZE_OF_LONG;
+    char* const fastOutputLimit = outputLimit - SIZE_OF_LONG;
 
     // LZO can concat two blocks together so, decode until the input data is
     // consumed
-    const char *input = inputAddress;
-    char *output = outputAddress;
+    const char* input = inputAddress;
+    char* output = outputAddress;
     while (input < inputLimit) {
       //
       // Note: For safety some of the code below may stop decoding early or
@@ -127,8 +124,7 @@ namespace orc {
               literalLength = 0xf;
 
               uint32_t nextByte = 0;
-              while (input < inputLimit &&
-                     (nextByte = *(input++) & 0xFF) == 0) {
+              while (input < inputLimit && (nextByte = *(input++) & 0xFF) == 0) {
                 literalLength += 0xff;
               }
               literalLength += nextByte;
@@ -191,8 +187,7 @@ namespace orc {
             matchLength = 0x7;
 
             int32_t nextByte = 0;
-            while (input < inputLimit &&
-                   (nextByte = *(input++) & 0xFF) == 0) {
+            while (input < inputLimit && (nextByte = *(input++) & 0xFF) == 0) {
               matchLength += 0xff;
             }
             matchLength += nextByte;
@@ -231,8 +226,7 @@ namespace orc {
             matchLength = 0x1f;
 
             int nextByte = 0;
-            while (input < inputLimit &&
-                   (nextByte = *(input++) & 0xFF) == 0) {
+            while (input < inputLimit && (nextByte = *(input++) & 0xFF) == 0) {
               matchLength += 0xff;
             }
             matchLength += nextByte;
@@ -276,8 +270,7 @@ namespace orc {
           literalLength = (command & 0x3);
         } else {
           throw MalformedInputException(input - inputAddress - 1,
-                                        "Invalid LZO command " +
-                                        toHex(command));
+                                        "Invalid LZO command " + toHex(command));
         }
         firstCommand = false;
 
@@ -286,12 +279,11 @@ namespace orc {
           // lzo encodes match offset minus one
           matchOffset++;
 
-          char *matchAddress = output - matchOffset;
-          if (matchAddress < outputAddress ||
-              output + matchLength > outputLimit) {
+          char* matchAddress = output - matchOffset;
+          if (matchAddress < outputAddress || output + matchLength > outputLimit) {
             throw MalformedInputException(input - inputAddress);
           }
-          char *matchOutputLimit = output + matchLength;
+          char* matchOutputLimit = output + matchLength;
 
           if (output > fastOutputLimit) {
             // slow match copy
@@ -343,14 +335,14 @@ namespace orc {
               }
             }
           }
-          output = matchOutputLimit; // correction in case we over-copied
+          output = matchOutputLimit;  // correction in case we over-copied
         }
 
         // copy literal
-        char *literalOutputLimit = output + literalLength;
+        char* literalOutputLimit = output + literalLength;
         if (literalOutputLimit > fastOutputLimit ||
             input + literalLength > inputLimit - SIZE_OF_LONG) {
-          if (literalOutputLimit > outputLimit) {
+          if (literalOutputLimit > outputLimit || input + literalLength > inputLimit) {
             throw MalformedInputException(input - inputAddress);
           }
 
@@ -373,8 +365,7 @@ namespace orc {
         lastLiteralLength = literalLength;
       }
 
-      if (input + SIZE_OF_SHORT > inputLimit &&
-          *reinterpret_cast<const int16_t*>(input) != 0) {
+      if (input + SIZE_OF_SHORT > inputLimit && *reinterpret_cast<const int16_t*>(input) != 0) {
         throw MalformedInputException(input - inputAddress);
       }
       input += SIZE_OF_SHORT;
@@ -383,4 +374,4 @@ namespace orc {
     return static_cast<uint64_t>(output - outputAddress);
   }
 
-}
+}  // namespace orc

@@ -16,7 +16,7 @@ namespace {
 
         TOriginalBlobStorageGroupInfo(ui32 blobSubgroupSize, const TBlobStorageGroupInfo& groupInfo)
             : BlobSubgroupSize(blobSubgroupSize)
-            , GroupID(groupInfo.GroupID)
+            , GroupID(groupInfo.GroupID.GetRawId())
             , GroupGeneration(groupInfo.GroupGeneration)
             , DynamicInfo(groupInfo.GetDynamicInfo())
         {
@@ -57,7 +57,7 @@ namespace {
 
         // Returns either vdisk idx in the blob subgroup, or BlobSubgroupSize if the vdisk is not in the blob subgroup
         ui32 GetIdxInSubgroup(const TVDiskID &vdisk, ui32 hash) const {
-            Y_ABORT_UNLESS(vdisk.GroupID == GroupID && vdisk.GroupGeneration == GroupGeneration);
+            Y_ABORT_UNLESS(vdisk.GroupID.GetRawId() == GroupID && vdisk.GroupGeneration == GroupGeneration);
             Y_ABORT_UNLESS(vdisk.FailRealm < Realms.size());
 
             const TBlobStorageGroupInfo::TFailRealm &realm = Realms[vdisk.FailRealm];

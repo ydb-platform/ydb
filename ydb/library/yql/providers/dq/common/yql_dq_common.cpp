@@ -1,15 +1,17 @@
 #include "yql_dq_common.h"
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 
-#include <ydb/library/yql/sql/sql.h>
-#include <ydb/library/yql/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 
 #include <util/string/split.h>
 
@@ -17,6 +19,19 @@ namespace NYql {
 namespace NCommon {
 
 using namespace NKikimr::NMiniKQL;
+
+TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn) {
+    Y_ABORT_UNLESS(typeAnn);
+
+    TScopedAlloc alloc(__LOCATION__);
+    TTypeEnvironment typeEnv(alloc);
+
+    NKikimr::NMiniKQL::TTypeBuilder typeBuilder(typeEnv);
+    TStringStream errorStream;
+    auto type = NCommon::BuildType(*typeAnn, typeBuilder, errorStream);
+    Y_ENSURE(type, "Failed to compile type: " << errorStream.Str());
+    return SerializeNode(type, typeEnv);
+}
 
 TString GetSerializedResultType(const TString& program) {
     TScopedAlloc alloc(__LOCATION__);
@@ -40,32 +55,6 @@ TString GetSerializedResultType(const TString& program) {
     auto programResultItemType = static_cast<const TStreamType*>(programResultType->GetReturnType())->GetItemType();
 
     return SerializeNode(programResultItemType, typeEnv);
-}
-
-TMaybe<TString> SqlToSExpr(const TString& query) {
-    NSQLTranslation::TTranslationSettings settings;
-    settings.SyntaxVersion = 1;
-    settings.Mode = NSQLTranslation::ESqlMode::QUERY;
-    settings.DefaultCluster = "undefined";
-    settings.ClusterMapping[settings.DefaultCluster] = "undefined";
-    settings.ClusterMapping["csv"] = "csv";
-    settings.ClusterMapping["memory"] = "memory";
-    settings.ClusterMapping["ydb"] = "ydb";
-    settings.EnableGenericUdfs = true;
-    settings.File = "generated.sql";
-
-    auto astRes = NSQLTranslation::SqlToYql(query, settings);
-    if (!astRes.Issues.Empty()) {
-        Cerr << astRes.Issues.ToString() << Endl;
-    }
-
-    if (!astRes.Root) {
-        return {};
-    }
-
-    TStringStream sexpr;
-    astRes.Root->PrintTo(sexpr);
-    return sexpr.Str();
 }
 
 bool ParseCounterName(TString* prefix, std::map<TString, TString>* labels, TString* name, const TString& counterName) {

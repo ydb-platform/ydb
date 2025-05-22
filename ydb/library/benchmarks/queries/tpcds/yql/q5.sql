@@ -10,14 +10,14 @@ $ssr = (select s.s_store_id as s_store_id,
             ss_sold_date_sk  as date_sk,
             ss_ext_sales_price as sales_price,
             ss_net_profit as profit,
-            cast(0 as float) as return_amt,
-            cast(0 as float) as net_loss
+            $z0 as return_amt,
+            $z0 as net_loss
     from {{store_sales}} as ss
     union all
     select sr_store_sk as store_sk,
            sr_returned_date_sk as date_sk,
-           cast(0 as float) as sales_price,
-           cast(0 as float) as profit,
+           $z0 as sales_price,
+           $z0 as profit,
            sr_return_amt as return_amt,
            sr_net_loss as net_loss
     from {{store_returns}} as sr
@@ -25,8 +25,8 @@ $ssr = (select s.s_store_id as s_store_id,
      cross join {{date_dim}} as d
      cross join {{store}} as s
  where date_sk = d_date_sk
-       and cast(d_date as date) between cast('2000-08-19' as date)
-                  and (cast('2000-08-19' as date) +  DateTime::IntervalFromDays(14))
+       and cast(d_date as date) between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) +  DateTime::IntervalFromDays(14))
        and store_sk = s_store_sk
  group by s.s_store_id);
 
@@ -40,14 +40,14 @@ $csr = (select cp.cp_catalog_page_id as cp_catalog_page_id,
             cs_sold_date_sk  as date_sk,
             cs_ext_sales_price as sales_price,
             cs_net_profit as profit,
-            cast(0 as float) as return_amt,
-            cast(0 as float) as net_loss
+            $z0 as return_amt,
+            $z0 as net_loss
     from {{catalog_sales}} as cs
     union all
     select cr_catalog_page_sk as page_sk,
            cr_returned_date_sk as date_sk,
-           cast(0 as float) as sales_price,
-           cast(0 as float) as profit,
+           $z0 as sales_price,
+           $z0 as profit,
            cr_return_amount as return_amt,
            cr_net_loss as net_loss
     from {{catalog_returns}} as cr
@@ -55,8 +55,8 @@ $csr = (select cp.cp_catalog_page_id as cp_catalog_page_id,
      cross join {{date_dim}} as d
      cross join {{catalog_page}} as cp
  where date_sk = d_date_sk
-       and cast(d_date as date) between cast('2000-08-19' as date)
-                  and (cast('2000-08-19' as date) +  DateTime::IntervalFromDays(14))
+       and cast(d_date as date) between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) +  DateTime::IntervalFromDays(14))
        and page_sk = cp_catalog_page_sk
  group by cp.cp_catalog_page_id);
 
@@ -64,14 +64,14 @@ $salesreturns = ( select  ws_web_site_sk as wsr_web_site_sk,
             ws_sold_date_sk  as date_sk,
             ws_ext_sales_price as sales_price,
             ws_net_profit as profit,
-            cast(0 as float) as return_amt,
-            cast(0 as float) as net_loss
+            $z0 as return_amt,
+            $z0 as net_loss
     from {{web_sales}} as ws
     union all
     select ws_web_site_sk as wsr_web_site_sk,
            wr_returned_date_sk as date_sk,
-           cast(0 as float) as sales_price,
-           cast(0 as float) as profit,
+           $z0 as sales_price,
+           $z0 as profit,
            wr_return_amt as return_amt,
            wr_net_loss as net_loss
     from {{web_returns}} as wr
@@ -89,8 +89,8 @@ $wsr = (select ws.web_site_id as web_site_id,
      cross join {{date_dim}} as d
      cross join {{web_site}} as ws
  where date_sk = d_date_sk
-       and cast(d_date as date) between cast('2000-08-19' as date)
-                  and (cast('2000-08-19' as date) +  DateTime::IntervalFromDays(14))
+       and cast(d_date as date) between cast('2000-08-23' as date)
+                  and (cast('2000-08-23' as date) +  DateTime::IntervalFromDays(14))
        and wsr_web_site_sk = web_site_sk
  group by ws.web_site_id);
 

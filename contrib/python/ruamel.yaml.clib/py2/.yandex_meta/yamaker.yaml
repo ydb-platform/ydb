@@ -1,0 +1,6 @@
+requirements:
+  - contrib/libs/yaml
+mark_as_cython_c:
+  - _ruamel_yaml.pyx
+keep:
+  - _ruamel_yaml.*

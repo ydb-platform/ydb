@@ -6,6 +6,7 @@
 #include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_curtain.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_envs.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -96,14 +97,14 @@ Y_UNIT_TEST_SUITE(TScreen) {
 
             auto cu0 = cook.Make(Mass0().Saved, 3, (7 + (len >> 1) - 3) >> 1);
             auto cu = cook.Make(Mass0().Saved, 7 + (len >> 1), 13 + len);
-            Y_ABORT_UNLESS(cu0.End != cu.Begin);
+            Y_ENSURE(cu0.End != cu.Begin);
 
             for (int joined = 0; joined < 2; ++joined) {
                 auto screen = joined ? TScreen::Join(cu0.Screen, cu.Screen) : cu.Screen;
                 auto slice = TSlicer(*Eggs0().Scheme).Cut(*Eggs0().Lone(), *screen);
 
                 { /*_ Check that simple screen is really working */
-                    TCheckIt iter(Eggs0(), { new TForwardEnv(1, 2), 3 }, slice);
+                    TCheckIter iter(Eggs0(), { new TForwardEnv(1, 2), 3 }, slice);
 
                     iter.To(4 + (off << 2) + (joined << 1))
                         .Seek({}, ESeek::Lower);
@@ -118,7 +119,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
                 }
 
                 { /* Check working partial screening on hole edge */
-                    TCheckIt iter(Eggs0(), { new TForwardEnv(1, 2), 3 }, slice);
+                    TCheckIter iter(Eggs0(), { new TForwardEnv(1, 2), 3 }, slice);
 
                     auto it = cu.Begin + (len >> 2);
 
@@ -145,7 +146,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
             auto cu = cook.Make(Mass0().Saved, rnd, 8192);
             auto slice = TSlicer(*Eggs0().Scheme).Cut(*Eggs0().Lone(), *cu.Screen);
 
-            TCheckIt iter(Eggs0(), { new TTestEnv, 0 }, slice);
+            TCheckIter iter(Eggs0(), { new TTestEnv, 0 }, slice);
 
             iter.To(4 + z);
 
@@ -166,7 +167,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
                     iter.Seek(*it, ESeek::Lower).Is(EReady::Gone);
                     iter.Seek(*it, ESeek::Upper).Is(EReady::Gone);
                 } else {
-                    Y_ABORT("Got AnyOff row within the range");
+                    Y_TABLET_ERROR("Got AnyOff row within the range");
                 }
             }
         }

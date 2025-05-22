@@ -1,8 +1,11 @@
 """
 Instantiate a variation font.  Run, eg:
 
-$ fonttools varLib.mutator ./NotoSansArabic-VF.ttf wght=140 wdth=85
+.. code-block:: sh
+
+    $ fonttools varLib.mutator ./NotoSansArabic-VF.ttf wght=140 wdth=85
 """
+
 from fontTools.misc.fixedTools import floatToFixedToFloat, floatToFixed
 from fontTools.misc.roundTools import otRound
 from fontTools.pens.boundsPen import BoundsPen
@@ -161,7 +164,9 @@ def instantiateVariableFont(varfont, location, inplace=False, overlap=True):
     defining the desired location along the variable font's axes.
     The location values must be specified as user-space coordinates, e.g.:
 
-            {'wght': 400, 'wdth': 100}
+    .. code-block::
+
+        {'wght': 400, 'wdth': 100}
 
     By default, a new TTFont object is returned. If ``inplace`` is True, the
     input varfont is modified and reduced to a static font.
@@ -198,9 +203,11 @@ def instantiateVariableFont(varfont, location, inplace=False, overlap=True):
         glyphnames = sorted(
             gvar.variations.keys(),
             key=lambda name: (
-                glyf[name].getCompositeMaxpValues(glyf).maxComponentDepth
-                if glyf[name].isComposite() or glyf[name].isVarComposite()
-                else 0,
+                (
+                    glyf[name].getCompositeMaxpValues(glyf).maxComponentDepth
+                    if glyf[name].isComposite()
+                    else 0
+                ),
                 name,
             ),
         )
@@ -304,9 +311,9 @@ def instantiateVariableFont(varfont, location, inplace=False, overlap=True):
             if applies:
                 assert record.FeatureTableSubstitution.Version == 0x00010000
                 for rec in record.FeatureTableSubstitution.SubstitutionRecord:
-                    table.FeatureList.FeatureRecord[
-                        rec.FeatureIndex
-                    ].Feature = rec.Feature
+                    table.FeatureList.FeatureRecord[rec.FeatureIndex].Feature = (
+                        rec.Feature
+                    )
                 break
         del table.FeatureVariations
 
@@ -401,7 +408,9 @@ def instantiateVariableFont(varfont, location, inplace=False, overlap=True):
             if set(excludedUnicodeLangIDs) == set(range(len((varfont["ltag"].tags)))):
                 del varfont["ltag"]
         varfont["name"].names[:] = [
-            n for n in varfont["name"].names if n.nameID not in exclude
+            n
+            for n in varfont["name"].names
+            if n.nameID < 256 or n.nameID not in exclude
         ]
 
     if "wght" in location and "OS/2" in varfont:

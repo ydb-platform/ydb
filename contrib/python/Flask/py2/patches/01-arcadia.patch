@@ -1,0 +1,67 @@
+--- contrib/python/Flask/py2/flask/helpers.py	(index)
++++ contrib/python/Flask/py2/flask/helpers.py	(working tree)
+@@ -21,7 +21,7 @@ from threading import RLock
+ from time import time
+ from zlib import adler32
+ 
+-from jinja2 import FileSystemLoader
++from jinja2 import ChoiceLoader, FileSystemLoader, ResourceLoader
+ from werkzeug.datastructures import Headers
+ from werkzeug.exceptions import BadRequest
+ from werkzeug.exceptions import NotFound
+@@ -974,6 +974,13 @@ class _PackageBoundObject(object):
+ 
+     def __init__(self, import_name, template_folder=None, root_path=None):
+         self.import_name = import_name
++
++        package_name = import_name
++        self.module_loader = pkgutil.find_loader(import_name)
++        if self.module_loader and not self.module_loader.is_package(import_name):
++            package_name = package_name.rsplit('.', 1)[0]
++        self._builtin_resource_prefix = package_name.replace('.', '/')
++
+         self.template_folder = template_folder
+ 
+         if root_path is None:
+@@ -1041,7 +1048,10 @@ class _PackageBoundObject(object):
+         .. versionadded:: 0.5
+         """
+         if self.template_folder is not None:
+-            return FileSystemLoader(os.path.join(self.root_path, self.template_folder))
++            return ChoiceLoader([
++                FileSystemLoader(os.path.join(self.root_path, self.template_folder)),
++                ResourceLoader(os.path.join(self._builtin_resource_prefix, self.template_folder), self.module_loader),
++            ])
+ 
+     def get_send_file_max_age(self, filename):
+         """Provides default cache_timeout for the :func:`send_file` functions.
+@@ -1080,9 +1090,26 @@ class _PackageBoundObject(object):
+         # Ensure get_send_file_max_age is called in all cases.
+         # Here, we ensure get_send_file_max_age is called for Blueprints.
+         cache_timeout = self.get_send_file_max_age(filename)
+-        return send_from_directory(
+-            self.static_folder, filename, cache_timeout=cache_timeout
+-        )
++        try:
++            return send_from_directory(
++                self.static_folder, filename, cache_timeout=cache_timeout
++            )
++        except NotFound:
++            if self.module_loader is None:
++                raise
++            from io import BytesIO
++            path = os.path.join(self._builtin_resource_prefix, self._static_folder, filename)
++            try:
++                data = self.module_loader.get_data(path)
++            except IOError:
++                raise NotFound
++            mimetype = mimetypes.guess_type(filename)[0]
++            fobj = BytesIO(data)
++            # Note: in case of uWSGI, might also need to set
++            # `wsgi-disable-file-wrapper = true`
++            # because, otherwise, uwsgi expects a `fileno` on it.
++            return send_file(fobj, mimetype=mimetype,
++                             cache_timeout=cache_timeout, conditional=True)
+ 
+     def open_resource(self, resource, mode="rb"):
+         """Opens a resource from the application's resource folder.  To see

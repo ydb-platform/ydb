@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -30,42 +31,46 @@ public:
         : TBase(msg)
         , Request(request)
     {
-        TBase::SetSecurityToken(request.GetSecurityToken());
-        TBase::SetRequireAdminAccess(true);
+        const auto& token = request.GetSecurityToken();
+        if (!token.empty()) {
+            TBase::SetSecurityToken(token);
+        } else {
+            const auto& clientCertificates = msg.FindClientCert();
+            if (!clientCertificates.empty()) {
+                TBase::SetSecurityToken(TString(clientCertificates.front()));
+            }
+        }
+        // Don`t require admin access for GetNodeConfigRequest
+        if (Request.GetRequestCase() != NKikimrClient::TConsoleRequest::kGetNodeConfigRequest) {
+            TBase::SetRequireAdminAccess(true);
+        }
+
+        TBase::SetPeerName(msg.GetPeerName());
     }
 
     void Bootstrap(const TActorContext &ctx)
     {
         auto dinfo = AppData(ctx)->DomainsInfo;
 
-        if (Request.HasDomainName()) {
-            auto *domain = dinfo->GetDomainByName(Request.GetDomainName());
-            if (!domain) {
-                auto error = Sprintf("Unknown domain %s", Request.GetDomainName().data());
-                ReplyWithErrorAndDie(error, ctx);
-                return;
-            }
-            StateStorageGroup = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
-        } else {
-            if (dinfo->Domains.size() > 1) {
-                auto error = "Ambiguous domain (use --domain option)";
-                ReplyWithErrorAndDie(error, ctx);
-                return;
-            }
-
-            auto domain = dinfo->Domains.begin()->second;
-            StateStorageGroup = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
+        if (Request.HasDomainName() && (!dinfo->Domain || dinfo->GetDomain()->Name != Request.GetDomainName())) {
+            auto error = Sprintf("Unknown domain %s", Request.GetDomainName().data());
+            ReplyWithErrorAndDie(error, ctx);
+            return;
         }
 
         SendRequest(ctx);
         TBase::Become(&TConsoleRequestActor::MainState);
+
+        if (const auto timeout = TDuration::MilliSeconds(Request.GetTimeoutMs())) {
+            ctx.Schedule(timeout, new TEvents::TEvWakeup());
+        }
     }
 
     void SendRequest(const TActorContext &ctx)
     {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
-        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(StateStorageGroup), pipeConfig);
+        auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(), pipeConfig);
         ConsolePipe = ctx.RegisterWithSameMailbox(pipe);
 
         // Don't print security token.
@@ -77,6 +82,7 @@ public:
             auto request = MakeHolder<TEvConsole::TEvCreateTenantRequest>();
             request->Record.CopyFrom(Request.GetCreateTenantRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
+            request->Record.SetPeerName(TBase::GetPeerName());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetConfigRequest()) {
             auto request = MakeHolder<TEvConsole::TEvGetConfigRequest>();
@@ -120,6 +126,10 @@ public:
             request->Record.CopyFrom(Request.GetGetNodeConfigItemsRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetNodeConfigRequest()) {
+            if (!CheckAccessGetNodeConfig()) {
+                ReplyWithErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Cannot get node config. Access denied. Node is not authorized", ctx);
+                return;
+            }
             auto request = MakeHolder<TEvConsole::TEvGetNodeConfigRequest>();
             request->Record.CopyFrom(Request.GetGetNodeConfigRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
@@ -322,6 +332,10 @@ public:
         SendReplyAndDie(ctx);
     }
 
+    void HandleTimeout(const TActorContext &ctx) {
+        ReplyWithErrorAndDie(Ydb::StatusIds::TIMEOUT, "Console request timed out", ctx);
+    }
+
     STFUNC(MainState) {
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TEvUndelivered::EventType, Undelivered);
@@ -341,6 +355,7 @@ public:
             HFunc(TEvConsole::TEvToggleConfigValidatorResponse, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            SFunc(TEvents::TEvWakeup, HandleTimeout);
         default:
             Y_ABORT("TConsoleRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),
@@ -348,10 +363,17 @@ public:
         }
     }
 
+    bool CheckAccessGetNodeConfig() const {
+        if (TBase::IsTokenRequired()) {
+            return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
+        }
+        // if token is not required access is granted
+        return true;
+    }
+
 private:
     NKikimrClient::TConsoleRequest Request;
     NKikimrClient::TConsoleResponse Response;
-    ui32 StateStorageGroup = 0;
     TActorId ConsolePipe;
 };
 

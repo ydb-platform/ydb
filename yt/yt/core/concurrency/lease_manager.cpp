@@ -39,7 +39,7 @@ class TLeaseManager::TImpl
 public:
     static TLease CreateLease(TDuration timeout, TClosure onExpired)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_ASSERT(onExpired);
 
         auto lease = New<TLeaseEntry>(timeout, std::move(onExpired));
@@ -52,7 +52,7 @@ public:
 
     static bool RenewLease(TLease lease, std::optional<TDuration> timeout)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
         YT_ASSERT(lease);
 
         auto guard = Guard(lease->SpinLock);
@@ -75,7 +75,7 @@ public:
 
     static bool CloseLease(TLease lease)
     {
-        VERIFY_THREAD_AFFINITY_ANY();
+        YT_ASSERT_THREAD_AFFINITY_ANY();
 
         if (!lease) {
             return false;
@@ -113,7 +113,7 @@ private:
 
     static void InvalidateLease(TLease lease)
     {
-        VERIFY_SPINLOCK_AFFINITY(lease->SpinLock);
+        YT_ASSERT_SPINLOCK_AFFINITY(lease->SpinLock);
 
         TDelayedExecutor::CancelAndClear(lease->Cookie);
         lease->IsValid = false;

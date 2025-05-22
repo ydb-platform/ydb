@@ -1,0 +1,11 @@
+--- contrib/python/boto3/py2/boto3/compat.py	(index)
++++ contrib/python/boto3/py2/boto3/compat.py	(working tree)
+@@ -16,7 +16,7 @@ import errno
+ import socket
+ import warnings
+ 
+-from botocore.vendored import six
++from botocore.compat import six
+ from boto3.exceptions import PythonDeprecationWarning
+ 
+ if six.PY3:

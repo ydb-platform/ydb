@@ -1,0 +1,13 @@
+(
+#comment
+(let config (DataSource 'config))
+
+(let res_sink (DataSink 'result))
+(let data (AsList (String 'a) (String 'a)))
+(let data1 (Map data (lambda '(x) (Concat x (Concat (String '_) (String '_))))))
+(let data2 (Map data (lambda '(y) (Concat y (Concat (String '_) (String '_))))))
+(let data (Extend data1 data2))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,14 @@
+<tmp_path>/program.yql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.yql:<main>:7:13: Warning: At function: RemovePrefixMembers
+    	(let world (Write! world res_sink (Key) data '('('type))))
+	            ^
+        <tmp_path>/program.yql:<main>:6:12: Warning: At function: Collect
+        	(let data (Collect (Squeeze1 stream (lambda '(item) item) (lambda '(item state) (+ item state)) (Void) (Void))))
+	           ^
+            <tmp_path>/program.yql:<main>:6:21: Warning: At function: Squeeze1
+            	(let data (Collect (Squeeze1 stream (lambda '(item) item) (lambda '(item state) (+ item state)) (Void) (Void))))
+	                    ^
+                <tmp_path>/program.yql:<main>:5:14: Warning: Deprecated Squeeze1, use Condense1 instead.
+                	(let stream (Iterator (AsList (Int32 '1) (Int32 '2) (Int32 '3))))
+	             ^

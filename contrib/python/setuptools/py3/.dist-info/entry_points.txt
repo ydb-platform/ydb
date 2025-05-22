@@ -2,6 +2,7 @@
 alias = setuptools.command.alias:alias
 bdist_egg = setuptools.command.bdist_egg:bdist_egg
 bdist_rpm = setuptools.command.bdist_rpm:bdist_rpm
+bdist_wheel = setuptools.command.bdist_wheel:bdist_wheel
 build = setuptools.command.build:build
 build_clib = setuptools.command.build_clib:build_clib
 build_ext = setuptools.command.build_ext:build_ext
@@ -19,8 +20,6 @@ rotate = setuptools.command.rotate:rotate
 saveopts = setuptools.command.saveopts:saveopts
 sdist = setuptools.command.sdist:sdist
 setopt = setuptools.command.setopt:setopt
-test = setuptools.command.test:test
-upload_docs = setuptools.command.upload_docs:upload_docs
 
 [distutils.setup_keywords]
 dependency_links = setuptools.dist:assert_string_list
@@ -35,10 +34,6 @@ package_data = setuptools.dist:check_package_data
 packages = setuptools.dist:check_packages
 python_requires = setuptools.dist:check_specifier
 setup_requires = setuptools.dist:check_requirements
-test_loader = setuptools.dist:check_importable
-test_runner = setuptools.dist:check_importable
-test_suite = setuptools.dist:check_test_suite
-tests_require = setuptools.dist:check_requirements
 use_2to3 = setuptools.dist:invalid_unless_false
 zip_safe = setuptools.dist:assert_bool
 

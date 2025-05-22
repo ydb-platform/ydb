@@ -2,6 +2,8 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
+VERSION(v1.36.5)
+
 SRCS(
     build.go
     desc.go
@@ -9,14 +11,8 @@ SRCS(
     desc_lazy.go
     desc_list.go
     desc_list_gen.go
+    editions.go
     placeholder.go
 )
 
-GO_XTEST_SRCS(
-    build_test.go
-    desc_test.go
-)
-
 END()
-
-RECURSE(gotest)

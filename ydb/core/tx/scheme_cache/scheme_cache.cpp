@@ -14,29 +14,68 @@ TSchemeCacheConfig::TSchemeCacheConfig(const TAppData* appData, ::NMonitoring::T
 {
     Y_ABORT_UNLESS(appData);
     Y_ABORT_UNLESS(appData->DomainsInfo);
-
-    for (const auto& [_, domain] : appData->DomainsInfo->Domains) {
-        Y_ABORT_UNLESS(domain);
-
-        if (!domain->SchemeRoot) {
-            continue;
-        }
-
+    if (const auto& domain = appData->DomainsInfo->Domain; domain && domain->SchemeRoot) {
         Roots.emplace_back(domain->DomainRootTag(), domain->SchemeRoot, domain->Name);
     }
 }
 
 TString TDomainInfo::ToString() const {
-    return TStringBuilder() << "{"
+    auto result = TStringBuilder() << "{"
         << " DomainKey: " << DomainKey
         << " ResourcesDomainKey: " << ResourcesDomainKey
         << " Params { " << Params.ShortDebugString() << " }"
-        << " ServerlessComputeResourcesMode: " << ServerlessComputeResourcesMode
+        << " ServerlessComputeResourcesMode: " << ServerlessComputeResourcesMode;
+
+    result << " Users: [";
+    for (ui32 i = 0; i < Users.size(); ++i) {
+        if (i) {
+            result << ",";
+        }
+
+        result << Users.at(i).ToString();
+    }
+    result << "]";
+
+    result << " Groups: [";
+    for (ui32 i = 0; i < Groups.size(); ++i) {
+        if (i) {
+            result << ",";
+        }
+
+        result << Groups.at(i).ToString();
+    }
+    result << "]";
+
+    result << " }";
+    return result;
+}
+
+TString TDomainInfo::TUser::ToString() const {
+    return TStringBuilder() << "{"
+        << " Sid: " << Sid
     << " }";
 }
 
+TString TDomainInfo::TGroup::ToString() const {
+    auto result = TStringBuilder() << "{"
+        << " Sid: " << Sid;
+
+    result << " Members: [";
+    for (ui32 i = 0; i < Members.size(); ++i) {
+        if (i) {
+            result << ",";
+        }
+
+        result << Members.at(i);
+    }
+    result << "]";
+
+    result << " }";
+    return result;
+}
+
 TString TSchemeCacheNavigate::TEntry::ToString() const {
-    return TStringBuilder() << "{"
+    auto out = TStringBuilder() << "{"
         << " Path: " << JoinPath(Path)
         << " TableId: " << TableId
         << " RequestType: " << RequestType
@@ -46,8 +85,22 @@ TString TSchemeCacheNavigate::TEntry::ToString() const {
         << " SyncVersion: " << (SyncVersion ? "true" : "false")
         << " Status: " << Status
         << " Kind: " << Kind
-        << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>")
-    << " }";
+        << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>");
+    
+    if (ListNodeEntry) {
+        out << " Children [";
+        for (ui32 i = 0; i < ListNodeEntry->Children.size(); ++i) {
+            if (i) {
+                out << ",";
+            }
+
+            out << ListNodeEntry->Children.at(i).Name;
+        }
+        out << "]";
+    }
+    
+    out << " }";
+    return out;
 }
 
 TString TSchemeCacheNavigate::TEntry::ToString(const NScheme::TTypeRegistry& typeRegistry) const {

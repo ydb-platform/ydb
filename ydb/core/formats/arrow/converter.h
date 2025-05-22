@@ -22,6 +22,7 @@ class TArrowToYdbConverter {
 private:
     std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema_; // Destination schema (allow shrink and reorder)
     IRowWriter& RowWriter_;
+    bool AllowInfDouble_;
 
     template <typename TArray>
     TCell MakeCellFromValue(const std::shared_ptr<arrow::Array>& column, i64 row) {
@@ -63,17 +64,19 @@ public:
 
     static bool NeedConversion(const NScheme::TTypeInfo& typeInRequest, const NScheme::TTypeInfo& expectedType);
 
-    TArrowToYdbConverter(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter)
+    TArrowToYdbConverter(
+        const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema, IRowWriter& rowWriter, const bool allowInfDouble = false)
         : YdbSchema_(ydbSchema)
         , RowWriter_(rowWriter)
-    {}
+        , AllowInfDouble_(allowInfDouble) {
+    }
 
     bool Process(const arrow::RecordBatch& batch, TString& errorMessage);
 };
 
-std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                   const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert);
-std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                   const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert);
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert, const bool allowInfDouble = false);
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> InplaceConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+    const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert);
 
 } // namespace NKikimr::NArrow

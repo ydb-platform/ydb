@@ -1,0 +1,11 @@
+--- contrib/libs/c-ares/include/ares.h	(index)
++++ contrib/libs/c-ares/include/ares.h	(working tree)
+@@ -130,7 +130,7 @@ extern "C" {
+ #  define __has_attribute(x) 0
+ #endif
+ 
+-#ifdef CARES_NO_DEPRECATED
++#if 1
+ #  define CARES_DEPRECATED
+ #  define CARES_DEPRECATED_FOR(f)
+ #else

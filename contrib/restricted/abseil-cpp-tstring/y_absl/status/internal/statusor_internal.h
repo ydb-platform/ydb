@@ -14,12 +14,15 @@
 #ifndef Y_ABSL_STATUS_INTERNAL_STATUSOR_INTERNAL_H_
 #define Y_ABSL_STATUS_INTERNAL_STATUSOR_INTERNAL_H_
 
+#include <cstdint>
 #include <type_traits>
 #include <utility>
 
 #include "y_absl/base/attributes.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/status/status.h"
+#include "y_absl/strings/string_view.h"
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
@@ -120,18 +123,78 @@ using IsForwardingAssignmentValid = y_absl::disjunction<
         std::is_same<y_absl::in_place_t, y_absl::remove_cvref_t<U>>,
         IsForwardingAssignmentAmbiguous<T, U>>>>;
 
+template <bool Value, typename T>
+using Equality = std::conditional_t<Value, T, y_absl::negation<T>>;
+
+template <bool Explicit, typename T, typename U, bool Lifetimebound>
+using IsConstructionValid = y_absl::conjunction<
+    Equality<Lifetimebound,
+             type_traits_internal::IsLifetimeBoundAssignment<T, U>>,
+    IsDirectInitializationValid<T, U&&>, std::is_constructible<T, U&&>,
+    Equality<!Explicit, std::is_convertible<U&&, T>>,
+    y_absl::disjunction<
+        std::is_same<T, y_absl::remove_cvref_t<U>>,
+        y_absl::conjunction<
+            std::conditional_t<
+                Explicit,
+                y_absl::negation<std::is_constructible<y_absl::Status, U&&>>,
+                y_absl::negation<std::is_convertible<U&&, y_absl::Status>>>,
+            y_absl::negation<
+                internal_statusor::HasConversionOperatorToStatusOr<T, U&&>>>>>;
+
+template <typename T, typename U, bool Lifetimebound>
+using IsAssignmentValid = y_absl::conjunction<
+    Equality<Lifetimebound,
+             type_traits_internal::IsLifetimeBoundAssignment<T, U>>,
+    std::is_constructible<T, U&&>, std::is_assignable<T&, U&&>,
+    y_absl::disjunction<
+        std::is_same<T, y_absl::remove_cvref_t<U>>,
+        y_absl::conjunction<
+            y_absl::negation<std::is_convertible<U&&, y_absl::Status>>,
+            y_absl::negation<HasConversionOperatorToStatusOr<T, U&&>>>>,
+    IsForwardingAssignmentValid<T, U&&>>;
+
+template <bool Explicit, typename T, typename U>
+using IsConstructionFromStatusValid = y_absl::conjunction<
+    y_absl::negation<std::is_same<y_absl::StatusOr<T>, y_absl::remove_cvref_t<U>>>,
+    y_absl::negation<std::is_same<T, y_absl::remove_cvref_t<U>>>,
+    y_absl::negation<std::is_same<y_absl::in_place_t, y_absl::remove_cvref_t<U>>>,
+    Equality<!Explicit, std::is_convertible<U, y_absl::Status>>,
+    std::is_constructible<y_absl::Status, U>,
+    y_absl::negation<HasConversionOperatorToStatusOr<T, U>>>;
+
+template <bool Explicit, typename T, typename U, bool Lifetimebound,
+          typename UQ>
+using IsConstructionFromStatusOrValid = y_absl::conjunction<
+    y_absl::negation<std::is_same<T, U>>,
+    Equality<Lifetimebound,
+             type_traits_internal::IsLifetimeBoundAssignment<T, U>>,
+    std::is_constructible<T, UQ>,
+    Equality<!Explicit, std::is_convertible<UQ, T>>,
+    y_absl::negation<IsConstructibleOrConvertibleFromStatusOr<T, U>>>;
+
+template <typename T, typename U, bool Lifetimebound>
+using IsStatusOrAssignmentValid = y_absl::conjunction<
+    y_absl::negation<std::is_same<T, y_absl::remove_cvref_t<U>>>,
+    Equality<Lifetimebound,
+             type_traits_internal::IsLifetimeBoundAssignment<T, U>>,
+    std::is_constructible<T, U>, std::is_assignable<T, U>,
+    y_absl::negation<IsConstructibleOrConvertibleOrAssignableFromStatusOr<
+        T, y_absl::remove_cvref_t<U>>>>;
+
 class Helper {
  public:
   // Move type-agnostic error handling to the .cc.
-  static void HandleInvalidStatusCtorArg(Status*);
-  Y_ABSL_ATTRIBUTE_NORETURN static void Crash(const y_absl::Status& status);
+  static void HandleInvalidStatusCtorArg(y_absl::Nonnull<Status*>);
+  [[noreturn]] static void Crash(const y_absl::Status& status);
 };
 
 // Construct an instance of T in `p` through placement new, passing Args... to
 // the constructor.
 // This abstraction is here mostly for the gcc performance fix.
 template <typename T, typename... Args>
-Y_ABSL_ATTRIBUTE_NONNULL(1) void PlacementNew(void* p, Args&&... args) {
+Y_ABSL_ATTRIBUTE_NONNULL(1)
+void PlacementNew(y_absl::Nonnull<void*> p, Args&&... args) {
   new (p) T(std::forward<Args>(args)...);
 }
 
@@ -375,7 +438,54 @@ struct MoveAssignBase<T, false> {
   MoveAssignBase& operator=(MoveAssignBase&&) = delete;
 };
 
-Y_ABSL_ATTRIBUTE_NORETURN void ThrowBadStatusOrAccess(y_absl::Status status);
+[[noreturn]] void ThrowBadStatusOrAccess(y_absl::Status status);
+
+// Used to introduce jitter into the output of printing functions for
+// `StatusOr` (i.e. `AbslStringify` and `operator<<`).
+class StringifyRandom {
+  enum BracesType {
+    kBareParens = 0,
+    kSpaceParens,
+    kBareBrackets,
+    kSpaceBrackets,
+  };
+
+  // Returns a random `BracesType` determined once per binary load.
+  static BracesType RandomBraces() {
+    static const BracesType kRandomBraces = static_cast<BracesType>(
+        (reinterpret_cast<uintptr_t>(&kRandomBraces) >> 4) % 4);
+    return kRandomBraces;
+  }
+
+ public:
+  static inline y_absl::string_view OpenBrackets() {
+    switch (RandomBraces()) {
+      case kBareParens:
+        return "(";
+      case kSpaceParens:
+        return "( ";
+      case kBareBrackets:
+        return "[";
+      case kSpaceBrackets:
+        return "[ ";
+    }
+    return "(";
+  }
+
+  static inline y_absl::string_view CloseBrackets() {
+    switch (RandomBraces()) {
+      case kBareParens:
+        return ")";
+      case kSpaceParens:
+        return " )";
+      case kBareBrackets:
+        return "]";
+      case kSpaceBrackets:
+        return " ]";
+    }
+    return ")";
+  }
+};
 
 }  // namespace internal_statusor
 Y_ABSL_NAMESPACE_END

@@ -15,23 +15,18 @@
 #include <utility>
 #include <vector>
 
+// Assert in place so gcc + libc++ combination properly builds
+static_assert(std::is_constructible<YAML::Node, const YAML::Node&>::value, "Node must be copy constructable");
+
 namespace YAML {
 namespace detail {
-struct node_pair: public std::pair<Node, Node> {
-    node_pair() = default;
-    node_pair(const Node& first, const Node& second)
-        : std::pair<Node, Node>(first, second)
-    {
-    }
-};
-
-struct iterator_value : public Node, node_pair {
-  iterator_value() {}
+struct iterator_value : public Node, std::pair<Node, Node> {
+  iterator_value() = default;
   explicit iterator_value(const Node& rhs)
       : Node(rhs),
-        node_pair(Node(Node::ZombieNode), Node(Node::ZombieNode)) {}
+        std::pair<Node, Node>(Node(Node::ZombieNode), Node(Node::ZombieNode)) {}
   explicit iterator_value(const Node& key, const Node& value)
-      : Node(Node::ZombieNode), node_pair(key, value) {}
+      : Node(Node::ZombieNode), std::pair<Node, Node>(key, value) {}
 };
 }
 }

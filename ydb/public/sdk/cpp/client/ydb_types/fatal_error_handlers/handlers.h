@@ -4,7 +4,7 @@
 
 #include <functional>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 void ThrowFatalError(const TString& str);
 

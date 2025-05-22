@@ -8,6 +8,7 @@
 #define BOOST_LOCALE_COLLATOR_HPP_INCLUDED
 
 #include <boost/locale/config.hpp>
+#include <boost/locale/detail/facet_id.hpp>
 #include <locale>
 
 #ifdef BOOST_MSVC
@@ -43,17 +44,16 @@ namespace boost { namespace locale {
 
     /// \brief Collation facet.
     ///
-    /// It reimplements standard C++ std::collate,
-    /// allowing usage of std::locale for direct string comparison
+    /// It reimplements standard C++ std::collate with support for collation levels
     template<typename CharType>
-    class collator : public std::collate<CharType> {
+    class BOOST_SYMBOL_VISIBLE collator : public std::locale::facet, public detail::facet_id<collator<CharType>> {
     public:
         /// Type of the underlying character
         typedef CharType char_type;
         /// Type of string used with this facet
         typedef std::basic_string<CharType> string_type;
 
-        /// Compare two strings in rage [b1,e1),  [b2,e2) according using a collation level \a level. Calls do_compare
+        /// Compare two strings in range [b1,e1),  [b2,e2) according to collation level \a level. Calls do_compare
         ///
         /// Returns -1 if the first of the two strings sorts before the seconds, returns 1 if sorts after and 0 if
         /// they considered equal.
@@ -64,6 +64,13 @@ namespace boost { namespace locale {
                     const char_type* e2) const
         {
             return do_compare(level, b1, e1, b2, e2);
+        }
+
+        /// Default compare function as-in std::collate that does not take collation level into account.
+        /// Uses identical level
+        int compare(const char_type* b1, const char_type* e1, const char_type* b2, const char_type* e2) const
+        {
+            return compare(collate_level::identical, b1, e1, b2, e2);
         }
 
         /// Create a binary string that can be compared to other in order to get collation order. The string is created
@@ -80,12 +87,23 @@ namespace boost { namespace locale {
             return do_transform(level, b, e);
         }
 
+        /// Default transform function as-in std::collate that does not take collation level into account.
+        /// Uses identical level
+        string_type transform(const char_type* b, const char_type* e) const
+        {
+            return transform(collate_level::identical, b, e);
+        }
+
         /// Calculate a hash of a text in range [b,e). The value can be used for collation sensitive string comparison.
         ///
         /// If compare(level,b1,e1,b2,e2) == 0 then hash(level,b1,e1) == hash(level,b2,e2)
         ///
         /// Calls do_hash
         long hash(collate_level level, const char_type* b, const char_type* e) const { return do_hash(level, b, e); }
+
+        /// Default hash function as-in std::collate that does not take collation level into account.
+        /// Uses identical level
+        long hash(const char_type* b, const char_type* e) const { return hash(collate_level::identical, b, e); }
 
         /// Compare two strings \a l and \a r using collation level \a level
         ///
@@ -107,7 +125,7 @@ namespace boost { namespace locale {
         /// Create a binary string from string \a s, that can be compared to other, useful for collation of multiple
         /// strings.
         ///
-        /// The transformation follows these rules:
+        /// The transformation follows this rule:
         /// \code
         ///   compare(level,s1,s2) == sign( transform(level,s1).compare(transform(level,s2)) );
         /// \endcode
@@ -118,29 +136,7 @@ namespace boost { namespace locale {
 
     protected:
         /// constructor of the collator object
-        collator(size_t refs = 0) : std::collate<CharType>(refs) {}
-
-        /// This function is used to override default collation function that does not take in account collation level.
-        /// Uses primary level
-        int
-        do_compare(const char_type* b1, const char_type* e1, const char_type* b2, const char_type* e2) const override
-        {
-            return do_compare(collate_level::identical, b1, e1, b2, e2);
-        }
-
-        /// This function is used to override default collation function that does not take in account collation level.
-        /// Uses primary level
-        string_type do_transform(const char_type* b, const char_type* e) const override
-        {
-            return do_transform(collate_level::identical, b, e);
-        }
-
-        /// This function is used to override default collation function that does not take in account collation level.
-        /// Uses primary level
-        long do_hash(const char_type* b, const char_type* e) const override
-        {
-            return do_hash(collate_level::identical, b, e);
-        }
+        collator(size_t refs = 0) : std::locale::facet(refs) {}
 
         /// Actual function that performs comparison between the strings. For details see compare member function. Can
         /// be overridden.
@@ -157,7 +153,7 @@ namespace boost { namespace locale {
     };
 
     /// \brief This class can be used in STL algorithms and containers for comparison of strings
-    /// with a level other than primary
+    /// with a level other than identical
     ///
     /// For example:
     ///
@@ -169,21 +165,22 @@ namespace boost { namespace locale {
     template<typename CharType, collate_level default_level = collate_level::identical>
     struct comparator {
     public:
-        /// Create a comparator class for locale \a l and with collation leval \a level
+        /// Create a comparator class for locale \a l and with collation level \a level
         ///
         /// \throws std::bad_cast: \a l does not have \ref collator facet installed
         comparator(const std::locale& l = std::locale(), collate_level level = default_level) :
-            locale_(l), level_(level)
+            locale_(l), collator_(std::use_facet<collator<CharType>>(locale_)), level_(level)
         {}
 
         /// Compare two strings -- equivalent to return left < right according to collation rules
         bool operator()(const std::basic_string<CharType>& left, const std::basic_string<CharType>& right) const
         {
-            return std::use_facet<collator<CharType>>(locale_).compare(level_, left, right) < 0;
+            return collator_.compare(level_, left, right) < 0;
         }
 
     private:
         std::locale locale_;
+        const collator<CharType>& collator_;
         collate_level level_;
     };
 

@@ -1,9 +1,10 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <library/cpp/json/json_writer.h>
+#include <mutex>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -13,6 +14,7 @@ public:
     struct TSettings {
         TString Path;
         bool Recursive;
+        bool Multithread;
         bool FromNewLine;
         NScheme::TListDirectorySettings ListDirectorySettings;
         NTable::TDescribeTableSettings DescribeTableSettings;
@@ -37,13 +39,14 @@ protected:
     NTable::TDescribeTableResult DescribeTable(const TString& relativePath);
 
 private:
-    void PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath);
+    NThreading::TFuture<void> PrintDirectoryRecursive(const TString& fullPath, const TString& relativePath);
     static bool IsDirectoryLike(const NScheme::TSchemeEntry& entry);
 
 protected:
     NTable::TTableClient TableClient;
     NScheme::TSchemeClient SchemeClient;
     const TSettings Settings;
+    std::mutex Lock;
 };
 
 class TDefaultSchemePrinter : public TSchemePrinterBase {

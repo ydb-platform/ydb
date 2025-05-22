@@ -10,7 +10,7 @@
 
 #include <google/protobuf/text_format.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 TString TColumn::ToString() const {
     TString result;

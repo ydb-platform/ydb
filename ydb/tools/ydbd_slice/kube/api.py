@@ -2,7 +2,7 @@ import copy
 import json
 import time
 import logging
-from kubernetes.client import ApiClient as KubeApiClient, CustomObjectsApi, ApiException, CoreV1Api
+from kubernetes.client import ApiClient as KubeApiClient, CustomObjectsApi, ApiException, CoreV1Api, BatchV1Api
 from kubernetes.config import load_kube_config
 from ydb.tools.ydbd_slice.kube import kubectl
 
@@ -221,6 +221,11 @@ def get_storage(api_client, namespace, name):
     )
 
 
+def get_jobs(api_client, namespace):
+    api = BatchV1Api(api_client)
+    return api.list_namespaced_job(namespace=namespace)
+
+
 def create_storage(api_client, body):
     namespace = body['metadata']['namespace']
     name = body['metadata']['name']
@@ -399,7 +404,7 @@ def wait_pods_deleted(api_client, pods, timeout=1800):
     while time.time() < end_ts:
         if not any(pod_present.values()):
             return
-        logger.debug(f'pods left: {len([v for v  in pod_present.values() if v])}/{len(pod_present)}')
+        logger.debug(f'pods left: {len([v for v in pod_present.values() if v])}/{len(pod_present)}')
         for key, present in pod_present.items():
             if not present:
                 continue
@@ -422,3 +427,77 @@ def wait_pods_deleted(api_client, pods, timeout=1800):
         time.sleep(1)
 
     raise TimeoutError('waiting for pods to delete timed out')
+
+
+def get_job_pods(api_client, namespace, job_name):
+    api = CoreV1Api(api_client)
+    return api.list_namespaced_pod(namespace, label_selector=f'job-name={job_name}').items
+
+
+def delete_job_pods(api_client, namespace, job_name):
+    api = CoreV1Api(api_client)
+    pods = api.list_namespaced_pod(namespace, label_selector=f'job-name={job_name}')
+    for pod in pods.items:
+        if pod.status.phase == 'Succeeded':
+            try:
+                api.delete_namespaced_pod(pod.metadata.name, namespace)
+            except ApiException as e:
+                if e.status == 404:
+                    pass
+                else:
+                    raise
+        else:
+            logger.error(f'Pod {pod.metadata.name} in namespace {namespace} has not completed successfully')
+            raise RuntimeError(f'Pod {pod.metadata.name} in namespace {namespace} has not completed successfully')
+
+    return
+
+
+def wait_job_pods_completed(api_client, namespace, job_name, timeout=300):
+    logger.debug(f'waiting for job pods to complete: {namespace}/{job_name}')
+    end_ts = time.time() + timeout
+    while time.time() < end_ts:
+        pods = get_job_pods(api_client, namespace, job_name)
+        if not pods:
+            return
+        for pod in pods:
+            if pod.status.phase != 'Succeeded':
+                break
+        else:
+            return
+        time.sleep(5)
+    raise TimeoutError(f'waiting for job pods in namespace {namespace} to complete timed out')
+
+
+def create_job(api_client, namespace, body):
+    logger.debug(f'creating job: {namespace}/{body["metadata"]["name"]}')
+    api = BatchV1Api(api_client)
+    body = add_kubectl_last_applied_configuration(body)
+    return api.create_namespaced_job(namespace=namespace, body=body)
+
+
+def delete_job(api_client, namespace, name):
+    logger.debug(f'deleting job: {namespace}/{name}')
+    api = BatchV1Api(api_client)
+    try:
+        return api.delete_namespaced_job(name=name, namespace=namespace)
+    except ApiException as e:
+        if e.status == 404:
+            return
+        raise
+
+
+def wait_jobs_completed(api_client, namespace, timeout=300):
+    logger.debug(f'waiting for jobs to complete: {namespace}')
+    end_ts = time.time() + timeout
+    while time.time() < end_ts:
+        jobs = get_jobs(api_client, namespace)
+        if not jobs.items:
+            return
+
+        for job in jobs.items:
+            if not job.status.succeeded:
+                break
+            return
+        time.sleep(5)
+    raise TimeoutError(f'waiting for jobs in namespace {namespace} to complete timed out')

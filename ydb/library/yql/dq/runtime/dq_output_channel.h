@@ -6,8 +6,8 @@
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <util/generic/size_literals.h>
 
@@ -23,6 +23,21 @@ struct TDqOutputChannelStats : public TDqOutputStats {
     ui64 SpilledBytes = 0;
     ui64 SpilledRows = 0;
     ui64 SpilledBlobs = 0;
+};
+
+struct TDqOutputChannelSettings {
+    struct TMutable {
+        bool IsLocalChannel = false;
+    };
+
+    ui64 MaxStoredBytes = 8_MB;
+    ui64 MaxChunkBytes = 2_MB;
+    ui64 ChunkSizeLimit = 48_MB;
+    NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
+    IDqChannelStorage::TPtr ChannelStorage;
+    TCollectStatsLevel Level = TCollectStatsLevel::None;
+    TMaybe<ui8> ArrayBufferMinFillPercentage;
+    TMutable MutableSettings;
 };
 
 class IDqOutputChannel : public IDqOutput {
@@ -55,15 +70,8 @@ public:
     virtual ui64 Drop() = 0;
 
     virtual void Terminate() = 0;
-};
 
-struct TDqOutputChannelSettings {
-    ui64 MaxStoredBytes = 8_MB;
-    ui64 MaxChunkBytes = 2_MB;
-    ui64 ChunkSizeLimit = 48_MB;
-    NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
-    IDqChannelStorage::TPtr ChannelStorage;
-    TCollectStatsLevel Level = TCollectStatsLevel::None;
+    virtual void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) = 0;
 };
 
 struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {

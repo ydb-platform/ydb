@@ -1,11 +1,13 @@
-import time
-
 import abc
 import asyncio
 import logging
-from ydb import issues, credentials
+import time
+
+from ydb import credentials
+from ydb import issues
 
 logger = logging.getLogger(__name__)
+YDB_AUTH_TICKET_HEADER = "x-ydb-auth-ticket"
 
 
 class _OneToManyValue(object):
@@ -64,6 +66,12 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
     async def _make_token_request(self):
         pass
 
+    async def get_auth_token(self) -> str:
+        for header, token in await self.auth_metadata():
+            if header == YDB_AUTH_TICKET_HEADER:
+                return token
+        return ""
+
     async def _refresh(self):
         current_time = time.time()
         self._log_refresh_start(current_time)
@@ -71,7 +79,7 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
         try:
             auth_metadata = await self._make_token_request()
             await self._cached_token.update(auth_metadata["access_token"])
-            self.update_expiration_info(auth_metadata)
+            self._update_expiration_info(auth_metadata)
             self.logger.info(
                 "Token refresh successful. current_time %s, refresh_in %s",
                 current_time,
@@ -85,6 +93,10 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
             self.last_error = str(e)
             await asyncio.sleep(1)
             self._tp.submit(self._refresh)
+
+        except BaseException as e:
+            self.last_error = str(e)
+            raise
 
     async def token(self):
         current_time = time.time()

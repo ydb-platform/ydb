@@ -3,28 +3,39 @@ LIBRARY()
 SRCS(
     actor_persqueue_client_iface.h
     blob.cpp
+    common_app.cpp
     cluster_tracker.cpp
     event_helpers.cpp
     fetch_request_actor.cpp
     header.cpp
     heartbeat.cpp
+    key.cpp
     metering_sink.cpp
+    list_all_topics_actor.cpp
     mirrorer.cpp
     mirrorer.h
     ownerinfo.cpp
+    offload_actor.cpp
+    partition_blob_encoder.cpp
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
+    partition_scale_request.cpp
+    partition_scale_manager.cpp
     partition_sourcemanager.cpp
     partition_write.cpp
     partition.cpp
     percentile_counter.cpp
     pq.cpp
     pq_database.cpp
+    pq_impl_app.cpp
     pq_impl.cpp
     pq_l2_cache.cpp
     pq_rl_helpers.cpp
     quota_tracker.cpp
+    read_balancer__balancing_app.cpp
+    read_balancer__balancing.cpp
+    read_balancer_app.cpp
     read_balancer.cpp
     account_read_quoter.cpp
     read_quoter.cpp
@@ -35,16 +46,20 @@ SRCS(
     user_info.cpp
     utils.cpp
     write_meta.cpp
+    write_quoter.cpp
     microseconds_sliding_window.cpp
     dread_cache_service/caching_service.cpp
+    write_id.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(sourceid.h)
+GENERATE_ENUM_SERIALIZATION(read_balancer__balancing.h)
+GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
 
 PEERDIR(
     ydb/library/actors/core
     library/cpp/html/pcdata
     library/cpp/json
+    ydb/core/backup/impl
     ydb/core/base
     ydb/core/engine/minikql
     ydb/core/keyvalue
@@ -59,14 +74,25 @@ PEERDIR(
     ydb/library/logger
     ydb/library/persqueue/counter_time_keeper
     ydb/library/persqueue/topic_parser
+    ydb/library/protobuf_printer
     ydb/public/lib/base
-    ydb/public/sdk/cpp/client/ydb_persqueue_core
+    ydb/public/sdk/cpp/src/client/persqueue_public
 )
 
 END()
+
+RECURSE(
+    codecs
+    config
+    events
+    partition_key_range
+    purecalc
+    writer
+)
 
 RECURSE_FOR_TESTS(
     ut
     dread_cache_service/ut
     ut/slow
+    ut/ut_with_sdk
 )

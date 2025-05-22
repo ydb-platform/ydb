@@ -1,12 +1,11 @@
+// SPDX-License-Identifier: 0BSD
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 /// \file       alone_decoder.c
 /// \brief      Decoder for LZMA_Alone files
 //
 //  Author:     Lasse Collin
-//
-//  This file has been put into the public domain.
-//  You can do whatever you want with this file.
 //
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -135,8 +134,7 @@ alone_decode(void *coder_ptr, const lzma_allocator *allocator,
 
 		coder->pos = 0;
 		coder->sequence = SEQ_CODER_INIT;
-
-	// Fall through
+		FALLTHROUGH;
 
 	case SEQ_CODER_INIT: {
 		if (coder->memusage > coder->memlimit)

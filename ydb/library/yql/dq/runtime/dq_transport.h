@@ -5,11 +5,11 @@
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 
 
 namespace NYql::NDq {
@@ -82,7 +82,7 @@ private:
         }
         TDqSerializedBatch result;
         result.Proto.SetTransportVersion(TransportVersion);
-        result.Proto.SetRows(count);
+        result.Proto.SetChunks(count);
         result.SetPayload(packer.Finish());
         return result;
     }

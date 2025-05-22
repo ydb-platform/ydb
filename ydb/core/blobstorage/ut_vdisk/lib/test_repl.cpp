@@ -199,12 +199,14 @@ private:
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         auto groupInfo = TBlobStorageGroupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
         VCtx.Reset(new TVDiskContext(ctx.SelfID, groupInfo.PickTopology(), counters, VDiskInfo.VDiskID,
-                ctx.ExecutorThread.ActorSystem, NPDisk::DEVICE_TYPE_UNKNOWN));
+                ctx.ActorSystem(), NPDisk::DEVICE_TYPE_UNKNOWN));
 
         ReplCtx = std::make_shared<TReplCtx>(
                 VCtx,
+                nullptr,
                 nullptr, // PDiskCtx
                 nullptr, // HugeBlobCtx
+                4097,
                 nullptr,
                 MakeIntrusive<TBlobStorageGroupInfo>(groupInfo),
                 ctx.SelfID,
@@ -352,7 +354,7 @@ SYNC_TEST_END(TTestReplProxyData, TSyncTestWithSmallCommonDataset)
 SYNC_TEST_BEGIN(TTestReplProxyKeepBits, TSyncTestWithSmallCommonDataset)
 virtual void Scenario(const TActorContext &ctx) {
     // prepare gc command
-    ui64 tabletID = 0;
+    ui64 tabletID = DefaultTestTabletId;
     ui32 recGen = 1;
     ui32 recGenCounter = 1;
     ui32 channel = 0;
@@ -360,7 +362,7 @@ virtual void Scenario(const TActorContext &ctx) {
     ui32 collectGen = 1;
     ui32 collectStep = 40;
     TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep(new TVector<NKikimr::TLogoBlobID>());
-    keep->push_back(TLogoBlobID(0, 1, 37, 0, 0, 0));
+    keep->push_back(TLogoBlobID(DefaultTestTabletId, 1, 37, 0, 0, 0));
     TAutoPtr<IActor> gcCommand(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, tabletID, recGen, recGenCounter,
                                                           channel, collect, collectGen, collectStep, keep, nullptr));
     // set gc settings
@@ -386,79 +388,10 @@ SYNC_TEST_END(TTestReplProxyKeepBits, TSyncTestWithSmallCommonDataset)
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-SYNC_TEST_BEGIN(TTestHandoffMoveDel, TSyncTestBase)
-virtual void Scenario(const TActorContext &ctx) {
-    TDataSnapshotPtr data(new TDataSnapshot(Conf->GroupInfo.Get()));
-    TString aaaa("aaaa");
-    TLogoBlobID id0(0, 1, 321, 0, aaaa.size(), 0);
-    // [0:0:0:0:0] - main
-    // [0:0:0:1:1] - main
-    // [0:0:0:2:0] - main
-    // [0:0:0:3:1] - handoff
-
-    TAllVDisks::TVDiskInstance &vdisk00 = Conf->VDisks->Get(0);
-    TAllVDisks::TVDiskInstance &vdisk11 = Conf->VDisks->Get(3);
-    TAllVDisks::TVDiskInstance &vdisk20 = Conf->VDisks->Get(4);
-    TAllVDisks::TVDiskInstance &vdisk31 = Conf->VDisks->Get(7);
-    data->PutExact(vdisk00.VDiskID, vdisk00.ActorID, TLogoBlobID(id0, 1), aaaa); // main 0
-    data->PutExact(vdisk11.VDiskID, vdisk11.ActorID, TLogoBlobID(id0, 2), aaaa); // main 1
-    data->PutExact(vdisk31.VDiskID, vdisk31.ActorID, TLogoBlobID(id0, 3), aaaa); // handoff
-
-    // load data
-    SyncRunner->Run(ctx, CreateLoadDataSnapshot(SyncRunner->NotifyID(), Conf, data,
-                                                NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
-
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-
-    // check data
-    TDataSnapshotPtr result(new TDataSnapshot(Conf->GroupInfo.Get()));
-#ifdef OPTIMIZE_SYNC
-    result->PutExact(vdisk00.VDiskID, vdisk00.ActorID, TLogoBlobID(id0, 1), aaaa, TIngress(0x24)); // main 0
-    result->PutExact(vdisk11.VDiskID, vdisk11.ActorID, TLogoBlobID(id0, 2), aaaa, TIngress(0x12)); // main 1
-    result->PutExact(vdisk20.VDiskID, vdisk20.ActorID, TLogoBlobID(id0, 3), aaaa, TIngress(0x9));  // main 2
-    result->PutExact(vdisk31.VDiskID, vdisk31.ActorID, TLogoBlobID(id0, 3), "", TIngress(0xc38));  // handoff
-#else
-    result->PutExact(vdisk00.VDiskID, vdisk00.ActorID, TLogoBlobID(id0, 1), aaaa, TIngress(0xc3c)); // main 0   old: 0xc3c
-    result->PutExact(vdisk11.VDiskID, vdisk11.ActorID, TLogoBlobID(id0, 2), aaaa, TIngress(0xc3a)); // main 1   old: 0xc3a
-    result->PutExact(vdisk20.VDiskID, vdisk20.ActorID, TLogoBlobID(id0, 3), aaaa, TIngress(0xc39)); // main 2   old: 0xc39
-    result->PutExact(vdisk31.VDiskID, vdisk31.ActorID, TLogoBlobID(id0, 3), "", TIngress(0xc38));   // handoff
-#endif
-    TSyncRunner::TReturnValue ret{0, 0};
-    while (ret.Status != 1) {
-        ret = SyncRunner->Run(ctx, CreateCheckDataSnapshot(SyncRunner->NotifyID(), Conf, result));
-    }
-}
-SYNC_TEST_END(TTestHandoffMoveDel, TSyncTestBase)
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 SYNC_TEST_BEGIN(TTestCollectAllSimpleDataset, TSyncTestBase)
 virtual void Scenario(const TActorContext &ctx) {
     // prepare gc command
-    ui64 tabletID = 0;
+    ui64 tabletID = DefaultTestTabletId;
     ui32 recGen = 1;
     ui32 recGenCounter = 1;
     ui32 channel = 1;

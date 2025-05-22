@@ -1,0 +1,11 @@
+{id=3;"k"="One";"value"=17};
+{id=5;"k"="Two";"value"=17};
+{id=13;"k"="One";"value"=0};
+{id=23;"k"="Three";"value"=-44};
+{id=27;"k"="Ten";"value"=17};
+{id=33;"k"="Zero";"value"=1024};
+{id=38;"k"="Seventeen";"value"=17};
+{id=39;"k"="One";"value"=23};
+{id=40;"k"="Three";"value"=17};
+{id=42;"k"="Four";"value"=25};
+{id=50;"k"="One";"value"=17};

@@ -15,22 +15,23 @@
 #ifndef Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_PARSER_H_
 #define Y_ABSL_STRINGS_INTERNAL_STR_FORMAT_PARSER_H_
 
-#include <limits.h>
 #include <stddef.h>
 #include <stdlib.h>
 
 #include <cassert>
-#include <cstdint>
+#include <cstring>
 #include <initializer_list>
-#include <iosfwd>
-#include <iterator>
 #include <memory>
 #include <util/generic/string.h>
+#include <utility>
 #include <vector>
 
+#include "y_absl/base/config.h"
+#include "y_absl/base/optimization.h"
 #include "y_absl/strings/internal/str_format/checker.h"
 #include "y_absl/strings/internal/str_format/constexpr_parser.h"
 #include "y_absl/strings/internal/str_format/extension.h"
+#include "y_absl/strings/string_view.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN

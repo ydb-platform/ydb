@@ -18,17 +18,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         BLOG_D("TTxStoreMetrics::Execute");
-        switch (Self->BackendType) {
-            case EBackendType::Memory:
-                Self->MemoryBackend.StoreMetrics(std::move(Data));
-                return true;
-            case EBackendType::Local:
-                return Self->LocalBackend.StoreMetrics(txc, std::move(Data));
-            case EBackendType::External:
-                // TODO
-                break;
-        }
-        return true;
+        return Self->LocalBackend.StoreMetrics(txc, std::move(Data));
     }
 
     void Complete(const TActorContext&) override {
@@ -37,7 +27,18 @@ public:
 };
 
 void TGraphShard::ExecuteTxStoreMetrics(TMetricsData&& data) {
-    Execute(new TTxStoreMetrics(this, std::move(data)));
+    AggregateMetrics(data);
+    switch (BackendType) {
+        case EBackendType::Memory:
+            MemoryBackend.StoreMetrics(std::move(data));
+            break;
+        case EBackendType::Local:
+            Execute(new TTxStoreMetrics(this, std::move(data)));
+            break;
+        case EBackendType::External:
+            // TODO
+            break;
+    }
 }
 
 } // NGraph

@@ -28,7 +28,7 @@ private:
 
         void Handle(TEvBlobStorage::TEvVStatus::TPtr ev) {
             Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(NKikimrProto::OK, Self.VDiskId,
-                Self.Status >= NKikimrBlobStorage::REPLICATING, Self.Status >= NKikimrBlobStorage::READY, 0));
+                Self.Status >= NKikimrBlobStorage::REPLICATING,  Self.Status >= NKikimrBlobStorage::READY, false, 0));
         }
 
         STRICT_STFUNC(StateFunc, {

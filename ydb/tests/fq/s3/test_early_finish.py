@@ -18,39 +18,35 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 class TestEarlyFinish(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_early_finish(self, kikimr, s3, client):
+    def test_early_finish(self, kikimr, s3, client, unique_prefix):
         # Topics
         self.init_topics("select_early", create_output=False)
-        client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
+        yds_connection_name = unique_prefix + "myyds"
+        client.create_yds_connection(yds_connection_name, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 
         # S3
         resource = boto3.resource(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         bucket = resource.Bucket("rbucket")
         bucket.create(ACL='public-read')
 
         s3_client = boto3.client(
-            "s3",
-            endpoint_url=s3.s3_url,
-            aws_access_key_id="key",
-            aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
         s3_client.put_object(Body="A", Bucket='rbucket', Key='A.txt', ContentType='text/plain')
         s3_client.put_object(Body="C", Bucket='rbucket', Key='C.txt', ContentType='text/plain')
-        client.create_storage_connection("rawbucket", "rbucket")
+        storage_connection_name = unique_prefix + "rawbucket"
+        client.create_storage_connection(storage_connection_name, "rbucket")
 
         sql = R'''
             SELECT S.Data as Data1, D.Data as Data2
-            FROM myyds.`{input_topic}` AS S
+            FROM `{yds_connection_name}`.`{input_topic}` AS S
             INNER JOIN (
                 SELECT Data
-                FROM rawbucket.`*`
+                FROM `{storage_connection_name}`.`*`
                 WITH (format=raw, SCHEMA (
                     Data String
                 ))
@@ -58,9 +54,10 @@ class TestEarlyFinish(TestYdsBase):
             ) AS D
             ON S.Data = D.Data
             LIMIT 2
-            '''\
-        .format(
-            input_topic=self.input_topic
+            '''.format(
+            yds_connection_name=yds_connection_name,
+            storage_connection_name=storage_connection_name,
+            input_topic=self.input_topic,
         )
 
         client = FederatedQueryClient("my_folder", streaming_over_kikimr=kikimr)
@@ -90,4 +87,4 @@ class TestEarlyFinish(TestYdsBase):
         read_rules = list_read_rules(self.input_topic)
         assert len(read_rules) == 0, read_rules
 
-        assert self.wait_until((lambda : kikimr.control_plane.get_actor_count(1, "YQ_PINGER") == 0))
+        assert self.wait_until((lambda: kikimr.control_plane.get_actor_count(1, "YQ_PINGER") == 0))

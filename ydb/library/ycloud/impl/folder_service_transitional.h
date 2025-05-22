@@ -1,12 +1,12 @@
 #pragma once
 #include <ydb/library/ycloud/api/folder_service_transitional.h>
-#include "grpc_service_settings.h"
+#include <ydb/library/grpc/actor_client/grpc_service_settings.h>
 
 namespace NCloud {
 
 using namespace NKikimr;
 
-struct TFolderServiceTransitionalSettings : TGrpcClientSettings {};
+struct TFolderServiceTransitionalSettings : NGrpcActorClient::TGrpcClientSettings {};
 
 IActor* CreateFolderServiceTransitional(const TFolderServiceTransitionalSettings& settings);
 

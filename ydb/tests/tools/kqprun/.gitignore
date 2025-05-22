@@ -1,3 +1,15 @@
+storage
 sync_dir
+example
+udfs
+
+*.attr
+*.bin
+*.conf
+*.json
 *.log
+*.old
 *.sql
+*.svg
+*.txt
+*.yql

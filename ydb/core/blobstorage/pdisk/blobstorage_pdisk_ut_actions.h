@@ -7,6 +7,7 @@
 #include "blobstorage_pdisk_chunk_id_formatter.h"
 
 #include <util/random/mersenne64.h>
+#include <ydb/core/base/blobstorage_common.h>
 
 namespace NKikimr {
 
@@ -1655,7 +1656,7 @@ private:
         switch (TestStep) {
         case 0:
             VERBOSE_COUT(" Sending TEvInit");
-            VDiskID.GroupID = MyNum;
+            VDiskID.GroupID = TGroupId::FromValue(MyNum);
             ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
             break;
         case 10:
@@ -1715,7 +1716,7 @@ private:
             if (DeletedChunks < ChunksToReserve / 2) {
                 NPDisk::TCommitRecord commitRecord;
                 commitRecord.FirstLsnToKeep = 1 + ReleaseLsnStepSize * (DeletedChunks + 1);
-                Y_ABORT_UNLESS(commitRecord.FirstLsnToKeep <= LogRecordsToWrite + 1);
+                Y_VERIFY(commitRecord.FirstLsnToKeep <= LogRecordsToWrite + 1);
                 TLogRecAboutChunks log;
                 log.Type = EDeleteChunk;
                 log.Data.DeletedChunk = CommittedChunks.back();
@@ -1748,7 +1749,7 @@ public:
         Garbage = PrepareData(LogRecordSize);
         TLogRecAboutChunks log;
         log.Type = EGarbage;
-        Y_ABORT_UNLESS(LogRecordSize >= sizeof(log));
+        Y_VERIFY(LogRecordSize >= sizeof(log));
         memcpy(Garbage.Detach(), &log, sizeof(log));
     }
 };
@@ -1797,7 +1798,7 @@ private:
         switch (TestStep) {
         case 0:
             VERBOSE_COUT(" Sending TEvInit");
-            VDiskID.GroupID = MyNum;
+            VDiskID.GroupID = TGroupId::FromValue(MyNum);
             ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
             break;
         case 10:

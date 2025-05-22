@@ -1,0 +1,146 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 2bb7fde157effeae3f1e1e3100704f64
+BELONGS ya.make
+    License text:
+        //    Copyright (c) 2004 Hartmut Kaiser
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/program_options/config.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ca418207a9a9e57884eb84192e8056e
+BELONGS ya.make
+    License text:
+        // Copyright Vladimir Prus 2004.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/program_options/cmdline.hpp [1:3]
+        include/boost/program_options/detail/convert.hpp [1:3]
+        include/boost/program_options/detail/parsers.hpp [1:3]
+        include/boost/program_options/detail/value_semantic.hpp [1:3]
+        include/boost/program_options/environment_iterator.hpp [1:3]
+        include/boost/program_options/eof_iterator.hpp [1:3]
+        include/boost/program_options/option.hpp [1:3]
+        include/boost/program_options/positional_options.hpp [1:3]
+        include/boost/program_options/value_semantic.hpp [1:3]
+        include/boost/program_options/version.hpp [1:3]
+        src/convert.cpp [1:3]
+        src/positional_options.cpp [1:3]
+        src/utf8_codecvt_facet.cpp [1:3]
+        src/value_semantic.cpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 791de63e8a85039486e8b095c3912ad1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/program_options/detail/utf8_codecvt_facet.hpp [1:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae6c75314a374199dd4eb8179394a65c
+BELONGS ya.make
+    License text:
+        // Copyright Vladimir Prus 2002-2004.
+        // Copyright Bertolt Mildner 2004.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/program_options/options_description.hpp [1:4]
+        src/options_description.cpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf5e56ae189ec8cdbf6a61c940073563
+BELONGS ya.make
+    License text:
+        // Copyright Vladimir Prus 2002.
+        // Distributed under the Boost Software License, Version 1.0. (See
+        // accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/program_options.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d1e7f9bd90cf97484f0926c3d9377996
+BELONGS ya.make
+    License text:
+        // Copyright Sascha Ochsenknecht 2009.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/split.cpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d989ff9c2bd62725fe9987a9d8746019
+BELONGS ya.make
+    License text:
+        // Copyright Vladimir Prus 2002-2004.
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/program_options/detail/cmdline.hpp [1:3]
+        include/boost/program_options/detail/config_file.hpp [1:3]
+        include/boost/program_options/errors.hpp [1:3]
+        include/boost/program_options/options_description.hpp [1:4]
+        include/boost/program_options/parsers.hpp [1:3]
+        include/boost/program_options/variables_map.hpp [1:3]
+        src/cmdline.cpp [1:3]
+        src/config_file.cpp [1:3]
+        src/options_description.cpp [1:4]
+        src/parsers.cpp [1:3]
+        src/variables_map.cpp [1:3]
+        src/winmain.cpp [1:3]

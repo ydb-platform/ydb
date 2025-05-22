@@ -1,78 +1,46 @@
 #include "flat_part_laid.h"
 #include "flat_stat_table.h"
-#include "flat_stat_part.h"
 #include "flat_table_subset.h"
+#include "flat_stat_table_btree_index.h"
+#include "flat_stat_table_mixed_index.h"
 
 namespace NKikimr {
 namespace NTable {
 
-bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env) {
+bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, 
+    TBuildStatsYieldHandler yieldHandler, const TString& logPrefix)
+{
     stats.Clear();
 
-    TPartDataStats stIterStats = { };
-    TStatsIterator stIter(subset.Scheme->Keys);
-
-    // Make index iterators for all parts
-    bool started = true;
-    for (auto& pi : subset.Flatten) {
-        stats.IndexSize.Add(pi->IndexesRawSize, pi->Label.Channel());
-        TAutoPtr<TScreenedPartIndexIterator> iter = new TScreenedPartIndexIterator(pi, env, subset.Scheme->Keys, pi->Small, pi->Large);
-        auto ready = iter->Start();
-        if (ready == EReady::Page) {
-            started = false;
-        } else if (ready == EReady::Data) {
-            stIter.Add(iter);
-        }
-    }
-    if (!started) {
-        return false;
-    }
-
-    ui64 prevRows = 0;
-    ui64 prevSize = 0;
-    while (true) {
-        auto ready = stIter.Next(stIterStats);
-        if (ready == EReady::Page) {
-            return false;
-        } else if (ready == EReady::Gone) {
-            break;
-        }
-
-        const bool nextRowsBucket = (stIterStats.RowCount >= prevRows + rowCountResolution);
-        const bool nextSizeBucket = (stIterStats.DataSize.Size >= prevSize + dataSizeResolution);
-
-        if (!nextRowsBucket && !nextSizeBucket)
-            continue;
-
-        TDbTupleRef currentKey = stIter.GetCurrentKey();
-        TString serializedKey = TSerializedCellVec::Serialize(TConstArrayRef<TCell>(currentKey.Columns, currentKey.ColumnCount));
-
-        if (nextRowsBucket) {
-            prevRows = stIterStats.RowCount;
-            stats.RowCountHistogram.push_back({serializedKey, prevRows});
-        }
-
-        if (nextSizeBucket) {
-            prevSize = stIterStats.DataSize.Size;
-            stats.DataSizeHistogram.push_back({serializedKey, prevSize});
+    bool mixedIndex = false;
+    for (const auto& part : subset.Flatten) {
+        if (!part->IndexPages.HasBTree() && part->IndexPages.HasFlat()) {
+            mixedIndex = true;
         }
     }
 
-    stats.RowCount = stIterStats.RowCount;
-    stats.DataSize = std::move(stIterStats.DataSize);
+    LOG_BUILD_STATS("starting for " << (mixedIndex ? "mixed" : "b-tree") << " index");
 
-    return true;
+    auto ready = mixedIndex
+        ? BuildStatsMixedIndex(subset, stats, rowCountResolution, dataSizeResolution, env, yieldHandler)
+        : BuildStatsBTreeIndex(subset, stats, histogramBucketsCount, env, yieldHandler, logPrefix);
+
+    LOG_BUILD_STATS("finished for " << (mixedIndex ? "mixed" : "b-tree") << " index"
+        << " ready: " << ready
+        << " stats: " << stats.ToString());
+
+    return ready;
 }
 
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners) {
-    for (auto& pi : subset.Flatten) {
-        partOwners.insert(pi->Label.TabletID());
+    for (const auto& partView : subset.Flatten) {
+        partOwners.insert(partView->Label.TabletID());
     }
-    for (auto& pi : subset.ColdParts) {
-        partOwners.insert(pi->Label.TabletID());
+    for (const auto& coldPart : subset.ColdParts) {
+        partOwners.insert(coldPart->Label.TabletID());
     }
-    for (auto& pi : subset.TxStatus) {
-        partOwners.insert(pi->Label.TabletID());
+    for (const auto& txStatus : subset.TxStatus) {
+        partOwners.insert(txStatus->Label.TabletID());
     }
 }
 

@@ -9,8 +9,9 @@
 #include <yt/yt/core/concurrency/system_invokers.h>
 
 #include <yt/yt/core/misc/lazy_ptr.h>
-#include <yt/yt/core/misc/singleton.h>
 #include <yt/yt/core/misc/ring_queue.h>
+
+#include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <stack>
 
@@ -82,7 +83,10 @@ public:
         return InvalidThreadId;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 
 private:
@@ -127,7 +131,10 @@ public:
         return InvalidThreadId;
     }
 
-    void RegisterWaitTimeObserver(TWaitTimeObserver /*waitTimeObserver*/) override
+    void SubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
+    { }
+
+    void UnsubscribeWaitTimeObserved(const TWaitTimeObserver& /*callback*/) override
     { }
 };
 
@@ -139,53 +146,6 @@ IInvokerPtr GetNullInvoker()
 IInvokerPtr GetFinalizerInvoker()
 {
     return NConcurrency::GetFinalizerInvoker();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void GuardedInvoke(
-    const IInvokerPtr& invoker,
-    TClosure onSuccess,
-    TClosure onCancel)
-{
-    YT_ASSERT(invoker);
-    YT_ASSERT(onSuccess);
-    YT_ASSERT(onCancel);
-
-    class TGuard
-    {
-    public:
-        explicit TGuard(TClosure onCancel)
-            : OnCancel_(std::move(onCancel))
-        { }
-
-        TGuard(TGuard&& other) = default;
-
-        ~TGuard()
-        {
-            if (OnCancel_) {
-                OnCancel_();
-            }
-        }
-
-        void Release()
-        {
-            OnCancel_.Reset();
-        }
-
-    private:
-        TClosure OnCancel_;
-    };
-
-    auto doInvoke = [] (TClosure onSuccess, TGuard guard) {
-        guard.Release();
-        onSuccess();
-    };
-
-    invoker->Invoke(BIND_NO_PROPAGATE(
-        std::move(doInvoke),
-        Passed(std::move(onSuccess)),
-        Passed(TGuard(std::move(onCancel)))));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

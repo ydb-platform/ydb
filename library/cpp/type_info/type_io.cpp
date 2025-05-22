@@ -13,6 +13,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/scope.h>
 
+#include <optional>
+
 namespace NTi::NIo {
     namespace {
         class TYsonDeserializer: private TNonCopyable {
@@ -61,7 +63,8 @@ namespace NTi::NIo {
                 const TType *Key, *Value;
             };
             struct TDecimalData {
-                ui8 Precision, Scale;
+                std::optional<ui8> Precision;
+                std::optional<ui8> Scale;
             };
             using TTypeData = std::variant<
                 std::monostate,
@@ -162,11 +165,19 @@ namespace NTi::NIo {
                             }
                         } else if (mapKey == "precision") {
                             if (std::holds_alternative<std::monostate>(data)) {
-                                data = TDecimalData{ReadSmallInt(R"("precision")"), 0};
+                                const auto precision = ReadSmallInt(R"("precision")");
+                                if (0 == precision) {
+                                    ythrow TDeserializationException() << R"(invalid zero "precision")";
+                                }
+                                data = TDecimalData{precision, std::nullopt};
                             } else if (std::holds_alternative<TDecimalData>(data)) {
                                 auto& decimalData = std::get<TDecimalData>(data);
-                                if (decimalData.Precision == 0) {
-                                    decimalData.Precision = ReadSmallInt(R"("precision")");
+                                if (!decimalData.Precision.has_value()) {
+                                    const auto precision = ReadSmallInt(R"("precision")");
+                                    if (0 == precision) {
+                                        ythrow TDeserializationException() << R"(invalid zero "precision")";
+                                    }
+                                    decimalData.Precision = precision;
                                 } else {
                                     ythrow TDeserializationException() << R"(duplicate key "precision")";
                                 }
@@ -175,10 +186,10 @@ namespace NTi::NIo {
                             }
                         } else if (mapKey == "scale") {
                             if (std::holds_alternative<std::monostate>(data)) {
-                                data = TDecimalData{0, ReadSmallInt(R"("scale")")};
+                                data = TDecimalData{std::nullopt, ReadSmallInt(R"("scale")")};
                             } else if (std::holds_alternative<TDecimalData>(data)) {
                                 auto& decimalData = std::get<TDecimalData>(data);
-                                if (decimalData.Scale == 0) {
+                                if (!decimalData.Scale.has_value()) {
                                     decimalData.Scale = ReadSmallInt(R"("scale")");
                                 } else {
                                     ythrow TDeserializationException() << R"(duplicate key "scale")";
@@ -272,15 +283,15 @@ namespace NTi::NIo {
 
                         auto& decimalData = std::get<TDecimalData>(data);
 
-                        if (decimalData.Precision == 0) {
+                        if (!decimalData.Precision.has_value()) {
                             ythrow TDeserializationException() << R"(missing required key "precision" for type Decimal)";
                         }
 
-                        if (decimalData.Scale == 0) {
+                        if (!decimalData.Scale.has_value()) {
                             ythrow TDeserializationException() << R"(missing required key "scale" for type Decimal)";
                         }
 
-                        return Factory_->DecimalRaw(decimalData.Precision, decimalData.Scale);
+                        return Factory_->DecimalRaw(decimalData.Precision.value(), decimalData.Scale.value());
                     }
                     case ETypeName::Json:
                         type = TJsonType::InstanceRaw();
@@ -290,6 +301,18 @@ namespace NTi::NIo {
                         break;
                     case ETypeName::Uuid:
                         type = TUuidType::InstanceRaw();
+                        break;
+                    case ETypeName::Date32:
+                        type = TDate32Type::InstanceRaw();
+                        break;
+                    case ETypeName::Datetime64:
+                        type = TDatetime64Type::InstanceRaw();
+                        break;
+                    case ETypeName::Timestamp64:
+                        type = TTimestamp64Type::InstanceRaw();
+                        break;
+                    case ETypeName::Interval64:
+                        type = TInterval64Type::InstanceRaw();
                         break;
                     case ETypeName::Void:
                         type = TVoidType::InstanceRaw();
@@ -408,8 +431,8 @@ namespace NTi::NIo {
 
                 auto result = event.AsScalar().AsInt64();
 
-                if (result <= 0) {
-                    ythrow TDeserializationException() << what << " must be greater than zero";
+                if (result < 0) {
+                    ythrow TDeserializationException() << what << " must be greater or equal to zero";
                 }
 
                 if (result > Max<ui8>()) {
@@ -530,12 +553,16 @@ namespace NTi::NIo {
                     {"string", ETypeName::String},
                     {"utf8", ETypeName::Utf8},
                     {"date", ETypeName::Date},
+                    {"date32", ETypeName::Date32},
                     {"datetime", ETypeName::Datetime},
+                    {"datetime64", ETypeName::Datetime64},
                     {"timestamp", ETypeName::Timestamp},
+                    {"timestamp64", ETypeName::Timestamp64},
                     {"tz_date", ETypeName::TzDate},
                     {"tz_datetime", ETypeName::TzDatetime},
                     {"tz_timestamp", ETypeName::TzTimestamp},
                     {"interval", ETypeName::Interval},
+                    {"interval64", ETypeName::Interval64},
                     {"json", ETypeName::Json},
                     {"yson", ETypeName::Yson},
                     {"uuid", ETypeName::Uuid},
@@ -709,6 +736,18 @@ namespace NTi::NIo {
             },
             [&consumer](const TUuidType*) {
                 consumer.OnScalarString("uuid");
+            },
+            [&consumer](const TDate32Type*) {
+                consumer.OnScalarString("date32");
+            },
+            [&consumer](const TDatetime64Type*) {
+                consumer.OnScalarString("datetime64");
+            },
+            [&consumer](const TTimestamp64Type*) {
+                consumer.OnScalarString("timestamp64");
+            },
+            [&consumer](const TInterval64Type*) {
+                consumer.OnScalarString("interval64");
             },
             [&consumer](const TDecimalType* t) {
                 consumer.OnBeginMap();
@@ -968,6 +1007,18 @@ namespace NTi::NIo {
             [&consumer](const TUuidType*) {
                 WriteDataType(consumer, EPrimitiveTypeName::Uuid);
             },
+            [&consumer](const TDate32Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Date32);
+            },
+            [&consumer](const TDatetime64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Datetime64);
+            },
+            [&consumer](const TTimestamp64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Timestamp64);
+            },
+            [&consumer](const TInterval64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::Interval64);
+            },
             [&consumer](const TDecimalType* t) {
                 consumer.OnBeginList();
                 consumer.OnScalarString("DataType");
@@ -1142,6 +1193,10 @@ namespace NTi::NIo {
                 [](const TJsonType*) -> TStringBuf { return "string"; },
                 [](const TYsonType*) -> TStringBuf { return "any"; },
                 [](const TUuidType*) -> TStringBuf { return "string"; },
+                [](const TDate32Type*) -> TStringBuf { return "int64"; },
+                [](const TDatetime64Type*) -> TStringBuf { return "int64"; },
+                [](const TTimestamp64Type*) -> TStringBuf { return "int64"; },
+                [](const TInterval64Type*) -> TStringBuf { return "int64"; },
                 [](const TDecimalType*) -> TStringBuf { return "string"; },
                 [](const TOptionalType*) -> TStringBuf { return "any"; },
                 [](const TListType*) -> TStringBuf { return "any"; },

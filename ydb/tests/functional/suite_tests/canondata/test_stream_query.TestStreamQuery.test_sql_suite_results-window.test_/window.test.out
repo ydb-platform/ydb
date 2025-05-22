@@ -1,6 +1,7 @@
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname) ORDER BY depname, salary;
 
    depname    | empno | salary | column3 
@@ -21,7 +22,8 @@ SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PA
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY salary, depname;
+pragma AnsiCurrentRow;
+SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY salary, depname, empno;
 
    depname    | empno | salary | column3 
 --------------+-------+--------+---------
@@ -29,8 +31,8 @@ SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITI
  b'personnel' |     2 |   3900 |       2 
    b'develop' |     7 |   4200 |       1 
    b'develop' |     9 |   4500 |       2 
-     b'sales' |     4 |   4800 |       1 
      b'sales' |     3 |   4800 |       1 
+     b'sales' |     4 |   4800 |       1 
      b'sales' |     1 |   5000 |       3 
    b'develop' |    10 |   5200 |       3 
    b'develop' |    11 |   5200 |       3 
@@ -41,6 +43,7 @@ SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITI
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT four, ten, SUM(SUM(four)) OVER w, AVG(ten) FROM tenk1
 GROUP BY four, ten WINDOW w AS (PARTITION BY four) ORDER BY four, ten;
 
@@ -72,6 +75,7 @@ GROUP BY four, ten WINDOW w AS (PARTITION BY four) ORDER BY four, ten;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname) ORDER BY depname, salary, empno;
 
    depname    | empno | salary | column3 
@@ -92,19 +96,20 @@ SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PA
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT depname, empno, salary, rank() OVER w AS r FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY r;
+pragma AnsiCurrentRow;
+SELECT depname, empno, salary, rank() OVER w AS r FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY r, empno;
 
    depname    | empno | salary | r 
 --------------+-------+--------+---
-   b'develop' |     7 |   4200 | 1 
-     b'sales' |     4 |   4800 | 1 
      b'sales' |     3 |   4800 | 1 
+     b'sales' |     4 |   4800 | 1 
  b'personnel' |     5 |   3500 | 1 
+   b'develop' |     7 |   4200 | 1 
  b'personnel' |     2 |   3900 | 2 
    b'develop' |     9 |   4500 | 2 
-   b'develop' |    11 |   5200 | 3 
-   b'develop' |    10 |   5200 | 3 
      b'sales' |     1 |   5000 | 3 
+   b'develop' |    10 |   5200 | 3 
+   b'develop' |    11 |   5200 | 3 
    b'develop' |     8 |   6000 | 5 
 (10 rows)
 
@@ -112,6 +117,7 @@ SELECT depname, empno, salary, rank() OVER w AS r FROM empsalary WINDOW w AS (PA
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT COUNT(*) OVER w AS cnt FROM tenk1 WHERE unique2 < 10 WINDOW w AS () ORDER BY cnt;
 
  cnt 
@@ -132,6 +138,7 @@ SELECT COUNT(*) OVER w AS cnt FROM tenk1 WHERE unique2 < 10 WINDOW w AS () ORDER
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten) ORDER BY four;
 
 (0 rows)
@@ -140,6 +147,7 @@ SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten) ORDER BY four;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT sum(four) OVER w AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY ten ORDER BY unique2) ORDER BY sum_1, ten, four;
 
  sum_1 | ten | four 
@@ -160,6 +168,7 @@ SELECT sum(four) OVER w AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT row_number() OVER w AS rnum_1 FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY unique2) ORDER BY rnum_1;
 
  rnum_1 
@@ -180,6 +189,7 @@ SELECT row_number() OVER w AS rnum_1 FROM tenk1 WHERE unique2 < 10 WINDOW w AS (
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT rank() OVER w AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY rank_1, ten, four;
 
  rank_1 | ten | four 
@@ -200,6 +210,7 @@ SELECT rank() OVER w AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT dense_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
  column0 | ten | four 
@@ -220,6 +231,7 @@ SELECT dense_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
  column0 | ten | four 
@@ -240,6 +252,7 @@ SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PAR
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
  column0 | ten | four 
@@ -260,6 +273,7 @@ SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PA
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
  column0 | ten | four 
@@ -280,6 +294,7 @@ SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
  column0 | ten | four 
@@ -300,15 +315,16 @@ SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten) ORDER BY ten, four;
 
  column0 | column1 | ten | four 
 ---------+---------+-----+------
        0 |       0 |   0 |    0 
        0 |       0 |   0 |    0 
-       2 |       2 |   0 |    2 
-       1 |       1 |   1 |    1 
-       1 |       1 |   1 |    1 
+       0 |       0 |   0 |    2 
+       3 |       3 |   1 |    1 
+       3 |       3 |   1 |    1 
        3 |       3 |   1 |    3 
        3 |       3 |   3 |    3 
        0 |       0 |   4 |    0 
@@ -320,6 +336,7 @@ SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WH
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT last_value(ten) OVER w, ten, four FROM
     (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten LIMIT 1000)
 WINDOW w AS (PARTITION BY four ORDER BY ten)
@@ -343,6 +360,7 @@ ORDER BY four, ten;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER w AS wsum
 FROM tenk1 GROUP BY ten, two WINDOW w AS (PARTITION BY two ORDER BY ten)
 ORDER BY ten, two;
@@ -365,6 +383,7 @@ ORDER BY ten, two;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT count(*) OVER w, four FROM (SELECT * FROM tenk1 WHERE two = 1) WHERE unique2 < 10 WINDOW w AS (PARTITION BY four) ORDER BY four;
 
  column0 | four 
@@ -381,6 +400,7 @@ SELECT count(*) OVER w, four FROM (SELECT * FROM tenk1 WHERE two = 1) WHERE uniq
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT (count(*) OVER w + sum(hundred) OVER w) AS cntsum
 FROM tenk1 WHERE unique2 < 10
 WINDOW w AS (PARTITION BY four ORDER BY ten)
@@ -388,9 +408,9 @@ ORDER BY cntsum;
 
  cntsum 
 --------
-     21 
      22 
      22 
+     24 
      24 
      51 
      82 
@@ -404,6 +424,7 @@ ORDER BY cntsum;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT * FROM(
   SELECT count(*) OVER w1 +
     sum(hundred) OVER w2 AS total,
@@ -421,6 +442,7 @@ ORDER BY total, fourcount, twosum;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT avg(four) OVER w AS avg_1 FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY thousand / 100) ORDER BY avg_1;
 
  avg_1 
@@ -441,6 +463,7 @@ SELECT avg(four) OVER w AS avg_1 FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PART
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER win AS wsum
 FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten)
 ORDER BY wsum, ten, two;
@@ -463,6 +486,7 @@ ORDER BY wsum, ten, two;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT sum(salary) AS sum_salary,
     row_number() OVER w1 AS rnum_1,
     sum(sum(salary)) OVER w2 AS sum_sum_salary
@@ -481,6 +505,7 @@ ORDER BY sum_salary, rnum_1, sum_sum_salary;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT sum(salary) OVER w1 AS sum_salary, count(*) OVER w2 AS cnt
 FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary)
 ORDER BY sum_salary, cnt;
@@ -491,10 +516,10 @@ ORDER BY sum_salary, cnt;
        7400 |   2 
       11600 |   3 
       16100 |   4 
-      20900 |   5 
+      25700 |   6 
       25700 |   6 
       30700 |   7 
-      35900 |   8 
+      41100 |   9 
       41100 |   9 
       47100 |  10 
 (10 rows)
@@ -503,6 +528,7 @@ ORDER BY sum_salary, cnt;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT count(*) OVER w AS cnt FROM (SELECT * FROM tenk1 WHERE FALSE) WINDOW w AS (PARTITION BY four) ORDER BY cnt;
 
 (0 rows)
@@ -511,6 +537,7 @@ SELECT count(*) OVER w AS cnt FROM (SELECT * FROM tenk1 WHERE FALSE) WINDOW w AS
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT sum(salary) OVER w AS sum_salary, rank() OVER w as rank_1 FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC)
 ORDER BY sum_salary, rank_1;
 
@@ -520,9 +547,9 @@ ORDER BY sum_salary, rank_1;
        5000 |      1 
        6000 |      1 
        7400 |      2 
-       9800 |      2 
-      11200 |      2 
       14600 |      2 
+      14600 |      2 
+      16400 |      2 
       16400 |      2 
       20900 |      4 
       25100 |      5 
@@ -532,6 +559,7 @@ ORDER BY sum_salary, rank_1;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER w, MAX(depadj) OVER w FROM(
     SELECT empsalary.*,
         CASE WHEN enroll_date < DateTime::MakeDatetime(DateTime::Parse("%Y-%m-%d")('2007-08-01'))
@@ -564,6 +592,7 @@ ORDER BY empno;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT SUM(COUNT(f1)) OVER w AS sum_cnt FROM int4_tbl WHERE f1=42 WINDOW w AS () ORDER BY sum_cnt;
 
  sum_cnt 
@@ -575,6 +604,7 @@ SELECT SUM(COUNT(f1)) OVER w AS sum_cnt FROM int4_tbl WHERE f1=42 WINDOW w AS ()
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 select ten,
   sum(unique1) + sum(unique2) as res,
   rank() over w as rank
@@ -601,6 +631,7 @@ order by ten;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT four, ten,
 	sum(ten) over w,
 	last_value(ten) over w
@@ -636,6 +667,7 @@ ORDER BY four, ten;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT four, ten/4 as two,
 	sum(ten/4) over w as three,
 	last_value(ten/4) over w
@@ -671,6 +703,7 @@ ORDER BY four, two, three;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT sum(unique1) over w,
 	unique1, four
 FROM tenk1 WHERE unique1 < 10
@@ -695,6 +728,7 @@ ORDER BY unique1;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT sum(unique1) over w,
 	unique1, four
 FROM tenk1 WHERE unique1 < 10
@@ -719,6 +753,7 @@ ORDER BY unique1;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
+pragma AnsiCurrentRow;
 SELECT sum(unique1) over w,
 	unique1, four
 FROM tenk1 WHERE unique1 < 10

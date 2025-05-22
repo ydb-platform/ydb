@@ -1,0 +1,10 @@
+# This patch cant be droped after d0f040a65bfc39c52930f0ea0ca0a9d465bc5043 commit
+--- contrib/python/Werkzeug/py3/werkzeug/urls.py
++++ contrib/python/Werkzeug/py3/werkzeug/urls.py
+@@ -27,7 +27,6 @@ _always_safe = frozenset(
+         b"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+         b"0123456789"
+         b"-._~"
+-        b"$!'()*+,;"  # RFC3986 sub-delims set, not including query string delimiters &=
+     )
+ )

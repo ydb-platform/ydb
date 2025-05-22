@@ -31,12 +31,10 @@ namespace NNetliba {
     // тогда на приемнике повиснет пакет. Этот пакет мы зашибем по этому таймауту
     const float UDP_MAX_INPUT_DATA_WAIT = UDP_TRANSFER_TIMEOUT * 2;
 
-    enum {
-        UDP_PACKET_SIZE_FULL = 8900,  // used for ping to detect jumbo-frame support
-        UDP_PACKET_SIZE = 8800,       // max data in packet
-        UDP_PACKET_SIZE_SMALL = 1350, // 1180 would be better taking into account that 1280 is guaranteed ipv6 minimum MTU
-        UDP_PACKET_BUF_SIZE = UDP_PACKET_SIZE + 100,
-    };
+    constexpr int UDP_PACKET_SIZE_FULL = 8900;  // used for ping to detect jumbo-frame support
+    constexpr int UDP_PACKET_SIZE = 8800;       // max data in packet
+    constexpr int UDP_PACKET_SIZE_SMALL = 1350; // 1180 would be better taking into account that 1280 is guaranteed ipv6 minimum MTU
+    constexpr int UDP_PACKET_BUF_SIZE = UDP_PACKET_SIZE + 100;
 
     //////////////////////////////////////////////////////////////////////////
     struct TUdpCompleteInTransfer {
@@ -1214,7 +1212,7 @@ namespace NNetliba {
             const TUdpAddress& ip = i.first;
             const TCongestionControl& cc = *i.second.UdpCongestion;
             IIBPeer* ibPeer = i.second.IBPeer.Get();
-            sprintf(buf, "%s\tIB: %d, RTT: %g  Timeout: %g  Window: %g  MaxWin: %g  FailRate: %g  TimeSinceLastRecv: %g  Transfers: %d  MTU: %d\n",
+            snprintf(buf, sizeof(buf), "%s\tIB: %d, RTT: %g  Timeout: %g  Window: %g  MaxWin: %g  FailRate: %g  TimeSinceLastRecv: %g  Transfers: %d  MTU: %d\n",
                     GetAddressAsString(ip).c_str(),
                     ibPeer ? ibPeer->GetState() : -1,
                     cc.GetRTT() * 1000, cc.GetTimeout() * 1000, cc.GetWindow(), cc.GetMaxWindow(), cc.GetFailRate(),
@@ -1227,17 +1225,17 @@ namespace NNetliba {
     TString TUdpHost::GetDebugInfo() {
         TString res;
         char buf[1000];
-        sprintf(buf, "Receiving %d msgs, sending %d high prior, %d regular msgs, %d low prior msgs\n",
+        snprintf(buf, sizeof(buf), "Receiving %d msgs, sending %d high prior, %d regular msgs, %d low prior msgs\n",
                 RecvQueue.ysize(), (int)SendOrderHighPrior.size(), (int)SendOrder.size(), (int)SendOrderLow.size());
         res += buf;
 
         TRequesterPendingDataStats pds;
         GetPendingDataSize(&pds);
-        sprintf(buf, "Pending data size: %" PRIu64 "\n", pds.InpDataSize + pds.OutDataSize);
+        snprintf(buf, sizeof(buf), "Pending data size: %" PRIu64 "\n", pds.InpDataSize + pds.OutDataSize);
         res += buf;
-        sprintf(buf, "  in packets: %d, size %" PRIu64 "\n", pds.InpCount, pds.InpDataSize);
+        snprintf(buf, sizeof(buf), "  in packets: %d, size %" PRIu64 "\n", pds.InpCount, pds.InpDataSize);
         res += buf;
-        sprintf(buf, "  out packets: %d, size %" PRIu64 "\n", pds.OutCount, pds.OutDataSize);
+        snprintf(buf, sizeof(buf), "  out packets: %d, size %" PRIu64 "\n", pds.OutCount, pds.OutDataSize);
         res += buf;
 
         res += "\nCongestion info:\n";

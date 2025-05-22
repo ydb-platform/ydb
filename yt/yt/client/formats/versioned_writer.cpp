@@ -1,10 +1,14 @@
 #include "versioned_writer.h"
 #include "config.h"
 
+#include <yt/yt/client/table_client/logical_type.h>
+#include <yt/yt/client/table_client/name_table.h>
+
 #include <yt/yt/core/concurrency/async_stream.h>
 
 namespace NYT::NFormats {
 
+using namespace NComplexTypes;
 using namespace NConcurrency;
 using namespace NYson;
 using namespace NTableClient;
@@ -18,7 +22,20 @@ TVersionedWriter::TVersionedWriter(
     : Stream_(std::move(stream))
     , Schema_(std::move(schema))
     , Consumer_(consumerBuilder(&Buffer_))
-{ }
+{
+    auto nameTable = TNameTable::FromSchema(*Schema_);
+
+    for (const auto& column : Schema_->Columns()) {
+        if (IsV3Composite(column.LogicalType())) {
+            auto id = nameTable->GetIdOrThrow(column.Name());
+            TComplexTypeFieldDescriptor descriptor(column.Name(), column.LogicalType());
+            auto converter = CreateYsonServerToClientConverter(descriptor, /*config*/ {});
+            if (converter) {
+                ColumnConverters_.emplace(id, std::move(converter));
+            }
+        }
+    }
+}
 
 TFuture<void> TVersionedWriter::Close()
 {
@@ -52,7 +69,14 @@ bool TVersionedWriter::Write(TRange<TVersionedRow> rows)
             case EValueType::Any:
                 Consumer_->OnRaw(value.AsStringBuf(), EYsonType::Node);
                 return;
-            case EValueType::Composite:
+            case EValueType::Composite: {
+                    if (auto it = ColumnConverters_.find(value.Id); it != ColumnConverters_.end()) {
+                        it->second(value, Consumer_.get());
+                    } else {
+                        Consumer_->OnRaw(value.AsStringBuf(), EYsonType::Node);
+                    }
+                    return;
+                }
             case EValueType::Min:
             case EValueType::Max:
             case EValueType::TheBottom:

@@ -2,7 +2,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2022 The OpenLDAP Foundation.
+ * Copyright 1998-2024 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -383,6 +383,7 @@ ldap_int_tls_connect( LDAP *ld, LDAPConn *conn, const char *host )
 		if ( lo && lo->ldo_tls_connect_cb && lo->ldo_tls_connect_cb !=
 			ld->ld_options.ldo_tls_connect_cb )
 			lo->ldo_tls_connect_cb( ld, ssl, ctx, lo->ldo_tls_connect_arg );
+		conn->lconn_status = LDAP_CONNST_TLS_INPROGRESS;
 	}
 
 	/* pass hostname for SNI, but only if it's an actual name
@@ -441,9 +442,11 @@ ldap_int_tls_connect( LDAP *ld, LDAPConn *conn, const char *host )
 		ber_sockbuf_remove_io( sb, &ber_sockbuf_io_debug,
 			LBER_SBIOD_LEVEL_TRANSPORT );
 #endif
+		conn->lconn_status = LDAP_CONNST_CONNECTED;
 		return -1;
 	}
 
+	conn->lconn_status = LDAP_CONNST_CONNECTED;
 	return 0;
 }
 
@@ -516,14 +519,19 @@ int
 ldap_tls_inplace( LDAP *ld )
 {
 	Sockbuf		*sb = NULL;
+	LDAPConn	*lc = ld->ld_defconn;
 
-	if ( ld->ld_defconn && ld->ld_defconn->lconn_sb ) {
+	if ( lc && lc->lconn_sb ) {
 		sb = ld->ld_defconn->lconn_sb;
 
 	} else if ( ld->ld_sb ) {
 		sb = ld->ld_sb;
 
 	} else {
+		return 0;
+	}
+
+	if ( lc && lc->lconn_status == LDAP_CONNST_TLS_INPROGRESS ) {
 		return 0;
 	}
 
@@ -1159,6 +1167,9 @@ ldap_int_tls_start ( LDAP *ld, LDAPConn *conn, LDAPURLDesc *srv )
 	  */
 	while ( ret > 0 ) {
 		if ( async ) {
+			ld->ld_errno = LDAP_X_CONNECTING;
+			return (ld->ld_errno);
+		} else {
 			struct timeval curr_time_tv, delta_tv;
 			int wr=0;
 
@@ -1215,6 +1226,11 @@ ldap_int_tls_start ( LDAP *ld, LDAPConn *conn, LDAPURLDesc *srv )
 			}
 		}
 		ret = ldap_int_tls_connect( ld, conn, host );
+	}
+
+	if ( !async && ld->ld_options.ldo_tm_net.tv_sec >= 0 ) {
+		/* Restore original sb status */
+		ber_sockbuf_ctrl( sb, LBER_SB_OPT_SET_NONBLOCK, (void*)0 );
 	}
 
 	if ( ret < 0 ) {

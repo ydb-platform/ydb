@@ -28,6 +28,13 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
 
     runtime.SetLogPriority(NKikimrServices::TABLET_AGGREGATOR, NActors::NLog::PRI_DEBUG);
 
+    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev){
+        if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo && ev->Sender != edge) {
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
     IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, v, TString(), numWorkers);
     aggregatorId = runtime.Register(aggregator);
 
@@ -47,10 +54,11 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
     options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, numWorkers);
     runtime.DispatchEvents(options);
     for (const auto& a : cc) {
-        THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         for (auto i = 1; i <= NODES; ++i) {
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(i, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(i, "::", "localhost", "localhost", 1234, TNodeLocation()));
         }
+        THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(nodes);
         runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
     }
 
@@ -713,6 +721,13 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         runtime.Initialize(TAppPrepare().Unwrap());
         TActorId edge = runtime.AllocateEdgeActor();
 
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev){
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo && ev->Sender != edge) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
         IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 2, TString(), 3);
         aggregatorId = runtime.Register(aggregator);
 
@@ -727,10 +742,11 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
         runtime.DispatchEvents(options);
         for (const auto& a : cc) {
-            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(nodes);
             runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 
@@ -813,6 +829,13 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
 
         TActorId edge = runtime.AllocateEdgeActor();
 
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev){
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo && ev->Sender != edge) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
         IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 3, "rt3.*--*,cons*/*/rt.*--*", 3);
         aggregatorId = runtime.Register(aggregator);
 
@@ -827,10 +850,11 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
         runtime.DispatchEvents(options);
         for (const auto& a : cc) {
-            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(nodes);
             runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 
@@ -903,10 +927,11 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
         runtime.DispatchEvents(options);
         for (const auto& a : cc) {
-            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>();
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
-            nodesInfo->Nodes.emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(1, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(2, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            nodes->emplace_back(TEvInterconnect::TNodeInfo(3, "::", "localhost", "localhost", 1234, TNodeLocation()));
+            THolder<TEvInterconnect::TEvNodesInfo> nodesInfo = MakeHolder<TEvInterconnect::TEvNodesInfo>(nodes);
             runtime.Send(new NActors::IEventHandle(a, edge, nodesInfo.Release()), 0, true);
         }
 

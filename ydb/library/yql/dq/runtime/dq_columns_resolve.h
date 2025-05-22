@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/minikql/mkql_node.h>
 // #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 namespace NYql::NDq {

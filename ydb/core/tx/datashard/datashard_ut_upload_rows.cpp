@@ -198,9 +198,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SCHEME_ERROR);
     }
 
-    Y_UNIT_TEST_TWIN(TestUploadRowsLocks, StreamLookup) {
+    Y_UNIT_TEST(TestUploadRowsLocks) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -753,10 +752,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
-            .Columns({
-                {"key", "Uint32", true, false},
-                {"value", "Uint32", false, false},
-            })
             .Indexes({
                 TShardedTableOptions::TIndex{
                     "by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync
@@ -866,11 +861,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         InitRoot(server, sender);
 
-        auto opts = TShardedTableOptions()
-                        .Shards(1)
-                        .Columns({
-                            {"key", "Uint32", true, false},
-                            {"value", "Uint32", false, false}});
+        TShardedTableOptions opts;
         CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 2), (3, 4);");

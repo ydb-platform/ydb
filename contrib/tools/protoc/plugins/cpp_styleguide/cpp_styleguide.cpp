@@ -1,11 +1,9 @@
 #include <google/protobuf/compiler/code_generator.h>
-#include <google/protobuf/compiler/cpp/cpp_helpers.h>
+#include <google/protobuf/compiler/cpp/helpers.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/io/printer.h>
 #include <google/protobuf/io/zero_copy_stream.h>
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/stubs/strutil.h>
 
 #include "cpp_styleguide.h"
 #include <util/stream/output.h>
@@ -42,7 +40,8 @@ namespace NPlugins {
 
     TProtoStringType HeaderFileName(const FileDescriptor* file) {
         TProtoStringType basename = compiler::StripProto(file->name());
-        return basename.append(".pb.h");
+        bool use_proto_h = !!getenv("PROTOC_PLUGINS_LITE_HEADERS");
+        return use_proto_h ? basename.append(".proto.h") : basename.append(".pb.h");
     }
 
     TProtoStringType SourceFileName(const FileDescriptor* file) {
@@ -494,7 +493,7 @@ namespace NPlugins {
             vars["extendee"     ] = ClassName(Descriptor_->containing_type(), true);
             vars["type_traits"  ] = type_traits_;
             vars["name"         ] = Descriptor_->name();
-            vars["field_type"   ] = SimpleItoa(static_cast<int>(Descriptor_->type()));
+            vars["field_type"   ] = std::to_string(static_cast<int>(Descriptor_->type()));
             vars["packed"       ] = Descriptor_->options().packed() ? "true" : "false";
 
             printer->Print(vars,

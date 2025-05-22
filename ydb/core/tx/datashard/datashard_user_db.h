@@ -1,9 +1,21 @@
 #pragma once
-#include "datashard_impl.h"
+
+#include "change_collector.h"
+
+#include <ydb/core/base/row_version.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/maybe.h>
 
+namespace NKikimr::NMiniKQL {
+    struct TEngineHostCounters;
+}
+
 namespace NKikimr::NDataShard {
+
+class TUniqueConstrainException: public yexception {};
 
 class IDataShardUserDb {
 protected:
@@ -25,6 +37,21 @@ public:
             NTable::TRowState& row,
             const TMaybe<TRowVersion>& readVersion = {}) = 0;
 
+    virtual void UpsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+
+    virtual void ReplaceRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+    
+    virtual void InsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+
     virtual void UpdateRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
@@ -32,7 +59,12 @@ public:
 
     virtual void EraseRow(
             const TTableId& tableId,
-            const TArrayRef<const TRawTypeValue> key) = 0;            
+            const TArrayRef<const TRawTypeValue> key) = 0;
+
+    virtual void CommitChanges(
+            const TTableId& tableId,
+            ui64 lockId,
+            const TRowVersion& writeVersion) = 0;
 };
 
 class IDataShardConflictChecker {
@@ -80,14 +112,34 @@ public:
             NTable::TRowState& row,
             const TMaybe<TRowVersion>& readVersion = {}) override;
 
-    void UpdateRow(
+    void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops) override;
     
+    void ReplaceRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            
+    void InsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            
+    void UpdateRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+
     void EraseRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key) override;
+
+    void CommitChanges(
+            const TTableId& tableId, 
+            ui64 lockId, 
+            const TRowVersion& writeVersion) override;
 
 //IDataShardChangeGroupProvider
 public:  
@@ -110,7 +162,6 @@ public:
     void ResetCollectedChanges();
 
 public:
-    void CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion);
     bool NeedToReadBeforeWrite(const TTableId& tableId);
     void AddCommitTxId(const TTableId& tableId, ui64 txId, const TRowVersion& commitVersion);
     ui64 GetWriteTxId(const TTableId& tableId);
@@ -125,11 +176,17 @@ public:
     NMiniKQL::TEngineHostCounters& GetCounters();
     const NMiniKQL::TEngineHostCounters& GetCounters() const;
 
+    bool PrechargeRow(
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key);    
+
 private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
-    void UpdateRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+    bool RowExists(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
 
+    void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
 private:
     TDataShard& Self;
     NTable::TDatabase& Db;
@@ -143,7 +200,8 @@ private:
     YDB_ACCESSOR_DEF(ui32, LockNodeId);
     YDB_ACCESSOR_DEF(ui64, VolatileTxId);
     YDB_ACCESSOR_DEF(bool, IsImmediateTx);
-    YDB_ACCESSOR_DEF(bool, IsRepeatableSnapshot);
+    YDB_ACCESSOR_DEF(bool, IsWriteTx);
+    YDB_ACCESSOR_DEF(bool, UsesMvccSnapshot);
 
     YDB_ACCESSOR_DEF(TRowVersion, ReadVersion);
     YDB_ACCESSOR_DEF(TRowVersion, WriteVersion);
@@ -158,6 +216,8 @@ private:
     absl::flat_hash_set<ui64> VolatileCommitTxIds;
     YDB_ACCESSOR_DEF(absl::flat_hash_set<ui64>, VolatileDependencies);
     YDB_ACCESSOR_DEF(bool, VolatileCommitOrdered);
+
+    YDB_ACCESSOR_DEF(bool, PerformedUserReads);
 
     NMiniKQL::TEngineHostCounters& Counters;
 };

@@ -1,19 +1,17 @@
 #pragma once
-#include <util/string/vector.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NNodeWhiteboard;
 using namespace ::google::protobuf;
 
-template <typename ResponseType>
+template<typename ResponseType>
 struct TWhiteboardInfo;
 
 void AggregateMessage(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom);
 
-template <typename ResponseType>
+template<typename ResponseType>
 class TWhiteboardAggregator {
 public:
     using TResponseType = ResponseType;
@@ -45,5 +43,4 @@ THolder<ResponseType> AggregateWhiteboardResponses(TMap<TTabletId, THolder<Respo
     return TWhiteboardAggregator<ResponseType>::AggregateResponses(responses);
 }
 
-}
 }

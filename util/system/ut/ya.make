@@ -1,7 +1,5 @@
 UNITTEST_FOR(util)
 
-SUBSCRIBER(g:util-subscribers)
-
 FORK_TESTS()
 
 FORK_SUBTESTS()
@@ -16,7 +14,12 @@ EXPLICIT_DATA()
 
 IF (OS_DARWIN)
     SIZE(LARGE)
-    TAG(ya:fat ya:force_sandbox ya:exotic_platform)
+    TAG(
+        ya:fat
+        ya:force_sandbox
+        ya:exotic_platform
+        ya:large_tests_on_single_slots
+    )
     TIMEOUT(3600)
 ENDIF()
 
@@ -71,19 +74,28 @@ SRCS(
     system/thread_ut.cpp
     system/tls_ut.cpp
     system/types_ut.cpp
-    system/type_name_ut.cpp
     system/user_ut.cpp
     system/unaligned_mem_ut.cpp
     system/yassert_ut.cpp
 )
 
+IF (NOT USE_STL_SYSTEM)
+    SRCS(
+        system/type_name_ut.cpp
+    )
+ENDIF()
+
 IF (OS_WINDOWS)
     SRCS(
         system/fs_win_ut.cpp
+        system/mktemp_ut.cpp
     )
     DEPENDS(
         util/system/ut/stdin_osfhandle
     )
+    IF (ARCH_X86_64)
+        WINDOWS_LONG_PATH_MANIFEST()
+    ENDIF()
 ENDIF()
 
 REQUIREMENTS(ram:12)

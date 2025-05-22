@@ -1,0 +1,227 @@
+--- contrib/libs/cxxsupp/libcxxabi/src/abort_message.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/abort_message.cpp	(working tree)
+@@ -33,12 +33,21 @@ void abort_message(const char* format, ...)
+     // formatting into the variable-sized buffer fails.
+ #if !defined(NDEBUG) || !defined(LIBCXXABI_BAREMETAL)
+     {
++#if defined(__EMSCRIPTEN__) && defined(NDEBUG)
++        // Just trap in a non-debug build. These internal libcxxabi assertions are
++        // very rare, and it's not worth linking in vfprintf stdio support or
++        // even minimal logging for them, as we'll have a proper call stack, which
++        // will show a call into "abort_message", and can help debugging. (In a
++        // debug build that won't be inlined.)
++        abort();
++#else
+         fprintf(stderr, "libc++abi: ");
+         va_list list;
+         va_start(list, format);
+         vfprintf(stderr, format, list);
+         va_end(list);
+         fprintf(stderr, "\n");
++#endif
+     }
+ #endif
+ 
+--- contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.cpp	(working tree)
+@@ -271,6 +271,13 @@ handler, _Unwind_RaiseException may return. In that case, __cxa_throw
+ will call terminate, assuming that there was no handler for the
+ exception.
+ */
++
++#if defined(__EMSCRIPTEN__) && defined(__WASM_EXCEPTIONS__) && !defined(NDEBUG)
++extern "C" {
++void __throw_exception_with_stack_trace(_Unwind_Exception*);
++} // extern "C"
++#endif
++
+ void
+ #ifdef __wasm__
+ // In Wasm, a destructor returns its argument
+@@ -291,6 +298,10 @@ __cxa_throw(void *thrown_object, std::type_info *tinfo, void (_LIBCXXABI_DTOR_FU
+ 
+ #ifdef __USING_SJLJ_EXCEPTIONS__
+     _Unwind_SjLj_RaiseException(&exception_header->unwindHeader);
++#elif defined(__EMSCRIPTEN__) && defined(__WASM_EXCEPTIONS__) && !defined(NDEBUG)
++    // In debug mode, call a JS library function to use WebAssembly.Exception JS
++    // API, which enables us to include stack traces
++    __throw_exception_with_stack_trace(&exception_header->unwindHeader);
+ #else
+     _Unwind_RaiseException(&exception_header->unwindHeader);
+ #endif
+@@ -645,6 +656,10 @@ void __cxa_rethrow() {
+     }
+ #ifdef __USING_SJLJ_EXCEPTIONS__
+     _Unwind_SjLj_RaiseException(&exception_header->unwindHeader);
++#elif defined(__EMSCRIPTEN__) && defined(__WASM_EXCEPTIONS__) && !defined(NDEBUG)
++    // In debug mode, call a JS library function to use WebAssembly.Exception JS
++    // API, which enables us to include stack traces
++    __throw_exception_with_stack_trace(&exception_header->unwindHeader);
+ #else
+     _Unwind_RaiseException(&exception_header->unwindHeader);
+ #endif
+@@ -770,6 +785,11 @@ __cxa_rethrow_primary_exception(void* thrown_object)
+         dep_exception_header->unwindHeader.exception_cleanup = dependent_exception_cleanup;
+ #ifdef __USING_SJLJ_EXCEPTIONS__
+         _Unwind_SjLj_RaiseException(&dep_exception_header->unwindHeader);
++#elif defined(__EMSCRIPTEN__) && defined(__WASM_EXCEPTIONS__) && !defined(NDEBUG)
++        // In debug mode, call a JS library function to use
++        // WebAssembly.Exception JS API, which enables us to include stack
++        // traces
++        __throw_exception_with_stack_trace(&dep_exception_header->unwindHeader);
+ #else
+         _Unwind_RaiseException(&dep_exception_header->unwindHeader);
+ #endif
+--- contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.h	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/cxa_exception.h	(working tree)
+@@ -19,6 +19,26 @@
+ 
+ namespace __cxxabiv1 {
+ 
++#ifdef __EMSCRIPTEN_EXCEPTIONS__
++
++struct _LIBCXXABI_HIDDEN __cxa_exception {
++  size_t referenceCount;
++  std::type_info *exceptionType;
++  // In wasm, destructors return 'this' as in ARM
++  void* (*exceptionDestructor)(void *);
++  uint8_t caught;
++  uint8_t rethrown;
++  void *adjustedPtr;
++  // Add padding to ensure that the size of __cxa_exception is a multiple of
++  // the maximum useful alignment for the target machine.  This ensures that
++  // the thrown object that follows has that correct alignment.
++  void *padding;
++};
++
++static_assert(sizeof(__cxa_exception) % alignof(max_align_t) == 0, "__cxa_exception must have a size that is multipl of max alignment");
++
++#else
++
+ static const uint64_t kOurExceptionClass          = 0x434C4E47432B2B00; // CLNGC++\0
+ static const uint64_t kOurDependentExceptionClass = 0x434C4E47432B2B01; // CLNGC++\1
+ static const uint64_t get_vendor_and_language     = 0xFFFFFFFFFFFFFF00; // mask for CLNGC++
+@@ -164,6 +184,8 @@ extern "C" _LIBCXXABI_FUNC_VIS __cxa_eh_globals * __cxa_get_globals_fast ();
+ extern "C" _LIBCXXABI_FUNC_VIS void * __cxa_allocate_dependent_exception ();
+ extern "C" _LIBCXXABI_FUNC_VIS void __cxa_free_dependent_exception (void * dependent_exception);
+ 
++#endif // !__EMSCRIPTEN_EXCEPTIONS__
++
+ }  // namespace __cxxabiv1
+ 
+ #endif // _CXA_EXCEPTION_H
+--- contrib/libs/cxxsupp/libcxxabi/src/cxa_handlers.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/cxa_handlers.cpp	(working tree)
+@@ -73,7 +73,7 @@ __attribute__((noreturn))
+ void
+ terminate() noexcept
+ {
+-#ifndef _LIBCXXABI_NO_EXCEPTIONS
++#if !defined(_LIBCXXABI_NO_EXCEPTIONS) && !defined(__EMSCRIPTEN_EXCEPTIONS__)
+     // If there might be an uncaught exception
+     using namespace __cxxabiv1;
+     __cxa_eh_globals* globals = __cxa_get_globals_fast();
+--- contrib/libs/cxxsupp/libcxxabi/src/cxa_personality.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/cxa_personality.cpp	(working tree)
+@@ -663,6 +663,7 @@ static void scan_eh_tab(scan_results &results, _Unwind_Action actions,
+     const uint8_t* lpStart = lpStartEncoding == DW_EH_PE_omit
+                                  ? (const uint8_t*)funcStart
+                                  : (const uint8_t*)readEncodedPointer(&lsda, lpStartEncoding, base);
++    (void)(lpStart);  // Unused when using SjLj/Wasm exceptions
+     uint8_t ttypeEncoding = *lsda++;
+     if (ttypeEncoding != DW_EH_PE_omit)
+     {
+@@ -676,7 +677,7 @@ static void scan_eh_tab(scan_results &results, _Unwind_Action actions,
+     // includes current PC.
+     uint8_t callSiteEncoding = *lsda++;
+ #if defined(__USING_SJLJ_EXCEPTIONS__) || defined(__WASM_EXCEPTIONS__)
+-    (void)callSiteEncoding;  // When using SjLj/Wasm exceptions, callSiteEncoding is never used
++    (void)callSiteEncoding;  // Unused when using SjLj/Wasm exceptions
+ #endif
+     uint32_t callSiteTableLength = static_cast<uint32_t>(readULEB128(&lsda));
+     const uint8_t* callSiteTableStart = lsda;
+--- contrib/libs/cxxsupp/libcxxabi/src/cxa_thread_atexit.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/cxa_thread_atexit.cpp	(working tree)
+@@ -112,9 +112,14 @@ extern "C" {
+ #ifdef HAVE___CXA_THREAD_ATEXIT_IMPL
+     return __cxa_thread_atexit_impl(dtor, obj, dso_symbol);
+ #else
++#ifndef __EMSCRIPTEN__
++    // Emscripten doesn't implement __cxa_thread_atexit_impl, so we can simply
++    // avoid this check.
+     if (__cxa_thread_atexit_impl) {
+       return __cxa_thread_atexit_impl(dtor, obj, dso_symbol);
+-    } else {
++    } else
++#endif
++    {
+       // Initialize the dtors std::__libcpp_tls_key (uses __cxa_guard_*() for
+       // one-time initialization and __cxa_atexit() for destruction)
+       static DtorsManager manager;
+--- contrib/libs/cxxsupp/libcxxabi/src/private_typeinfo.cpp	(index)
++++ contrib/libs/cxxsupp/libcxxabi/src/private_typeinfo.cpp	(working tree)
+@@ -1542,5 +1542,64 @@ __base_class_type_info::search_below_dst(__dynamic_cast_info* info,
+                                       not_public_path,
+                                   use_strcmp);
+ }
++}  // __cxxabiv1
++
++
++// XXX EMSCRIPTEN
++#if defined(__wasm__) && !defined(__WASM_EXCEPTIONS__)
++
++#include "cxa_exception.h"
++
++namespace __cxxabiv1
++{
++
++// These functions are used by the emscripten-style exception handling
++// mechanism.
++// Note that they need to be included even in the `-noexcept` build of
++// libc++abi to support the case where some parts of a project are built
++// with exception catching enabled, but at link time exception catching
++// is disabled.  In this case dependencies to these functions (and the JS
++// functions which call them) will still exist in the final build.
++extern "C" {
++
++int __cxa_can_catch(__shim_type_info* catchType, __shim_type_info* excpType, void **thrown) {
++  //std::type_info *t1 = static_cast<std::type_info*>(catchType);
++  //std::type_info *t2 = static_cast<std::type_info*>(excpType);
++  //printf("can %s catch %s (%p)?\n", t1->name(), t2->name(), thrown);
++
++  void *temp = *thrown;
++  int ret = catchType->can_catch(excpType, temp);
++  if (ret) *thrown = temp; // apply changes only if we are catching
++  return ret;
++}
++
++static
++inline
++__cxa_exception*
++cxa_exception_from_thrown_object(void* thrown_object)
++{
++    return static_cast<__cxa_exception*>(thrown_object) - 1;
++}
++
++void *__cxa_get_exception_ptr(void *thrown_object) throw() {
++    // Get pointer which is expected to be received by catch clause in C++ code.
++    // It may be adjusted when the pointer is casted to some of the exception
++    // object base classes (e.g. when virtual inheritance is used). When a pointer
++    // is thrown this method should return the thrown pointer itself.
++    // Work around a fastcomp bug, this code is still included for some reason in
++    // a build without exceptions support.
++    __cxa_exception* ex = cxa_exception_from_thrown_object(thrown_object);
++    bool is_pointer = !!dynamic_cast<__pointer_type_info*>(ex->exceptionType);
++    if (is_pointer)
++        return *(void**)thrown_object;
++    if (ex->adjustedPtr)
++        return ex->adjustedPtr;
++    return ex;
++}
++
++}
+ 
+ }  // __cxxabiv1
++
++#endif // __wasm__ && !__WASM_EXCEPTIONS__
++

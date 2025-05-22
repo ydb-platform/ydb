@@ -47,7 +47,7 @@ public:
 
     TIntrusivePtr<TTabletStorageInfo> MakeTabletInfo() {
         TIntrusivePtr<TTabletStorageInfo> x(new TTabletStorageInfo());
-        x->TabletID = MakeTabletID(0, 0, 1);
+        x->TabletID = MakeTabletID(false, 1);
         x->TabletType = TTabletTypes::KeyValue;
         x->Channels.resize(4);
         for (ui64 channel = 0; channel < x->Channels.size(); ++channel) {

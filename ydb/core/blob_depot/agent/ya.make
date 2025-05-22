@@ -1,5 +1,15 @@
 LIBRARY()
 
+    IF (OS_WINDOWS)
+        CFLAGS(
+            -DKIKIMR_DISABLE_S3_OPS
+        )
+    ELSE()
+        SRCS(
+            s3.cpp
+        )
+    ENDIF()
+
     SRCS(
         agent.cpp
         agent.h
@@ -24,6 +34,7 @@ LIBRARY()
         # DS Proxy queries
         storage_put.cpp
         storage_get.cpp
+        storage_get_block.cpp
         storage_block.cpp
         storage_discover.cpp
         storage_range.cpp
@@ -36,6 +47,7 @@ LIBRARY()
         ydb/core/blobstorage/vdisk/common
         ydb/core/blob_depot
         ydb/core/protos
+        ydb/core/wrappers
     )
 
 END()

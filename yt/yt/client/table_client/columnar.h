@@ -2,8 +2,7 @@
 
 #include "public.h"
 
-#include <yt/yt/core/misc/range.h>
-
+#include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>
 
 namespace NYT::NTableClient {
@@ -212,6 +211,7 @@ void DecodeIntegerVector(
     bool zigZagEncoded,
     TRange<ui32> dictionaryIndexes,
     TRange<ui64> rleIndexes,
+    TRef bitmap,
     TFetcher fetcher,
     TConsumer consumer);
 

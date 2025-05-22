@@ -3,14 +3,15 @@
 using namespace NLastGetopt;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NStatusHelpers;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int RunUpdateViews(TDriver& driver, const TString& prefix, int argc, char** argv) {
+int RunUpdateViews(TDriver& driver, const std::string& prefix, int argc, char** argv) {
     TOpts opts = TOpts::Default();
 
-    ui64 seriesId;
-    ui64 newViews;
+    uint64_t seriesId;
+    uint64_t newViews;
 
     opts.AddLongOption("id", "Series id").Required().RequiredArgument("NUM")
         .StoreResult(&seriesId);
@@ -19,9 +20,9 @@ int RunUpdateViews(TDriver& driver, const TString& prefix, int argc, char** argv
 
     TOptsParseResult res(&opts, argc, argv);
 
-    TString queryText = Sprintf(R"(
+    std::string queryText = std::format(R"(
         --!syntax_v1
-        PRAGMA TablePathPrefix("%1$s");
+        PRAGMA TablePathPrefix("{}");
 
         DECLARE $seriesId AS Uint64;
         DECLARE $newViews AS Uint64;
@@ -46,9 +47,9 @@ int RunUpdateViews(TDriver& driver, const TString& prefix, int argc, char** argv
         SELECT $newRevViews AS rev_views, series_id FROM $data;
 
         SELECT COUNT(*) AS cnt FROM $data;
-    )", prefix.data());
+    )", prefix);
 
-    ui64 updatedCount = 0;
+    uint64_t updatedCount = 0;
 
     TTableClient client(driver);
     ThrowOnError(client.RetryOperationSync([&](TSession session) -> TStatus {
@@ -82,6 +83,6 @@ int RunUpdateViews(TDriver& driver, const TString& prefix, int argc, char** argv
         return result;
     }));
 
-    Cout << "Updated " << updatedCount << " rows" << Endl;
+    std::cout << "Updated " << updatedCount << " rows" << std::endl;
     return 0;
 }

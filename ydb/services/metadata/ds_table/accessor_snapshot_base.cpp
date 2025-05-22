@@ -32,8 +32,9 @@ void TDSAccessorBase::Handle(NRequest::TEvRequestResult<NRequest::TDialogYQLRequ
     for (auto&& i : managers) {
         auto it = CurrentExistence.find(i->GetStorageTablePath());
         Y_ABORT_UNLESS(it != CurrentExistence.end());
-        Y_ABORT_UNLESS(it->second);
-        if (it->second == 1) {
+        Y_ABORT_UNLESS(it->second.State != EState::UNKNOWN);
+        if (it->second.State == EState::EXISTS) {
+            Y_ABORT_UNLESS((int)replyIdx < qResult.result_sets().size());
             *qResultFull.add_result_sets() = std::move(qResult.result_sets()[replyIdx]);
             ++replyIdx;
         } else {
@@ -65,7 +66,13 @@ void TDSAccessorBase::Handle(TEvRecheckExistence::TPtr& ev) {
 }
 
 void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvError::TPtr& ev) {
-    AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("action", "cannot detect path existence")("path", ev->Get()->GetPath())("error", ev->Get()->GetErrorMessage());
+    auto it = ExistenceChecks.find(ev->Get()->GetPath());
+    if (it == ExistenceChecks.end() || it->second.RetryCount == 0) {
+        AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("action", "cannot detect path existence")("path", ev->Get()->GetPath())("error", ev->Get()->GetErrorMessage());
+        Schedule(TDuration::Seconds(1), new TEvRecheckExistence(ev->Get()->GetPath()));
+        return;
+    }
+    ++it->second.RetryCount;
     Schedule(TDuration::Seconds(1), new TEvRecheckExistence(ev->Get()->GetPath()));
 }
 
@@ -73,21 +80,21 @@ void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvResult::TPtr& 
     auto it = ExistenceChecks.find(ev->Get()->GetTablePath());
     Y_ABORT_UNLESS(it != ExistenceChecks.end());
     if (ev->Get()->IsTableExists()) {
-        it->second = 1;
+        it->second.State = EState::EXISTS;
     } else {
-        it->second = -1;
+        it->second.State = EState::NON_EXISTS;
     }
     bool hasExists = false;
     for (auto&& i : ExistenceChecks) {
-        if (i.second == 0) {
+        if (i.second.State == EState::UNKNOWN) {
             return;
         }
-        if (i.second == 1) {
+        if (i.second.State == EState::EXISTS) {
             hasExists = true;
         }
     }
     if (!hasExists) {
-        OnNewEnrichedSnapshot(SnapshotConstructor->CreateEmpty(RequestedActuality));
+        OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult(), SnapshotConstructor->CreateEmpty(RequestedActuality));
     } else {
         StartSnapshotsFetchingImpl();
     }
@@ -100,11 +107,11 @@ void TDSAccessorBase::StartSnapshotsFetching() {
     bool hasExistsCheckers = false;
     for (auto&& i : managers) {
         auto it = ExistenceChecks.find(i->GetStorageTablePath());
-        if (it == ExistenceChecks.end() || it->second == -1) {
+        if (it == ExistenceChecks.end() || it->second.State == EState::NON_EXISTS) {
             Register(new TTableExistsActor(InternalController, i->GetStorageTablePath(), TDuration::Seconds(5)));
             hasExistsCheckers = true;
-            ExistenceChecks[i->GetStorageTablePath()] = 0;
-        } else if (it->second == 0) {
+            ExistenceChecks[i->GetStorageTablePath()].State = EState::UNKNOWN;
+        } else if (it->second.State == EState::UNKNOWN) {
             hasExistsCheckers = true;
         }
     }
@@ -122,8 +129,8 @@ void TDSAccessorBase::StartSnapshotsFetchingImpl() {
     for (auto&& i : managers) {
         auto it = CurrentExistence.find(i->GetStorageTablePath());
         Y_ABORT_UNLESS(it != CurrentExistence.end());
-        Y_ABORT_UNLESS(it->second);
-        if (it->second == 1) {
+        Y_ABORT_UNLESS(it->second.State != EState::UNKNOWN);
+        if (it->second.State == EState::EXISTS) {
             sb << "SELECT * FROM `" + EscapeC(i->GetStorageTablePath()) + "`;" << Endl;
         }
     }

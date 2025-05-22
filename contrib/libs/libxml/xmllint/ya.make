@@ -6,7 +6,7 @@ LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-WITHOUT_LICENSE_TEXTS()
+VERSION(2.9.13)
 
 PEERDIR(
     contrib/libs/libiconv

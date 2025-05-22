@@ -14,26 +14,24 @@ namespace NYT::NDriver {
 
 struct TProxyDiscoveryRequest
 {
-    NApi::EProxyType Type;
-    TString Role = NApi::DefaultRpcProxyRole;
+    NApi::EProxyKind Kind = NApi::EProxyKind::Rpc;
+    std::string Role = NApi::DefaultRpcProxyRole;
     NApi::NRpcProxy::EAddressType AddressType = NApi::NRpcProxy::DefaultAddressType;
-    TString NetworkName = NApi::NRpcProxy::DefaultNetworkName;
+    std::string NetworkName = NApi::NRpcProxy::DefaultNetworkName;
     bool IgnoreBalancers = false;
 
-    bool operator==(const TProxyDiscoveryRequest& other) const;
-    bool operator!=(const TProxyDiscoveryRequest& other) const;
+    bool operator==(const TProxyDiscoveryRequest& other) const = default;
 
     operator size_t() const;
 };
 
 void FormatValue(TStringBuilderBase* builder, const TProxyDiscoveryRequest& request, TStringBuf spec);
-TString ToString(const TProxyDiscoveryRequest& request);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TProxyDiscoveryResponse
 {
-    std::vector<TString> Addresses;
+    std::vector<std::string> Addresses;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

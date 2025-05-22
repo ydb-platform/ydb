@@ -1,128 +1,183 @@
 # Kafka API usage examples
+<!-- markdownlint-disable blanks-around-fences -->
 
-This article provides examples of Kafka API usage to work with [{{ ydb-short-name }} topics](../../concepts/topic.md).
+This example shows a code snippet for reading data from a topic via Kafka API without a consumer group (Manual Partition Assignment).
+You don't need to create a consumer for this reading mode.
+
+Before proceeding with the examples:
+
+1. [Create a topic](../ydb-cli/topic-create.md).
+1. [Add a consumer](../ydb-cli/topic-consumer-add.md).
+1. If authentication is enabled, [create a user](../../security/authorization.md#user).
+
+## How to try the Kafka API {#how-to-try-kafka-api}
+
+### In Docker {#how-to-try-kafka-api-in-docker}
+
+Run Docker following [the quickstart guide](../../quickstart.md#install), and the Kafka API will be available on port 9092.
+
+## Kafka API usage examples
+
+### Reading
+
+Consider the following limitations of using the Kafka API for reading:
+
+- No support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option.
+- Only one partition assignment strategy - `roundrobin`.
+- No reading without a pre-created consumer group.
+
+Therefore, in the consumer configuration, you must always specify the **consumer group name** and the parameters:
+
+- `check.crcs=false`
+- `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
+
+Below are examples of reading using the Kafka protocol for various applications, programming languages, and frameworks without authentication.
+For examples of how to set up authentication, see [Authentication examples](#authentication-examples).
+
+{% list tabs %}
+
+- Built-in Kafka CLI tools
+
+  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
+
+  {% include [index.md](_includes/bash/kafka-api-console-read-no-auth.md) %}
+
+- kcat
+
+  {% include [index.md](_includes/bash/kafka-api-kcat-read-no-auth.md) %}
+
+- Java
+
+  {% include [index.md](_includes/java/kafka-api-java-read-no-auth.md) %}
+
+- Spark
+
+  {% include [index.md](_includes/spark-constraints.md) %}
+
+  {% include [index.md](_includes/java/kafka-api-spark-read-no-auth.md) %}
+
+  {% include [index.md](_includes/spark-version-notice.md) %}
+
+- Flink
+
+  {% include [index.md](_includes/flink-constraints.md) %}
+
+  {% include [index.md](_includes/java/kafka-api-flink-read-no-auth.md) %}
+
+  {% include [index.md](_includes/flink-version-notice.md) %}
+
+{% endlist %}
+
+#### Frequent problems and solutions
+
+##### Unexpected error in join group response
+
+Full text of an exception:
+
+```txt
+Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.
+```
+
+Most likely it means that a consumer group is not specified or, if specified, it does not exist in the YDB cluster.
 
 
-Before executing the examples, [create a topic](../ydb-cli/topic-create.md) and [add a consumer](../ydb-cli/topic-consumer-add.md).
-
-## Examples of working with topics
-
-The examples use:
-
- * `ydb:9093` — host name.
- * `/Root/Database` — database name.
- * `/Root/Database/Topic` — topic name.
- * `user@/Root/Database` — username. Includes the username and database name.
- * `*****` — user password.
+Solution: create a consumer group in {{ ydb-short-name }} using [CLI](../ydb-cli/topic-consumer-add.md) or [SDK](../ydb-sdk/topic.md#alter-topic).
 
 
-## Writing data to a topic
 
-### Writing via Kafka Java SDK
+### Writing
 
-This example includes a code snippet for writing data to a topic via [Kafka API](https://kafka.apache.org/documentation/).
+{% note info %}
 
-  ```java
-  String HOST = "ydb:9093";
-  String TOPIC = "/Root/Database/Topic";
-  String USER = "user@/Root/Database";
-  String PASS = "*****";
+Using Kafka transactions when writing via Kafka API is currently not supported. Transactions are only available when using the [YDB Topic API](../ydb-sdk/topic.md#write-tx).
 
-  Properties props = new Properties();
-  props.put("bootstrap.servers", HOST);
-  props.put("acks", "all");
+Otherwise, writing to Apache Kafka and {{ ydb-short-name }} Topics through Kafka API is no different.
 
-  props.put("key.serializer", StringSerializer.class.getName());
-  props.put("key.deserializer", StringDeserializer.class.getName());
-  props.put("value.serializer", StringSerializer.class.getName());
-  props.put("value.deserializer", StringDeserializer.class.getName());
 
-  props.put("security.protocol", "SASL_SSL");
-  props.put("sasl.mechanism", "PLAIN");
-  props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
+{% endnote %}
 
-  props.put("compression.type", "none");
+{% list tabs %}
 
-  Producer<String, String> producer = new KafkaProducer<>(props);
-  producer.send(new ProducerRecord<String, String>(TOPIC, "msg-key", "msg-body"));
-  producer.flush();
-  producer.close();
-  ```
+- Built-in Kafka CLI tools
 
-### Writing via Logstash
+  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-To configure [Logstash](https://github.com/elastic/logstash), use the following parameters:
+  {% include [index.md](_includes/bash/kafka-api-console-write-no-auth.md) %}
 
-  ```
-  output {
-    kafka {
-      codec => json
-      topic_id => "/Root/Database/Topic"
-      bootstrap_servers => "ydb:9093"
-      compression_type => none
-      security_protocol => SASL_SSL
-      sasl_mechanism => PLAIN
-      sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='user@/Root/Database' password='*****';"
-    }
-  }
-  ```
+- kcat
 
-### Writing via Fluent Bit
+  {% include [index.md](_includes/bash/kafka-api-kcat-write-no-auth.md) %}
 
-To configure [Fluent Bit](https://github.com/fluent/fluent-bit), use the following parameters:
+- Java
 
-  ```
-  [OUTPUT]
-    name                          kafka
-    match                         *
-    Brokers                       ydb:9093
-    Topics                        /Root/Database/Topic
-    rdkafka.client.id             Fluent-bit
-    rdkafka.request.required.acks 1
-    rdkafka.log_level             7
-    rdkafka.security.protocol     SASL_SSL
-    rdkafka.sasl.mechanism        PLAIN
-    rdkafka.sasl.username         user@/Root/Database
-    rdkafka.sasl.password         *****
-  ```
+  {% include [index.md](_includes/java/kafka-api-java-write-no-auth.md) %}
 
-## Reading data from a topic
+- Spark
 
-### Reading data from a topic via Kafka Java SDK
+  {% include [index.md](_includes/spark-constraints.md) %}
 
-This example includes a code snippet for reading data from a topic via Kafka Java SDK.
+  {% include [index.md](_includes/java/kafka-api-spark-write-no-auth.md) %}
 
-```java
-  String HOST = "ydb:9093";
-  String TOPIC = "/Root/Database/Topic";
-  String USER = "user@/Root/Database";
-  String PASS = "*****";
+  {% include [index.md](_includes/spark-version-notice.md) %}
 
-  Properties props = new Properties();
-  props.put("bootstrap.servers", HOST);
-  props.put("auto.offset.reset", "earliest"); // to read from start
-  props.put("check.crcs", false);
+- Flink
 
-  props.put("key.deserializer", StringDeserializer.class.getName());
-  props.put("value.deserializer", StringDeserializer.class.getName());
+  {% include [index.md](_includes/flink-constraints.md) %}
 
-  props.put("security.protocol", "SASL_SSL");
-  props.put("sasl.mechanism", "PLAIN");
-  props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
+  {% include [index.md](_includes/java/kafka-api-flink-write-no-auth.md) %}
 
-  Consumer<String, String> consumer = new KafkaConsumer<>(props);
+  {% include [index.md](_includes/flink-version-notice.md) %}
 
-  List<PartitionInfo> partitionInfos = consumer.partitionsFor(TOPIC);
-  List<TopicPartition> topicPartitions = new ArrayList<>();
+- Logstash
 
-  for (PartitionInfo partitionInfo : partitionInfos) {
-      topicPartitions.add(new TopicPartition(partitionInfo.topic(), partitionInfo.partition()));
-  }
-  consumer.assign(topicPartitions);
+  {% include [index.md](_includes/logs-to-kafka/kafka-api-logstash.md) %}
 
-  while (true) {
-      ConsumerRecords<String, String> records = consumer.poll(1000);
-      for (ConsumerRecord<String, String> record : records) {
-          System.out.println(record.key() + ":" + record.value());
-      }
-  }
+- Fluent Bit
+
+  {% include [index.md](_includes/logs-to-kafka/kafka-api-fluent-bit.md) %}
+
+{% endlist %}
+
+### Authentication examples {#authentication-examples}
+
+For more details on authentication, see the [Authentication](./auth.md) section. Below are examples of authentication in a cloud database and a local database.
+
+
+{% note info %}
+
+Currently, the only available authentication mechanism with Kafka API in {{ ydb-short-name }} Topics is `SASL_PLAIN`.
+
+
+{% endnote %}
+
+#### Authentication examples in on-prem YDB
+
+To use authentication in a multinode self-deployed database:
+
+1. Create a user. [How to do this in YQL](../../yql/reference/syntax/create-user.md). [How to execute YQL from CLI](../ydb-cli/sql.md).
+2. Connect to the Kafka API as shown in the examples below. In all examples, it is assumed that:
+
+   - YDB is running locally with the environment variable `YDB_KAFKA_PROXY_PORT=9092`, meaning that the Kafka API is available at `localhost:9092`. For example, you can run YDB in Docker as described [here](../../quickstart.md#install).
+
+   - <username> is the username you specified when creating the user.
+   - <password> is the user's password you specified when creating the user.
+
+Examples are shown for reading, but the same configuration parameters work for writing to a topic as well.
+
+{% list tabs %}
+
+- Built-in Kafka CLI tools
+
+  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
+
+  {% include [index.md](_includes/bash/kafka-api-console-read-with-sasl-creds-on-prem.md) %}
+
+- kcat
+
+  {% include [index.md](_includes/bash/kafka-api-kcat-read-with-sasl-creds-on-prem.md) %}
+
+- Java
+
+  {% include [index.md](_includes/java/kafka-api-java-read-with-sasl-creds-on-prem.md) %}
+
+{% endlist %}

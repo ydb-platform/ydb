@@ -2,7 +2,7 @@
 
 #include <util/generic/string.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 TString GetRootCertificate();
 

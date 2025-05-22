@@ -2,6 +2,8 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
+VERSION(v1.6.0)
+
 SRCS(
     dce.go
     doc.go
@@ -16,6 +18,8 @@ SRCS(
     uuid.go
     version1.go
     version4.go
+    version6.go
+    version7.go
 )
 
 GO_TEST_SRCS(

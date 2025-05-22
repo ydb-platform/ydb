@@ -2,21 +2,33 @@
 
 namespace NKikimr::NStorage {
 
-    void TDistributedConfigKeeper::IssueScatterTask(bool locallyGenerated, TEvScatter&& request) {
-        const ui64 cookie = NextScatterCookie++;
-        STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Request, request), (Cookie, cookie));
-        Y_ABORT_UNLESS(locallyGenerated || Binding);
-        const auto [it, inserted] = ScatterTasks.try_emplace(cookie, locallyGenerated ? std::nullopt : Binding,
-            std::move(request));
+    void TDistributedConfigKeeper::IssueScatterTask(std::optional<TActorId> actorId, TEvScatter&& request) {
+        ui64 cookie = NextScatterCookie++;
+        if (cookie == 0) {
+            cookie = NextScatterCookie++;
+        }
+        STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Request, request), (Cookie, cookie), (ActorId, actorId),
+            (Binding, Binding), (Scepter, Scepter ? std::make_optional(Scepter->Id) : std::nullopt));
+        Y_ABORT_UNLESS(!actorId && Binding && !Scepter // just forwarding what we got from binding
+            || !actorId && !Binding && Scepter // initiating scatter task as a root node
+            || actorId && !Binding && Scepter); // query issued by InvokeOnRootNode machinery
+        const auto [it, inserted] = ScatterTasks.try_emplace(cookie, Binding, std::move(request), Scepter,
+            actorId.value_or(TActorId()));
         Y_ABORT_UNLESS(inserted);
         TScatterTask& task = it->second;
         PrepareScatterTask(cookie, task);
         for (auto& [nodeId, info] : DirectBoundNodes) {
             IssueScatterTaskForNode(nodeId, info, cookie, task);
         }
+        CheckCompleteScatterTask(it);
+    }
+
+    void TDistributedConfigKeeper::CheckCompleteScatterTask(TScatterTasks::iterator it) {
+        TScatterTask& task = it->second;
         if (task.PendingNodes.empty() && !task.AsyncOperationsPending) {
-            CompleteScatterTask(task);
+            TScatterTask temp = std::move(task);
             ScatterTasks.erase(it);
+            CompleteScatterTask(temp);
         }
     }
 
@@ -24,10 +36,8 @@ namespace NKikimr::NStorage {
         if (const auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
             TScatterTask& task = it->second;
             Y_ABORT_UNLESS(task.AsyncOperationsPending);
-            task.AsyncOperationsPending = false;
-            if (task.PendingNodes.empty()) {
-                CompleteScatterTask(task);
-                ScatterTasks.erase(it);
+            if (!--task.AsyncOperationsPending) {
+                CheckCompleteScatterTask(it);
             }
         }
     }
@@ -44,20 +54,23 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::CompleteScatterTask(TScatterTask& task) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC22, "CompleteScatterTask", (Request, task.Request));
 
-        // some state checks
         if (task.Origin) {
             Y_ABORT_UNLESS(Binding); // when binding is dropped, all scatter tasks must be dropped too
             Y_ABORT_UNLESS(Binding == task.Origin); // binding must not change
         }
 
-        PerformScatterTask(task);
+        PerformScatterTask(task); // do the local part
 
         if (task.Origin) {
             auto reply = std::make_unique<TEvNodeConfigGather>();
             task.Response.Swap(&reply->Record);
             SendEvent(*Binding, std::move(reply));
+        } else if (task.ActorId) {
+            auto ev = std::make_unique<TEvNodeConfigGather>();
+            task.Response.Swap(&ev->Record);
+            Send(task.ActorId, ev.release());
         } else {
-            ProcessGather(&task.Response);
+            ProcessGather(task.Scepter.lock() == Scepter ? &task.Response : nullptr);
         }
     }
 
@@ -70,19 +83,20 @@ namespace NKikimr::NStorage {
 
         const size_t n = task.PendingNodes.erase(nodeId);
         Y_ABORT_UNLESS(n == 1);
-        if (task.PendingNodes.empty() && !task.AsyncOperationsPending) {
-            CompleteScatterTask(task);
-            ScatterTasks.erase(it);
-        }
+        CheckCompleteScatterTask(it);
     }
 
-    void TDistributedConfigKeeper::AbortAllScatterTasks(const TBinding& binding) {
+    void TDistributedConfigKeeper::AbortAllScatterTasks(const std::optional<TBinding>& binding) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC24, "AbortAllScatterTasks", (Binding, binding));
 
         for (auto& [cookie, task] : std::exchange(ScatterTasks, {})) {
-            Y_ABORT_UNLESS(task.Origin);
             Y_ABORT_UNLESS(task.Origin == binding);
-
+            if (task.ActorId) { // terminate the task prematurely -- and notify actor
+                auto ev = std::make_unique<TEvNodeConfigGather>();
+                task.Response.SetAborted(true);
+                task.Response.Swap(&ev->Record);
+                Send(task.ActorId, ev.release());
+            }
             for (const ui32 nodeId : task.PendingNodes) {
                 const auto it = DirectBoundNodes.find(nodeId);
                 Y_ABORT_UNLESS(it != DirectBoundNodes.end());
@@ -98,7 +112,7 @@ namespace NKikimr::NStorage {
             (Cookie, ev->Cookie), (SessionId, ev->InterconnectSession), (Record, ev->Get()->Record));
 
         if (Binding && Binding->Expected(*ev)) {
-            IssueScatterTask(false, std::move(ev->Get()->Record));
+            IssueScatterTask(std::nullopt, std::move(ev->Get()->Record));
         }
     }
 
@@ -110,20 +124,18 @@ namespace NKikimr::NStorage {
         if (const auto it = DirectBoundNodes.find(senderNodeId); it != DirectBoundNodes.end() && it->second.Expected(*ev)) {
             TBoundNode& info = it->second;
             auto& record = ev->Get()->Record;
-            if (const auto jt = ScatterTasks.find(record.GetCookie()); jt != ScatterTasks.end()) {
-                const size_t n = info.ScatterTasks.erase(jt->first);
+            const ui64 cookie = record.GetCookie();
+            if (const auto jt = ScatterTasks.find(cookie); jt != ScatterTasks.end()) {
+                const size_t n = info.ScatterTasks.erase(cookie);
                 Y_ABORT_UNLESS(n == 1);
 
                 TScatterTask& task = jt->second;
                 record.Swap(&task.CollectedResponses.emplace_back());
                 const size_t m = task.PendingNodes.erase(senderNodeId);
                 Y_ABORT_UNLESS(m == 1);
-                if (task.PendingNodes.empty() && !task.AsyncOperationsPending) {
-                    CompleteScatterTask(task);
-                    ScatterTasks.erase(jt);
-                }
+                CheckCompleteScatterTask(jt);
             } else {
-                Y_DEBUG_ABORT_UNLESS(false);
+                Y_DEBUG_ABORT_UNLESS(!info.ScatterTasks.contains(cookie));
             }
         }
     }

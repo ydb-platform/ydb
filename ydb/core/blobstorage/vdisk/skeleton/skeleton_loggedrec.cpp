@@ -27,7 +27,8 @@ namespace NKikimr {
             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
             const TActorId &recipient,
             ui64 recipientCookie,
-            NWilson::TTraceId traceId)
+            NWilson::TTraceId traceId,
+            NKikimrBlobStorage::EPutHandleClass handleClass)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
@@ -36,7 +37,12 @@ namespace NKikimr {
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
         , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.Put")
-    {}
+        , HandleClass(handleClass)
+    {
+        if (Span) {
+            Span.Attribute("blob_id", id.ToString());
+        }
+    }
 
     void TLoggedRecVPut::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
@@ -48,7 +54,8 @@ namespace NKikimr {
                 << " Marker# BSVSLR01");
 
         Span.EndOk();
-        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie);
+        const auto& vCtx = hull.GetHullCtx()->VCtx;
+        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx, HandleClass);
     }
 
     NWilson::TTraceId TLoggedRecVPut::GetTraceId() const {
@@ -67,7 +74,8 @@ namespace NKikimr {
             std::unique_ptr<TEvVMultiPutItemResult> result,
             const TActorId &recipient,
             ui64 recipientCookie,
-            NWilson::TTraceId traceId)
+            NWilson::TTraceId traceId,
+            NKikimrBlobStorage::EPutHandleClass)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
@@ -76,7 +84,11 @@ namespace NKikimr {
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
         , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.MultiPutItem")
-    {}
+    {
+        if (Span) {
+            Span.Attribute("blob_id", Id.ToString());
+        }
+    }
 
     void TLoggedRecVMultiPutItem::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
@@ -89,7 +101,7 @@ namespace NKikimr {
                 << " Marker# BSVSLR02");
 
         Span.EndOk();
-        ctx.Send(Recipient, Result.release(), RecipientCookie);
+        ctx.Send(Recipient, Result.release(), 0, RecipientCookie);
     }
 
     NWilson::TTraceId TLoggedRecVMultiPutItem::GetTraceId() const {
@@ -108,7 +120,11 @@ namespace NKikimr {
         , HugeKeeperId(hugeKeeperId)
         , Ev(ev)
         , Span(TWilson::VDiskInternals, std::move(Ev->TraceId), "VDisk.Log.PutHuge")
-    {}
+    {
+        if (Span) {
+            Span.Attribute("blob_id", Ev->Get()->LogoBlobID.ToString());
+        }
+    }
 
     void TLoggedRecVPutHuge::Replay(THull &hull, const TActorContext &ctx) {
         TEvHullLogHugeBlob *msg = Ev->Get();
@@ -124,7 +140,8 @@ namespace NKikimr {
                 << "TEvVPut: realtime# false result# " << msg->Result->ToString()
                 << " Marker# BSVSLR03");
         Span.EndOk();
-        SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie);
+        const auto& vCtx = hull.GetHullCtx()->VCtx;
+        SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, vCtx, msg->HandleClass);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -149,8 +166,9 @@ namespace NKikimr {
     {}
 
     void TLoggedRecVBlock::Replay(THull &hull, const TActorContext &ctx) {
-        auto replySender = [&ctx] (const TActorId &id, ui64 cookie, NWilson::TTraceId, IEventBase *msg) {
-            SendVDiskResponse(ctx, id, msg, cookie);
+        const auto& vCtx = hull.GetHullCtx()->VCtx;
+        auto replySender = [&ctx, &vCtx] (const TActorId &id, ui64 cookie, NWilson::TTraceId, IEventBase *msg) {
+            SendVDiskResponse(ctx, id, msg, cookie, vCtx, {});
         };
 
         hull.AddBlockCmd(ctx, TabletId, Gen, IssuerGuid, Seg.Point(), replySender);
@@ -158,7 +176,7 @@ namespace NKikimr {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_BLOCK, hull.GetHullCtx()->VCtx->VDiskLogPrefix
                 << "TEvVBlock: result# " << Result->ToString()
                 << " Marker# BSVSLR04");
-        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie);
+        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx, {});
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -185,7 +203,8 @@ namespace NKikimr {
                 << "TEvVCollectGarbage: result# " << Result->ToString()
                 << " Marker# BSVSLR05");
         Span.EndOk();
-        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie);
+        const auto& vCtx = hull.GetHullCtx()->VCtx;
+        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -203,8 +222,9 @@ namespace NKikimr {
     {}
 
     void TLoggedRecLocalSyncData::Replay(THull &hull, const TActorContext &ctx) {
-        auto replySender = [&ctx] (const TActorId &id, ui64 cookie, NWilson::TTraceId, IEventBase *msg) {
-            SendVDiskResponse(ctx, id, msg, cookie);
+        const auto& vCtx = hull.GetHullCtx()->VCtx;
+        auto replySender = [&ctx, &vCtx] (const TActorId &id, ui64 cookie, NWilson::TTraceId, IEventBase *msg) {
+            SendVDiskResponse(ctx, id, msg, cookie, vCtx, {});
         };
 
 #ifdef UNPACK_LOCALSYNCDATA
@@ -212,8 +232,8 @@ namespace NKikimr {
 #else
         hull.AddSyncDataCmd(ctx, OrigEv->Get()->Data, Seg, replySender);
 #endif
-        Span.EndOk();
-        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie);
+        Span.EndOk();        
+        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -222,7 +242,7 @@ namespace NKikimr {
     TLoggedRecAnubisOsirisPut::TLoggedRecAnubisOsirisPut(
             TLsnSeg seg,
             bool confirmSyncLogAlso,
-            const TEvAnubisOsirisPut::THullDbInsert &insert,
+            const THullDbInsert &insert,
             std::unique_ptr<TEvAnubisOsirisPutResult> result,
             TEvAnubisOsirisPut::TPtr origEv)
         : ILoggedRec(seg, confirmSyncLogAlso)
@@ -232,8 +252,9 @@ namespace NKikimr {
     {}
 
     void TLoggedRecAnubisOsirisPut::Replay(THull &hull, const TActorContext &ctx) {
-        hull.AddAnubisOsirisLogoBlob(ctx, Insert.Id, Insert.Ingress, Seg);
-        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie);
+        hull.AddLogoBlob(ctx, Insert.Id, Insert.Ingress, Seg);
+        const auto& vCtx = hull.GetHullCtx()->VCtx;
+        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -260,18 +281,21 @@ namespace NKikimr {
     TLoggedRecDelLogoBlobDataSyncLog::TLoggedRecDelLogoBlobDataSyncLog(
             TLsnSeg seg,
             bool confirmSyncLogAlso,
+            const THullDbInsert &insert,
             std::unique_ptr<TEvDelLogoBlobDataSyncLogResult> result,
             const TActorId &recipient,
             ui64 recipientCookie)
         : ILoggedRec(seg, confirmSyncLogAlso)
+        , Insert(insert)
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
     {}
 
     void TLoggedRecDelLogoBlobDataSyncLog::Replay(THull &hull, const TActorContext &ctx) {
-        Y_UNUSED(hull);
-        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie);
+        hull.AddLogoBlob(ctx, Insert.Id, Insert.Ingress, Seg);
+        const auto& vCtx = hull.GetHullCtx()->VCtx;
+        SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie, vCtx, {});
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -287,7 +311,8 @@ namespace NKikimr {
 
     void TLoggedRecAddBulkSst::Replay(THull &hull, const TActorContext &ctx) {
         hull.AddBulkSst(ctx, OrigEv->Get()->Essence, Seg);
-        SendVDiskResponse(ctx, OrigEv->Sender, new TEvAddBulkSstResult, OrigEv->Cookie);
+        const auto& vCtx = hull.GetHullCtx()->VCtx;
+        SendVDiskResponse(ctx, OrigEv->Sender, new TEvAddBulkSstResult, OrigEv->Cookie, vCtx, {});
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

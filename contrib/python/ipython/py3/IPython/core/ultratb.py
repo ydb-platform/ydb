@@ -552,28 +552,31 @@ class ListTB(TBTools):
         lines = ''.join(self._format_exception_only(etype, evalue))
         out_list.append(lines)
 
-        exception = self.get_parts_of_chained_exception(evalue)
+        # Find chained exceptions if we have a traceback (not for exception-only mode)
+        if etb is not None:
+            exception = self.get_parts_of_chained_exception(evalue)
 
-        if exception and (id(exception[1]) not in chained_exc_ids):
-            chained_exception_message = (
-                self.prepare_chained_exception_message(evalue.__cause__)[0]
-                if evalue is not None
-                else ""
-            )
-            etype, evalue, etb = exception
-            # Trace exception to avoid infinite 'cause' loop
-            chained_exc_ids.add(id(exception[1]))
-            chained_exceptions_tb_offset = 0
-            out_list = (
-                self.structured_traceback(
-                    etype,
-                    evalue,
-                    (etb, chained_exc_ids),  # type: ignore
-                    chained_exceptions_tb_offset,
-                    context,
+            if exception and (id(exception[1]) not in chained_exc_ids):
+                chained_exception_message = (
+                    self.prepare_chained_exception_message(evalue.__cause__)[0]
+                    if evalue is not None
+                    else ""
                 )
-                + chained_exception_message
-                + out_list)
+                etype, evalue, etb = exception
+                # Trace exception to avoid infinite 'cause' loop
+                chained_exc_ids.add(id(exception[1]))
+                chained_exceptions_tb_offset = 0
+                out_list = (
+                    self.structured_traceback(
+                        etype,
+                        evalue,
+                        (etb, chained_exc_ids),  # type: ignore
+                        chained_exceptions_tb_offset,
+                        context,
+                    )
+                    + chained_exception_message
+                    + out_list
+                )
 
         return out_list
 
@@ -743,6 +746,7 @@ class FrameInfo:
     lineno: Tuple[int]
     # number of context lines to use
     context: Optional[int]
+    raw_lines: List[str]
 
     @classmethod
     def _from_stack_data_FrameInfo(cls, frame_info):
@@ -777,8 +781,13 @@ class FrameInfo:
 
         # self.lines = []
         if sd is None:
-            ix = inspect.getsourcelines(frame)
-            self.raw_lines = ix[0]
+            try:
+                # return a list of source lines and a starting line number
+                self.raw_lines = inspect.getsourcelines(frame)[0]
+            except OSError:
+                self.raw_lines = [
+                    "'Could not get source, probably due dynamically evaluated source code.'"
+                ]
 
     @property
     def variables_in_executing_piece(self):
@@ -789,7 +798,20 @@ class FrameInfo:
 
     @property
     def lines(self):
-        return self._sd.lines
+        from executing.executing import NotOneValueFound
+
+        try:
+            return self._sd.lines
+        except NotOneValueFound:
+
+            class Dummy:
+                lineno = 0
+                is_current = False
+
+                def render(self, *, pygmented):
+                    return "<Error retrieving source code with stack_data see ipython/ipython#13598>"
+
+            return [Dummy()]
 
     @property
     def executing(self):
@@ -808,8 +830,8 @@ class VerboseTB(TBTools):
     traceback, to be used with alternate interpreters (because their own code
     would appear in the traceback)."""
 
-    _tb_highlight = ""
-    _tb_highlight_style = "default"
+    tb_highlight = ""
+    tb_highlight_style = "default"
 
     def __init__(
         self,
@@ -1111,8 +1133,8 @@ class VerboseTB(TBTools):
         after = context // 2
         before = context - after
         if self.has_colors:
-            style = get_style_by_name(self._tb_highlight_style)
-            style = stack_data.style_with_executing_node(style, self._tb_highlight)
+            style = get_style_by_name(self.tb_highlight_style)
+            style = stack_data.style_with_executing_node(style, self.tb_highlight)
             formatter = Terminal256Formatter(style=style)
         else:
             formatter = None

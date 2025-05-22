@@ -28,7 +28,16 @@ bool TRetryLimiter::UpdateOnRetry(const TInstant& lastSeenAt, const TRetryPolicy
             RetryRate = 0.0;
         }
     }
-    bool shouldRetry = RetryRate < policy.RetryCount;
+
+    bool shouldRetry = true;
+    if (RetryRate >= policy.RetryCount) {
+        shouldRetry = false;
+        LastError = TStringBuilder() << "failure rate " << RetryRate << " exceeds limit of "  << policy.RetryCount;
+    } else if (policy.RetryLimit && RetryCount >= policy.RetryLimit) {
+        shouldRetry = false;
+        LastError = TStringBuilder() << "retry count reached limit of "  << policy.RetryLimit;
+    }
+
     if (shouldRetry) {
         RetryCount++;
         RetryCounterUpdatedAt = now;
@@ -45,6 +54,11 @@ bool IsTerminalStatus(FederatedQuery::QueryMeta::ComputeStatus status)
 bool IsAbortedStatus(FederatedQuery::QueryMeta::ComputeStatus status)
 {
     return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM }, status);
+}
+
+bool IsFailedStatus(FederatedQuery::QueryMeta::ComputeStatus status) {
+    return IsIn({ FederatedQuery::QueryMeta::ABORTED_BY_USER, FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM,
+         FederatedQuery::QueryMeta::FAILED }, status);
 }
 
 bool IsBillablelStatus(FederatedQuery::QueryMeta::ComputeStatus status, NYql::NDqProto::StatusIds::StatusCode statusCode) {
@@ -140,6 +154,7 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
             policyMapping.AddStatusCode(NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             auto& policy = *policyMapping.MutablePolicy();
             policy.SetRetryCount(10);
+            policy.SetRetryLimit(40);
             policy.SetRetryPeriod("1m");
             policy.SetBackoffPeriod("1s");
         }
@@ -174,6 +189,7 @@ bool DoesPingTaskUpdateQueriesTable(const Fq::Private::PingTaskRequest& request)
         || !request.issues().empty()
         || !request.transient_issues().empty()
         || request.statistics()
+        || request.timeline()
         || !request.result_set_meta().empty()
         || request.ast()
         || request.ast_compressed().data()

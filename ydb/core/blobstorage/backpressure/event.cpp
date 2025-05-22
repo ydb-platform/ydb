@@ -27,7 +27,7 @@ IEventBase *TEventHolder::MakeErrorReply(NKikimrProto::EReplyStatus status, cons
 
 void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, ui64 queueCookie, ui64 msgId,
         ui64 sequenceId, bool sendMeCostSettings, NWilson::TTraceId traceId, const NBackpressure::TQueueClientId& clientId,
-        const THPTimer& processingTimer) {
+        const TBSQueueTimer& processingTimer) {
     // check that we are not discarded yet
     Y_ABORT_UNLESS(Type != 0);
 
@@ -74,7 +74,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
         Y_ABORT_UNLESS(status);
 
         // send it to disk
-        ctx.ExecutorThread.Send(new IEventHandle(Type, flags, remoteVDisk, ctx.SelfID,
+        ctx.Send(new IEventHandle(Type, flags, remoteVDisk, ctx.SelfID,
             MakeIntrusive<TEventSerializedData>(*Buffer, std::move(buf)), queueCookie, nullptr, std::move(traceId)));
     }
 }

@@ -2,7 +2,7 @@
 
 `xmltodict` is a Python module that makes working with XML feel like you are working with [JSON](http://docs.python.org/library/json.html), as in this ["spec"](http://www.xml.com/pub/a/2006/05/31/converting-between-xml-and-json.html):
 
-[![Build Status](https://travis-ci.com/martinblech/xmltodict.svg?branch=master)](https://travis-ci.com/martinblech/xmltodict)
+[![Build Status](https://app.travis-ci.com/martinblech/xmltodict.svg?branch=master)](https://app.travis-ci.com/martinblech/xmltodict)
 
 ```python
 >>> print(json.dumps(xmltodict.parse("""
@@ -202,6 +202,17 @@ You just need to
 
 ```sh
 $ pip install xmltodict
+```
+
+### Using conda
+
+For installing `xmltodict` using Anaconda/Miniconda (*conda*) from the 
+[conda-forge channel][#xmltodict-conda] all you need to do is:
+
+[#xmltodict-conda]: https://anaconda.org/conda-forge/xmltodict
+
+```sh
+$ conda install -c conda-forge xmltodict
 ```
 
 ### RPM-based distro (Fedora, RHEL, …)

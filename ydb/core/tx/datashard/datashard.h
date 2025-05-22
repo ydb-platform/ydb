@@ -151,6 +151,7 @@ namespace NDataShard {
     extern TDuration gDbStatsReportInterval;
     extern ui64 gDbStatsDataSizeResolution;
     extern ui64 gDbStatsRowCountResolution;
+    extern ui32 gDbStatsHistogramBucketsCount;
 
     // This SeqNo is used to discard outdated schema Tx requests on datashards.
     // In case of tablet restart on network disconnects SS can resend same Propose for the same schema Tx.
@@ -191,7 +192,7 @@ namespace NTxDataShard {
     using NDataShard::TTxFlags;
 }
 
-struct TEvDataShard {
+namespace TEvDataShard {
     enum EEv {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_DATASHARD),
         EvCancelTransactionProposal,
@@ -241,8 +242,8 @@ struct TEvDataShard {
         EvGetTableStatsResult,
         EvPeriodicTableStats,
 
-        EvS3ListingRequest,
-        EvS3ListingResponse,
+        EvObjectStorageListingRequest,
+        EvObjectStorageListingResponse,
 
         EvUploadRowsRequest,
         EvUploadRowsResponse,
@@ -327,6 +328,29 @@ struct TEvDataShard {
 
         EvOverloadReady,
         EvOverloadUnsubscribe,
+
+        EvSampleKRequest,
+        EvSampleKResponse,
+
+        EvLocalKMeansRequest,
+        EvLocalKMeansResponse,
+
+        EvReshuffleKMeansRequest,
+        EvReshuffleKMeansResponse,
+
+        // Sent by the scan actor when EvRead uses a scan
+        EvReadScanStarted,
+        EvReadScanFinished,
+
+        // Used to transfer in-memory state between generations
+        EvInMemoryStateRequest,
+        EvInMemoryStateResponse,
+
+        EvForceDataCleanup,
+        EvForceDataCleanupResult,
+
+        EvPrefixKMeansRequest,
+        EvPrefixKMeansResponse,
 
         EvEnd
     };
@@ -465,7 +489,7 @@ struct TEvDataShard {
             const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)
         {
-            Y_ABORT_UNLESS(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
+            Y_ENSURE(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
             Record.SetSchemeShardId(ssId);
             Record.MutableProcessingParams()->CopyFrom(processingParams);
         }
@@ -595,6 +619,10 @@ struct TEvDataShard {
         void SetStepOrderId(const std::pair<ui64, ui64>& stepOrderId) {
             Record.SetStep(stepOrderId.first);
             Record.SetOrderId(stepOrderId.second);
+            // Note: this method is used by schema operations where stepOrderId == commitVersion
+            auto* commitVersion = Record.MutableCommitVersion();
+            commitVersion->SetStep(stepOrderId.first);
+            commitVersion->SetTxId(stepOrderId.second);
         }
 
         void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
@@ -643,7 +671,7 @@ struct TEvDataShard {
                 TString result;
                 TStringOutput out(result);
                 for (ui32 i = 0; i < Record.ErrorSize(); ++i) {
-                    out << Record.GetError(i).GetKind() << " (" 
+                    out << Record.GetError(i).GetKind() << " ("
                         << (Record.GetError(i).HasReason() ? Record.GetError(i).GetReason() : "no reason")
                         << ") |";
                 }
@@ -826,11 +854,8 @@ struct TEvDataShard {
                                                         NKikimrTxDataShard::TEvGetTableStats,
                                                         TEvDataShard::EvGetTableStats> {
         TEvGetTableStats() = default;
-        explicit TEvGetTableStats(ui64 tableId, ui64 dataSizeResolution = 0, ui64 rowCountResolution = 0, bool collectKeySample = false) {
+        explicit TEvGetTableStats(ui64 tableId) {
             Record.SetTableId(tableId);
-            Record.SetDataSizeResolution(dataSizeResolution);
-            Record.SetRowCountResolution(rowCountResolution);
-            Record.SetCollectKeySample(collectKeySample);
         }
     };
 
@@ -917,6 +942,9 @@ struct TEvDataShard {
                                NKikimrTxDataShard::TEvRead,
                                TEvDataShard::EvRead>;
 
+        static constexpr ui32 HINT_BATCH = NKikimrTxDataShard::TEvRead::HINT_BATCH;
+        static constexpr ui32 HINT_LOW_PRIORITY = NKikimrTxDataShard::TEvRead::HINT_LOW_PRIORITY;
+
         TEvRead() = default;
 
         TString ToString() const override;
@@ -931,7 +959,7 @@ struct TEvDataShard {
             return TBase::SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data);
+        static TEvRead* Load(const TEventSerializedData* data);
 
     private:
         void FillRecord();
@@ -977,7 +1005,7 @@ struct TEvDataShard {
             return TBase::SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data);
+        static TEvReadResult* Load(const TEventSerializedData* data);
 
         size_t GetRowsCount() const {
             return Record.GetRowCount();
@@ -1035,12 +1063,10 @@ struct TEvDataShard {
     };
 
     struct TEvReadContinue : public TEventLocal<TEvReadContinue, TEvDataShard::EvReadContinue> {
-        TActorId Reader;
-        ui64 ReadId;
+        const ui64 LocalReadId;
 
-        TEvReadContinue(TActorId reader, ui64 readId)
-            : Reader(reader)
-            , ReadId(readId)
+        explicit TEvReadContinue(ui64 localReadId)
+            : LocalReadId(localReadId)
         {}
     };
 
@@ -1054,6 +1080,24 @@ struct TEvDataShard {
                                            NKikimrTxDataShard::TEvReadCancel,
                                            TEvDataShard::EvReadCancel> {
         TEvReadCancel() = default;
+    };
+
+    struct TEvReadScanStarted : public TEventLocal<TEvReadScanStarted, EvReadScanStarted> {
+        const ui64 LocalReadId;
+
+        // Event sender is the scan actor
+        explicit TEvReadScanStarted(ui64 localReadId)
+            : LocalReadId(localReadId)
+        {}
+    };
+
+    struct TEvReadScanFinished : public TEventLocal<TEvReadScanFinished, EvReadScanFinished> {
+        const ui64 LocalReadId;
+
+        // Event sender is the scan actor
+        explicit TEvReadScanFinished(ui64 localReadId)
+            : LocalReadId(localReadId)
+        {}
     };
 
     struct TEvReadColumnsRequest : public TEventPB<TEvReadColumnsRequest,
@@ -1303,7 +1347,7 @@ struct TEvDataShard {
             : TxId(txId)
             , Info(info)
         {
-            Y_ABORT_UNLESS(Info.DataETag);
+            Y_ENSURE(Info.DataETag);
         }
 
         TString ToString() const override {
@@ -1350,7 +1394,7 @@ struct TEvDataShard {
             , Record(*RecordHolder)
             , Info(info)
         {
-            Y_ABORT_UNLESS(Info.DataETag);
+            Y_ENSURE(Info.DataETag);
         }
 
         TString ToString() const override {
@@ -1377,6 +1421,25 @@ struct TEvDataShard {
                 << " Record: " << Record.ShortDebugString()
                 << " Info: " << Info
             << " }";
+        }
+    };
+
+    struct TEvObjectStorageListingRequest
+        : public TEventPB<TEvObjectStorageListingRequest,
+                            NKikimrTxDataShard::TEvObjectStorageListingRequest,
+                            TEvDataShard::EvObjectStorageListingRequest> {
+        TEvObjectStorageListingRequest() = default;
+    };
+
+    struct TEvObjectStorageListingResponse
+         : public TEventPB<TEvObjectStorageListingResponse,
+                            NKikimrTxDataShard::TEvObjectStorageListingResponse,
+                            TEvDataShard::EvObjectStorageListingResponse> {
+        TEvObjectStorageListingResponse() = default;
+
+        explicit TEvObjectStorageListingResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
+            Record.SetTabletID(tabletId);
+            Record.SetStatus(status);
         }
     };
 
@@ -1420,6 +1483,54 @@ struct TEvDataShard {
                           NKikimrTxDataShard::TEvBuildIndexProgressResponse,
                           TEvDataShard::EvBuildIndexProgressResponse>
     {
+    };
+
+    struct TEvSampleKRequest
+        : public TEventPB<TEvSampleKRequest,
+                          NKikimrTxDataShard::TEvSampleKRequest,
+                          TEvDataShard::EvSampleKRequest> {
+    };
+
+    struct TEvSampleKResponse
+        : public TEventPB<TEvSampleKResponse,
+                          NKikimrTxDataShard::TEvSampleKResponse,
+                          TEvDataShard::EvSampleKResponse> {
+    };
+
+    struct TEvReshuffleKMeansRequest
+        : public TEventPB<TEvReshuffleKMeansRequest,
+                          NKikimrTxDataShard::TEvReshuffleKMeansRequest,
+                          TEvDataShard::EvReshuffleKMeansRequest> {
+    };
+
+    struct TEvReshuffleKMeansResponse
+        : public TEventPB<TEvReshuffleKMeansResponse,
+                          NKikimrTxDataShard::TEvReshuffleKMeansResponse,
+                          TEvDataShard::EvReshuffleKMeansResponse> {
+    };
+
+    struct TEvLocalKMeansRequest
+        : public TEventPB<TEvLocalKMeansRequest,
+                          NKikimrTxDataShard::TEvLocalKMeansRequest,
+                          TEvDataShard::EvLocalKMeansRequest> {
+    };
+
+    struct TEvLocalKMeansResponse
+        : public TEventPB<TEvLocalKMeansResponse,
+                          NKikimrTxDataShard::TEvLocalKMeansResponse,
+                          TEvDataShard::EvLocalKMeansResponse> {
+    };
+
+    struct TEvPrefixKMeansRequest
+        : public TEventPB<TEvPrefixKMeansRequest,
+                          NKikimrTxDataShard::TEvPrefixKMeansRequest,
+                          TEvDataShard::EvPrefixKMeansRequest> {
+    };
+
+    struct TEvPrefixKMeansResponse
+        : public TEventPB<TEvPrefixKMeansResponse,
+                          NKikimrTxDataShard::TEvPrefixKMeansResponse,
+                          TEvDataShard::EvPrefixKMeansResponse> {
     };
 
     struct TEvKqpScan
@@ -1469,6 +1580,26 @@ struct TEvDataShard {
             Record.SetTabletId(tabletId);
             Record.MutablePathId()->SetOwnerId(ownerId);
             Record.MutablePathId()->SetLocalId(localId);
+            Record.SetStatus(status);
+        }
+    };
+
+    struct TEvForceDataCleanup : TEventPB<TEvForceDataCleanup, NKikimrTxDataShard::TEvForceDataCleanup,
+                                          TEvDataShard::EvForceDataCleanup> {
+        TEvForceDataCleanup() = default;
+
+        TEvForceDataCleanup(ui64 dataCleanupGeneration) {
+            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+        }
+    };
+
+    struct TEvForceDataCleanupResult : TEventPB<TEvForceDataCleanupResult, NKikimrTxDataShard::TEvForceDataCleanupResult,
+                                                TEvDataShard::EvForceDataCleanupResult> {
+        TEvForceDataCleanupResult() = default;
+
+        TEvForceDataCleanupResult(ui64 dataCleanupGeneration, ui64 tabletId, NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus status) {
+            Record.SetDataCleanupGeneration(dataCleanupGeneration);
+            Record.SetTabletId(tabletId);
             Record.SetStatus(status);
         }
     };
@@ -1683,6 +1814,29 @@ struct TEvDataShard {
             Record.SetStatus(status);
             Record.SetErrorDescription(error);
         }
+    };
+
+    struct TEvInMemoryStateRequest
+        : public TEventPB<TEvInMemoryStateRequest,
+                          NKikimrTxDataShard::TEvInMemoryStateRequest,
+                          EvInMemoryStateRequest>
+    {
+        TEvInMemoryStateRequest() = default;
+
+        explicit TEvInMemoryStateRequest(ui32 generation, const TString& continuationToken = {}) {
+            Record.SetGeneration(generation);
+            if (!continuationToken.empty()) {
+                Record.SetContinuationToken(continuationToken);
+            }
+        }
+    };
+
+    struct TEvInMemoryStateResponse
+        : public TEventPB<TEvInMemoryStateResponse,
+                          NKikimrTxDataShard::TEvInMemoryStateResponse,
+                          EvInMemoryStateResponse>
+    {
+        TEvInMemoryStateResponse() = default;
     };
 };
 

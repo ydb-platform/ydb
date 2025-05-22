@@ -29,12 +29,14 @@
 #ifndef Y_ABSL_FLAGS_FLAG_H_
 #define Y_ABSL_FLAGS_FLAG_H_
 
+#include <cstdint>
 #include <util/generic/string.h>
 #include <type_traits>
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 #include "y_absl/base/optimization.h"
+#include "y_absl/flags/commandlineflag.h"
 #include "y_absl/flags/config.h"
 #include "y_absl/flags/internal/flag.h"
 #include "y_absl/flags/internal/registry.h"
@@ -71,12 +73,9 @@ Y_ABSL_NAMESPACE_BEGIN
 // For type support of Abseil Flags, see the marshalling.h header file, which
 // discusses supported standard types, optional flags, and additional Abseil
 // type support.
-#if !defined(_MSC_VER) || defined(__clang__)
+
 template <typename T>
 using Flag = flags_internal::Flag<T>;
-#else
-#include "y_absl/flags/internal/flag_msvc.inc"
-#endif
 
 // GetFlag()
 //
@@ -196,18 +195,12 @@ Y_ABSL_NAMESPACE_END
 // -----------------------------------------------------------------------------
 
 // Y_ABSL_FLAG_IMPL macro definition conditional on Y_ABSL_FLAGS_STRIP_NAMES
-#if !defined(_MSC_VER) || defined(__clang__)
 #define Y_ABSL_FLAG_IMPL_FLAG_PTR(flag) flag
 #define Y_ABSL_FLAG_IMPL_HELP_ARG(name)                      \
   y_absl::flags_internal::HelpArg<AbslFlagHelpGenFor##name>( \
       FLAGS_help_storage_##name)
 #define Y_ABSL_FLAG_IMPL_DEFAULT_ARG(Type, name) \
   y_absl::flags_internal::DefaultArg<Type, AbslFlagDefaultGenFor##name>(0)
-#else
-#define Y_ABSL_FLAG_IMPL_FLAG_PTR(flag) flag.GetImpl()
-#define Y_ABSL_FLAG_IMPL_HELP_ARG(name) &AbslFlagHelpGenFor##name::NonConst
-#define Y_ABSL_FLAG_IMPL_DEFAULT_ARG(Type, name) &AbslFlagDefaultGenFor##name::Gen
-#endif
 
 #if Y_ABSL_FLAGS_STRIP_NAMES
 #define Y_ABSL_FLAG_IMPL_FLAGNAME(txt) ""

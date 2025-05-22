@@ -1,18 +1,36 @@
+from __future__ import print_function
 import sys
 import subprocess
 import os
+import platform
 import collections
 import re
 import tempfile
 
 
+def fix_win_bin_name(name):
+    res = os.path.normpath(name)
+    if not os.path.splitext(name)[1]:
+        return res + '.exe'
+    return res
+
+def find_compiler_bindir(command):
+    for idx, word in enumerate(command):
+        if '--compiler-bindir' in word:
+            return idx
+    return None
+
 def is_clang(command):
-    for word in command:
-        if '--compiler-bindir' in word and 'clang' in word:
-            return True
+    cmplr_dir_idx = find_compiler_bindir(command)
+    return cmplr_dir_idx is not None and 'clang' in command[cmplr_dir_idx]
 
-    return False
-
+def fix_win(command, flags):
+    if platform.system().lower() == "windows":
+        command[0] = fix_win_bin_name(command[0])
+        cmplr_dir_idx = find_compiler_bindir(command)
+        if cmplr_dir_idx is not None:
+            key, value = command[cmplr_dir_idx].split('=')
+            command[cmplr_dir_idx] = key + '=' + fix_win_bin_name(value)
 
 def main():
     try:
@@ -27,6 +45,10 @@ def main():
     if sys.argv[1] == '--mtime':
         mtime0 = sys.argv[2]
         cmd = 3
+    if sys.argv[cmd] == '--custom-pid':
+        custom_pid = sys.argv[4]
+        cmd = 5
+
     command = sys.argv[cmd:spl]
     cflags = sys.argv[spl + 1 :]
 
@@ -35,9 +57,11 @@ def main():
         command.remove('--y_dump_args')
         dump_args = True
 
+    fix_win(command, cflags)
+
     executable = command[0]
     if not os.path.exists(executable):
-        print >> sys.stderr, '{} not found'.format(executable)
+        print('{} not found'.format(executable), file=sys.stderr)
         sys.exit(1)
 
     if is_clang(command):
@@ -59,6 +83,7 @@ def main():
         '-flto',
         '-faligned-allocation',
         '-fsized-deallocation',
+        '-fexperimental-library',
         # While it might be reasonable to compile host part of .cu sources with these optimizations enabled,
         # nvcc passes these options down towards cicc which lacks x86_64 extensions support.
         '-msse2',
@@ -72,7 +97,7 @@ def main():
         skip_list.append('-nostdinc++')
 
     for flag in skip_list:
-        if flag in cflags:
+        while flag in cflags:
             cflags.remove(flag)
 
     skip_prefix_list = [
@@ -149,15 +174,16 @@ def main():
     # generated files (otherwise it also prepends tmpxft_{pid}_00000000-5), and
     # cicc derives the module name from its {input}.cpp1.ii file name.
     command += ['--keep', '--keep-dir', tempfile.mkdtemp(prefix='compile_cuda.py.')]
-    # nvcc generates symbols like __fatbinwrap_{len}_{basename}_{hash} where
+    # nvcc generates symbols like __fatbinwrap_{len}_{basename}_{hash}_{pid} where
     # {basename} is {input}.cpp1.ii with non-C chars translated to _, {len} is
-    # {basename} length, and {hash} is the hash of first exported symbol in
+    # {basename} length, {hash} is the hash of first exported symbol in
     # {input}.cpp1.ii if there is one, otherwise it is based on its modification
     # time (converted to string in the local timezone) and the current working
-    # directory.  To stabilize the names of these symbols we need to fix mtime,
-    # timezone, and cwd.
-    if mtime0:
-        os.environ['LD_PRELOAD'] = mtime0
+    # directory, and {pid} is a pid of nvcc process. To stabilize the names of
+    # these symbols we need to fix mtime, timezone, cwd and pid.
+    preload = [os.environ.get('LD_PRELOAD', ''), mtime0, custom_pid]
+    os.environ['LD_PRELOAD'] = ' '.join(filter(None, preload))
+
     os.environ['TZ'] = 'UTC0'  # POSIX fixed offset format.
     os.environ['TZDIR'] = '/var/empty'  # Against counterfeit /usr/share/zoneinfo/$TZ.
 

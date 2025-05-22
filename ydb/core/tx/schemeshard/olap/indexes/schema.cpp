@@ -1,5 +1,6 @@
 #include "schema.h"
 #include <ydb/library/accessor/validator.h>
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -22,7 +23,7 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
         errors.AddError("different index classes: " + upsert.GetIndexConstructor().GetClassName() + " vs " + IndexMeta.GetClassName());
         return false;
     }
-    auto object = upsert.GetIndexConstructor()->CreateIndexMeta(GetId(), currentSchema, errors);
+    auto object = upsert.GetIndexConstructor()->CreateIndexMeta(GetId(), GetName(), currentSchema, errors);
     if (!object) {
         return false;
     }
@@ -44,7 +45,7 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
             }
         } else {
             const ui32 id = nextEntityId++;
-            auto meta = index.GetIndexConstructor()->CreateIndexMeta(id, currentSchema, errors);
+            auto meta = index.GetIndexConstructor()->CreateIndexMeta(id, index.GetName(), currentSchema, errors);
             if (!meta) {
                 return false;
             }
@@ -82,7 +83,10 @@ void TOlapIndexesDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     }
 }
 
-bool TOlapIndexesDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+bool TOlapIndexesDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+    if (opSchema.GetIndexes().size() == 0) {
+        return true;
+    }
     THashSet<ui32> usedIndexes;
     ui32 lastIdx = 0;
     for (const auto& proto : opSchema.GetIndexes()) {

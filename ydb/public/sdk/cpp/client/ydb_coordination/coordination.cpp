@@ -11,7 +11,7 @@
 #include <util/generic/deque.h>
 #include <util/random/entropy.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NCoordination {
 
 using NThreading::TFuture;

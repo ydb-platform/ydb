@@ -28,13 +28,13 @@ TString QueueIdName(NKikimrBlobStorage::EVDiskQueueId queueId) {
 }
 
 TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TBSProxyContextPtr& bspctx,
-        const TActorId& monActor, const TActorId& proxyActor)
+        const TActorId& monActor, const TActorId& proxyActor, bool useActorSystemTimeInBSQueue)
     : GroupQueues(MakeIntrusive<TGroupQueues>(info->GetTopology()))
     , ConnectedQueuesMask(info->GetTotalVDisksNum(), 0)
     , MonActor(monActor)
     , ProxyActor(proxyActor)
 {
-    const ui32 nodeId = TlsActivationContext->ExecutorThread.ActorSystem->NodeId;
+    const ui32 nodeId = TActivationContext::ActorSystem()->NodeId;
 
     for (const auto& vdisk : info->GetVDisks()) {
         auto vd = info->GetVDiskId(vdisk.OrderNumber);
@@ -71,7 +71,7 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             std::unique_ptr<NActors::IActor> queueActor(CreateVDiskBackpressureClient(info, vd, queueId, counters, bspctx,
                 NBackpressure::TQueueClientId(NBackpressure::EQueueClientType::DSProxy, nodeId), QueueIdName(queueId),
                 interconnectChannel, nodeId == targetNodeId, TDuration::Minutes(1), flowRecord,
-                NMonitoring::TCountableBase::EVisibility::Public));
+                NMonitoring::TCountableBase::EVisibility::Public, useActorSystemTimeInBSQueue));
 
             TActorId queue = TActivationContext::Register(queueActor.release(), ProxyActor, TMailboxType::ReadAsFilled,
                 AppData()->SystemPoolId);
@@ -188,8 +188,8 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
     }
 }
 
-ui32 TGroupSessions::GetMinREALHugeBlobInBytes() const {
-    return GroupQueues->CostModel ? GroupQueues->CostModel->MinREALHugeBlobInBytes : 0;
+ui32 TGroupSessions::GetMinHugeBlobInBytes() const {
+    return GroupQueues->CostModel ? GroupQueues->CostModel->MinHugeBlobInBytes : 0;
 }
 
 ui32 TGroupSessions::GetNumUnconnectedDisks() {

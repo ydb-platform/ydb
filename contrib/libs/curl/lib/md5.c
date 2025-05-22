@@ -58,7 +58,7 @@
 #endif
 
 #if defined(USE_GNUTLS)
-#include <nettle/md5.h>
+#error #include <nettle/md5.h>
 #elif defined(USE_OPENSSL_MD5)
 #include <openssl/md5.h>
 #elif defined(USE_WOLFSSL_MD5)

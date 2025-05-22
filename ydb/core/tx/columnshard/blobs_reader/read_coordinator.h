@@ -12,13 +12,54 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
+class TBlobsForRead {
+private:
+    THashMap<TString, THashMap<TBlobRange, std::vector<std::shared_ptr<ITask>>>> BlobTasks;
+public:
+    std::vector<std::shared_ptr<ITask>> ExtractTasksAll() {
+        THashMap<ui64, std::shared_ptr<ITask>> tasks;
+        for (auto&& i : BlobTasks) {
+            for (auto&& r : i.second) {
+                for (auto&& t : r.second) {
+                    tasks.emplace(t->GetTaskIdentifier(), t);
+                }
+            }
+        }
+        std::vector<std::shared_ptr<ITask>> result;
+        for (auto&& i : tasks) {
+            result.emplace_back(i.second);
+        }
+        return result;
+    }
+
+    std::vector<std::shared_ptr<ITask>> Extract(const TString& storageId, const TBlobRange& bRange) {
+        auto it = BlobTasks.find(storageId);
+        AFL_VERIFY(it != BlobTasks.end());
+        auto itBlobRange = it->second.find(bRange);
+        auto result = std::move(itBlobRange->second);
+        it->second.erase(itBlobRange);
+        if (it->second.empty()) {
+            BlobTasks.erase(it);
+        }
+        return result;
+    }
+
+    void AddTask(const std::shared_ptr<ITask>& task) {
+        for (auto&& i : task->GetAgents()) {
+            auto& storage = BlobTasks[i.second->GetStorageId()];
+            for (auto&& bRid : i.second->GetGroups()) {
+                storage[bRid.first].emplace_back(task);
+            }
+        }
+    }
+};
+
 class TReadCoordinatorActor: public NActors::TActorBootstrapped<TReadCoordinatorActor> {
 private:
     ui64 TabletId;
     NActors::TActorId Parent;
-    THashMap<TBlobRange, std::vector<std::shared_ptr<ITask>>> BlobTasks;
+    TBlobsForRead BlobTasks;
 public:
-    static TAtomicCounter WaitingBlobsCount;
     TReadCoordinatorActor(ui64 tabletId, const TActorId& parent);
 
     void Handle(TEvStartReadTask::TPtr& ev);

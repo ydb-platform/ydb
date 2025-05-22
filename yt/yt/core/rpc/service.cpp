@@ -6,12 +6,12 @@ namespace NYT::NRpc {
 
 void IServiceContext::SetRequestInfo()
 {
-    SetRawRequestInfo(TString(), false);
+    SetRawRequestInfo(std::string(), false);
 }
 
 void IServiceContext::SetResponseInfo()
 {
-    SetRawResponseInfo(TString(), false);
+    SetRawResponseInfo(std::string(), false);
 }
 
 void IServiceContext::ReplyFrom(TFuture<TSharedRefArray> asyncMessage)
@@ -77,24 +77,16 @@ TServiceId::TServiceId(std::string serviceName, TRealmId realmId)
     , RealmId(realmId)
 { }
 
-bool operator == (const TServiceId& lhs, const TServiceId& rhs)
+void FormatValue(TStringBuilderBase* builder, const TServiceId& id, TStringBuf /*spec*/)
 {
-    return lhs.ServiceName == rhs.ServiceName && lhs.RealmId == rhs.RealmId;
-}
-
-bool operator != (const TServiceId& lhs, const TServiceId& rhs)
-{
-    return !(lhs == rhs);
-}
-
-TString ToString(const TServiceId& serviceId)
-{
-    auto result = TString(serviceId.ServiceName);
-    if (!serviceId.RealmId.IsEmpty()) {
-        result.append(':');
-        result.append(ToString(serviceId.RealmId));
-    }
-    return result;
+    builder->AppendFormat(
+        "%v%v",
+        id.ServiceName,
+        MakeFormatterWrapper([&] (TStringBuilderBase* builder) {
+            if (!id.RealmId.IsEmpty()) {
+                builder->AppendFormat(":%v", id.RealmId);
+            }
+        }));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

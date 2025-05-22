@@ -1,7 +1,9 @@
 #include <yt/yt/client/federated/cache.h>
 #include <yt/yt/client/federated/config.h>
-
+#include <yt/yt/client/api/options.h>
 #include <yt/yt/client/cache/cache.h>
+
+#include <yt/yt/core/misc/error.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
 
@@ -10,15 +12,20 @@
 namespace NYT::NClient::NFederated {
 
 using namespace NYT::NApi;
+using namespace NYT::NClient::NCache;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST(TFederatedClientsCacheTest, GetSameClient)
 {
     SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-    auto cache = CreateFederatedClientsCache("my_bundle");
-    auto client1 = cache->GetClient("localhost");
-    auto client2 = cache->GetClient("localhost");
+    auto ytClientsCache = CreateFederatedClientsCache(
+        New<TConnectionConfig>(),
+        New<TClientsCacheConfig>(),
+        NApi::GetClientOptionsFromEnvStatic());
+
+    auto client1 = ytClientsCache->GetClient("localhost");
+    auto client2 = ytClientsCache->GetClient("localhost");
 
     EXPECT_TRUE(client1 == client2);
 
@@ -26,7 +33,81 @@ TEST(TFederatedClientsCacheTest, GetSameClient)
     // and to remove references to TConnection that it's holding.
     // It's because we don't actually create YT Server.
     client1->GetConnection()->Terminate();
-    client2->GetConnection()->Terminate();
+}
+
+TEST(TFederatedClientsCacheTest, GetFederatedWithEmptyConfig)
+{
+    SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    auto ytClientsCache = CreateFederatedClientsCache(
+        New<TConnectionConfig>(),
+        New<TClientsCacheConfig>(),
+        NApi::GetClientOptionsFromEnvStatic());
+
+    EXPECT_THROW(
+        ytClientsCache->GetClient("primary+secondary"),
+        NYT::TErrorException);
+}
+
+TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch1)
+{
+    SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    auto connectionConfig = New<TConnectionConfig>();
+    connectionConfig->BundleName = "my_bundle";
+    connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"primary"};
+    connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"secondary"};
+
+    auto ytClientsCache = CreateFederatedClientsCache(
+        connectionConfig,
+        New<TClientsCacheConfig>(),
+        NApi::GetClientOptionsFromEnvStatic());
+
+    EXPECT_THROW(
+        ytClientsCache->GetClient("primary+tertiary"),
+        NYT::TErrorException);
+}
+
+TEST(TFederatedClientsCacheTest, ConfigurationAndClusterUrlMismatch2)
+{
+    SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    auto connectionConfig = New<TConnectionConfig>();
+    connectionConfig->BundleName = "my_bundle";
+    connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"primary"};
+    connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"secondary"};
+    connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"tertiary"};
+
+    auto ytClientsCache = CreateFederatedClientsCache(
+        connectionConfig,
+        New<TClientsCacheConfig>(),
+        NApi::GetClientOptionsFromEnvStatic());
+
+    EXPECT_THROW(
+        ytClientsCache->GetClient("primary+tertiary"),
+        NYT::TErrorException);
+}
+
+TEST(TFederatedClientsCacheTest, ConfigurationMissingCluster)
+{
+    SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    auto connectionConfig = New<TConnectionConfig>();
+    connectionConfig->BundleName = "my_bundle";
+    connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"primary"};
+    connectionConfig->RpcProxyConnections.push_back(New<NApi::NRpcProxy::TConnectionConfig>());
+    connectionConfig->RpcProxyConnections.back()->ClusterUrl = TString{"secondary"};
+
+    auto ytClientsCache = CreateFederatedClientsCache(
+        connectionConfig,
+        New<TClientsCacheConfig>(),
+        NApi::GetClientOptionsFromEnvStatic());
+
+    EXPECT_THROW(
+        ytClientsCache->GetClient("primary+secondary+tertiary"),
+        NYT::TErrorException);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

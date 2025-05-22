@@ -1,8 +1,9 @@
 #include "dqs_mkql_compiler.h"
 
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 namespace NYql::NDqs {
 
@@ -16,17 +17,7 @@ void RegisterDqsMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, cons
             return TRuntimeNode();
         });
 
-    std::unordered_set<IDqIntegration*> integrations(ctx.DataSources.size() + ctx.DataSinks.size());
-    for (const auto& ds: ctx.DataSources) {
-        if (const auto dq = ds->GetDqIntegration()) {
-            integrations.emplace(dq);
-        }
-    }
-    for (const auto& ds: ctx.DataSinks) {
-        if (const auto dq = ds->GetDqIntegration()) {
-            integrations.emplace(dq);
-        }
-    }
+    auto integrations = GetUniqueIntegrations(ctx);
     std::for_each(integrations.cbegin(), integrations.cend(), std::bind(&IDqIntegration::RegisterMkqlCompiler, std::placeholders::_1, std::ref(compiler)));
 }
 

@@ -20,6 +20,7 @@
 #define ORC_OUTPUTSTREAM_HH
 
 #include "Adaptor.hh"
+#include "BlockBuffer.hh"
 #include "orc/OrcFile.hh"
 #include "wrap/zero-copy-stream-wrapper.h"
 
@@ -27,45 +28,55 @@ namespace orc {
 
   /**
    * Record write position for creating index stream
-  */
+   */
   class PositionRecorder {
-  public:
+   public:
     virtual ~PositionRecorder();
     virtual void add(uint64_t pos) = 0;
   };
 
+  DIAGNOSTIC_PUSH
+
+#ifdef __clang__
+  DIAGNOSTIC_IGNORE("-Wunused-private-field")
+#endif
+  struct WriterMetrics;
   /**
    * A subclass of Google's ZeroCopyOutputStream that supports output to memory
    * buffer, and flushing to OutputStream.
    * By extending Google's class, we get the ability to pass it directly
    * to the protobuf writers.
    */
-  class BufferedOutputStream: public google::protobuf::io::ZeroCopyOutputStream {
-  private:
-    OutputStream * outputStream;
-    std::unique_ptr<DataBuffer<char> > dataBuffer;
-    uint64_t blockSize;
+  class BufferedOutputStream : public google::protobuf::io::ZeroCopyOutputStream {
+   private:
+    OutputStream* outputStream_;
+    std::unique_ptr<BlockBuffer> dataBuffer_;
+    uint64_t blockSize_;
+    WriterMetrics* metrics_;
 
-  public:
-    BufferedOutputStream(MemoryPool& pool,
-                      OutputStream * outStream,
-                      uint64_t capacity,
-                      uint64_t block_size);
+   public:
+    BufferedOutputStream(MemoryPool& pool, OutputStream* outStream, uint64_t capacity,
+                         uint64_t blockSize, WriterMetrics* metrics);
     virtual ~BufferedOutputStream() override;
 
-    virtual bool Next(void** data, int*size) override;
+    virtual bool Next(void** data, int* size) override;
     virtual void BackUp(int count) override;
     virtual int64_t ByteCount() const override;
-    virtual bool WriteAliasedRaw(const void * data, int size) override;
+    virtual bool WriteAliasedRaw(const void* data, int size) override;
     virtual bool AllowsAliasing() const override;
 
     virtual std::string getName() const;
     virtual uint64_t getSize() const;
     virtual uint64_t flush();
     virtual void suppress();
+    virtual uint64_t getRawInputBufferSize() const;
 
-    virtual bool isCompressed() const { return false; }
+    virtual bool isCompressed() const {
+      return false;
+    }
+    virtual void finishStream();
   };
+  DIAGNOSTIC_POP
 
   /**
    * An append only buffered stream that allows
@@ -74,24 +85,25 @@ namespace orc {
    * to the protobuf writers.
    */
   class AppendOnlyBufferedStream {
-  private:
-    std::unique_ptr<BufferedOutputStream> outStream;
-    char * buffer;
-    int bufferOffset, bufferLength;
+   private:
+    std::unique_ptr<BufferedOutputStream> outStream_;
+    char* buffer_;
+    int bufferOffset_, bufferLength_;
 
-  public:
-    AppendOnlyBufferedStream(std::unique_ptr<BufferedOutputStream> _outStream) :
-                                              outStream(std::move(_outStream)) {
-      buffer = nullptr;
-      bufferOffset = bufferLength = 0;
+   public:
+    AppendOnlyBufferedStream(std::unique_ptr<BufferedOutputStream> outStream)
+        : outStream_(std::move(outStream)) {
+      buffer_ = nullptr;
+      bufferOffset_ = bufferLength_ = 0;
     }
 
-    void write(const char * data, size_t size);
+    void write(const char* data, size_t size);
     uint64_t getSize() const;
     uint64_t flush();
+    void finishStream();
 
     void recordPosition(PositionRecorder* recorder) const;
   };
-}
+}  // namespace orc
 
-#endif // ORC_OUTPUTSTREAM_HH
+#endif  // ORC_OUTPUTSTREAM_HH

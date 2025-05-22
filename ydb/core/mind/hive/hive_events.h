@@ -5,6 +5,7 @@
 #include "hive.h"
 #include "tablet_info.h"
 #include "node_info.h"
+#include "leader_tablet_info.h"
 
 namespace NKikimr {
 namespace NHive {
@@ -31,6 +32,12 @@ struct TEvPrivate {
         EvRestartCancelled,
         EvProcessStorageBalancer,
         EvStorageBalancerOut,
+        EvDeleteNode,
+        EvCanMoveTablets,
+        EvUpdateDataCenterFollowers,
+        EvGenerateTestData,
+        EvRefreshScaleRecommendation,
+        EvUpdateFollowers,
         EvEnd
     };
 
@@ -44,7 +51,9 @@ struct TEvPrivate {
         {}
     };
 
-    struct TEvProcessBootQueue : TEventLocal<TEvProcessBootQueue, EvProcessBootQueue> {};
+    struct TEvProcessBootQueue : TEventLocal<TEvProcessBootQueue, EvProcessBootQueue> {
+        bool ProcessWaitQueue = false; // Only for use in tests
+    };
 
     struct TEvPostponeProcessBootQueue : TEventLocal<TEvPostponeProcessBootQueue, EvPostponeProcessBootQueue> {};
 
@@ -66,12 +75,14 @@ struct TEvPrivate {
     struct TEvUnlockTabletReconnectTimeout : TEventLocal<TEvUnlockTabletReconnectTimeout, EvUnlockTabletReconnectTimeout> {
         ui64 TabletId;
         ui64 SeqNo;
+        NKikimrHive::ELockLostReason Reason;
 
         TEvUnlockTabletReconnectTimeout() = default;
 
-        explicit TEvUnlockTabletReconnectTimeout(ui64 tabletId, ui64 seqNo)
-            : TabletId(tabletId)
-            , SeqNo(seqNo)
+        explicit TEvUnlockTabletReconnectTimeout(const TLeaderTabletInfo& tablet, NKikimrHive::ELockLostReason reason)
+            : TabletId(tablet.Id)
+            , SeqNo(tablet.PendingUnlockSeqNo)
+            , Reason(reason)
         {}
     };
 
@@ -110,6 +121,27 @@ struct TEvPrivate {
     struct TEvProcessStorageBalancer : TEventLocal<TEvProcessStorageBalancer, EvProcessStorageBalancer> {};
 
     struct TEvStorageBalancerOut : TEventLocal<TEvStorageBalancerOut, EvStorageBalancerOut> {};
+
+    struct TEvDeleteNode : TEventLocal<TEvDeleteNode, EvDeleteNode> {
+        TNodeId NodeId;
+
+        TEvDeleteNode(TNodeId nodeId) : NodeId(nodeId) {}
+    };
+
+    struct TEvCanMoveTablets : TEventLocal<TEvCanMoveTablets, EvCanMoveTablets> {};
+
+    struct TEvUpdateDataCenterFollowers : TEventLocal<TEvUpdateDataCenterFollowers, EvUpdateDataCenterFollowers> {
+        TDataCenterId DataCenter;
+
+        TEvUpdateDataCenterFollowers(TDataCenterId dataCenter) : DataCenter(dataCenter) {};
+    };
+
+    struct TEvGenerateTestData : TEventLocal<TEvGenerateTestData, EvGenerateTestData> {};
+  
+    struct TEvRefreshScaleRecommendation : TEventLocal<TEvRefreshScaleRecommendation, EvRefreshScaleRecommendation> {};
+
+    struct TEvUpdateFollowers : TEventLocal<TEvUpdateFollowers, EvUpdateFollowers> {
+    };
 };
 
 } // NHive

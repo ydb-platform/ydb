@@ -1,6 +1,7 @@
 #include "comparator.h"
 
 #include "key_bound.h"
+#include "private.h"
 #include "serialize.h"
 
 #include <yt/yt/core/logging/log.h>
@@ -15,12 +16,13 @@ using namespace NYson;
 using namespace NYTree;
 
 //! Used only for YT_LOG_FATAL below.
-static const TLogger Logger("TableClientComparator");
+constinit const auto Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TComparator::TComparator(std::vector<ESortOrder> sortOrders)
+TComparator::TComparator(std::vector<ESortOrder> sortOrders, TCallback<TUUComparerSignature> cgComparator)
     : SortOrders_(std::move(sortOrders))
+    , CGComparator_(std::move(cgComparator))
 { }
 
 void TComparator::Persist(const TPersistenceContext& context)
@@ -62,75 +64,6 @@ int TComparator::CompareValues(int index, const TUnversionedValue& lhs, const TU
     }
 
     return valueComparisonResult;
-}
-
-TKeyBound TComparator::StrongerKeyBound(const TKeyBound& lhs, const TKeyBound& rhs) const
-{
-    YT_VERIFY(lhs);
-    YT_VERIFY(rhs);
-
-    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
-    auto comparisonResult = CompareKeyBounds(lhs, rhs);
-    if (lhs.IsUpper) {
-        comparisonResult = -comparisonResult;
-    }
-
-    return (comparisonResult <= 0) ? rhs : lhs;
-}
-
-void TComparator::ReplaceIfStrongerKeyBound(TKeyBound& lhs, const TKeyBound& rhs) const
-{
-    if (!lhs) {
-        lhs = rhs;
-        return;
-    }
-
-    if (!rhs) {
-        return;
-    }
-
-    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
-    auto comparisonResult = CompareKeyBounds(lhs, rhs);
-    if (lhs.IsUpper) {
-        comparisonResult = -comparisonResult;
-    }
-
-    if (comparisonResult < 0) {
-        lhs = rhs;
-    }
-}
-
-void TComparator::ReplaceIfStrongerKeyBound(TOwningKeyBound& lhs, const TOwningKeyBound& rhs) const
-{
-    if (!lhs) {
-        lhs = rhs;
-        return;
-    }
-
-    if (!rhs) {
-        return;
-    }
-
-    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
-    auto comparisonResult = CompareKeyBounds(lhs, rhs);
-    if (lhs.IsUpper) {
-        comparisonResult = -comparisonResult;
-    }
-
-    if (comparisonResult < 0) {
-        lhs = rhs;
-    }
-}
-
-TKeyBound TComparator::WeakerKeyBound(const TKeyBound& lhs, const TKeyBound& rhs) const
-{
-    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
-    auto comparisonResult = CompareKeyBounds(lhs, rhs);
-    if (lhs.IsUpper) {
-        comparisonResult = -comparisonResult;
-    }
-
-    return (comparisonResult >= 0) ? rhs : lhs;
 }
 
 bool TComparator::IsRangeEmpty(const TKeyBound& lowerBound, const TKeyBound& upperBound) const
@@ -249,6 +182,19 @@ int TComparator::CompareKeys(const TKey& lhs, const TKey& rhs) const
     ValidateKey(lhs);
     ValidateKey(rhs);
 
+    if (CGComparator_) {
+        // Compare keys with code generated comparator.
+        int comparisonResult = CGComparator_.Run(lhs.Begin(), rhs.Begin(), GetLength());
+
+        if (comparisonResult == 0) {
+            return comparisonResult;
+        }
+
+        int differentColumnIdx = abs(comparisonResult) - 1;
+        int orderSign = SortOrders_[differentColumnIdx] == ESortOrder::Ascending ? +1 : -1;
+        return comparisonResult * orderSign;
+    }
+
     for (int index = 0; index < lhs.GetLength(); ++index) {
         auto valueComparisonResult = CompareValues(index, lhs[index], rhs[index]);
         if (valueComparisonResult != 0) {
@@ -322,11 +268,6 @@ void FormatValue(TStringBuilderBase* builder, const TComparator& comparator, TSt
     builder->AppendChar('}');
 }
 
-TString ToString(const TComparator& comparator)
-{
-    return ToStringViaBuilder(comparator);
-}
-
 void Serialize(const TComparator& comparator, IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
@@ -374,7 +315,7 @@ TKeyComparer::TKeyComparer()
     : TBase(
         New<TCaller>(
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
-            FROM_HERE,
+            YT_CURRENT_SOURCE_LOCATION,
 #endif
             nullptr,
             &ComparePrefix),

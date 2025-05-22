@@ -32,8 +32,8 @@ class TAsyncIndexChangeCollector: public TBaseChangeCollector {
 
     void AddValue(TVector<NTable::TUpdateOp>& out, const NTable::TUpdateOp& update);
     void AddRawValue(TVector<NTable::TUpdateOp>& out, NTable::TTag tag, const TRawTypeValue& value);
-    void AddCellValue(TVector<NTable::TUpdateOp>& out, NTable::TTag tag, const TCell& cell, NScheme::TTypeInfo type);
-    void AddNullValue(TVector<NTable::TUpdateOp>& out, NTable::TTag tag, NScheme::TTypeInfo type);
+    void AddCellValue(TVector<NTable::TUpdateOp>& out, NTable::TTag tag, const TCell& cell, const NScheme::TTypeInfo& type);
+    void AddNullValue(TVector<NTable::TUpdateOp>& out, NTable::TTag tag, const NScheme::TTypeInfo& type);
 
     void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
         TArrayRef<const NTable::TUpdateOp> key, TArrayRef<const NTable::TUpdateOp> data);

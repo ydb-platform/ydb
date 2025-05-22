@@ -15,10 +15,6 @@ public:
     TGRpcYdbDummyService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NActors::TActorId proxyActorId);
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NYdbGrpc::TGlobalLimiter* limiter) override;
-
-    bool IncRequest();
-    void DecRequest();
 
 private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
@@ -28,7 +24,6 @@ private:
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;
-    NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };
 
 }

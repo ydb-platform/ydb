@@ -12,6 +12,7 @@ private:
 private:
     TString ColumnName;
     TString ColumnType;
+    std::optional<TString> StorageId;
     bool NotNull = false;
 public:
     TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) override;

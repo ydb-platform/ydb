@@ -1,6 +1,7 @@
 """
 User interface Controls for the layout.
 """
+
 from __future__ import annotations
 
 import time
@@ -666,7 +667,11 @@ class BufferControl(UIControl):
 
         merged_processor = merge_processors(input_processors)
 
-        def transform(lineno: int, fragments: StyleAndTextTuples) -> _ProcessedLine:
+        def transform(
+            lineno: int,
+            fragments: StyleAndTextTuples,
+            get_line: Callable[[int], StyleAndTextTuples],
+        ) -> _ProcessedLine:
             "Transform the fragments for a given line number."
 
             # Get cursor position at this line.
@@ -678,7 +683,14 @@ class BufferControl(UIControl):
 
             transformation = merged_processor.apply_transformation(
                 TransformationInput(
-                    self, document, lineno, source_to_display, fragments, width, height
+                    self,
+                    document,
+                    lineno,
+                    source_to_display,
+                    fragments,
+                    width,
+                    height,
+                    get_line,
                 )
             )
 
@@ -696,7 +708,7 @@ class BufferControl(UIControl):
                 try:
                     return cache[i]
                 except KeyError:
-                    processed_line = transform(i, get_line(i))
+                    processed_line = transform(i, get_line(i), get_line)
                     cache[i] = processed_line
                     return processed_line
 

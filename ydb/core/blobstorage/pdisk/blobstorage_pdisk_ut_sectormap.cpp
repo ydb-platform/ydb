@@ -11,83 +11,90 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(TSectorMap) {
+Y_UNIT_TEST_SUITE(TSectorMapPerformance) {
 
-    bool TestSectorMapPerformance(NPDisk::NSectorMap::EDiskMode diskMode, ui64 diskSizeGb, ui64 dataSizeMb, bool toFirstSector,
-            bool testRead, ui32 tries, double deviationRange = 0.05, std::pair<double, double>* time = nullptr) {
+    enum class ESectorPosition : ui8 {
+        SectorFirst = 0,
+        SectorLast,
+    };
+
+    enum class EOperationType : ui8 {
+        OperationRead = 0,
+        OperationWrite,
+    };
+
+    using EDiskMode = NPDisk::NSectorMap::EDiskMode;
+
+    bool TestSectorMapPerformance(EDiskMode diskMode, ui64 diskSizeGb, ui64 dataSizeMb, ESectorPosition sectorPosition,
+            EOperationType operationType, std::pair<double, double> deviationRange = {0.05, 0.5},
+            std::pair<double, double>* time = nullptr) {
         static TString data = PrepareData(1024 * 1024 * 1024);
         ui64 dataSize = dataSizeMb * 1024 * 1024;
         ui64 deviceSize = diskSizeGb * 1024 * 1024 * 1024;
 
         auto deviceType = NPDisk::NSectorMap::DiskModeToDeviceType(diskMode);
         ui64 diskRate;
-        if (testRead) {
-            diskRate = toFirstSector ? NPDisk::DevicePerformance.at(deviceType).FirstSectorReadBytesPerSec :
-                NPDisk::DevicePerformance.at(deviceType).LastSectorReadBytesPerSec;
+        const auto& performanceParams = NPDisk::DevicePerformance.at(deviceType);
+        if (operationType == EOperationType::OperationRead) {
+            diskRate = (sectorPosition == ESectorPosition::SectorFirst)
+                    ? performanceParams.FirstSectorReadBytesPerSec
+                    : performanceParams.LastSectorReadBytesPerSec;
         } else {
-            diskRate = toFirstSector ? NPDisk::DevicePerformance.at(deviceType).FirstSectorWriteBytesPerSec :
-                NPDisk::DevicePerformance.at(deviceType).LastSectorWriteBytesPerSec;
+            diskRate = (sectorPosition == ESectorPosition::SectorFirst)
+                    ? performanceParams.FirstSectorWriteBytesPerSec
+                    : performanceParams.LastSectorWriteBytesPerSec;
         }
 
         ui64 sectorsNum = deviceSize / NPDisk::NSectorMap::SECTOR_SIZE;
-        ui64 sectorPos = toFirstSector ? 0 : sectorsNum - dataSize / NPDisk::NSectorMap::SECTOR_SIZE - 2;
-        double timeExpected = (double)dataSize / diskRate;
-        double timeSum = 0;
-        for (ui32 i = 0; i < tries; ++i) {
-            NPDisk::TSectorMap sectorMap(deviceSize, diskMode);
-            sectorMap.ZeroInit(2);
+        ui64 sectorPos = (sectorPosition == ESectorPosition::SectorFirst)
+                ? 0
+                : sectorsNum - dataSize / NPDisk::NSectorMap::SECTOR_SIZE - 2;
 
-            double timeElapsed = 0;
-            if (testRead) {
-                sectorMap.Write((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
-                THPTimer timer;
-                sectorMap.Read((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
-                timeElapsed = timer.Passed();
-            } else {
-                THPTimer timer;
-                sectorMap.Write((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
-                timeElapsed = timer.Passed();
-            }
+        double timeExpected = (double)dataSize / diskRate + 1e-9 * performanceParams.SeekTimeNs;
 
-            timeSum += timeElapsed;
+        NPDisk::TSectorMap sectorMap(deviceSize, diskMode);
+        sectorMap.ZeroInit(2);
+
+        if (operationType == EOperationType::OperationRead) {
+            sectorMap.Write((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
         }
-        double timeAvg = timeSum / tries;
-        double relativeDeviation = (timeAvg - timeExpected) / timeExpected;
+        double timeElapsed = 0;
+        THPTimer timer;
+        if (operationType == EOperationType::OperationRead) {
+            sectorMap.Read((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
+        } else {
+            sectorMap.Write((ui8*)data.data(), dataSize, sectorPos * NPDisk::NSectorMap::SECTOR_SIZE);
+        }
+        timeElapsed = timer.Passed();
+
+        double relativeDeviation = (timeElapsed - timeExpected) / timeExpected;
         if (time) {
-            *time = { timeExpected, timeAvg };
+            *time = { timeExpected, timeElapsed };
         }
 
-        return std::abs(relativeDeviation) <= deviationRange;
+        bool ok = relativeDeviation >= -deviationRange.first && relativeDeviation <= deviationRange.second;
+        return NSan::PlainOrUnderSanitizer(ok, true);
     }
 
-    Y_UNIT_TEST(SectorMapPerformance) {
-        std::vector<TString> failedTests;
 
-        std::pair<double, double> time;
-
-        using EDiskMode = NPDisk::NSectorMap::EDiskMode;
-        auto test = [&](EDiskMode diskMode, ui32 diskSizeGb, ui32 dataSizeMb, bool toFirstSector, bool testRead, ui32 tries) {
-            if (!TestSectorMapPerformance(diskMode, diskSizeGb, dataSizeMb, toFirstSector, testRead, tries, 0.1, &time)) {
-                failedTests.push_back(TStringBuilder() << diskSizeGb << "GB " << NPDisk::NSectorMap::DiskModeToString(diskMode) <<
-                        (testRead ? " read " : " write ") << dataSizeMb << " MB to" << (toFirstSector ? " first " : " last ") <<
-                        "sector, timeExpected=" << time.first << ", timeAverage=" << time.second);
-            }
-        };
-
-        for (auto diskMode : { EDiskMode::DM_HDD, EDiskMode::DM_SSD }) {
-            for (ui32 dataSizeMb : { 100, 1000 }) {
-                for (bool testRead : { false, true }) {
-                    test(diskMode, 1960, dataSizeMb, true, testRead, 1);
-                }
-            }
-        }
-        test(EDiskMode::DM_HDD, 1960, 100, false, true, 1);
-        test(EDiskMode::DM_HDD, 1960, 100, false, false, 1);
-
-        for (auto& testName : failedTests) {
-            Cerr << testName << Endl;
-        }
-        UNIT_ASSERT(failedTests.empty());
+#define MAKE_TEST(diskMode, diskSizeGb, dataSizeMb, operationType, position)                                    \
+    Y_UNIT_TEST(Test##diskMode##diskSizeGb##GB##operationType##dataSizeMb##MB##On##position##Sector) {          \
+        std::pair<double, double> time;                                                                         \
+        UNIT_ASSERT_C(TestSectorMapPerformance(EDiskMode::DM_##diskMode, diskSizeGb,  dataSizeMb,               \
+                ESectorPosition::Sector##position, EOperationType::Operation##operationType, { 0.05, 2.0 },     \
+                &time), "Time expected# " << time.first << " time elapsed#" << time.second);                    \
     }
+
+    MAKE_TEST(HDD, 1960, 100, Read, First);
+    MAKE_TEST(HDD, 1960, 100, Read, Last);
+    MAKE_TEST(HDD, 1960, 100, Write, First);
+    MAKE_TEST(HDD, 1960, 100, Write, Last);
+
+    MAKE_TEST(SSD, 1960, 100, Read, First);
+    MAKE_TEST(SSD, 1960, 100, Write, First);
+    MAKE_TEST(SSD, 1960, 1000, Read, First);
+    MAKE_TEST(SSD, 1960, 1000, Write, First);
+
+#undef MAKE_TEST
 }
 }

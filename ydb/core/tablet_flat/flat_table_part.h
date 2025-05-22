@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "flat_part_scheme.h"
 #include "flat_page_btree_index.h"
-#include "flat_page_index.h"
+#include "flat_page_flat_index.h"
 #include "flat_page_data.h"
 #include "flat_page_blobs.h"
 #include "flat_page_frames.h"
@@ -11,7 +11,6 @@
 #include "flat_page_gstat.h"
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
-#include "util_basics.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -31,7 +30,7 @@ namespace NTable {
 
         virtual ~TColdPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out << "ColdPart{" << Label << " eph " << Epoch << "}";
         }
@@ -49,11 +48,40 @@ namespace NTable {
 
         struct TIndexPages {
             using TPageId = NPage::TPageId;
+            using TGroupId = NPage::TGroupId;
             using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
-            const TVector<TPageId> Groups;
-            const TVector<TPageId> Historic;
+            const TVector<TPageId> FlatGroups;
+            const TVector<TPageId> FlatHistoric;
             const TVector<TBtreeIndexMeta> BTreeGroups;
             const TVector<TBtreeIndexMeta> BTreeHistoric;
+
+            bool HasBTree() const noexcept {
+                return !BTreeGroups.empty();
+            }
+
+            bool HasFlat() const noexcept {
+                return !FlatGroups.empty();
+            }
+
+            const TBtreeIndexMeta& GetBTree(TGroupId groupId) const {
+                if (groupId.IsHistoric()) {
+                    Y_ENSURE(groupId.Index < BTreeHistoric.size());
+                    return BTreeHistoric[groupId.Index];
+                } else {
+                    Y_ENSURE(groupId.Index < BTreeGroups.size());
+                    return BTreeGroups[groupId.Index];
+                }
+            }
+
+            TPageId GetFlat(TGroupId groupId) const {
+                if (groupId.IsHistoric()) {
+                    Y_ENSURE(groupId.Index < FlatHistoric.size());
+                    return FlatHistoric[groupId.Index];
+                } else {
+                    Y_ENSURE(groupId.Index < FlatGroups.size());
+                    return FlatGroups[groupId.Index];
+                }
+            }
         };
 
         struct TParams {
@@ -92,23 +120,21 @@ namespace NTable {
             , GarbageStats(std::move(params.GarbageStats))
             , TxIdStats(std::move(params.TxIdStats))
             , Stat(stat)
-            , GroupsCount(IndexPages.Groups.size())
-            , HistoricGroupsCount(IndexPages.Historic.size())
+            , GroupsCount(Max(IndexPages.FlatGroups.size(), IndexPages.BTreeGroups.size()))
+            , HistoricGroupsCount(Max(IndexPages.FlatHistoric.size(), IndexPages.BTreeHistoric.size()))
             , IndexesRawSize(params.IndexesRawSize)
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)
         {
-            Y_ABORT_UNLESS(Scheme->Groups.size() == GroupsCount,
-                "Part has scheme with %" PRISZT " groups, but %" PRISZT " indexes",
-                Scheme->Groups.size(), GroupsCount);
-            Y_ABORT_UNLESS(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
-                "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
-                GroupsCount, HistoricGroupsCount);
+            Y_ENSURE(Scheme->Groups.size() == GroupsCount,
+                "Part has scheme with " << Scheme->Groups.size() << " groups, but " << GroupsCount << " indexes");
+            Y_ENSURE(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
+                "Part has " << GroupsCount << " indexes, but " << HistoricGroupsCount << " historic indexes");
         }
 
         virtual ~TPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Part{" << Label << " eph " << Epoch << ", "
@@ -125,11 +151,12 @@ namespace NTable {
          */
         virtual TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const = 0;
 
-        virtual ui64 DataSize() const = 0;
-        virtual ui64 BackingSize() const = 0;
-        virtual ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
-        virtual NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
-        virtual ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
+        virtual ui64 DataSize() const noexcept = 0;
+        virtual ui64 BackingSize() const noexcept = 0;
+        virtual ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
+        virtual ui64 GetPageSize(ELargeObj lob, ui64 ref) const = 0;
+        virtual NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
+        virtual ui8 GetGroupChannel(NPage::TGroupId groupId) const = 0;
         virtual ui8 GetPageChannel(ELargeObj lob, ui64 ref) const = 0;
 
     protected:
@@ -184,7 +211,7 @@ namespace NTable {
 
         virtual ~TTxStatusPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "TxStatus{" << Label << " epoch " << Epoch << ", "

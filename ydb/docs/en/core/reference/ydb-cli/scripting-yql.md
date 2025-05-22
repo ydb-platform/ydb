@@ -1,4 +1,7 @@
+
 # Running a script
+
+{% include notitle [warning](./_includes/deprecated_command_warning.md) %}
 
 You can use the `scripting yql` subcommand to run a YQL script. The script can include queries of different types. Unlike `yql`, the `scripting yql` command has a limit on the number of returned rows and accessed data.
 
@@ -14,19 +17,21 @@ General format of the command:
 View the description of the YQL script command:
 
 ```bash
-ydb scripting yql --help
+{{ ydb-cli }} scripting yql --help
 ```
 
 ## Parameters of the subcommand {#options}
 
 #|
-|| **Name** | **Description** ||
+|| Name | Description ||
 || `--timeout` | The time within which the operation should be completed on the server. ||
 || `--stats` | Statistics mode.
 Acceptable values:
+
 * `none`: Do not collect statistics.
 * `basic`: Collect statistics for basic events.
 * `full`: Collect statistics for all events.
+
     Defaults to `none`. ||
 || `-s`, `--script` | Text of the YQL query to be executed. ||
 || `-f`, `--file` | Path to the text of the YQL query to be executed. ||

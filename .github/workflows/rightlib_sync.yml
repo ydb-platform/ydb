@@ -1,0 +1,23 @@
+name: Rightlib sync
+on:
+  schedule:
+    - cron: "30 0 * * *"   # At 00:30 -- for PR creation
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            ydb/ci/
+      - uses: ./.github/actions/rightlib_sync
+        with:
+          command: create-pr
+          repository: ${{ github.repository }}
+          gh_personal_access_token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}

@@ -1,7 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -336,7 +335,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
                 TestSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/table_0",
                                R"(
-                                    SourceTabletId: 9437196
+                                    SourceTabletId: 72075186233409548
                                     SplitBoundary {
                                         KeyPrefix {
                                             Tuple { Optional { Uint64: 300 } }
@@ -430,7 +429,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
 
             TestSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/table_0",
                            R"(
-                                SourceTabletId: 9437196
+                                SourceTabletId: 72075186233409548
                                 SplitBoundary {
                                     KeyPrefix {
                                         Tuple { Optional { Uint64: 300 } }
@@ -670,7 +669,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId} );
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
-                                   {NLs::PathVersionEqual(5),
+                                   {NLs::PathVersionEqual(6),
                                     NLs::PathsInsideDomain(2),
                                     NLs::ShardsInsideDomain(3)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
@@ -680,7 +679,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
             }
 
             AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/DirA/USER_0/dir/table_0", R"(
-                                        SourceTabletId: 9437196
+                                        SourceTabletId: 72075186233409548
                                         SplitBoundary {
                                             KeyPrefix {
                                                 Tuple { Optional { Uint64: 3000000000 } }

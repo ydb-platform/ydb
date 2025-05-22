@@ -1,0 +1,8 @@
+BUILD_DIRNAME = "build"
+BUNDLE_DIRNAME = "bundle"
+NODE_MODULES_DIRNAME = "node_modules"
+NODE_MODULES_WORKSPACE_BUNDLE_FILENAME = "workspace_node_modules.tar"
+NPM_REGISTRY_URL = "http://npm.yandex-team.ru"
+OUTPUT_TAR_UUID_FILENAME = "output.tar.uuid"
+PACKAGE_JSON_FILENAME = "package.json"
+PNPM_LOCKFILE_FILENAME = "pnpm-lock.yaml"

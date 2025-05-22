@@ -1,0 +1,2054 @@
+Registering pre-existing tables
+	onek
+	int4_tbl
+	INT4_TBL
+	tenk1
+	text_tbl
+	road
+	TEXT_TBL
+	int8_tbl
+<sql-statement>
+--
+-- SUBSELECT
+--
+SELECT 1 AS one WHERE 1 IN (SELECT 1);
+</sql-statement>
+<sql-statement>
+SELECT 1 AS zero WHERE 1 NOT IN (SELECT 1);
+</sql-statement>
+<sql-statement>
+SELECT 1 AS zero WHERE 1 IN (SELECT 2);
+</sql-statement>
+<sql-statement>
+-- Check grammar's handling of extra parens in assorted contexts
+SELECT * FROM (SELECT 1 AS x) ss;
+</sql-statement>
+<sql-statement>
+SELECT * FROM ((SELECT 1 AS x)) ss;
+</sql-statement>
+<sql-statement>
+(SELECT 2) UNION SELECT 2;
+</sql-statement>
+<sql-statement>
+((SELECT 2)) UNION SELECT 2;
+</sql-statement>
+<sql-statement>
+SELECT ((SELECT 2) UNION SELECT 2);
+</sql-statement>
+<sql-statement>
+SELECT (((SELECT 2)) UNION SELECT 2);
+</sql-statement>
+<sql-statement>
+SELECT (SELECT ARRAY[1,2,3])[1];
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 360
+    	SELECT (SELECT ARRAY[1,2,3])[1];
+	^
+<sql-statement>
+SELECT ((SELECT ARRAY[1,2,3]))[2];
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 360
+    	SELECT ((SELECT ARRAY[1,2,3]))[2];
+	^
+<sql-statement>
+SELECT (((SELECT ARRAY[1,2,3])))[3];
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 360
+    	SELECT (((SELECT ARRAY[1,2,3])))[3];
+	^
+<sql-statement>
+-- Set up some simple test tables
+CREATE TABLE SUBSELECT_TBL (
+  f1 integer,
+  f2 integer,
+  f3 float
+);
+</sql-statement>
+<sql-statement>
+INSERT INTO SUBSELECT_TBL VALUES (1, 2, 3);
+</sql-statement>
+<sql-statement>
+INSERT INTO SUBSELECT_TBL VALUES (2, 3, 4);
+</sql-statement>
+<sql-statement>
+INSERT INTO SUBSELECT_TBL VALUES (3, 4, 5);
+</sql-statement>
+<sql-statement>
+INSERT INTO SUBSELECT_TBL VALUES (1, 1, 1);
+</sql-statement>
+<sql-statement>
+INSERT INTO SUBSELECT_TBL VALUES (2, 2, 2);
+</sql-statement>
+<sql-statement>
+INSERT INTO SUBSELECT_TBL VALUES (3, 3, 3);
+</sql-statement>
+<sql-statement>
+INSERT INTO SUBSELECT_TBL VALUES (6, 7, 8);
+</sql-statement>
+<sql-statement>
+INSERT INTO SUBSELECT_TBL VALUES (8, 9, NULL);
+</sql-statement>
+<sql-statement>
+SELECT * FROM SUBSELECT_TBL;
+</sql-statement>
+<sql-statement>
+-- Uncorrelated subselects
+SELECT f1 AS "Constant Select" FROM SUBSELECT_TBL
+  WHERE f1 IN (SELECT 1);
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "Uncorrelated Field" FROM SUBSELECT_TBL
+  WHERE f1 IN (SELECT f2 FROM SUBSELECT_TBL);
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "Uncorrelated Field" FROM SUBSELECT_TBL
+  WHERE f1 IN (SELECT f2 FROM SUBSELECT_TBL WHERE
+    f2 IN (SELECT f1 FROM SUBSELECT_TBL));
+</sql-statement>
+<sql-statement>
+SELECT f1, f2
+  FROM SUBSELECT_TBL
+  WHERE (f1, f2) NOT IN (SELECT f2, CAST(f3 AS int4) FROM SUBSELECT_TBL
+                         WHERE f3 IS NOT NULL);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:18: Error: alternative is not implemented yet : 138
+    	  WHERE (f1, f2) NOT IN (SELECT f2, CAST(f3 AS int4) FROM SUBSELECT_TBL
+	                 ^
+<sql-statement>
+-- Correlated subselects
+SELECT f1 AS "Correlated Field", f2 AS "Second Field"
+  FROM SUBSELECT_TBL upper
+  WHERE f1 IN (SELECT f2 FROM SUBSELECT_TBL WHERE f1 = upper.f1);
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "Correlated Field", f3 AS "Second Field"
+  FROM SUBSELECT_TBL upper
+  WHERE f1 IN
+    (SELECT f2 FROM SUBSELECT_TBL WHERE CAST(upper.f2 AS float) = f3);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedFilter, At function: OrderedMap, At function: EquiJoin
+    	SELECT f1 AS "Correlated Field", f3 AS "Second Field"
+	^
+        -stdin-:<main>:3:12: Error: At function: Aggregate
+        	  WHERE f1 IN
+	           ^
+            -stdin-:/lib/yql/aggregate.yql:644:18: Error: At function: AggregationTraits
+            	
+	                 ^
+                -stdin-:/lib/yql/aggregate.yql:678:111: Error: At function: SafeCast
+                	
+	                                                                                                              ^
+                    -stdin-:<main>:3:12: Error: At function: FromPg, At function: PgResolvedOp
+                    	  WHERE f1 IN
+	           ^
+                        -stdin-:<main>:3:9: Error: At function: Member
+                        	  WHERE f1 IN
+	        ^
+                            -stdin-:<main>:3:9: Error: Member not found: _yql_join_sublink_0__alias_upper.f1. Did you mean _yql_join_sublink_0__alias_upper.f2?
+                            	  WHERE f1 IN
+	        ^
+<sql-statement>
+SELECT f1 AS "Correlated Field", f3 AS "Second Field"
+  FROM SUBSELECT_TBL upper
+  WHERE f3 IN (SELECT upper.f1 + f2 FROM SUBSELECT_TBL
+               WHERE f2 = CAST(f3 AS integer));
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedFilter, At function: OrderedMap, At function: EquiJoin
+    	SELECT f1 AS "Correlated Field", f3 AS "Second Field"
+	^
+        -stdin-:<main>:3:12: Error: At function: Aggregate
+        	  WHERE f3 IN (SELECT upper.f1 + f2 FROM SUBSELECT_TBL
+	           ^
+            -stdin-:/lib/yql/aggregate.yql:644:18: Error: At function: AggregationTraits
+            	
+	                 ^
+                -stdin-:/lib/yql/aggregate.yql:678:111: Error: At function: SafeCast
+                	
+	                                                                                                              ^
+                    -stdin-:<main>:3:12: Error: At function: FromPg, At function: PgResolvedOp
+                    	  WHERE f3 IN (SELECT upper.f1 + f2 FROM SUBSELECT_TBL
+	           ^
+                        -stdin-:<main>:3:9: Error: At function: Member
+                        	  WHERE f3 IN (SELECT upper.f1 + f2 FROM SUBSELECT_TBL
+	        ^
+                            -stdin-:<main>:3:9: Error: Member not found: _yql_join_sublink_0__alias_upper.f3. Did you mean _yql_join_sublink_0__alias_upper.f1?
+                            	  WHERE f3 IN (SELECT upper.f1 + f2 FROM SUBSELECT_TBL
+	        ^
+<sql-statement>
+SELECT f1 AS "Correlated Field"
+  FROM SUBSELECT_TBL
+  WHERE (f1, f2) IN (SELECT f2, CAST(f3 AS int4) FROM SUBSELECT_TBL
+                     WHERE f3 IS NOT NULL);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:18: Error: alternative is not implemented yet : 138
+    	  WHERE (f1, f2) IN (SELECT f2, CAST(f3 AS int4) FROM SUBSELECT_TBL
+	                 ^
+<sql-statement>
+--
+-- Use some existing tables in the regression test
+--
+SELECT ss.f1 AS "Correlated Field", ss.f3 AS "Second Field"
+  FROM SUBSELECT_TBL ss
+  WHERE f1 NOT IN (SELECT f1+1 FROM INT4_TBL
+                   WHERE f1 != ss.f1 AND f1 < 2147483647);
+</sql-statement>
+<sql-statement>
+select q1, float8(count(*)) / (select count(*) from int8_tbl)
+from int8_tbl group by q1 order by q1;
+</sql-statement>
+-stdin-:<main>: Fatal: Optimization
+
+    -stdin-:<main>:1:1: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:3637  ExpandPgSelectImpl(): requirement order failed
+    	select q1, float8(count(*)) / (select count(*) from int8_tbl)
+	^
+    -stdin-:<main>: Fatal: ydb/library/yql/core/common_opt/yql_co_pgselect.cpp:727  RewriteSubLinksPartial(): requirement status.Level != IGraphTransformer::TStatus::Error failed
+    
+<sql-statement>
+-- Unspecified-type literals in output columns should resolve as text
+SELECT *, pg_typeof(f1) FROM
+  (SELECT 'foo' AS f1 FROM generate_series(1,3)) ss ORDER BY 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- Unspecified-type literals in output columns should resolve as text
+	^
+        -stdin-:<main>:2:21: Error: Star is incompatible to column reference
+        	SELECT *, pg_typeof(f1) FROM
+	                    ^
+<sql-statement>
+-- ... unless there's context to suggest differently
+explain (verbose, costs off) select '42' union all select '43';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- ... unless there's context to suggest differently
+	^
+<sql-statement>
+explain (verbose, costs off) select '42' union all select 43;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off) select '42' union all select 43;
+	^
+<sql-statement>
+-- check materialization of an initplan reference (bug #14524)
+explain (verbose, costs off)
+select 1 = all (select (select 1));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- check materialization of an initplan reference (bug #14524)
+	^
+<sql-statement>
+select 1 = all (select (select 1));
+</sql-statement>
+<sql-statement>
+--
+-- Check EXISTS simplification with LIMIT
+--
+explain (costs off)
+select * from int4_tbl o where exists
+  (select 1 from int4_tbl i where i.f1=o.f1 limit null);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+explain (costs off)
+select * from int4_tbl o where not exists
+  (select 1 from int4_tbl i where i.f1=o.f1 limit 1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select * from int4_tbl o where exists
+  (select 1 from int4_tbl i where i.f1=o.f1 limit 0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+--
+-- Test cases to catch unpleasant interactions between IN-join processing
+-- and subquery pullup.
+--
+select count(*) from
+  (select 1 from tenk1 a
+   where unique1 IN (select hundred from tenk1 b)) ss;
+</sql-statement>
+<sql-statement>
+select count(distinct ss.ten) from
+  (select ten from tenk1 a
+   where unique1 IN (select hundred from tenk1 b)) ss;
+</sql-statement>
+<sql-statement>
+select count(*) from
+  (select 1 from tenk1 a
+   where unique1 IN (select distinct hundred from tenk1 b)) ss;
+</sql-statement>
+<sql-statement>
+select count(distinct ss.ten) from
+  (select ten from tenk1 a
+   where unique1 IN (select distinct hundred from tenk1 b)) ss;
+</sql-statement>
+<sql-statement>
+--
+-- Test cases to check for overenthusiastic optimization of
+-- "IN (SELECT DISTINCT ...)" and related cases.  Per example from
+-- Luca Pireddu and Michael Fuhr.
+--
+CREATE TEMP TABLE foo (id integer);
+</sql-statement>
+<sql-statement>
+CREATE TEMP TABLE bar (id1 integer, id2 integer);
+</sql-statement>
+<sql-statement>
+INSERT INTO foo VALUES (1);
+</sql-statement>
+<sql-statement>
+INSERT INTO bar VALUES (1, 1);
+</sql-statement>
+<sql-statement>
+INSERT INTO bar VALUES (2, 2);
+</sql-statement>
+<sql-statement>
+INSERT INTO bar VALUES (3, 1);
+</sql-statement>
+<sql-statement>
+-- These cases require an extra level of distinct-ing above subquery s
+SELECT * FROM foo WHERE id IN
+    (SELECT id2 FROM (SELECT DISTINCT id1, id2 FROM bar) AS s);
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo WHERE id IN
+    (SELECT id2 FROM (SELECT id1,id2 FROM bar GROUP BY id1,id2) AS s);
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo WHERE id IN
+    (SELECT id2 FROM (SELECT id1, id2 FROM bar UNION
+                      SELECT id1, id2 FROM bar) AS s);
+</sql-statement>
+<sql-statement>
+-- These cases do not
+SELECT * FROM foo WHERE id IN
+    (SELECT id2 FROM (SELECT DISTINCT ON (id2) id1, id2 FROM bar) AS s);
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo WHERE id IN
+    (SELECT id2 FROM (SELECT id2 FROM bar GROUP BY id2) AS s);
+</sql-statement>
+<sql-statement>
+SELECT * FROM foo WHERE id IN
+    (SELECT id2 FROM (SELECT id2 FROM bar UNION
+                      SELECT id2 FROM bar) AS s);
+</sql-statement>
+<sql-statement>
+--
+-- Test case to catch problems with multiply nested sub-SELECTs not getting
+-- recalculated properly.  Per bug report from Didier Moens.
+--
+CREATE TABLE orderstest (
+    approver_ref integer,
+    po_ref integer,
+    ordercanceled boolean
+);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (1, 1, false);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (66, 5, false);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (66, 6, false);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (66, 7, false);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (66, 1, true);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (66, 8, false);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (66, 1, false);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (77, 1, false);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (1, 1, false);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (66, 1, false);
+</sql-statement>
+<sql-statement>
+INSERT INTO orderstest VALUES (1, 1, false);
+</sql-statement>
+<sql-statement>
+CREATE VIEW orders_view AS
+SELECT *,
+(SELECT CASE
+   WHEN ord.approver_ref=1 THEN '---' ELSE 'Approved'
+ END) AS "Approved",
+(SELECT CASE
+ WHEN ord.ordercanceled
+ THEN 'Canceled'
+ ELSE
+  (SELECT CASE
+		WHEN ord.po_ref=1
+		THEN
+		 (SELECT CASE
+				WHEN ord.approver_ref=1
+				THEN '---'
+				ELSE 'Approved'
+			END)
+		ELSE 'PO'
+	END)
+END) AS "Status",
+(CASE
+ WHEN ord.ordercanceled
+ THEN 'Canceled'
+ ELSE
+  (CASE
+		WHEN ord.po_ref=1
+		THEN
+		 (CASE
+				WHEN ord.approver_ref=1
+				THEN '---'
+				ELSE 'Approved'
+			END)
+		ELSE 'PO'
+	END)
+END) AS "Status_OK"
+FROM orderstest ord;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	CREATE VIEW orders_view AS
+	^
+<sql-statement>
+SELECT * FROM orders_view;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.orders_view
+    
+<sql-statement>
+DROP TABLE orderstest cascade;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: CASCADE is not implemented
+    	DROP TABLE orderstest cascade;
+	^
+<sql-statement>
+--
+-- Test cases to catch situations where rule rewriter fails to propagate
+-- hasSubLinks flag correctly.  Per example from Kyle Bateman.
+--
+create temp table parts (
+    partnum     text,
+    cost        float8
+);
+</sql-statement>
+<sql-statement>
+create temp table shipped (
+    ttype       char(2),
+    ordnum      int4,
+    partnum     text,
+    value       float8
+);
+</sql-statement>
+<sql-statement>
+create temp view shipped_view as
+    select * from shipped where ttype = 'wt';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	create temp view shipped_view as
+	^
+<sql-statement>
+create rule shipped_view_insert as on insert to shipped_view do instead
+    insert into shipped values('wt', new.ordnum, new.partnum, new.value);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 265
+    	create rule shipped_view_insert as on insert to shipped_view do instead
+	^
+<sql-statement>
+insert into parts (partnum, cost) values (1, 1234.56);
+</sql-statement>
+<sql-statement>
+insert into shipped_view (ordnum, partnum, value)
+    values (0, 1, (select cost from parts where partnum = '1'));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:19: Error: SubLinks are not allowed in: VALUES
+    	    values (0, 1, (select cost from parts where partnum = '1'));
+	                  ^
+<sql-statement>
+select * from shipped_view;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.shipped_view
+    
+<sql-statement>
+create rule shipped_view_update as on update to shipped_view do instead
+    update shipped set partnum = new.partnum, value = new.value
+        where ttype = new.ttype and ordnum = new.ordnum;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 265
+    	create rule shipped_view_update as on update to shipped_view do instead
+	^
+<sql-statement>
+update shipped_view set value = 11
+    from int4_tbl a join int4_tbl b
+      on (a.f1 = (select f1 from int4_tbl c where c.f1=b.f1))
+    where ordnum = a.f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:18: Error: SubLinks are not allowed in: JOIN ON
+    	      on (a.f1 = (select f1 from int4_tbl c where c.f1=b.f1))
+	                 ^
+<sql-statement>
+select * from shipped_view;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.shipped_view
+    
+<sql-statement>
+select f1, ss1 as relabel from
+    (select *, (select sum(f1) from int4_tbl b where f1 >= a.f1) as ss1
+     from int4_tbl a) ss;
+</sql-statement>
+<sql-statement>
+--
+-- Test cases involving PARAM_EXEC parameters and min/max index optimizations.
+-- Per bug report from David Sanchez i Gregori.
+--
+select * from (
+  select max(unique1) from tenk1 as a
+  where exists (select 1 from tenk1 as b where b.thousand = a.unique2)
+) ss;
+</sql-statement>
+<sql-statement>
+select * from (
+  select min(unique1) from tenk1 as a
+  where not exists (select 1 from tenk1 as b where b.unique2 = 10000)
+) ss;
+</sql-statement>
+<sql-statement>
+--
+-- Test that an IN implemented using a UniquePath does unique-ification
+-- with the right semantics, as per bug #4113.  (Unfortunately we have
+-- no simple way to ensure that this test case actually chooses that type
+-- of plan, but it does in releases 7.4-8.3.  Note that an ordering difference
+-- here might mean that some other plan type is being used, rendering the test
+-- pointless.)
+--
+create temp table numeric_table (num_col numeric);
+</sql-statement>
+<sql-statement>
+insert into numeric_table values (1), (1.000000000000000000001), (2), (3);
+</sql-statement>
+<sql-statement>
+create temp table float_table (float_col float8);
+</sql-statement>
+<sql-statement>
+insert into float_table values (1), (2), (3);
+</sql-statement>
+<sql-statement>
+select * from float_table
+  where float_col in (select num_col from numeric_table);
+</sql-statement>
+<sql-statement>
+select * from numeric_table
+  where num_col in (select float_col from float_table);
+</sql-statement>
+<sql-statement>
+--
+-- Test case for bug #4290: bogus calculation of subplan param sets
+--
+create temp table ta (id int primary key, val int);
+</sql-statement>
+<sql-statement>
+insert into ta values(1,1);
+</sql-statement>
+<sql-statement>
+insert into ta values(2,2);
+</sql-statement>
+<sql-statement>
+create temp table tb (id int primary key, aval int);
+</sql-statement>
+<sql-statement>
+insert into tb values(1,1);
+</sql-statement>
+<sql-statement>
+insert into tb values(2,1);
+</sql-statement>
+<sql-statement>
+insert into tb values(3,2);
+</sql-statement>
+<sql-statement>
+insert into tb values(4,2);
+</sql-statement>
+<sql-statement>
+create temp table tc (id int primary key, aid int);
+</sql-statement>
+<sql-statement>
+insert into tc values(1,1);
+</sql-statement>
+<sql-statement>
+insert into tc values(2,2);
+</sql-statement>
+<sql-statement>
+select
+  ( select min(tb.id) from tb
+    where tb.aval = (select ta.val from ta where ta.id = tc.aid) ) as min_tb_id
+from tc;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	select
+	^
+        -stdin-:<main>:2:3: Error: At function: PgSubLink, At function: PgSelect
+        	  ( select min(tb.id) from tb
+	  ^
+            -stdin-:<main>: Error: At function: PgSetItem
+            
+                -stdin-:<main>:2:3: Error: At function: PgWhere
+                	  ( select min(tb.id) from tb
+	  ^
+                    -stdin-:<main>:3:19: Error: At function: PgOp
+                    	    where tb.aval = (select ta.val from ta where ta.id = tc.aid) ) as min_tb_id
+	                  ^
+                        -stdin-:<main>:3:21: Error: At function: PgSubLink, At function: PgSelect, At function: PgSetItem
+                        	    where tb.aval = (select ta.val from ta where ta.id = tc.aid) ) as min_tb_id
+	                    ^
+                            -stdin-:<main>:3:58: Error: No such column: aid
+                            	    where tb.aval = (select ta.val from ta where ta.id = tc.aid) ) as min_tb_id
+	                                                         ^
+<sql-statement>
+--
+-- Test case for 8.3 "failed to locate grouping columns" bug
+--
+create temp table t1 (f1 numeric(14,0), f2 varchar(30));
+</sql-statement>
+<sql-statement>
+select * from
+  (select distinct f1, f2, (select f2 from t1 x where x.f1 = up.f1) as fs
+   from t1 up) ss
+group by f1,f2,fs;
+</sql-statement>
+<sql-statement>
+--
+-- Test case for bug #5514 (mishandling of whole-row Vars in subselects)
+--
+create temp table table_a(id integer);
+</sql-statement>
+<sql-statement>
+insert into table_a values (42);
+</sql-statement>
+<sql-statement>
+create temp view view_a as select * from table_a;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: expected at least one target column
+    	create temp view view_a as select * from table_a;
+	^
+<sql-statement>
+select view_a from view_a;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.view_a
+    
+<sql-statement>
+select (select view_a) from view_a;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.view_a
+    
+<sql-statement>
+select (select (select view_a)) from view_a;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.view_a
+    
+<sql-statement>
+select (select (a.*)::text) from view_a a;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.view_a
+    
+<sql-statement>
+--
+-- Check that whole-row Vars reading the result of a subselect don't include
+-- any junk columns therein
+--
+select q from (select max(f1) from int4_tbl group by f1 order by f1) q;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Pull
+    	--
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  input of anonymous composite types is not implemented
+
+        	--
+	^
+<sql-statement>
+with q as (select max(f1) from int4_tbl group by f1 order by f1)
+  select q from q;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Pull
+    	with q as (select max(f1) from int4_tbl group by f1 order by f1)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  input of anonymous composite types is not implemented
+
+        	with q as (select max(f1) from int4_tbl group by f1 order by f1)
+	^
+<sql-statement>
+--
+-- Test case for sublinks pulled up into joinaliasvars lists in an
+-- inherited update/delete query
+--
+begin;  --  this shouldn't delete anything, but be safe
+</sql-statement>
+<sql-statement>
+delete from road
+where exists (
+  select 1
+  from
+    int4_tbl cross join
+    ( select f1, array(select q1 from int8_tbl) as arr
+      from text_tbl ) ss
+  where road.name = ss.f1 );
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+rollback;
+</sql-statement>
+<sql-statement>
+--
+-- Test case for sublinks pushed down into subselects via join alias expansion
+--
+select
+  (select sq1) as qq1
+from
+  (select exists(select 1 from int4_tbl where f1 = q2) as sq1, 42 as dummy
+   from int8_tbl) sq0
+  join
+  int4_tbl i4 on dummy = i4.f1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: OrderedFlatMap, At function: EquiJoin, At function: OrderedFlatMap, At function: EquiJoin, At function: OrderedFlatMap, At function: EquiJoin
+    	--
+	^
+        -stdin-:<main>:7:11: Error: At function: Aggregate, At function: OrderedMap, At function: EquiJoin
+        	  (select exists(select 1 from int4_tbl where f1 = q2) as sq1, 42 as dummy
+	          ^
+            -stdin-:<main>:7:11: Error: Cannot compare key columns (a._alias_int4_tbl.f1 has type: pgint4, b._alias_int8_tbl.q2 has type: pgint8)
+            	  (select exists(select 1 from int4_tbl where f1 = q2) as sq1, 42 as dummy
+	          ^
+<sql-statement>
+--
+-- Test case for subselect within UPDATE of INSERT...ON CONFLICT DO UPDATE
+--
+create temp table upsert(key int4 primary key, val text);
+</sql-statement>
+<sql-statement>
+insert into upsert values(1, 'val') on conflict (key) do update set val = 'not seen';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: InsertStmt: not supported onConflictClause
+    	insert into upsert values(1, 'val') on conflict (key) do update set val = 'not seen';
+	^
+<sql-statement>
+insert into upsert values(1, 'val') on conflict (key) do update set val = 'seen with subselect ' || (select f1 from int4_tbl where f1 != 0 limit 1)::text;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: InsertStmt: not supported onConflictClause
+    	insert into upsert values(1, 'val') on conflict (key) do update set val = 'seen with subselect ' || (select f1 from int4_tbl where f1 != 0 limit 1)::text;
+	^
+<sql-statement>
+select * from upsert;
+</sql-statement>
+<sql-statement>
+with aa as (select 'int4_tbl' u from int4_tbl limit 1)
+insert into upsert values (1, 'x'), (999, 'y')
+on conflict (key) do update set val = (select u from aa)
+returning *;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: InsertStmt: not supported onConflictClause
+    	with aa as (select 'int4_tbl' u from int4_tbl limit 1)
+	^
+<sql-statement>
+--
+-- Test case for cross-type partial matching in hashed subplan (bug #7597)
+--
+create temp table outer_7597 (f1 int4, f2 int4);
+</sql-statement>
+<sql-statement>
+insert into outer_7597 values (0, 0);
+</sql-statement>
+<sql-statement>
+insert into outer_7597 values (1, 0);
+</sql-statement>
+<sql-statement>
+insert into outer_7597 values (0, null);
+</sql-statement>
+<sql-statement>
+insert into outer_7597 values (1, null);
+</sql-statement>
+<sql-statement>
+create temp table inner_7597(c1 int8, c2 int8);
+</sql-statement>
+<sql-statement>
+insert into inner_7597 values(0, null);
+</sql-statement>
+<sql-statement>
+select * from outer_7597 where (f1, f2) not in (select * from inner_7597);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:41: Error: alternative is not implemented yet : 138
+    	select * from outer_7597 where (f1, f2) not in (select * from inner_7597);
+	                                        ^
+<sql-statement>
+--
+-- Similar test case using text that verifies that collation
+-- information is passed through by execTuplesEqual() in nodeSubplan.c
+-- (otherwise it would error in texteq())
+--
+create temp table outer_text (f1 text, f2 text);
+</sql-statement>
+<sql-statement>
+insert into outer_text values ('a', 'a');
+</sql-statement>
+<sql-statement>
+insert into outer_text values ('b', 'a');
+</sql-statement>
+<sql-statement>
+insert into outer_text values ('a', null);
+</sql-statement>
+<sql-statement>
+insert into outer_text values ('b', null);
+</sql-statement>
+<sql-statement>
+create temp table inner_text (c1 text, c2 text);
+</sql-statement>
+<sql-statement>
+insert into inner_text values ('a', null);
+</sql-statement>
+<sql-statement>
+insert into inner_text values ('123', '456');
+</sql-statement>
+<sql-statement>
+select * from outer_text where (f1, f2) not in (select * from inner_text);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:41: Error: alternative is not implemented yet : 138
+    	select * from outer_text where (f1, f2) not in (select * from inner_text);
+	                                        ^
+<sql-statement>
+--
+-- Another test case for cross-type hashed subplans: comparison of
+-- inner-side values must be done with appropriate operator
+--
+explain (verbose, costs off)
+select 'foo'::text in (select 'bar'::name union all select 'bar'::name);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select 'foo'::text in (select 'bar'::name union all select 'bar'::name);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: AsStruct
+    	select 'foo'::text in (select 'bar'::name union all select 'bar'::name);
+	^
+        -stdin-:<main>:1:20: Error: At function: ToPg, At function: SqlIn
+        	select 'foo'::text in (select 'bar'::name union all select 'bar'::name);
+	                   ^
+            -stdin-:<main>:1:20: Error: Can't lookup pgtext in collection of pgname: types pgtext and pgname are not comparable
+            	select 'foo'::text in (select 'bar'::name union all select 'bar'::name);
+	                   ^
+<sql-statement>
+--
+-- Test that we don't try to hash nested records (bug #17363)
+-- (Hashing could be supported, but for now we don't)
+--
+explain (verbose, costs off)
+select row(row(row(1))) = any (select row(row(1)));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select row(row(row(1))) = any (select row(row(1)));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:25: Error: alternative is not implemented yet : 138
+    	select row(row(row(1))) = any (select row(row(1)));
+	                        ^
+<sql-statement>
+--
+-- Test case for premature memory release during hashing of subplan output
+--
+select '1'::text in (select '1'::name union all select '1'::name);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: AsStruct
+    	--
+	^
+        -stdin-:<main>:4:18: Error: At function: ToPg, At function: SqlIn
+        	select '1'::text in (select '1'::name union all select '1'::name);
+	                 ^
+            -stdin-:<main>:4:18: Error: Can't lookup pgtext in collection of pgname: types pgtext and pgname are not comparable
+            	select '1'::text in (select '1'::name union all select '1'::name);
+	                 ^
+<sql-statement>
+--
+-- Test that we don't try to use a hashed subplan if the simplified
+-- testexpr isn't of the right shape
+--
+-- this fails by default, of course
+select * from int8_tbl where q1 in (select c1 from inner_text);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	--
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	--
+	^
+                -stdin-:<main>:6:33: Error: At function: PgSubLink, At function: PgOp
+                	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+                    -stdin-:<main>:6:33: Error: Unable to find an overload for operator = with given argument type(s): (int8,text)
+                    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+<sql-statement>
+begin;
+</sql-statement>
+<sql-statement>
+-- make an operator to allow it to succeed
+create function bogus_int8_text_eq(int8, text) returns boolean
+language sql as 'select $1::text = $2';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- make an operator to allow it to succeed
+	^
+<sql-statement>
+create operator = (procedure=bogus_int8_text_eq, leftarg=int8, rightarg=text);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 255
+    	create operator = (procedure=bogus_int8_text_eq, leftarg=int8, rightarg=text);
+	^
+<sql-statement>
+explain (costs off)
+select * from int8_tbl where q1 in (select c1 from inner_text);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select * from int8_tbl where q1 in (select c1 from inner_text);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+                -stdin-:<main>:1:33: Error: At function: PgSubLink, At function: PgOp
+                	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+                    -stdin-:<main>:1:33: Error: Unable to find an overload for operator = with given argument type(s): (int8,text)
+                    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+<sql-statement>
+-- inlining of this function results in unusual number of hash clauses,
+-- which we can still cope with
+create or replace function bogus_int8_text_eq(int8, text) returns boolean
+language sql as 'select $1::text = $2 and $1::text = $2';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- inlining of this function results in unusual number of hash clauses,
+	^
+<sql-statement>
+explain (costs off)
+select * from int8_tbl where q1 in (select c1 from inner_text);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select * from int8_tbl where q1 in (select c1 from inner_text);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+                -stdin-:<main>:1:33: Error: At function: PgSubLink, At function: PgOp
+                	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+                    -stdin-:<main>:1:33: Error: Unable to find an overload for operator = with given argument type(s): (int8,text)
+                    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+<sql-statement>
+-- inlining of this function causes LHS and RHS to be switched,
+-- which we can't cope with, so hashing should be abandoned
+create or replace function bogus_int8_text_eq(int8, text) returns boolean
+language sql as 'select $2 = $1::text';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- inlining of this function causes LHS and RHS to be switched,
+	^
+<sql-statement>
+explain (costs off)
+select * from int8_tbl where q1 in (select c1 from inner_text);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select * from int8_tbl where q1 in (select c1 from inner_text);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select * from int8_tbl where q1 in (select c1 from inner_text);
+	^
+                -stdin-:<main>:1:33: Error: At function: PgSubLink, At function: PgOp
+                	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+                    -stdin-:<main>:1:33: Error: Unable to find an overload for operator = with given argument type(s): (int8,text)
+                    	select * from int8_tbl where q1 in (select c1 from inner_text);
+	                                ^
+<sql-statement>
+rollback;  -- to get rid of the bogus operator
+</sql-statement>
+<sql-statement>
+--
+-- Test resolution of hashed vs non-hashed implementation of EXISTS subplan
+--
+explain (costs off)
+select count(*) from tenk1 t
+where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select count(*) from tenk1 t
+where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0);
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select count(*) from tenk1 t
+where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0)
+  and thousand = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select count(*) from tenk1 t
+where (exists(select 1 from tenk1 k where k.unique1 = t.unique2) or ten < 0)
+  and thousand = 1;
+</sql-statement>
+<sql-statement>
+-- It's possible for the same EXISTS to get resolved both ways
+create temp table exists_tbl (c1 int, c2 int, c3 int) partition by list (c1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: PARTITION BY clause not supported
+    	-- It's possible for the same EXISTS to get resolved both ways
+	^
+<sql-statement>
+create temp table exists_tbl_null partition of exists_tbl for values in (null);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create temp table exists_tbl_null partition of exists_tbl for values in (null);
+	^
+<sql-statement>
+create temp table exists_tbl_def partition of exists_tbl default;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create temp table exists_tbl_def partition of exists_tbl default;
+	^
+<sql-statement>
+insert into exists_tbl select x, x/2, x+1 from generate_series(0,10) x;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.exists_tbl
+    
+<sql-statement>
+analyze exists_tbl;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze exists_tbl;
+	^
+<sql-statement>
+explain (costs off)
+select * from exists_tbl t1
+  where (exists(select 1 from exists_tbl t2 where t1.c1 = t2.c2) or c3 < 0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select * from exists_tbl t1
+  where (exists(select 1 from exists_tbl t2 where t1.c1 = t2.c2) or c3 < 0);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.exists_tbl
+    
+<sql-statement>
+--
+-- Test case for planner bug with nested EXISTS handling
+--
+select a.thousand from tenk1 a, tenk1 b
+where a.thousand = b.thousand
+  and exists ( select 1 from tenk1 c where b.hundred = c.hundred
+                   and not exists ( select 1 from tenk1 d
+                                    where a.thousand = d.thousand ) );
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	--
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	--
+	^
+                -stdin-:<main>:6:3: Error: At function: PgAnd
+                	  and exists ( select 1 from tenk1 c where b.hundred = c.hundred
+	  ^
+                    -stdin-:<main>:6:7: Error: At function: PgSubLink, At function: PgSelect
+                    	  and exists ( select 1 from tenk1 c where b.hundred = c.hundred
+	      ^
+                        -stdin-:<main>: Error: At function: PgSetItem
+                        
+                            -stdin-:<main>:6:7: Error: At function: PgWhere
+                            	  and exists ( select 1 from tenk1 c where b.hundred = c.hundred
+	      ^
+                                -stdin-:<main>:7:20: Error: At function: PgAnd
+                                	                   and not exists ( select 1 from tenk1 d
+	                   ^
+                                    -stdin-:<main>:7:24: Error: At function: PgNot
+                                    	                   and not exists ( select 1 from tenk1 d
+	                       ^
+                                        -stdin-:<main>:7:28: Error: At function: PgSubLink, At function: PgSelect, At function: PgSetItem
+                                        	                   and not exists ( select 1 from tenk1 d
+	                           ^
+                                            -stdin-:<main>:8:43: Error: No such column: thousand
+                                            	                                    where a.thousand = d.thousand ) );
+	                                          ^
+<sql-statement>
+--
+-- Check that nested sub-selects are not pulled up if they contain volatiles
+--
+explain (verbose, costs off)
+  select x, x from
+    (select (select now()) as x from (values(1),(2)) v(y)) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+explain (verbose, costs off)
+  select x, x from
+    (select (select random()) as x from (values(1),(2)) v(y)) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+explain (verbose, costs off)
+  select x, x from
+    (select (select now() where y=y) as x from (values(1),(2)) v(y)) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+explain (verbose, costs off)
+  select x, x from
+    (select (select random() where y=y) as x from (values(1),(2)) v(y)) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+--
+-- Test rescan of a hashed subplan (the use of random() is to prevent the
+-- sub-select from being pulled up, which would result in not hashing)
+--
+explain (verbose, costs off)
+select sum(ss.tst::int) from
+  onek o cross join lateral (
+  select i.ten in (select f1 from int4_tbl where f1 <= o.hundred) as tst,
+         random() as r
+  from onek i where i.unique1 = o.unique1 ) ss
+where o.ten = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select sum(ss.tst::int) from
+  onek o cross join lateral (
+  select i.ten in (select f1 from int4_tbl where f1 <= o.hundred) as tst,
+         random() as r
+  from onek i where i.unique1 = o.unique1 ) ss
+where o.ten = 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select sum(ss.tst::int) from
+	^
+<sql-statement>
+--
+-- Test rescan of a SetOp node
+--
+explain (costs off)
+select count(*) from
+  onek o cross join lateral (
+    select * from onek i1 where i1.unique1 = o.unique1
+    except
+    select * from onek i2 where i2.unique1 = o.unique2
+  ) ss
+where o.ten = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select count(*) from
+  onek o cross join lateral (
+    select * from onek i1 where i1.unique1 = o.unique1
+    except
+    select * from onek i2 where i2.unique1 = o.unique2
+  ) ss
+where o.ten = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select count(*) from
+	^
+<sql-statement>
+--
+-- Test rescan of a RecursiveUnion node
+--
+explain (costs off)
+select sum(o.four), sum(ss.a) from
+  onek o cross join lateral (
+    with recursive x(a) as
+      (select o.four as a
+       union
+       select a + 1 from x
+       where a < 10)
+    select * from x
+  ) ss
+where o.ten = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select sum(o.four), sum(ss.a) from
+  onek o cross join lateral (
+    with recursive x(a) as
+      (select o.four as a
+       union
+       select a + 1 from x
+       where a < 10)
+    select * from x
+  ) ss
+where o.ten = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select sum(o.four), sum(ss.a) from
+	^
+<sql-statement>
+--
+-- Check we don't misoptimize a NOT IN where the subquery returns no rows.
+--
+create temp table notinouter (a int);
+</sql-statement>
+<sql-statement>
+create temp table notininner (b int not null);
+</sql-statement>
+<sql-statement>
+insert into notinouter values (null), (1);
+</sql-statement>
+<sql-statement>
+select * from notinouter where a not in (select b from notininner);
+</sql-statement>
+<sql-statement>
+--
+-- Check we behave sanely in corner case of empty SELECT list (bug #8648)
+--
+create temp table nocolumns();
+</sql-statement>
+<sql-statement>
+select exists(select * from nocolumns);
+</sql-statement>
+<sql-statement>
+--
+-- Check behavior with a SubPlan in VALUES (bug #14924)
+--
+select val.x
+  from generate_series(1,10) as s(i),
+  lateral (
+    values ((select s.i + 1)), (s.i + 101)
+  ) as val(x)
+where s.i < 10 and (select val.x) < 110;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	--
+	^
+<sql-statement>
+-- another variant of that (bug #16213)
+explain (verbose, costs off)
+select * from
+(values
+  (3 not in (select * from (values (1), (2)) ss1)),
+  (false)
+) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- another variant of that (bug #16213)
+	^
+<sql-statement>
+select * from
+(values
+  (3 not in (select * from (values (1), (2)) ss1)),
+  (false)
+) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:3:6: Error: SubLinks are not allowed in: VALUES
+    	  (3 not in (select * from (values (1), (2)) ss1)),
+	     ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select * from
+	^
+<sql-statement>
+--
+-- Check sane behavior with nested IN SubLinks
+--
+explain (verbose, costs off)
+select * from int4_tbl where
+  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+  (select ten from tenk1 b);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select * from int4_tbl where
+  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+  (select ten from tenk1 b);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from int4_tbl where
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	select * from int4_tbl where
+	^
+                -stdin-:<main>:2:73: Error: At function: PgSubLink, At function: PgOp
+                	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	                                                                        ^
+                    -stdin-:<main>:2:4: Error: At function: If, At function: Coalesce, At function: FromPg
+                    	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	   ^
+                        -stdin-:<main>:2:17: Error: Expected computable data, but got: Unit
+                        	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	                ^
+                        -stdin-:<main>:2:17: Error: Computable required. Atom, key, world, datasink, datasource, type, lambda are not computable
+                        	  (case when f1 in (select unique1 from tenk1 a) then f1 else null end) in
+	                ^
+<sql-statement>
+--
+-- Check for incorrect optimization when IN subquery contains a SRF
+--
+explain (verbose, costs off)
+select * from int4_tbl o where (f1, f1) in
+  (select f1, generate_series(1,50) / 10 g from int4_tbl i group by f1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select * from int4_tbl o where (f1, f1) in
+  (select f1, generate_series(1,50) / 10 g from int4_tbl i group by f1);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:41: Error: alternative is not implemented yet : 138
+    	select * from int4_tbl o where (f1, f1) in
+	                                        ^
+<sql-statement>
+--
+-- check for over-optimization of whole-row Var referencing an Append plan
+--
+select (select q from
+         (select 1,2,3 where f1 > 0
+          union all
+          select 4,5,6.0 where f1 <= 0
+         ) q )
+from int4_tbl;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	--
+	^
+        -stdin-:<main>:4:8: Error: At function: PgSubLink, At function: PgSelect, At function: PgSetItem, At function: PgSelect
+        	select (select q from
+	       ^
+            -stdin-:<main>:4:8: Error: At function: PgSetItem
+            	select (select q from
+	       ^
+                -stdin-:<main>:5:30: Error: Column reference can't be used without FROM
+                	         (select 1,2,3 where f1 > 0
+	                             ^
+            -stdin-:<main>:4:8: Error: At function: PgSetItem
+            	select (select q from
+	       ^
+                -stdin-:<main>:7:32: Error: Column reference can't be used without FROM
+                	          select 4,5,6.0 where f1 <= 0
+	                               ^
+<sql-statement>
+--
+-- Check for sane handling of a lateral reference in a subquery's quals
+-- (most of the complication here is to prevent the test case from being
+-- flattened too much)
+--
+explain (verbose, costs off)
+select * from
+    int4_tbl i4,
+    lateral (
+        select i4.f1 > 1 as b, 1 as id
+        from (select random() order by 1) as t1
+      union all
+        select true as b, 2 as id
+    ) as t2
+where b and f1 >= 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+select * from
+    int4_tbl i4,
+    lateral (
+        select i4.f1 > 1 as b, 1 as id
+        from (select random() order by 1) as t1
+      union all
+        select true as b, 2 as id
+    ) as t2
+where b and f1 >= 0;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RangeSubselect: unsupported lateral
+    	select * from
+	^
+<sql-statement>
+--
+-- Check that volatile quals aren't pushed down past a DISTINCT:
+-- nextval() should not be called more than the nominal number of times
+--
+create temp sequence ts1;
+</sql-statement>
+-stdin-:<main>: Error: Pre type annotation
+
+    -stdin-:<main>:1:1: Error: Unexpected tag: pgObject
+    	--
+	^
+<sql-statement>
+select * from
+  (select distinct ten from tenk1) ss
+  where ten < 10 + nextval('ts1')
+  order by 1;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMapReduce!
+    	select * from
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "ts1" does not exist
+
+        	select * from
+	^
+<sql-statement>
+select nextval('ts1');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select nextval('ts1');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  relation "ts1" does not exist
+
+        	select nextval('ts1');
+	^
+<sql-statement>
+--
+-- Check that volatile quals aren't pushed down past a set-returning function;
+-- while a nonvolatile qual can be, if it doesn't reference the SRF.
+--
+create function tattle(x int, y int) returns bool
+volatile language plpgsql as $$
+begin
+  raise notice 'x = %, y = %', x, y;
+  return x > y;
+end$$;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	--
+	^
+<sql-statement>
+explain (verbose, costs off)
+select * from
+  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+  where tattle(x, 8);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select * from
+  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+  where tattle(x, 8);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:19: Error: Generator functions are not allowed in: SELECT
+    	  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+	                  ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select * from
+	^
+<sql-statement>
+-- if we pretend it's stable, we get different results:
+alter function tattle(x int, y int) stable;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 262
+    	-- if we pretend it's stable, we get different results:
+	^
+<sql-statement>
+explain (verbose, costs off)
+select * from
+  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+  where tattle(x, 8);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+select * from
+  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+  where tattle(x, 8);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:19: Error: Generator functions are not allowed in: SELECT
+    	  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+	                  ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select * from
+	^
+<sql-statement>
+-- although even a stable qual should not be pushed down if it references SRF
+explain (verbose, costs off)
+select * from
+  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+  where tattle(x, u);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- although even a stable qual should not be pushed down if it references SRF
+	^
+<sql-statement>
+select * from
+  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+  where tattle(x, u);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:19: Error: Generator functions are not allowed in: SELECT
+    	  (select 9 as x, unnest(array[1,2,3,11,12,13]) as u) ss
+	                  ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select * from
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select * from
+	^
+<sql-statement>
+drop function tattle(x int, y int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	drop function tattle(x int, y int);
+	^
+<sql-statement>
+--
+-- Test that LIMIT can be pushed to SORT through a subquery that just projects
+-- columns.  We check for that having happened by looking to see if EXPLAIN
+-- ANALYZE shows that a top-N sort was used.  We must suppress or filter away
+-- all the non-invariant parts of the EXPLAIN ANALYZE output.
+--
+create table sq_limit (pk int primary key, c1 int, c2 int);
+</sql-statement>
+<sql-statement>
+insert into sq_limit values
+    (1, 1, 1),
+    (2, 2, 2),
+    (3, 3, 3),
+    (4, 4, 4),
+    (5, 1, 1),
+    (6, 2, 2),
+    (7, 3, 3),
+    (8, 4, 4);
+</sql-statement>
+<sql-statement>
+create function explain_sq_limit() returns setof text language plpgsql as
+$$
+declare ln text;
+begin
+    for ln in
+        explain (analyze, summary off, timing off, costs off)
+        select * from (select pk,c2 from sq_limit order by c1,pk) as x limit 3
+    loop
+        ln := regexp_replace(ln, 'Memory: \S*',  'Memory: xxx');
+        return next ln;
+    end loop;
+end;
+$$;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	create function explain_sq_limit() returns setof text language plpgsql as
+	^
+<sql-statement>
+select * from explain_sq_limit();
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	select * from explain_sq_limit();
+	^
+        -stdin-:<main>:1:15: Error: At function: PgCall
+        	select * from explain_sq_limit();
+	              ^
+            -stdin-:<main>:1:15: Error: No such proc: explain_sq_limit
+            	select * from explain_sq_limit();
+	              ^
+<sql-statement>
+select * from (select pk,c2 from sq_limit order by c1,pk) as x limit 3;
+</sql-statement>
+<sql-statement>
+drop function explain_sq_limit();
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	drop function explain_sq_limit();
+	^
+<sql-statement>
+drop table sq_limit;
+</sql-statement>
+<sql-statement>
+--
+-- Ensure that backward scan direction isn't propagated into
+-- expression subqueries (bug #15336)
+--
+begin;
+</sql-statement>
+<sql-statement>
+declare c1 scroll cursor for
+ select * from generate_series(1,4) i
+  where i <> all (values (2),(3));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 304
+    	declare c1 scroll cursor for
+	^
+<sql-statement>
+move forward all in c1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	move forward all in c1;
+	^
+<sql-statement>
+fetch backward all in c1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 259
+    	fetch backward all in c1;
+	^
+<sql-statement>
+commit;
+</sql-statement>
+<sql-statement>
+--
+-- Tests for CTE inlining behavior
+--
+-- Basic subquery that can be inlined
+explain (verbose, costs off)
+with x as (select * from (select f1 from subselect_tbl) ss)
+select * from x where f1 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	--
+	^
+<sql-statement>
+-- Explicitly request materialization
+explain (verbose, costs off)
+with x as materialized (select * from (select f1 from subselect_tbl) ss)
+select * from x where f1 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Explicitly request materialization
+	^
+<sql-statement>
+-- Stable functions are safe to inline
+explain (verbose, costs off)
+with x as (select * from (select f1, now() from subselect_tbl) ss)
+select * from x where f1 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Stable functions are safe to inline
+	^
+<sql-statement>
+-- Volatile functions prevent inlining
+explain (verbose, costs off)
+with x as (select * from (select f1, random() from subselect_tbl) ss)
+select * from x where f1 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Volatile functions prevent inlining
+	^
+<sql-statement>
+-- SELECT FOR UPDATE cannot be inlined
+explain (verbose, costs off)
+with x as (select * from (select f1 from subselect_tbl for update) ss)
+select * from x where f1 = 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- SELECT FOR UPDATE cannot be inlined
+	^
+<sql-statement>
+-- Multiply-referenced CTEs are inlined only when requested
+explain (verbose, costs off)
+with x as (select * from (select f1, now() as n from subselect_tbl) ss)
+select * from x, x x2 where x.n = x2.n;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Multiply-referenced CTEs are inlined only when requested
+	^
+<sql-statement>
+explain (verbose, costs off)
+with x as not materialized (select * from (select f1, now() as n from subselect_tbl) ss)
+select * from x, x x2 where x.n = x2.n;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+-- Multiply-referenced CTEs can't be inlined if they contain outer self-refs
+explain (verbose, costs off)
+with recursive x(a) as
+  ((values ('a'), ('b'))
+   union all
+   (with z as not materialized (select * from x)
+    select z.a || z1.a as a from z cross join z as z1
+    where length(z.a || z1.a) < 5))
+select * from x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Multiply-referenced CTEs can't be inlined if they contain outer self-refs
+	^
+<sql-statement>
+with recursive x(a) as
+  ((values ('a'), ('b'))
+   union all
+   (with z as not materialized (select * from x)
+    select z.a || z1.a as a from z cross join z as z1
+    where length(z.a || z1.a) < 5))
+select * from x;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.z
+    
+<sql-statement>
+explain (verbose, costs off)
+with recursive x(a) as
+  ((values ('a'), ('b'))
+   union all
+   (with z as not materialized (select * from x)
+    select z.a || z.a as a from z
+    where length(z.a || z.a) < 5))
+select * from x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+with recursive x(a) as
+  ((values ('a'), ('b'))
+   union all
+   (with z as not materialized (select * from x)
+    select z.a || z.a as a from z
+    where length(z.a || z.a) < 5))
+select * from x;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.z
+    
+<sql-statement>
+-- Check handling of outer references
+explain (verbose, costs off)
+with x as (select * from int4_tbl)
+select * from (with y as (select * from x) select * from y) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Check handling of outer references
+	^
+<sql-statement>
+explain (verbose, costs off)
+with x as materialized (select * from int4_tbl)
+select * from (with y as (select * from x) select * from y) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (verbose, costs off)
+	^
+<sql-statement>
+-- Ensure that we inline the currect CTE when there are
+-- multiple CTEs with the same name
+explain (verbose, costs off)
+with x as (select 1 as y)
+select * from (with x as (select 2 as y) select * from x) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Ensure that we inline the currect CTE when there are
+	^
+<sql-statement>
+-- Row marks are not pushed into CTEs
+explain (verbose, costs off)
+with x as (select * from subselect_tbl)
+select * from x for update;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Row marks are not pushed into CTEs
+	^

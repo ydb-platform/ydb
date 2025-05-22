@@ -10,6 +10,8 @@
 #include <aws/common/common.h>
 #include <aws/common/thread.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #define AWS_LOG_LEVEL_NONE 0
 #define AWS_LOG_LEVEL_FATAL 1
 #define AWS_LOG_LEVEL_ERROR 2
@@ -56,9 +58,11 @@ enum aws_log_level {
 typedef uint32_t aws_log_subject_t;
 
 /* Each library gets space for 2^^10 log subject entries */
-#define AWS_LOG_SUBJECT_STRIDE_BITS 10
+enum {
+    AWS_LOG_SUBJECT_STRIDE_BITS = 10,
+};
 #define AWS_LOG_SUBJECT_STRIDE (1U << AWS_LOG_SUBJECT_STRIDE_BITS)
-#define AWS_LOG_SUBJECT_BEGIN_RANGE(x) ((x)*AWS_LOG_SUBJECT_STRIDE)
+#define AWS_LOG_SUBJECT_BEGIN_RANGE(x) ((x) * AWS_LOG_SUBJECT_STRIDE)
 #define AWS_LOG_SUBJECT_END_RANGE(x) (((x) + 1) * AWS_LOG_SUBJECT_STRIDE - 1)
 
 struct aws_log_subject_info {
@@ -68,7 +72,7 @@ struct aws_log_subject_info {
 };
 
 #define DEFINE_LOG_SUBJECT_INFO(id, name, desc)                                                                        \
-    { .subject_id = (id), .subject_name = (name), .subject_description = (desc) }
+    {.subject_id = (id), .subject_name = (name), .subject_description = (desc)}
 
 struct aws_log_subject_info_list {
     struct aws_log_subject_info *subject_list;
@@ -85,6 +89,7 @@ enum aws_common_log_subject {
     AWS_LS_COMMON_BUS,
     AWS_LS_COMMON_TEST,
     AWS_LS_COMMON_JSON_PARSER,
+    AWS_LS_COMMON_CBOR,
 
     AWS_LS_COMMON_LAST = AWS_LOG_SUBJECT_END_RANGE(AWS_C_COMMON_PACKAGE_ID)
 };
@@ -93,6 +98,13 @@ struct aws_logger;
 struct aws_log_formatter;
 struct aws_log_channel;
 struct aws_log_writer;
+
+#ifdef _MSC_VER
+#    pragma warning(push)
+#    pragma warning(disable : 4623) /* default constructor was implicitly defined as deleted */
+#    pragma warning(disable : 4626) /* assignment operator was implicitly defined as deleted */
+#    pragma warning(disable : 5027) /* move assignment operator was implicitly defined as deleted */
+#endif
 
 /**
  * We separate the log level function from the log call itself so that we can do the filter check in the macros (see
@@ -116,6 +128,10 @@ struct aws_logger_vtable {
     void (*const clean_up)(struct aws_logger *logger);
     int (*set_log_level)(struct aws_logger *logger, enum aws_log_level);
 };
+
+#ifdef _MSC_VER
+#    pragma warning(pop)
+#endif
 
 struct aws_logger {
     struct aws_logger_vtable *vtable;
@@ -339,5 +355,6 @@ int aws_logger_init_noalloc(
     struct aws_logger_standard_options *options);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_LOGGING_H */

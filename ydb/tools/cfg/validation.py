@@ -122,26 +122,24 @@ SYS_SCHEMA = {
             "type": "string",
             "enum": NodeType.all_node_type_names(),
         },
+        "force_io_pool_threads": {"type": "integer"},
     },
     "additionalProperties": False,
 }
 
-TRACING_SCHEMA = dict(
+SELECTORS_CONFIGS = dict(
     type="object",
     properties=dict(
-        host=dict(type="string"),
-        port=dict(type="integer"),
-        root_ca=dict(type="string"),
-        service_name=dict(type="string"),
-        auth_config=dict(type="object"),
+        request_type=dict(type="string"),
     ),
-    required=[
-        "host",
-        "port",
-        "root_ca",
-        "service_name",
-    ],
+    required=[],
     additionalProperties=False,
+)
+
+TRACING_SCHEMA = dict(
+    type="object",
+    properties={},
+    additionalProperties=True,
 )
 
 FAILURE_INJECTION_CONFIG_SCHEMA = {
@@ -157,6 +155,11 @@ DRIVE_SCHEMA = {
         "path": dict(type="string", minLength=1),
         "shared_with_os": dict(type="boolean"),
         "expected_slot_count": dict(type="integer"),
+        "pdisk_config": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {},
+        },
         "kind": dict(type="integer"),
     },
     "required": ["type", "path"],
@@ -173,9 +176,22 @@ HOST_SCHEMA = {
             "type": "integer",
         },
         "node_id": {"type": "integer", "minLength": 1},
+        "host": {"type": "string", "minLength": 1},
     },
-    "required": [
-        "name",
+    "oneOf": [
+        {
+            "additionalProperties": False
+        },
+        {
+            "required": [
+                "name"
+            ]
+        },
+        {
+            "required": [
+                "host"
+            ]
+        }
     ],
 }
 
@@ -401,7 +417,7 @@ DOMAIN_SCHEMA = {
             "type": "array",
             "items": {
                 "type": "string",
-                "enum": utils.get_resources_list("resources/console_initializers/"),
+                "enum": ["cloud_ssd_table_profile", "cloud_ssdencrypted_table_profile"],
             },
         },
     },
@@ -412,6 +428,7 @@ DOMAIN_SCHEMA = {
 NBS_SCHEMA = {
     "type": "object",
     "properties": {
+        "diagnostics": {"type": "object"},
         "enable": {"type": "boolean"},
         "new_config_generator_enabled": {"type": "boolean"},
         "sys": copy.deepcopy(SYS_SCHEMA),
@@ -899,9 +916,6 @@ TEMPLATE_SCHEMA = {
         "nw_cache_file_path": {
             "type": "string",
         },
-        "enable_cms_config_cache": {
-            "type": "boolean",
-        },
         "hosts": {
             "type": "array",
             "items": copy.deepcopy(HOST_SCHEMA),
@@ -925,7 +939,7 @@ TEMPLATE_SCHEMA = {
         "features": copy.deepcopy(FEATURES_SCHEMA),
         "shared_cache": copy.deepcopy(SHARED_CACHE_SCHEMA),
         "sys": copy.deepcopy(SYS_SCHEMA),
-        "tracing": copy.deepcopy(TRACING_SCHEMA),
+        "tracing_config": copy.deepcopy(TRACING_SCHEMA),
         "failure_injection_config": copy.deepcopy(FAILURE_INJECTION_CONFIG_SCHEMA),
         "solomon": copy.deepcopy(SOLOMON_SCHEMA),
         "cms": copy.deepcopy(CMS_SCHEMA),
@@ -943,7 +957,12 @@ TEMPLATE_SCHEMA = {
 
 
 def _host_and_ic_port(host):
-    return "%s:%s" % (host["name"], str(host.get("ic_port", 19001)))
+    port = 19001
+    if "ic_port" in host:
+        port = host["ic_port"]
+    if "port" in host:
+        port = host["port"]
+    return "%s:%s" % (host.get("name", host.get("host")), str(port))
 
 
 def checkNameServiceDuplicates(validator, allow_duplicates, instance, schema):

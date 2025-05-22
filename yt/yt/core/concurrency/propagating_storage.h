@@ -85,8 +85,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPropagatingStorage& GetCurrentPropagatingStorage();
-const TPropagatingStorage& GetPropagatingStorage(const NConcurrency::TFls& fls);
+TPropagatingStorage& CurrentPropagatingStorage();
+const TPropagatingStorage& GetCurrentPropagatingStorage();
+const TPropagatingStorage* TryGetPropagatingStorage(const NConcurrency::TFls& fls);
 
 ////////////////////////////////////////////////////////////////////////////////
 

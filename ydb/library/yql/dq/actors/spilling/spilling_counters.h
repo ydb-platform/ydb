@@ -17,6 +17,18 @@ struct TSpillingCounters : public TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingTooBigFileErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingNoSpaceErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIoErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingFileDescriptors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SpillingIOQueueSize;
+};
+
+struct TSpillingTaskCounters : public TThrRefBase {
+    std::atomic<ui64> ComputeWriteBytes = 0;
+    std::atomic<ui64> ChannelWriteBytes = 0;
+
+    std::atomic<ui64> ComputeReadTime = 0;
+    std::atomic<ui64> ComputeWriteTime = 0;
+    std::atomic<ui64> ChannelReadTime = 0;
+    std::atomic<ui64> ChannelWriteTime = 0;
 };
 
 } // namespace NYql::NDq

@@ -46,7 +46,7 @@ template <class T>
 int TInternRegistry<T>::GetSize() const
 {
     auto guard = Guard(Lock_);
-    return static_cast<int>(Registry_.size());
+    return std::ssize(Registry_);
 }
 
 template <class T>
@@ -207,11 +207,11 @@ struct TInternedObjectSerializer
                 const auto& registry = context.template GetInternRegistry<T>();
                 object = registry->Intern(std::move(value));
                 auto loadedKey = context.RegisterRefCountedEntity(object.ToDataPtr());
-                SERIALIZATION_DUMP_WRITE(context, "objref %v", loadedKey.Index);
+                SERIALIZATION_DUMP_WRITE(context, "objref %v", loadedKey);
             }
         } else {
             object = TInternedObject<T>::FromDataPtr(context.template GetRefCountedEntity<TInternedObjectData<T>>(key));
-            SERIALIZATION_DUMP_WRITE(context, "objref %v", key.Index);
+            SERIALIZATION_DUMP_WRITE(context, "objref %v", key);
         }
     }
 };

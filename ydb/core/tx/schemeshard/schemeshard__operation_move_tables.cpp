@@ -4,6 +4,8 @@
 
 #include "schemeshard_impl.h"
 
+#include "schemeshard_utils.h"  // for TransactionTemplate
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -49,6 +51,25 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         }
     }
 
+    THashSet<TString> sequences;
+    for (const auto& child: srcPath.Base()->GetChildren()) {
+        auto name = child.first;
+        auto pathId = child.second;
+
+        TPath childPath = srcPath.Child(name);
+        if (!childPath.IsSequence() || childPath.IsDeleted()) {
+            continue;
+        }
+
+        Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
+
+        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+        const auto& sequenceDesc = sequenceInfo->Description;
+        const auto& sequenceName = sequenceDesc.GetName();
+
+        sequences.emplace(sequenceName);
+    }
+
     TPath dstPath = TPath::Resolve(dstStr, context.SS);
 
     result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcPath, dstPath)));
@@ -65,24 +86,40 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move table with cdc streams")};
         }
 
+        if (srcChildPath.IsSequence()) {
+            continue;
+        }
+
         TPath dstIndexPath = dstPath.Child(name);
 
         Y_ABORT_UNLESS(srcChildPath.Base()->PathId == child.second);
-        Y_VERIFY_S(srcChildPath.Base()->GetChildren().size() == 1,
-                   srcChildPath.PathString() << " has children " << srcChildPath.Base()->GetChildren().size());
 
         result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
 
-        TString srcImplTableName = srcChildPath.Base()->GetChildren().begin()->first;
-        TPath srcImplTable = srcChildPath.Child(srcImplTableName);
-        if (srcImplTable.IsDeleted()) {
-            continue;
+        for (const auto& [implTableName, implTablePathId]: srcChildPath.Base()->GetChildren()) {
+            TPath srcImplTable = srcChildPath.Child(implTableName);
+            if (srcImplTable.IsDeleted()) {
+                continue;
+            }
+            Y_ABORT_UNLESS(srcImplTable.Base()->PathId == implTablePathId);
+
+            TPath dstImplTable = dstIndexPath.Child(implTableName);
+
+            result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
         }
-        Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcChildPath.Base()->GetChildren().begin()->second);
+    }
 
-        TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
+    for (const auto& sequence : sequences) {
+        auto scheme = TransactionTemplate(
+            dstPath.PathString(),
+            NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence);
+        scheme.SetFailOnExist(true);
 
-        result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
+        auto* moveSequence = scheme.MutableMoveSequence();
+        moveSequence->SetSrcPath(srcPath.PathString() + "/" + sequence);
+        moveSequence->SetDstPath(dstPath.PathString() + "/" + sequence);
+
+        result.push_back(CreateMoveSequence(NextPartId(nextId, result), scheme));
     }
 
     return result;

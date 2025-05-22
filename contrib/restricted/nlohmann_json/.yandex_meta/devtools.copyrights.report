@@ -1,0 +1,221 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3de5bae94597d6fa92ce56fbe6fc21b9
+BELONGS ya.make
+    License text:
+        // SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann <https://nlohmann.me>
+        // SPDX-FileCopyrightText: 2016 - 2021 Evan Nemerson <evan@nemerson.com>
+        // SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/thirdparty/hedley/hedley.hpp [8:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3fb410b721d46624abdaeb2473ffa5d6
+BELONGS ya.make
+    License text:
+        // SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann <https://nlohmann.me>
+        // SPDX-FileCopyrightText: 2018 The Abseil Authors
+        // SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/detail/meta/cpp_future.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3ff67c9bdbb15537628a2c59c3365bf6
+BELONGS ya.make
+    License text:
+        // SPDX-FileCopyrightText: 2008 - 2009 Björn Hoehrmann <bjoern@hoehrmann.de>
+        // SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann <https://nlohmann.me>
+        // SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/detail/output/serializer.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5b4a8a3da1fc1707e9cfad1a7ab52d63
+BELONGS ya.make
+    License text:
+        Copyright (c) 2013-2025 Niels Lohmann
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.MIT [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6738967b04c51108d809b85ac132d547
+BELONGS ya.make
+    License text:
+        Copyright &copy; 2013-2025 [Niels Lohmann](https://nlohmann.me)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [1323:1323]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77db38c27b2cc781224c151d0f786162
+BELONGS ya.make
+    License text:
+            @copyright Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+            @sa http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/detail/output/serializer.hpp [897:898]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8076846a0e6cd4735d49dcb2ef1f094d
+BELONGS ya.make
+    License text:
+                result["copyright"] = "(C) 2013-2025 Niels Lohmann";
+                result["name"] = "JSON for Modern C++";
+                result["url"] = "https://github.com/nlohmann/json";
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/json.hpp [255:257]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b2d024cee657b6d8a684658564761637
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [1333:1336]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8c3bf583dc390b261a3600ab20c9768
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [1333:1336]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ce7525b41b9b057bb4906c82b576055d
+BELONGS ya.make
+    License text:
+        The code is distributed under the MIT license, Copyright (c) 2009 Florian Loitsch.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/detail/conversions/to_chars.hpp [33:33]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f00eba1ede61dd156c5c44c3700d4ca0
+BELONGS ya.make
+    License text:
+        // SPDX-FileCopyrightText: 2009 Florian Loitsch <https://florian.loitsch.com/>
+        // SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann <https://nlohmann.me>
+        // SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/detail/conversions/to_chars.hpp [6:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f259313a7a86a144164c66030872d5f6
+BELONGS ya.make
+    License text:
+        // SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann <https://nlohmann.me>
+        // SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/nlohmann/adl_serializer.hpp [6:7]
+        include/nlohmann/byte_container_with_subtype.hpp [6:7]
+        include/nlohmann/detail/abi_macros.hpp [6:7]
+        include/nlohmann/detail/conversions/from_json.hpp [6:7]
+        include/nlohmann/detail/conversions/to_chars.hpp [6:8]
+        include/nlohmann/detail/conversions/to_json.hpp [6:7]
+        include/nlohmann/detail/exceptions.hpp [6:7]
+        include/nlohmann/detail/hash.hpp [6:7]
+        include/nlohmann/detail/input/binary_reader.hpp [6:7]
+        include/nlohmann/detail/input/input_adapters.hpp [6:7]
+        include/nlohmann/detail/input/json_sax.hpp [6:7]
+        include/nlohmann/detail/input/lexer.hpp [6:7]
+        include/nlohmann/detail/input/parser.hpp [6:7]
+        include/nlohmann/detail/input/position_t.hpp [6:7]
+        include/nlohmann/detail/iterators/internal_iterator.hpp [6:7]
+        include/nlohmann/detail/iterators/iter_impl.hpp [6:7]
+        include/nlohmann/detail/iterators/iteration_proxy.hpp [6:7]
+        include/nlohmann/detail/iterators/iterator_traits.hpp [6:7]
+        include/nlohmann/detail/iterators/json_reverse_iterator.hpp [6:7]
+        include/nlohmann/detail/iterators/primitive_iterator.hpp [6:7]
+        include/nlohmann/detail/json_custom_base_class.hpp [6:7]
+        include/nlohmann/detail/json_pointer.hpp [6:7]
+        include/nlohmann/detail/json_ref.hpp [6:7]
+        include/nlohmann/detail/macro_scope.hpp [6:7]
+        include/nlohmann/detail/macro_unscope.hpp [6:7]
+        include/nlohmann/detail/meta/call_std/begin.hpp [6:7]
+        include/nlohmann/detail/meta/call_std/end.hpp [6:7]
+        include/nlohmann/detail/meta/cpp_future.hpp [6:8]
+        include/nlohmann/detail/meta/detected.hpp [6:7]
+        include/nlohmann/detail/meta/identity_tag.hpp [6:7]
+        include/nlohmann/detail/meta/is_sax.hpp [6:7]
+        include/nlohmann/detail/meta/std_fs.hpp [6:7]
+        include/nlohmann/detail/meta/type_traits.hpp [6:7]
+        include/nlohmann/detail/meta/void_t.hpp [6:7]
+        include/nlohmann/detail/output/binary_writer.hpp [6:7]
+        include/nlohmann/detail/output/output_adapters.hpp [6:7]
+        include/nlohmann/detail/output/serializer.hpp [6:8]
+        include/nlohmann/detail/string_concat.hpp [6:7]
+        include/nlohmann/detail/string_escape.hpp [6:7]
+        include/nlohmann/detail/string_utils.hpp [6:7]
+        include/nlohmann/detail/value_t.hpp [6:7]
+        include/nlohmann/json.hpp [6:7]
+        include/nlohmann/json_fwd.hpp [6:7]
+        include/nlohmann/ordered_map.hpp [6:7]
+        include/nlohmann/thirdparty/hedley/hedley.hpp [8:10]
+        include/nlohmann/thirdparty/hedley/hedley_undef.hpp [6:7]

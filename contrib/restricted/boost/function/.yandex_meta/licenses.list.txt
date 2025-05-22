@@ -1,0 +1,67 @@
+====================BSL-1.0====================
+## License
+
+Distributed under the [Boost Software License, Version 1.0](http://boost.org/LICENSE_1_0.txt).
+
+====================BSL-1.0====================
+//  Copyright Douglas Gregor 2001-2003. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Copyright Douglas Gregor 2002-2003. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Use, modification and distribution is subject to
+//  the Boost Software License, Version 1.0.
+//  (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Use, modification and distribution is subject to the Boost
+//  Software License, Version 1.0.  (See accompanying file
+//  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+//  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+//  (See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+Distributed under the [Boost Software License, Version 1.0](http://boost.org/LICENSE_1_0.txt).
+
+====================COPYRIGHT====================
+//  Copyright (C) Douglas Gregor 2008
+
+
+====================COPYRIGHT====================
+//  Copyright Douglas Gregor 2001-2003. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Douglas Gregor 2001-2006
+//  Copyright Emil Dotchevski 2007
+//  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+//  (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Douglas Gregor 2002-2003. Use, modification and
+//  distribution is subject to the Boost Software License, Version
+//  1.0. (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+//  Copyright Douglas Gregor 2004.
+//  Copyright 2005 Peter Dimov

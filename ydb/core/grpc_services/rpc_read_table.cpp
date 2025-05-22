@@ -7,10 +7,10 @@
 #include "local_rate_limiter.h"
 #include "service_table.h"
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
@@ -23,6 +23,8 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <util/generic/size_literals.h>
+
+#include <ydb/core/protos/stream.pb.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -54,7 +56,7 @@ static void NullSerializeReadTableResponse(const TString& input, Ydb::StatusIds:
         snapshot->set_tx_id(txId);
     }
 
-    readTableResponse.mutable_result()->set_result_set(input.Data(), input.Size());
+    readTableResponse.mutable_result()->set_result_set(input.data(), input.size());
     Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output);
 }
 
@@ -65,49 +67,6 @@ static void NullSerializeReadTableResponse(const google::protobuf::RepeatedPtrFi
         readTableResponse.mutable_issues()->CopyFrom(message);
     }
     Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output);
-}
-
-static NKikimrMiniKQL::TParams ConvertKey(const Ydb::TypedValue& key) {
-    NKikimrMiniKQL::TParams protobuf;
-    ConvertYdbTypeToMiniKQLType(key.type(), *protobuf.MutableType());
-    ConvertYdbValueToMiniKQLValue(key.type(), key.value(), *protobuf.MutableValue());
-    return protobuf;
-}
-
-template<class TGetOutput>
-static void ConvertKeyRange(const Ydb::Table::KeyRange& keyRange, const TGetOutput& getOutput) {
-    switch (keyRange.from_bound_case()) {
-        case Ydb::Table::KeyRange::kGreaterOrEqual: {
-            auto* output = getOutput();
-            output->SetFromInclusive(true);
-            output->MutableFrom()->CopyFrom(ConvertKey(keyRange.greater_or_equal()));
-            break;
-        }
-        case Ydb::Table::KeyRange::kGreater: {
-            auto* output = getOutput();
-            output->SetFromInclusive(false);
-            output->MutableFrom()->CopyFrom(ConvertKey(keyRange.greater()));
-            break;
-        }
-        default:
-            break;
-    }
-    switch (keyRange.to_bound_case()) {
-        case Ydb::Table::KeyRange::kLessOrEqual: {
-            auto* output = getOutput();
-            output->SetToInclusive(true);
-            output->MutableTo()->CopyFrom(ConvertKey(keyRange.less_or_equal()));
-            break;
-        }
-        case Ydb::Table::KeyRange::kLess: {
-            auto* output = getOutput();
-            output->SetToInclusive(false);
-            output->MutableTo()->CopyFrom(ConvertKey(keyRange.less()));
-            break;
-        }
-        default:
-            break;
-    }
 }
 
 class TReadTableRPC : public TActorBootstrapped<TReadTableRPC> {
@@ -152,7 +111,7 @@ public:
         SendProposeRequest(ctx);
 
         auto actorId = SelfId();
-        const TActorSystem* const as = ctx.ExecutorThread.ActorSystem;
+        const TActorSystem* const as = ctx.ActorSystem();
         auto clientLostCb = [actorId, as]() {
             LOG_WARN(*as, NKikimrServices::READ_TABLE_API, "ForgetAction occurred, send TEvPoisonPill");
             as->Send(actorId, new TEvents::TEvPoisonPill());
@@ -214,6 +173,9 @@ private:
                 } else {
                     TStringStream str;
                     str << "Response version missmatched";
+                    if (msg->Record.HasReadTableResponseVersion()) {
+                        str << " , got: " << msg->Record.GetReadTableResponseVersion();
+                    }
                     LOG_ERROR(ctx, NKikimrServices::READ_TABLE_API,
                               "%s", str.Str().data());
                     const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str.Str());
@@ -243,8 +205,11 @@ private:
                 return ReplyFinishStream(Ydb::StatusIds::UNAUTHORIZED, issueMessage, ctx);
             }
             case TEvTxUserProxy::TResultStatus::ResolveError: {
-                const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Got ResolveError response from TxProxy");
+                NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Got ResolveError response from TxProxy");
                 auto tmp = issueMessage.Add();
+                for (const auto& unresolved : msg->Record.GetUnresolvedKeys()) {
+                    issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(unresolved));
+                }
                 NYql::IssueToMessage(issue, tmp);
                 return ReplyFinishStream(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
             }
@@ -479,7 +444,7 @@ private:
     void SendProposeRequest(const TActorContext &ctx) {
         const auto req = TEvReadTableRequest::GetProtoRequest(Request_.get());
         auto actorId = SelfId();
-        const TActorSystem* const as = ctx.ExecutorThread.ActorSystem;
+        const TActorSystem* const as = ctx.ActorSystem();
         auto cb = [actorId, as](size_t left) {
             as->Send(actorId, new TRpcServices::TEvGrpcNextReply{left});
         };
@@ -525,6 +490,20 @@ private:
         settings.TablePath = req->path();
         settings.Ordered = req->ordered();
         settings.RequireResultSet = true;
+
+        // Right now assume return_not_null_data_as_optional is true by default
+        // Sometimes we well change this default
+        switch (req->return_not_null_data_as_optional()) {
+            case Ydb::FeatureFlag::DISABLED:
+                settings.DataFormat = NTxProxy::EReadTableFormat::YdbResultSetWithNotNullSupport;
+                break;
+            case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
+            case Ydb::FeatureFlag::ENABLED:
+            default:
+                settings.DataFormat = NTxProxy::EReadTableFormat::YdbResultSet;
+                break;
+        }
+
         if (req->row_limit()) {
             settings.MaxRows = req->row_limit();
         }
@@ -533,15 +512,7 @@ private:
             settings.Columns.push_back(col);
         }
 
-        try {
-            ConvertKeyRange(req->key_range(), [&]{ return &settings.KeyRange; });
-        } catch (const std::exception& ex) {
-            const NYql::TIssue& issue = NYql::ExceptionToIssue(ex);
-            google::protobuf::RepeatedPtrField<TYdbIssueMessageType> message;
-            auto item = message.Add();
-            NYql::IssueToMessage(issue, item);
-            return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx);
-        }
+        settings.KeyRange.CopyFrom(req->key_range());
 
         ReadTableActor = ctx.RegisterWithSameMailbox(NKikimr::NTxProxy::CreateReadTableSnapshotWorker(settings));
     }

@@ -1,21 +1,34 @@
 # actions.py
+from __future__ import annotations
+
+from typing import Union, Callable, Any
 
 from .exceptions import ParseException
 from .util import col, replaced_by_pep8
+from .results import ParseResults
+
+
+ParseAction = Union[
+    Callable[[], Any],
+    Callable[[ParseResults], Any],
+    Callable[[int, ParseResults], Any],
+    Callable[[str, int, ParseResults], Any],
+]
 
 
 class OnlyOnce:
     """
     Wrapper for parse actions, to ensure they are only called once.
+    Note: parse action signature must include all 3 arguments.
     """
 
-    def __init__(self, method_call):
+    def __init__(self, method_call: Callable[[str, int, ParseResults], Any]) -> None:
         from .core import _trim_arity
 
         self.callable = _trim_arity(method_call)
         self.called = False
 
-    def __call__(self, s, l, t):
+    def __call__(self, s: str, l: int, t: ParseResults) -> ParseResults:
         if not self.called:
             results = self.callable(s, l, t)
             self.called = True
@@ -30,20 +43,20 @@ class OnlyOnce:
         self.called = False
 
 
-def match_only_at_col(n):
+def match_only_at_col(n: int) -> ParseAction:
     """
     Helper method for defining parse actions that require matching at
     a specific column in the input text.
     """
 
-    def verify_col(strg, locn, toks):
+    def verify_col(strg: str, locn: int, toks: ParseResults) -> None:
         if col(locn, strg) != n:
             raise ParseException(strg, locn, f"matched token not at column {n}")
 
     return verify_col
 
 
-def replace_with(repl_str):
+def replace_with(repl_str: str) -> ParseAction:
     """
     Helper method for common parse actions that simply return
     a literal value.  Especially useful when used with
@@ -60,7 +73,7 @@ def replace_with(repl_str):
     return lambda s, l, t: [repl_str]
 
 
-def remove_quotes(s, l, t):
+def remove_quotes(s: str, l: int, t: ParseResults) -> Any:
     """
     Helper parse action for removing quotation marks from parsed
     quoted strings.
@@ -77,7 +90,7 @@ def remove_quotes(s, l, t):
     return t[0][1:-1]
 
 
-def with_attribute(*args, **attr_dict):
+def with_attribute(*args: tuple[str, str], **attr_dict) -> ParseAction:
     """
     Helper to create a validating parse action to be used with start
     tags created with :class:`make_xml_tags` or
@@ -111,7 +124,6 @@ def with_attribute(*args, **attr_dict):
             <div type="graph">1,3 2,3 1,1</div>
             <div>this has no type</div>
             </div>
-
         '''
         div,div_end = make_html_tags("div")
 
@@ -134,17 +146,17 @@ def with_attribute(*args, **attr_dict):
         1 4 0 1 0
         1,3 2,3 1,1
     """
+    attrs_list: list[tuple[str, str]] = []
     if args:
-        attrs = args[:]
+        attrs_list.extend(args)
     else:
-        attrs = attr_dict.items()
-    attrs = [(k, v) for k, v in attrs]
+        attrs_list.extend(attr_dict.items())
 
-    def pa(s, l, tokens):
-        for attrName, attrValue in attrs:
+    def pa(s: str, l: int, tokens: ParseResults) -> None:
+        for attrName, attrValue in attrs_list:
             if attrName not in tokens:
                 raise ParseException(s, l, "no matching attribute " + attrName)
-            if attrValue != with_attribute.ANY_VALUE and tokens[attrName] != attrValue:
+            if attrValue != with_attribute.ANY_VALUE and tokens[attrName] != attrValue:  # type: ignore [attr-defined]
                 raise ParseException(
                     s,
                     l,
@@ -157,7 +169,7 @@ def with_attribute(*args, **attr_dict):
 with_attribute.ANY_VALUE = object()  # type: ignore [attr-defined]
 
 
-def with_class(classname, namespace=""):
+def with_class(classname: str, namespace: str = "") -> ParseAction:
     """
     Simplified version of :class:`with_attribute` when
     matching on a div class - made difficult because ``class`` is
@@ -197,21 +209,11 @@ def with_class(classname, namespace=""):
     return with_attribute(**{classattr: classname})
 
 
-# pre-PEP8 compatibility symbols
+# Compatibility synonyms
 # fmt: off
-@replaced_by_pep8(replace_with)
-def replaceWith(): ...
-
-@replaced_by_pep8(remove_quotes)
-def removeQuotes(): ...
-
-@replaced_by_pep8(with_attribute)
-def withAttribute(): ...
-
-@replaced_by_pep8(with_class)
-def withClass(): ...
-
-@replaced_by_pep8(match_only_at_col)
-def matchOnlyAtCol(): ...
-
+replaceWith = replaced_by_pep8("replaceWith", replace_with)
+removeQuotes = replaced_by_pep8("removeQuotes", remove_quotes)
+withAttribute = replaced_by_pep8("withAttribute", with_attribute)
+withClass = replaced_by_pep8("withClass", with_class)
+matchOnlyAtCol = replaced_by_pep8("matchOnlyAtCol", match_only_at_col)
 # fmt: on

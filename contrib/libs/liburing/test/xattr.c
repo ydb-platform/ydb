@@ -295,7 +295,6 @@ Exit:
 /* Test driver for failure cases of fsetxattr and fgetxattr. */
 static int test_failure_fxattr(void)
 {
-	int rc = 0;
 	struct io_uring ring;
 	char value[XATTR_SIZE];
 
@@ -314,31 +313,36 @@ static int test_failure_fxattr(void)
 	}
 
 	/* Test writing attributes. */
-	assert(io_uring_fsetxattr(&ring, -1, KEY1, VALUE1, strlen(VALUE1), 0) < 0);
-	assert(io_uring_fsetxattr(&ring, fd, NULL, VALUE1, strlen(VALUE1), 0) < 0);
-	assert(io_uring_fsetxattr(&ring, fd, KEY1, NULL,   strlen(VALUE1), 0) < 0);
-	assert(io_uring_fsetxattr(&ring, fd, KEY1, VALUE1, 0,              0) == 0);
-	assert(io_uring_fsetxattr(&ring, fd, KEY1, VALUE1, -1,             0) < 0);
+	if (io_uring_fsetxattr(&ring, -1, KEY1, VALUE1, strlen(VALUE1), 0) >= 0)
+		return 1;
+	if (io_uring_fsetxattr(&ring, fd, NULL, VALUE1, strlen(VALUE1), 0) >= 0)
+		return 1;
+	if (io_uring_fsetxattr(&ring, fd, KEY1, NULL,   strlen(VALUE1), 0) >= 0)
+		return 1;
+	if (io_uring_fsetxattr(&ring, fd, KEY1, VALUE1, 0, 0) != 0)
+		return 1;
+	if (io_uring_fsetxattr(&ring, fd, KEY1, VALUE1, -1, 0) >= 0)
+		return 1;
 
 	/* Test reading attributes. */
-	assert(io_uring_fgetxattr(&ring, -1, KEY1, value, XATTR_SIZE) < 0);
-	assert(io_uring_fgetxattr(&ring, fd, NULL, value, XATTR_SIZE) < 0);
-	assert(io_uring_fgetxattr(&ring, fd, KEY1, value, 0)          == 0);
+	if (io_uring_fgetxattr(&ring, -1, KEY1, value, XATTR_SIZE) >= 0)
+		return 1;
+	if (io_uring_fgetxattr(&ring, fd, NULL, value, XATTR_SIZE) >= 0)
+		return 1;
+	if (io_uring_fgetxattr(&ring, fd, KEY1, value, 0) != 0)
+		return 1;
 
 	/* Cleanup. */
 	close(fd);
 	unlink(FILENAME);
-
 	io_uring_queue_exit(&ring);
-
-	return rc;
+	return 0;
 }
 
 
 /* Test driver for failure cases for setxattr and getxattr. */
 static int test_failure_xattr(void)
 {
-	int rc = 0;
 	struct io_uring ring;
 	char value[XATTR_SIZE];
 
@@ -353,24 +357,33 @@ static int test_failure_xattr(void)
 	t_create_file(FILENAME, 0);
 
 	/* Test writing attributes. */
-	assert(io_uring_setxattr(&ring, "complete garbage", KEY1, VALUE1, strlen(VALUE1), 0) < 0);
-	assert(io_uring_setxattr(&ring, NULL,     KEY1, VALUE1, strlen(VALUE1), 0) < 0);
-	assert(io_uring_setxattr(&ring, FILENAME, NULL, VALUE1, strlen(VALUE1), 0) < 0);
-	assert(io_uring_setxattr(&ring, FILENAME, KEY1, NULL,   strlen(VALUE1), 0) < 0);
-	assert(io_uring_setxattr(&ring, FILENAME, KEY1, VALUE1, 0,              0) == 0);
+	if (io_uring_setxattr(&ring, "complete garbage", KEY1, VALUE1, strlen(VALUE1), 0) >= 0)
+		return 1;
+	if (io_uring_setxattr(&ring, NULL,     KEY1, VALUE1, strlen(VALUE1), 0) >= 0)
+		return 1;
+	if (io_uring_setxattr(&ring, FILENAME, NULL, VALUE1, strlen(VALUE1), 0) >= 0)
+		return 1;
+	if (io_uring_setxattr(&ring, FILENAME, KEY1, NULL,   strlen(VALUE1), 0) >= 0)
+		return 1;
+	if (io_uring_setxattr(&ring, FILENAME, KEY1, VALUE1, 0, 0) != 0)
+		return 1;
 
 	/* Test reading attributes. */
-	assert(io_uring_getxattr(&ring, "complete garbage", KEY1, value, XATTR_SIZE) < 0);
-	assert(io_uring_getxattr(&ring, NULL,     KEY1, value, XATTR_SIZE) < 0);
-	assert(io_uring_getxattr(&ring, FILENAME, NULL, value, XATTR_SIZE) < 0);
-	assert(io_uring_getxattr(&ring, FILENAME, KEY1, NULL,  XATTR_SIZE) == 0);
-	assert(io_uring_getxattr(&ring, FILENAME, KEY1, value, 0)          == 0);
+	if (io_uring_getxattr(&ring, "complete garbage", KEY1, value, XATTR_SIZE) >= 0)
+		return 1;
+	if (io_uring_getxattr(&ring, NULL,     KEY1, value, XATTR_SIZE) >= 0)
+		return 1;
+	if (io_uring_getxattr(&ring, FILENAME, NULL, value, XATTR_SIZE) >= 0)
+		return 1;
+	if (io_uring_getxattr(&ring, FILENAME, KEY1, NULL,  XATTR_SIZE) != 0)
+		return 1;
+	if (io_uring_getxattr(&ring, FILENAME, KEY1, value, 0) != 0)
+		return 1;
 
 	/* Cleanup. */
 	io_uring_queue_exit(&ring);
 	unlink(FILENAME);
-
-	return rc;
+	return 0;
 }
 
 /* Test for invalid SQE, this will cause a segmentation fault if enabled. */

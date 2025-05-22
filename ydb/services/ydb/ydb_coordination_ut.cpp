@@ -1,9 +1,10 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -140,7 +141,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClient) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::UNAUTHORIZED, TStatusDescription(result));
         bool issueFound = false;
         for (auto& issue : result.GetIssues()) {
-            NYql::WalkThroughIssues(issue, false, [&issueFound](const NYql::TIssue& issue, ui16){
+            NYdb::NIssue::WalkThroughIssues(issue, false, [&issueFound](const NYdb::NIssue::TIssue& issue, ui16){
                 if (issue.GetCode() == NKikimrIssues::TIssuesIds::ACCESS_DENIED) {
                     issueFound = true;
                 }
@@ -180,7 +181,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClient) {
 
         auto result = ExpectSuccess(context.Client.DescribeNode("/Root/node2"));
         UNIT_ASSERT_VALUES_EQUAL(
-            result.GetSelfCheckPeriod(),
+            result.GetSelfCheckPeriod().value(),
             TDuration::MilliSeconds(1234));
     }
 
@@ -197,7 +198,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClient) {
 
         auto desc1 = ExpectSuccess(context.Client.DescribeNode("/Root/node1"));
         UNIT_ASSERT_VALUES_EQUAL(
-            desc1.GetSelfCheckPeriod(),
+            desc1.GetSelfCheckPeriod().value(),
             TDuration::MilliSeconds(1234));
 
         ExpectSuccess(
@@ -209,10 +210,10 @@ Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClient) {
 
         auto desc2 = ExpectSuccess(context.Client.DescribeNode("/Root/node1"));
         UNIT_ASSERT_VALUES_EQUAL(
-            desc2.GetSelfCheckPeriod(),
+            desc2.GetSelfCheckPeriod().value(),
             TDuration::MilliSeconds(1234));
         UNIT_ASSERT_VALUES_EQUAL(
-            desc2.GetSessionGracePeriod(),
+            desc2.GetSessionGracePeriod().value(),
             TDuration::MilliSeconds(5678));
 
         ExpectSuccess(
@@ -224,10 +225,10 @@ Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClient) {
 
         auto desc3 = ExpectSuccess(context.Client.DescribeNode("/Root/node1"));
         UNIT_ASSERT_VALUES_EQUAL(
-            desc3.GetSelfCheckPeriod(),
+            desc3.GetSelfCheckPeriod().value(),
             TDuration::MilliSeconds(2345));
         UNIT_ASSERT_VALUES_EQUAL(
-            desc2.GetSessionGracePeriod(),
+            desc2.GetSessionGracePeriod().value(),
             TDuration::MilliSeconds(5678));
 
         ExpectSuccess(
@@ -676,7 +677,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewCoordinationClientAuth) {
 
             for (int idx = 2; idx <= 4; ++idx) {
                 TString path = TStringBuilder() << "/Root/node" << idx;
-                TVector<TString> permissions(allPermissions.begin(), allPermissions.begin() + (idx - 1));
+                std::vector<std::string> permissions(allPermissions.begin(), allPermissions.begin() + (idx - 1));
                 ExpectSuccess(context.SchemeClient.ModifyPermissions(path,
                     TModifyPermissionsSettings()
                         .AddGrantPermissions(TPermissions(

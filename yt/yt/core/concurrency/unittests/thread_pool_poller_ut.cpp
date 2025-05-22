@@ -24,7 +24,7 @@ class TPollableMock
     : public IPollable
 {
 public:
-    explicit TPollableMock(TString loggingTag = {})
+    explicit TPollableMock(std::string loggingTag = {})
         : LoggingTag_(std::move(loggingTag))
     { }
 
@@ -38,14 +38,9 @@ public:
         return static_cast<void*>(Cookie_.Get());
     }
 
-    const TString& GetLoggingTag() const override
+    const std::string& GetLoggingTag() const override
     {
         return LoggingTag_;
-    }
-
-    EPollablePriority GetPriority() const override
-    {
-        return EPollablePriority::Normal;
     }
 
     void OnEvent(EPollControl control) override
@@ -72,7 +67,7 @@ public:
     }
 
 private:
-    const TString LoggingTag_;
+    const std::string LoggingTag_;
 
     const TPromise<void> RetryPromise_ = NewPromise<void>();
     const TPromise<void> ShutdownPromise_ = NewPromise<void>();
@@ -132,7 +127,7 @@ TEST_F(TThreadPoolPollerTest, SimpleReconfigure)
     auto pollable = New<TPollableMock>();
     EXPECT_TRUE(Poller->TryRegister(pollable));
 
-    Poller->Reconfigure(InitialThreadCount * 2);
+    Poller->SetThreadCount(InitialThreadCount * 2);
 
     std::vector<TFuture<void>> futures{
         Poller->Unregister(pollable),
@@ -189,7 +184,7 @@ TEST_F(TThreadPoolPollerTest, Stress)
     auxThreads.emplace_back([&] {
         for (int j = 0; j < 10; ++j) {
             for (int i = 1, sign = -1; i < 10; ++i, sign *= -1) {
-                Poller->Reconfigure(InitialThreadCount + sign * i);
+                Poller->SetThreadCount(InitialThreadCount + sign * i);
             }
             std::this_thread::yield();
         }

@@ -32,7 +32,7 @@ namespace NKikimr::NBlobDepot {
             switch (const ui32 type = event->Type()) {
                 case TEvBlobStorage::EvGet: {
                     auto& get = static_cast<TEvBlobStorage::TEvGet&>(*event);
-                    response = get.MakeErrorResponse(NKikimrProto::OK, "proxy has vanished", groupId);
+                    response = get.MakeErrorResponse(NKikimrProto::OK, "proxy has vanished", TGroupId::FromValue(groupId));
                     auto& r = static_cast<TEvBlobStorage::TEvGetResult&>(*response);
                     for (size_t i = 0; i < r.ResponseSz; ++i) {
                         r.Responses[i].Status = NKikimrProto::NODATA;

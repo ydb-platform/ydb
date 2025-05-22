@@ -34,6 +34,20 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TGetMasterConsistentStateCommand
+    : public TTypedCommand<NApi::TGetMasterConsistentStateOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetMasterConsistentStateCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TExitReadOnlyCommand
     : public TTypedCommand<NApi::TExitReadOnlyOptions>
 {
@@ -254,6 +268,8 @@ private:
     TString Address_;
     NApi::EMaintenanceType Type_;
     TString Comment_;
+    // COMPAT(kvk1920): Compatibility with pre-24.2 HTTP clients.
+    bool SupportsPerTargetResponse_;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -273,10 +289,12 @@ private:
     TString Address_;
     bool Mine_ = false;
     bool All_ = false;
-    std::optional<TString> User_;
+    std::optional<std::string> User_;
     std::optional<NApi::TMaintenanceId> Id_;
     std::optional<std::vector<NApi::TMaintenanceId>> Ids_;
     std::optional<NApi::EMaintenanceType> Type_;
+    // COMPAT(kvk1920): Compatibility with pre-24.2 HTTP clients.
+    bool SupportsPerTargetResponse_;
 
     void DoExecute(ICommandContextPtr context) override;
 };

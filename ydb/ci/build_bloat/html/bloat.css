@@ -1,0 +1,57 @@
+/* Based on https://github.com/martine/webtreemap */
+
+body {
+  font-family: sans-serif;
+  font-size: 0.8em;
+  height: calc(100vh - 20px);
+}
+
+.content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1ex;
+}
+
+.header {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  vertical-align: middle;
+}
+
+.header div {
+  padding: 1ex 1em;
+}
+
+.header legend {
+  display: flex;
+  flex-direction: row;
+  gap: 1em;
+  padding: 0;
+}
+
+.header .note {
+  width: 100%;
+  flex-basis: content;
+  flex-grow: 1;
+}
+
+.header .webtreemap-node {
+  flex-basis: max-content;
+  flex-grow: 0;
+  position: relative;
+  text-align: center;
+}
+
+#map {
+  flex-basis: 100%;
+
+  min-width: 300px;
+  min-height: 300px;
+
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}

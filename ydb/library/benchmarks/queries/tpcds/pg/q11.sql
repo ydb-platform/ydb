@@ -19,11 +19,11 @@ with year_total as (
  group by c_customer_id
          ,c_first_name
          ,c_last_name
-         ,c_preferred_cust_flag 
+         ,c_preferred_cust_flag
          ,c_birth_country
          ,c_login
          ,c_email_address
-         ,d_year 
+         ,d_year
  union all
  select c_customer_id customer_id
        ,c_first_name customer_first_name
@@ -43,17 +43,17 @@ with year_total as (
  group by c_customer_id
          ,c_first_name
          ,c_last_name
-         ,c_preferred_cust_flag 
+         ,c_preferred_cust_flag
          ,c_birth_country
          ,c_login
          ,c_email_address
          ,d_year
          )
-  select  
+  select
                   t_s_secyear.customer_id
                  ,t_s_secyear.customer_first_name
                  ,t_s_secyear.customer_last_name
-                 ,t_s_secyear.customer_email_address
+                 ,t_s_secyear.customer_preferred_cust_flag
  from year_total t_s_firstyear
      ,year_total t_s_secyear
      ,year_total t_w_firstyear
@@ -69,14 +69,14 @@ with year_total as (
          and t_s_secyear.dyear = 2001+1
          and t_w_firstyear.dyear = 2001
          and t_w_secyear.dyear = 2001+1
-         and t_s_firstyear.year_total > 0::numeric
-         and t_w_firstyear.year_total > 0::numeric
-         and case when t_w_firstyear.year_total > 0::numeric then t_w_secyear.year_total / t_w_firstyear.year_total else 0.0::numeric end
-             > case when t_s_firstyear.year_total > 0::numeric then t_s_secyear.year_total / t_s_firstyear.year_total else 0.0::numeric end
+         and t_s_firstyear.year_total > 0
+         and t_w_firstyear.year_total > 0
+         and case when t_w_firstyear.year_total > 0 then t_w_secyear.year_total / t_w_firstyear.year_total else 0.0 end
+             > case when t_s_firstyear.year_total > 0 then t_s_secyear.year_total / t_s_firstyear.year_total else 0.0 end
  order by t_s_secyear.customer_id
          ,t_s_secyear.customer_first_name
          ,t_s_secyear.customer_last_name
-         ,t_s_secyear.customer_email_address
+         ,t_s_secyear.customer_preferred_cust_flag
 limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query11.tpl

@@ -1,9 +1,12 @@
 #pragma once
 
 #include <ydb/core/protos/grpc.pb.h>
+#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/core/protos/msgbus_kv.pb.h>
 
 #include <util/datetime/base.h>
-#include <ydb/library/grpc/client/grpc_common.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
 
 namespace NKikimr {
     namespace NGRpcProxy {
@@ -22,7 +25,6 @@ namespace NKikimr {
         using TJSONCallback = TCallback<NKikimrClient::TJSON>;
         using TNodeRegistrationResponseCallback = TCallback<NKikimrClient::TNodeRegistrationResponse>;
         using TCmsResponseCallback = TCallback<NKikimrClient::TCmsResponse>;
-        using TSqsResponseCallback = TCallback<NKikimrClient::TSqsResponse>;
         using TConsoleResponseCallback = TCallback<NKikimrClient::TConsoleResponse>;
 
         using TFinishCallback = std::function<void (const TGrpcError*)>;
@@ -62,7 +64,6 @@ namespace NKikimr {
             // ADMIN INTERNAL INTERFACE
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void SchemeInitRoot(const NKikimrClient::TSchemeInitRoot& request, TResponseCallback callback);
-            void BSAdm(const NKikimrClient::TBSAdm& request, TResponseCallback callback);
             void BlobStorageConfig(const NKikimrClient::TBlobStorageConfigRequest& request, TResponseCallback callback);
 
             void ResolveNode(const NKikimrClient::TResolveNodeRequest& request, TResponseCallback callback);
@@ -85,11 +86,6 @@ namespace NKikimr {
             void CmsRequest(const NKikimrClient::TCmsRequest& request, TCmsResponseCallback callback);
 
             /////////////////////////////////////////////////////////////////////////////////////////////////
-            // SQS INTERFACE
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void SqsRequest(const NKikimrClient::TSqsRequest& request, TSqsResponseCallback callback);
-
-            /////////////////////////////////////////////////////////////////////////////////////////////////
             // CONSOLE INTERFACE
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void ConsoleRequest(const NKikimrClient::TConsoleRequest& request, TConsoleResponseCallback callback);
@@ -97,9 +93,6 @@ namespace NKikimr {
             /////////////////////////////////////////////////////////////////////////////////////////////////
             // INTROSPECTION
             /////////////////////////////////////////////////////////////////////////////////////////////////
-            void LocalMKQL(const NKikimrClient::TLocalMKQL& request, TResponseCallback callback);
-            void LocalSchemeTx(const NKikimrClient::TLocalSchemeTx& request, TResponseCallback callback);
-            void TabletKillRequest(const NKikimrClient::TTabletKillRequest& request, TResponseCallback callback);
             void InterconnectDebug(const NKikimrClient::TInterconnectDebug& request, TResponseCallback callback);
 
             /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -107,29 +100,8 @@ namespace NKikimr {
             /////////////////////////////////////////////////////////////////////////////////////////////////
             void TabletStateRequest(const NKikimrClient::TTabletStateRequest& request, TResponseCallback callback);
 
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            // BLOBSTORAGE LOAD TEST
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void BlobStorageLoadRequest(const NKikimrClient::TBsTestLoadRequest& request, TResponseCallback callback);
-            void BlobStorageGetRequest(const NKikimrClient::TBsGetRequest& request, TResponseCallback callback);
-
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            // DATASHARD LOAD TEST
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void DataShardLoadRequest(const NKikimrClient::TDsTestLoadRequest& request, TResponseCallback callback);
-
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            // HTTP INTERFACE
-            /////////////////////////////////////////////////////////////////////////////////////////////////
-            void DbSchema(const NKikimrClient::TJSON& request, TJSONCallback callback);
-            void DbOperation(const NKikimrClient::TJSON& request, TJSONCallback callback);
-            void DbBatch(const NKikimrClient::TJSON& request, TJSONCallback callback);
-
-            void WhoAmI(const NKikimrClient::TWhoAmI& request, TResponseCallback callback);
             void FillNode(const NKikimrClient::TFillNodeRequest& request, TResponseCallback callback);
             void DrainNode(const NKikimrClient::TDrainNodeRequest& request, TResponseCallback callback);
-
-            void LoginRequest(const NKikimrClient::TLoginRequest& request, TResponseCallback callback);
         };
 
     } // NGRpcProxy

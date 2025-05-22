@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include <util/generic/string.h>
-
+#include <ydb/core/base/blobstorage_common.h>
 namespace NKikimr {
 
 inline TActorId MakeBlobStorageProxyID(ui32 blobStorageGroup) {
@@ -12,6 +12,10 @@ inline TActorId MakeBlobStorageProxyID(ui32 blobStorageGroup) {
     x[9] = (char)(blobStorageGroup >> 16);
     x[10] = (char)(blobStorageGroup >> 24);
     return TActorId(0, TStringBuf(x, 12));
+}
+
+inline TActorId MakeBlobStorageProxyID(TGroupId blobStorageGroup) {
+    return MakeBlobStorageProxyID(blobStorageGroup.GetRawId());
 }
 
 inline TActorId MakeLoadServiceID(ui32 nodeId) {
@@ -69,6 +73,11 @@ inline TActorId MakeBlobStoragePDiskID(ui32 node, ui32 pDiskID) {
 
 inline TActorId MakeBlobStorageReplBrokerID() {
     char x[12] = {'b', 's', 'r', 'e', 'p', 'l', 'b', 'r', 'o', 'k', 'e', 'r'};
+    return TActorId(0, TStringBuf(x, 12));
+}
+
+inline TActorId MakeBlobStorageSyncBrokerID() {
+    char x[12] = {'b', 's', 's', 'y', 'n', 'c', 'b', 'r', 'o', 'k', 'e', 'r'};
     return TActorId(0, TStringBuf(x, 12));
 }
 

@@ -5,6 +5,7 @@
 
 #include <util/charset/utf8.h>
 #include <util/generic/hash.h>
+#include <util/generic/yexception.h>
 #include <util/stream/output.h> // for IOutputStream
 #include <util/string/ascii.h>
 
@@ -49,7 +50,7 @@ public:
     }
     TTypeId GetTypeId() const override { return TypeId; }
     static TRawTypeValue ToRawTypeValue(const T& value) {
-        return TRawTypeValue((void*)&value, sizeof(T), TTypeInfo(TypeId));
+        return TRawTypeValue((void*)&value, sizeof(T), TypeId);
     }
 
     static const char* TypeName() {
@@ -166,7 +167,7 @@ public:
     }
 
     static TRawTypeValue ToRawTypeValue(const ::TString& value) {
-        return TRawTypeValue((const void*)value.data(), value.size(), TTypeInfo(TypeId));
+        return TRawTypeValue((const void*)value.data(), value.size(), TypeId);
     }
 };
 
@@ -212,8 +213,8 @@ public:
     }
 
     static TRawTypeValue ToRawTypeValue(const ::TString& value) {
-        Y_ABORT_UNLESS(value.size() <= MaxSize);
-        return TRawTypeValue((const void*)value.data(), value.size(), TTypeInfo(TypeId));
+        Y_ENSURE(value.size() <= MaxSize);
+        return TRawTypeValue((const void*)value.data(), value.size(), TypeId);
     }
 };
 
@@ -243,12 +244,21 @@ namespace NNames {
     extern const char Datetime[9];
     extern const char Timestamp[10];
     extern const char Interval[9];
+    extern const char Date32[7];
+    extern const char Datetime64[11];
+    extern const char Timestamp64[12];
+    extern const char Interval64[11];
 }
 
 class TDate : public IIntegerTypeWithKeyString<ui16, NTypeIds::Date, NNames::Date> {};
 class TDatetime : public IIntegerTypeWithKeyString<ui32, NTypeIds::Datetime, NNames::Datetime> {};
 class TTimestamp : public IIntegerTypeWithKeyString<ui64, NTypeIds::Timestamp, NNames::Timestamp> {};
 class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNames::Interval> {};
+
+class TDate32 : public IIntegerTypeWithKeyString<i32, NTypeIds::Date32, NNames::Date32> {};
+class TDatetime64 : public IIntegerTypeWithKeyString<i64, NTypeIds::Datetime64, NNames::Datetime64> {};
+class TTimestamp64 : public IIntegerTypeWithKeyString<i64, NTypeIds::Timestamp64, NNames::Timestamp64> {};
+class TInterval64 : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval64, NNames::Interval64> {};
 
 #define KIKIMR_FOREACH_MINIKQL_TYPE_I(name, size, macro, ...) macro(name, T##name, __VA_ARGS__)
 
@@ -279,6 +289,10 @@ class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNam
     xx(Interval, TInterval, __VA_ARGS__) \
     xx(DyNumber, TDyNumber, __VA_ARGS__) \
     xx(Uuid, TUuid, __VA_ARGS__) \
+    xx(Date32, TDate32, __VA_ARGS__) \
+    xx(Datetime64, TDatetime64, __VA_ARGS__) \
+    xx(Timestamp64, TTimestamp64, __VA_ARGS__) \
+    xx(Interval64, TInterval64, __VA_ARGS__) \
     /**/
 
 

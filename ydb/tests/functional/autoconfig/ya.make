@@ -5,12 +5,13 @@ TEST_SRCS(
     test_actorsystem.py
 )
 
-REQUIREMENTS(
-    cpu:4
-    ram:16
-)
-TIMEOUT(600)
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16 cpu:1)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 SPLIT_FACTOR(20)
 

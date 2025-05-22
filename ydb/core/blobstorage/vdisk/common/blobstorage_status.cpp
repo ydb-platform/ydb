@@ -22,6 +22,7 @@ namespace NKikimr {
         const TActorId NotifyId;
         const TInstant Now;
         const bool ReplDone;
+        const bool IsReadOnly;
         unsigned Counter;
         std::unique_ptr<TEvBlobStorage::TEvVStatusResult> Result;
 
@@ -32,17 +33,17 @@ namespace NKikimr {
             const NKikimrBlobStorage::TEvVStatus &record = Ev->Get()->Record;
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::RACE, SelfVDiskId, false,
-                    false, IncarnationGuid);
+                    false, false, IncarnationGuid);
                 SetRacingGroupInfo(record, Result->Record, GroupInfo);
                 LOG_DEBUG(ctx, BS_VDISK_OTHER, VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult Request# {%s} Response# {%s}",
                     SingleLineProto(record).data(), SingleLineProto(Result->Record).data()));
-                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, Ev->GetChannel());
+                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, Ev->GetChannel(), VCtx, {});
                 Die(ctx);
                 return;
             }
 
-            Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(NKikimrProto::OK, SelfVDiskId, true, ReplDone,
-                IncarnationGuid);
+            Result = std::make_unique<TEvBlobStorage::TEvVStatusResult>(
+                NKikimrProto::OK, SelfVDiskId, true, ReplDone, IsReadOnly, IncarnationGuid);
 
             const auto& oos = VCtx->GetOutOfSpaceState();
             Result->Record.SetStatusFlags(oos.GetGlobalStatusFlags().Flags);
@@ -69,10 +70,10 @@ namespace NKikimr {
             Result->Record.MergeFrom(ev->Get()->Record);
 
             if (Counter == 0) {
-                ctx.Send(NotifyId, new TEvents::TEvActorDied());
+                ctx.Send(NotifyId, new TEvents::TEvGone());
                 LOG_DEBUG(ctx, BS_VDISK_GET,
                     VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult"));
-                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, Ev->GetChannel());
+                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, Ev->GetChannel(), VCtx, {});
                 Die(ctx);
             }
         }
@@ -104,7 +105,8 @@ namespace NKikimr {
                 TEvBlobStorage::TEvVStatus::TPtr &ev,
                 const TActorId &notifyId,
                 const TInstant &now,
-                bool replDone)
+                bool replDone,
+                bool isReadOnly)
             : TActorBootstrapped<TStatusRequestHandler>()
             , VCtx(vctx)
             , SkeletonId(skeletonId)
@@ -118,6 +120,7 @@ namespace NKikimr {
             , NotifyId(notifyId)
             , Now(now)
             , ReplDone(replDone)
+            , IsReadOnly(isReadOnly)
             , Counter(0)
         {}
     };
@@ -134,9 +137,10 @@ namespace NKikimr {
             TEvBlobStorage::TEvVStatus::TPtr &ev,
             const TActorId &notifyId,
             const TInstant &now,
-            bool replDone) {
+            bool replDone,
+            bool isReadOnly) {
         return new TStatusRequestHandler(vctx, skeletonId, syncerId, syncLogId, ifaceMonGroup, selfVDiskId,
-            incarnationGuid, groupInfo, ev, notifyId, now, replDone);
+            incarnationGuid, groupInfo, ev, notifyId, now, replDone, isReadOnly);
     }
 
 } // NKikimr

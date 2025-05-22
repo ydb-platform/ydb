@@ -1,0 +1,23 @@
+(
+(let list (AsList
+    (AsStruct '('"time" (String '"2024-01-01T00:00:01Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+    (AsStruct '('"time" (String '"2024-01-01T00:00:02Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+    (AsStruct '('"time" (String '"2024-01-01T00:00:03Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+))
+(let input (FlatMap list (lambda '(row) (Just (AsStruct '('"data" (Member row '"data")) '('group0 (AsList (Member row '"user"))) '('"time" (Member row '"time")) '('"user" (Member row '"user")))))))
+(let keySelector (lambda '(row) '((StablePickle (Member row '"data")) (StablePickle (Member row 'group0)))))
+(let sortKeySelector (lambda '(row) (SafeCast (Member row '"time") (OptionalType (DataType 'Timestamp)))))
+(let interval (Interval '1000000))
+(let map (lambda '(item) (AsStruct)))
+(let reduce (lambda '(lhs rhs) (AsStruct)))
+(let hopping (MultiHoppingCore (Iterator input) keySelector sortKeySelector interval interval interval 
+    'true map reduce map map reduce 
+    (lambda '(key state time) (AsStruct 
+        '('_yql_time time) 
+        '('"data" (Nth key '"0")) 
+        '('group0 (Nth key '"1")))) '0))
+(let data (FormatType (TypeOf hopping))) # no typical comp node
+(let res (DataSink 'result))
+(let world (Write! world res (Key) data '('('type))))
+(return (Commit! world res))
+)

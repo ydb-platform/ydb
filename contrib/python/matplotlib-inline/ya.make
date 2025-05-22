@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.1.6)
+VERSION(0.1.7)
 
 LICENSE(BSD-3-Clause)
 
@@ -26,6 +26,7 @@ PY_SRCS(
 RESOURCE_FILES(
     PREFIX contrib/python/matplotlib-inline/
     .dist-info/METADATA
+    .dist-info/entry_points.txt
     .dist-info/top_level.txt
 )
 

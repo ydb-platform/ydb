@@ -1,0 +1,510 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0           0412e8c45e618ee4fef88e3b7e9f8baa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        api/unstable/crl.h [4:13]
+        api/unstable/fingerprint.h [4:13]
+        api/unstable/ktls.h [4:13]
+        pq-crypto/s2n_kyber_evp.c [4:13]
+        pq-crypto/s2n_kyber_evp.h [4:13]
+        tls/extensions/s2n_server_cert_status_request.c [4:13]
+        tls/extensions/s2n_server_cert_status_request.h [4:13]
+        tls/s2n_crl.c [4:13]
+        tls/s2n_crl.h [4:13]
+
+KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
+BELONGS ya.make
+FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE [2:202]
+
+KEEP     Apache-2.0           44187c59793e7ee8c9720576a5fe7c41
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 92.21
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        utils/s2n_rfc5952.h [5:13]
+
+KEEP     Public-Domain        46848e7956a6bedc8a3784e0abd57c0c
+BELONGS ya.make
+    License text:
+        /* Based on the public domain implementation in
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        pq-crypto/kyber_r3/kyber512r3_fips202.c [1:1]
+
+KEEP     Public-Domain        4a195ae04383fd8b4accb4b7dfa4a8fd
+BELONGS ya.make
+    License text:
+         * and the public domain "TweetFips202" implementation
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 75.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        pq-crypto/kyber_r3/kyber512r3_fips202.c [4:4]
+
+KEEP     Apache-2.0           5b1f5708e6e10c9740fe8b501f9b7c9e
+BELONGS ya.make
+    License text:
+        s2n-tls is a C99 implementation of the TLS/SSL protocols that is designed to be simple, small, fast, and with security as a priority. It is released and licensed under the Apache License 2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [3:3]
+        api/s2n.h [20:20]
+
+KEEP     Brian-Gladman-3-Clause 5c633a0224a7fbc49111f08904d03f31
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: pq-crypto/kyber_r3/KeccakP-brg_endian_avx2.h at line 5
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-brian-gladman-3-clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/brian-gladman-3-clause.LICENSE
+    Files with this license:
+        pq-crypto/kyber_r3/KeccakP-brg_endian_avx2.h [5:23]
+
+KEEP     MIT                  6fe4646e33a88690f9a284e7cf5c5522
+BELONGS ya.make
+    License text:
+        The following components are provided under the MIT License. See project link for details.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [217:217]
+
+KEEP     Apache-2.0           8824d81a8477cf3e444616f476257401
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        api/s2n.h [4:13]
+
+SKIP     LicenseRef-scancode-unknown-license-reference cad02d4efd3ccd94c99b83b02d5163e5
+BELONGS ya.make
+    # this is no license
+    License text:
+            and license terms. Your use of the source code for these subcomponents is
+            subject to the terms and conditions of the following licenses.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        LICENSE [209:210]
+
+KEEP     Apache-2.0           d3a6c1cb5b7a1e53a61f819a19149ee8
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        api/unstable/npn.h [4:13]
+        api/unstable/renegotiate.h [4:13]
+        crypto/s2n_aead_cipher_aes_gcm.c [4:13]
+        crypto/s2n_aead_cipher_chacha20_poly1305.c [4:13]
+        crypto/s2n_cbc_cipher_3des.c [4:13]
+        crypto/s2n_cbc_cipher_aes.c [4:13]
+        crypto/s2n_certificate.c [4:13]
+        crypto/s2n_certificate.h [4:13]
+        crypto/s2n_cipher.c [4:13]
+        crypto/s2n_cipher.h [4:13]
+        crypto/s2n_composite_cipher_aes_sha.c [4:13]
+        crypto/s2n_crypto.c [4:13]
+        crypto/s2n_crypto.h [4:13]
+        crypto/s2n_dhe.c [4:13]
+        crypto/s2n_dhe.h [4:13]
+        crypto/s2n_drbg.c [4:13]
+        crypto/s2n_drbg.h [4:13]
+        crypto/s2n_ecc_evp.c [4:13]
+        crypto/s2n_ecc_evp.h [4:13]
+        crypto/s2n_ecdsa.c [4:13]
+        crypto/s2n_ecdsa.h [4:13]
+        crypto/s2n_evp.c [4:13]
+        crypto/s2n_evp.h [4:13]
+        crypto/s2n_evp_signing.c [4:13]
+        crypto/s2n_evp_signing.h [4:13]
+        crypto/s2n_fips.c [4:13]
+        crypto/s2n_fips.h [4:13]
+        crypto/s2n_hash.c [4:13]
+        crypto/s2n_hash.h [4:13]
+        crypto/s2n_hkdf.c [4:13]
+        crypto/s2n_hkdf.h [4:13]
+        crypto/s2n_hmac.c [4:13]
+        crypto/s2n_hmac.h [4:13]
+        crypto/s2n_ktls_crypto.h [4:13]
+        crypto/s2n_libcrypto.c [4:13]
+        crypto/s2n_libcrypto.h [4:13]
+        crypto/s2n_locking.c [4:13]
+        crypto/s2n_locking.h [4:13]
+        crypto/s2n_openssl.h [4:13]
+        crypto/s2n_openssl_evp.h [4:13]
+        crypto/s2n_openssl_x509.c [4:13]
+        crypto/s2n_openssl_x509.h [4:13]
+        crypto/s2n_pkey.c [4:13]
+        crypto/s2n_pkey.h [4:13]
+        crypto/s2n_rsa.c [4:13]
+        crypto/s2n_rsa.h [4:13]
+        crypto/s2n_rsa_pss.c [4:13]
+        crypto/s2n_rsa_pss.h [4:13]
+        crypto/s2n_rsa_signing.c [4:13]
+        crypto/s2n_rsa_signing.h [4:13]
+        crypto/s2n_sequence.c [4:13]
+        crypto/s2n_sequence.h [4:13]
+        crypto/s2n_signature.h [3:12]
+        crypto/s2n_stream_cipher_null.c [4:13]
+        crypto/s2n_stream_cipher_rc4.c [4:13]
+        crypto/s2n_tls13_keys.c [4:13]
+        crypto/s2n_tls13_keys.h [4:13]
+        error/s2n_errno.c [4:13]
+        error/s2n_errno.h [4:13]
+        pq-crypto/s2n_pq.c [4:13]
+        pq-crypto/s2n_pq.h [4:13]
+        pq-crypto/s2n_pq_asm.h [4:13]
+        pq-crypto/s2n_pq_random.c [4:13]
+        pq-crypto/s2n_pq_random.h [4:13]
+        stuffer/s2n_stuffer.c [4:13]
+        stuffer/s2n_stuffer.h [4:13]
+        stuffer/s2n_stuffer_base64.c [4:13]
+        stuffer/s2n_stuffer_file.c [4:13]
+        stuffer/s2n_stuffer_network_order.c [4:13]
+        stuffer/s2n_stuffer_pem.c [4:13]
+        stuffer/s2n_stuffer_text.c [4:13]
+        tls/extensions/s2n_cert_status.c [4:13]
+        tls/extensions/s2n_cert_status.h [4:13]
+        tls/extensions/s2n_cert_status_response.c [4:13]
+        tls/extensions/s2n_cert_status_response.h [4:13]
+        tls/extensions/s2n_client_alpn.c [4:13]
+        tls/extensions/s2n_client_alpn.h [4:13]
+        tls/extensions/s2n_client_cert_status_request.c [4:13]
+        tls/extensions/s2n_client_cert_status_request.h [4:13]
+        tls/extensions/s2n_client_cookie.c [4:13]
+        tls/extensions/s2n_client_early_data_indication.c [4:13]
+        tls/extensions/s2n_client_ems.c [4:13]
+        tls/extensions/s2n_client_key_share.c [4:13]
+        tls/extensions/s2n_client_key_share.h [4:13]
+        tls/extensions/s2n_client_max_frag_len.c [4:13]
+        tls/extensions/s2n_client_max_frag_len.h [4:13]
+        tls/extensions/s2n_client_pq_kem.c [4:13]
+        tls/extensions/s2n_client_pq_kem.h [4:13]
+        tls/extensions/s2n_client_psk.c [4:13]
+        tls/extensions/s2n_client_psk.h [4:13]
+        tls/extensions/s2n_client_renegotiation_info.c [4:13]
+        tls/extensions/s2n_client_renegotiation_info.h [4:13]
+        tls/extensions/s2n_client_sct_list.c [4:13]
+        tls/extensions/s2n_client_sct_list.h [4:13]
+        tls/extensions/s2n_client_server_name.c [4:13]
+        tls/extensions/s2n_client_server_name.h [4:13]
+        tls/extensions/s2n_client_session_ticket.c [4:13]
+        tls/extensions/s2n_client_session_ticket.h [4:13]
+        tls/extensions/s2n_client_signature_algorithms.c [4:13]
+        tls/extensions/s2n_client_signature_algorithms.h [4:13]
+        tls/extensions/s2n_client_supported_groups.c [4:13]
+        tls/extensions/s2n_client_supported_groups.h [4:13]
+        tls/extensions/s2n_client_supported_versions.c [4:13]
+        tls/extensions/s2n_client_supported_versions.h [4:13]
+        tls/extensions/s2n_cookie.h [4:13]
+        tls/extensions/s2n_early_data_indication.h [4:13]
+        tls/extensions/s2n_ec_point_format.c [4:13]
+        tls/extensions/s2n_ec_point_format.h [4:13]
+        tls/extensions/s2n_ems.h [4:13]
+        tls/extensions/s2n_extension_list.c [4:13]
+        tls/extensions/s2n_extension_list.h [4:13]
+        tls/extensions/s2n_extension_type.c [4:13]
+        tls/extensions/s2n_extension_type.h [4:13]
+        tls/extensions/s2n_extension_type_lists.c [4:13]
+        tls/extensions/s2n_extension_type_lists.h [4:13]
+        tls/extensions/s2n_key_share.c [4:13]
+        tls/extensions/s2n_key_share.h [4:13]
+        tls/extensions/s2n_npn.c [4:13]
+        tls/extensions/s2n_npn.h [4:13]
+        tls/extensions/s2n_nst_early_data_indication.c [4:13]
+        tls/extensions/s2n_psk_key_exchange_modes.c [4:13]
+        tls/extensions/s2n_psk_key_exchange_modes.h [4:13]
+        tls/extensions/s2n_quic_transport_params.c [4:13]
+        tls/extensions/s2n_quic_transport_params.h [4:13]
+        tls/extensions/s2n_server_alpn.c [4:13]
+        tls/extensions/s2n_server_alpn.h [4:13]
+        tls/extensions/s2n_server_cookie.c [4:13]
+        tls/extensions/s2n_server_early_data_indication.c [4:13]
+        tls/extensions/s2n_server_ems.c [4:13]
+        tls/extensions/s2n_server_key_share.c [4:13]
+        tls/extensions/s2n_server_key_share.h [4:13]
+        tls/extensions/s2n_server_max_fragment_length.c [4:13]
+        tls/extensions/s2n_server_max_fragment_length.h [4:13]
+        tls/extensions/s2n_server_psk.c [4:13]
+        tls/extensions/s2n_server_psk.h [4:13]
+        tls/extensions/s2n_server_renegotiation_info.c [4:13]
+        tls/extensions/s2n_server_renegotiation_info.h [4:13]
+        tls/extensions/s2n_server_sct_list.c [4:13]
+        tls/extensions/s2n_server_sct_list.h [4:13]
+        tls/extensions/s2n_server_server_name.c [4:13]
+        tls/extensions/s2n_server_server_name.h [4:13]
+        tls/extensions/s2n_server_session_ticket.c [4:13]
+        tls/extensions/s2n_server_session_ticket.h [4:13]
+        tls/extensions/s2n_server_signature_algorithms.c [4:13]
+        tls/extensions/s2n_server_signature_algorithms.h [4:13]
+        tls/extensions/s2n_server_supported_versions.c [4:13]
+        tls/extensions/s2n_server_supported_versions.h [4:13]
+        tls/extensions/s2n_supported_versions.c [4:13]
+        tls/extensions/s2n_supported_versions.h [4:13]
+        tls/s2n_aead.c [4:13]
+        tls/s2n_alerts.c [4:13]
+        tls/s2n_alerts.h [4:13]
+        tls/s2n_async_pkey.c [4:13]
+        tls/s2n_async_pkey.h [4:13]
+        tls/s2n_auth_selection.c [4:13]
+        tls/s2n_auth_selection.h [4:13]
+        tls/s2n_cbc.c [4:13]
+        tls/s2n_change_cipher_spec.c [4:13]
+        tls/s2n_cipher_preferences.c [4:13]
+        tls/s2n_cipher_preferences.h [4:13]
+        tls/s2n_cipher_suites.c [4:13]
+        tls/s2n_cipher_suites.h [4:13]
+        tls/s2n_client_cert.c [4:13]
+        tls/s2n_client_cert_verify.c [4:13]
+        tls/s2n_client_finished.c [4:13]
+        tls/s2n_client_hello.c [4:13]
+        tls/s2n_client_hello.h [4:13]
+        tls/s2n_client_hello_request.c [4:13]
+        tls/s2n_client_key_exchange.c [4:13]
+        tls/s2n_client_key_exchange.h [4:13]
+        tls/s2n_config.c [4:13]
+        tls/s2n_config.h [4:13]
+        tls/s2n_connection.c [4:13]
+        tls/s2n_connection.h [4:13]
+        tls/s2n_crypto.c [4:13]
+        tls/s2n_crypto.h [4:13]
+        tls/s2n_crypto_constants.h [4:13]
+        tls/s2n_early_data.c [4:13]
+        tls/s2n_early_data.h [4:13]
+        tls/s2n_early_data_io.c [4:13]
+        tls/s2n_ecc_preferences.c [4:13]
+        tls/s2n_ecc_preferences.h [4:13]
+        tls/s2n_encrypted_extensions.c [4:13]
+        tls/s2n_establish_session.c [4:13]
+        tls/s2n_fingerprint.c [4:13]
+        tls/s2n_handshake.c [4:13]
+        tls/s2n_handshake.h [4:13]
+        tls/s2n_handshake_hashes.c [4:13]
+        tls/s2n_handshake_hashes.h [4:13]
+        tls/s2n_handshake_io.c [4:13]
+        tls/s2n_handshake_transcript.c [4:13]
+        tls/s2n_handshake_type.c [4:13]
+        tls/s2n_handshake_type.h [4:13]
+        tls/s2n_internal.h [4:13]
+        tls/s2n_kem.c [4:13]
+        tls/s2n_kem.h [4:13]
+        tls/s2n_kem_preferences.c [4:13]
+        tls/s2n_kem_preferences.h [4:13]
+        tls/s2n_kex.c [4:13]
+        tls/s2n_kex.h [4:13]
+        tls/s2n_kex_data.h [4:13]
+        tls/s2n_key_log.c [4:13]
+        tls/s2n_key_log.h [4:13]
+        tls/s2n_key_update.c [4:13]
+        tls/s2n_key_update.h [4:13]
+        tls/s2n_ktls.c [4:13]
+        tls/s2n_ktls.h [4:13]
+        tls/s2n_ktls_io.c [4:13]
+        tls/s2n_ktls_parameters.h [4:13]
+        tls/s2n_next_protocol.c [4:13]
+        tls/s2n_ocsp_stapling.c [4:13]
+        tls/s2n_post_handshake.c [4:13]
+        tls/s2n_post_handshake.h [4:13]
+        tls/s2n_prf.c [4:13]
+        tls/s2n_prf.h [4:13]
+        tls/s2n_protocol_preferences.c [4:13]
+        tls/s2n_protocol_preferences.h [4:13]
+        tls/s2n_psk.c [4:13]
+        tls/s2n_psk.h [4:13]
+        tls/s2n_quic_support.c [4:13]
+        tls/s2n_quic_support.h [4:13]
+        tls/s2n_record.h [4:13]
+        tls/s2n_record_read.c [4:13]
+        tls/s2n_record_read.h [4:13]
+        tls/s2n_record_read_aead.c [4:13]
+        tls/s2n_record_read_cbc.c [4:13]
+        tls/s2n_record_read_composite.c [4:13]
+        tls/s2n_record_read_stream.c [4:13]
+        tls/s2n_record_write.c [4:13]
+        tls/s2n_recv.c [4:13]
+        tls/s2n_renegotiate.c [4:13]
+        tls/s2n_renegotiate.h [4:13]
+        tls/s2n_resume.c [4:13]
+        tls/s2n_resume.h [4:13]
+        tls/s2n_security_policies.c [4:13]
+        tls/s2n_security_policies.h [4:13]
+        tls/s2n_send.c [4:13]
+        tls/s2n_server_cert.c [4:13]
+        tls/s2n_server_cert_request.c [4:13]
+        tls/s2n_server_done.c [4:13]
+        tls/s2n_server_extensions.c [4:13]
+        tls/s2n_server_extensions.h [4:13]
+        tls/s2n_server_finished.c [4:13]
+        tls/s2n_server_hello.c [4:13]
+        tls/s2n_server_hello_retry.c [4:13]
+        tls/s2n_server_key_exchange.c [4:13]
+        tls/s2n_server_key_exchange.h [4:13]
+        tls/s2n_server_new_session_ticket.c [4:13]
+        tls/s2n_shutdown.c [4:13]
+        tls/s2n_signature_algorithms.c [4:13]
+        tls/s2n_signature_algorithms.h [4:13]
+        tls/s2n_signature_scheme.c [4:13]
+        tls/s2n_signature_scheme.h [4:13]
+        tls/s2n_tls.c [4:13]
+        tls/s2n_tls.h [4:13]
+        tls/s2n_tls13.c [4:13]
+        tls/s2n_tls13.h [4:13]
+        tls/s2n_tls13_certificate_verify.c [4:13]
+        tls/s2n_tls13_certificate_verify.h [4:13]
+        tls/s2n_tls13_handshake.c [4:13]
+        tls/s2n_tls13_handshake.h [4:13]
+        tls/s2n_tls13_key_schedule.c [4:13]
+        tls/s2n_tls13_key_schedule.h [4:13]
+        tls/s2n_tls13_secrets.c [4:13]
+        tls/s2n_tls13_secrets.h [4:13]
+        tls/s2n_tls_parameters.h [4:13]
+        tls/s2n_x509_validator.c [4:13]
+        tls/s2n_x509_validator.h [4:13]
+        utils/s2n_annotations.h [4:13]
+        utils/s2n_array.c [4:13]
+        utils/s2n_array.h [4:13]
+        utils/s2n_atomic.c [4:13]
+        utils/s2n_atomic.h [4:13]
+        utils/s2n_bitmap.h [4:13]
+        utils/s2n_blob.c [4:13]
+        utils/s2n_blob.h [4:13]
+        utils/s2n_compiler.h [4:13]
+        utils/s2n_ensure.c [4:13]
+        utils/s2n_ensure.h [4:13]
+        utils/s2n_fork_detection.c [4:13]
+        utils/s2n_fork_detection.h [4:13]
+        utils/s2n_init.c [4:13]
+        utils/s2n_init.h [4:13]
+        utils/s2n_io.c [4:13]
+        utils/s2n_io.h [4:13]
+        utils/s2n_map.c [4:13]
+        utils/s2n_map.h [4:13]
+        utils/s2n_map_internal.h [4:13]
+        utils/s2n_mem.c [4:13]
+        utils/s2n_mem.h [4:13]
+        utils/s2n_random.c [4:13]
+        utils/s2n_random.h [4:13]
+        utils/s2n_result.c [4:13]
+        utils/s2n_result.h [4:13]
+        utils/s2n_rfc5952.c [4:13]
+        utils/s2n_safety.c [4:13]
+        utils/s2n_safety.h [4:13]
+        utils/s2n_safety_macros.h [5:14]
+        utils/s2n_set.c [4:13]
+        utils/s2n_set.h [4:13]
+        utils/s2n_socket.c [4:13]
+        utils/s2n_socket.h [4:13]
+        utils/s2n_timer.c [4:13]
+        utils/s2n_timer.h [4:13]
+
+KEEP     Apache-2.0           f7d0ea4ca54b2001383f4d9f0cd6199f
+BELONGS ya.make
+    License text:
+        [![Apache 2 License](https://img.shields.io/github/license/aws/s2n-tls.svg)](http://aws.amazon.com/apache-2-0/)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [10:10]
+
+KEEP     CC0-1.0              f9ca2565454cb7a5765a25d0b8486c11
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 90.00
+        Match type      : NOTICE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        pq-crypto/kyber_r3/KeccakP-1600-times4-SIMD256_avx2.c [3:13]
+        pq-crypto/kyber_r3/KeccakP-1600-times4-SIMD256_avx2.c [846:856]
+        pq-crypto/kyber_r3/KeccakP-1600-times4-SnP_avx2.h [3:13]
+        pq-crypto/kyber_r3/KeccakP-align_avx2.h [3:13]
+
+KEEP     Apache-2.0           fff0309371ea9c4919c24ec64989dd0f
+BELONGS ya.make
+    License text:
+        [![Apache 2 License](https://img.shields.io/github/license/aws/s2n-tls.svg)](http://aws.amazon.com/apache-2-0/)
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [10:10]

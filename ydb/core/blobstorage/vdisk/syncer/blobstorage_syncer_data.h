@@ -9,7 +9,7 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/driver_lib/version/version.h>
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 namespace NKikimr {
 
@@ -116,7 +116,7 @@ namespace NKikimr {
         ui64 DbBirthLsn = 0; // FIXME: remove after switching to the new sync
 
     private:
-        const TString LogPrefix;
+        const TString VDiskLogPrefix;
         const TActorId NotifyId;
         TNeighbors Neighbors;
         NSync::TQuorumTracker QuorumTracker;
@@ -187,6 +187,7 @@ namespace NKikimr {
     // TSyncerData
     ////////////////////////////////////////////////////////////////////////////
     struct TSyncerData : public TThrRefBase {
+        const TString VDiskLogPrefix;
         TSyncNeighborsPtr Neighbors;
         NSyncer::TLocalSyncerState LocalSyncerState;
         const TActorId NotifyId;
@@ -233,11 +234,13 @@ namespace NKikimr {
 
         // Convert from old entry point format to protobuf format
         // TODO: we can remove this function after migrating to the protobuf format
-        static TString Convert(const TVDiskIdShort &selfVDisk,
+        static TString Convert(const TString& logPrefix,
+                              const TVDiskIdShort &selfVDisk,
                               std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                               const TString &entryPoint);
 
-        static TString Convert(const TVDiskIdShort &selfVDisk,
+        static TString Convert(const TString& logPrefix,
+                              const TVDiskIdShort &selfVDisk,
                               std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                               const TContiguousSpan &entryPoint);
 

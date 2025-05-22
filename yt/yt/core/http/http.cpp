@@ -15,18 +15,19 @@ TStringBuf ToHttpString(EMethod method)
 #define XX(num, name, string) case EMethod::name: return #string;
         YT_HTTP_METHOD_MAP(XX)
 #undef XX
-        default: THROW_ERROR_EXCEPTION("Invalid method %v", method);
+        default:
+            THROW_ERROR_EXCEPTION("Invalid method %v", method);
     }
 }
 
-TStringBuf ToHttpString(EStatusCode code)
+TString ToHttpString(EStatusCode code)
 {
     switch (code) {
 #define XX(num, name, string) case EStatusCode::name: return #string;
         YT_HTTP_STATUS_MAP(XX)
 #undef XX
         default:
-            THROW_ERROR_EXCEPTION("Invalid status code %v", code);
+            return Format("Status code %v", code);
     }
 }
 
@@ -67,12 +68,12 @@ TUrlRef ParseUrl(TStringBuf url)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void THeaders::Add(const TString& header, TString value)
+void THeaders::Add(std::string header, std::string value)
 {
     ValidateHeaderValue(header, value);
 
     auto& entry = NameToEntry_[header];
-    entry.OriginalHeaderName = header;
+    entry.OriginalHeaderName = std::move(header);
     entry.Values.push_back(std::move(value));
 }
 
@@ -81,14 +82,15 @@ void THeaders::Remove(TStringBuf header)
     NameToEntry_.erase(header);
 }
 
-void THeaders::Set(const TString& header, TString value)
+void THeaders::Set(std::string header, std::string value)
 {
     ValidateHeaderValue(header, value);
 
-    NameToEntry_[header] = {header, {std::move(value)}};
+    auto& entry = NameToEntry_[header];
+    entry = {std::move(header), {std::move(value)}};
 }
 
-const TString* THeaders::Find(TStringBuf header) const
+const std::string* THeaders::Find(TStringBuf header) const
 {
     auto it = NameToEntry_.find(header);
     if (it == NameToEntry_.end()) {
@@ -112,7 +114,7 @@ void THeaders::RemoveOrThrow(TStringBuf header)
     NameToEntry_.erase(it);
 }
 
-TString THeaders::GetOrThrow(TStringBuf header) const
+std::string THeaders::GetOrThrow(TStringBuf header) const
 {
     auto value = Find(header);
     if (!value) {
@@ -121,7 +123,7 @@ TString THeaders::GetOrThrow(TStringBuf header) const
     return *value;
 }
 
-const TCompactVector<TString, 1>& THeaders::GetAll(TStringBuf header) const
+const TCompactVector<std::string, 1>& THeaders::GetAll(TStringBuf header) const
 {
     auto it = NameToEntry_.find(header);
     if (it == NameToEntry_.end()) {
@@ -131,16 +133,14 @@ const TCompactVector<TString, 1>& THeaders::GetAll(TStringBuf header) const
     return it->second.Values;
 }
 
-void THeaders::WriteTo(
-    IOutputStream* out,
-    const THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>* filtered) const
+void THeaders::WriteTo(IOutputStream* out, const THeaderNames* filtered) const
 {
     for (const auto& [name, entry] : NameToEntry_) {
         // TODO(prime): sanitize headers
         const auto& header = entry.OriginalHeaderName;
         const auto& values = entry.Values;
 
-        if (filtered && filtered->find(header) != filtered->end()) {
+        if (filtered && filtered->contains(header)) {
             continue;
         }
 
@@ -166,11 +166,15 @@ void THeaders::MergeFrom(const THeadersPtr& headers)
     }
 }
 
-std::vector<std::pair<TString, TString>> THeaders::Dump() const
+std::vector<std::pair<std::string, std::string>> THeaders::Dump(const THeaderNames* filtered) const
 {
-    std::vector<std::pair<TString, TString>> result;
+    std::vector<std::pair<std::string, std::string>> result;
 
     for (const auto& [name, entry] : NameToEntry_) {
+        if (filtered && filtered->contains(entry.OriginalHeaderName)) {
+            continue;
+        }
+
         for (const auto& value : entry.Values) {
             result.emplace_back(entry.OriginalHeaderName, value);
         }
@@ -181,15 +185,15 @@ std::vector<std::pair<TString, TString>> THeaders::Dump() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString EscapeHeaderValue(TStringBuf value)
+std::string EscapeHeaderValue(TStringBuf value)
 {
-    TString result;
+    std::string result;
     result.reserve(value.length());
     for (auto ch : value) {
         if (ch == '\n') {
-            result.append("\\n");
+            result += "\\n";
         } else {
-            result.append(ch);
+            result += ch;
         }
     }
     return result;

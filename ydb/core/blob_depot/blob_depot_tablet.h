@@ -4,6 +4,9 @@
 #include "events.h"
 #include "types.h"
 #include "schema.h"
+#include "mon_main.h"
+
+#include <ydb/core/protos/blob_depot_config.pb.h>
 
 namespace NKikimr::NTesting {
 
@@ -29,6 +32,12 @@ namespace NKikimr::NBlobDepot {
                 EvKickSpaceMonitor,
                 EvUpdateThroughputs,
                 EvDeliver,
+                EvJsonTimer,
+                EvJsonUpdate,
+                EvUploadResult,
+                EvDeleteResult,
+                EvScanFound,
+                EvScanContinue,
             };
         };
 
@@ -72,6 +81,8 @@ namespace NKikimr::NBlobDepot {
 
             NKikimrBlobStorage::TPDiskSpaceColor::E LastPushedSpaceColor = {};
             float LastPushedApproximateFreeSpaceShare = 0.0f;
+
+            THashSet<TS3Locator> S3WritesInFlight;
         };
 
         struct TPipeServerContext {
@@ -157,6 +168,7 @@ namespace NKikimr::NBlobDepot {
         void OnActivateExecutor(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT24, "OnActivateExecutor", (Id, GetLogId()));
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();
         }
 
@@ -167,12 +179,16 @@ namespace NKikimr::NBlobDepot {
         }
 
         void StartOperation() {
+            JsonHandler.Setup(SelfId(), Executor()->Generation());
             InitChannelKinds();
             DoGroupMetricsExchange();
             ProcessRegisterAgentQ();
             KickSpaceMonitor();
             StartDataLoad();
             UpdateThroughputs();
+            InitS3Manager();
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 0;
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADING_KEYS] = 1;
         }
 
         void StartDataLoad();
@@ -263,6 +279,15 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
         void Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev);
+        void Handle(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // S3 operations
+
+        class TS3Manager;
+        std::unique_ptr<TS3Manager> S3Manager;
+
+        void InitS3Manager();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Space monitoring
@@ -278,9 +303,12 @@ namespace NKikimr::NBlobDepot {
 
         class TTxMonData;
 
+        TJsonHandler JsonHandler;
+
         bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
 
         void RenderMainPage(IOutputStream& s);
+        NJson::TJsonValue RenderJson(bool pretty);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group assimilation
@@ -288,10 +316,39 @@ namespace NKikimr::NBlobDepot {
         TActorId GroupAssimilatorId;
         EDecommitState DecommitState = EDecommitState::Default;
         std::optional<TString> AssimilatorState;
+        struct TAsStats {
+            std::optional<ui64> SkipBlocksUpTo;
+            std::optional<std::tuple<ui64, ui8>> SkipBarriersUpTo;
+            std::optional<TLogoBlobID> SkipBlobsUpTo;
+            TInstant LatestErrorGet;
+            TInstant LatestOkGet;
+            TInstant LatestErrorPut;
+            TInstant LatestOkPut;
+            TLogoBlobID LastReadBlobId;
+            ui64 BytesToCopy = 0;
+            ui64 BytesCopied = 0;
+            ui64 CopySpeed = 0;
+            TDuration CopyTimeRemaining = TDuration::Max();
+            ui64 BlobsReadOk = 0;
+            ui64 BlobsReadNoData = 0;
+            ui64 BlobsReadError = 0;
+            ui64 BlobsPutOk = 0;
+            ui64 BlobsPutError = 0;
+            ui32 CopyIteration = 0;
+            ui32 CollectGarbageInFlight = 0;
+            ui32 CollectGarbageQueue = 0;
+            ui32 CollectGarbageOK = 0;
+            ui32 CollectGarbageError = 0;
+
+            void ToJson(NJson::TJsonValue& json, bool pretty) const;
+        } AsStats;
 
         class TGroupAssimilator;
 
         void StartGroupAssimilator();
+        void OnUpdateDecommitState();
+
+        ui32 PerGenerationCounter = 1;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group metrics exchange
@@ -299,6 +356,8 @@ namespace NKikimr::NBlobDepot {
         ui64 BytesRead = 0;
         ui64 BytesWritten = 0;
         std::deque<std::tuple<TMonotonic, ui64, ui64>> MetricsQ;
+        ui64 ReadThroughput = 0;
+        ui64 WriteThroughput = 0;
 
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);

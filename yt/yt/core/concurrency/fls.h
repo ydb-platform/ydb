@@ -42,6 +42,7 @@ public:
     T* operator->();
 
     T* GetOrCreate() const;
+    T* MaybeGet() const;
     const T* Get(const TFls& fls) const;
 
     bool IsInitialized() const;

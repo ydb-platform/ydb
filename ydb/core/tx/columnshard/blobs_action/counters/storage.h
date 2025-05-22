@@ -1,15 +1,37 @@
 #pragma once
 #include "read.h"
-#include "write.h"
 #include "remove_declare.h"
 #include "remove_gc.h"
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include "write.h"
+
+#include <ydb/library/signals/owner.h>
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NOlap::NBlobOperations {
 
 class TStorageCounters;
+
+enum class EConsumer {
+    TTL = 0,
+    GENERAL_COMPACTION,
+    INDEXATION,
+    CLEANUP_TABLES,
+    CLEANUP_PORTIONS,
+    CLEANUP_INSERT_TABLE,
+    CLEANUP_SHARED_BLOBS,
+    EXPORT,
+    SCAN,
+    GC,
+    WRITING,
+    WRITING_BUFFER,
+    WRITING_OPERATOR,
+    NORMALIZER,
+    STATISTICS,
+
+    COUNT
+};
 
 class TConsumerCounters: public NColumnShard::TCommonCountersOwner {
 private:
@@ -18,6 +40,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TWriteCounters>, WriteCounters);
     YDB_READONLY_DEF(std::shared_ptr<TRemoveDeclareCounters>, RemoveDeclareCounters);
     YDB_READONLY_DEF(std::shared_ptr<TRemoveGCCounters>, RemoveGCCounters);
+
 public:
     TConsumerCounters(const TString& consumerId, const TStorageCounters& parent);
 };
@@ -25,12 +48,12 @@ public:
 class TStorageCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-    THashMap<TString, std::shared_ptr<TConsumerCounters>> ConsumerCounters;
+    std::vector<std::shared_ptr<TConsumerCounters>> Consumers;
+
 public:
     TStorageCounters(const TString& storageId);
 
-    std::shared_ptr<TConsumerCounters> GetConsumerCounter(const TString& consumerId);
-
+    std::shared_ptr<TConsumerCounters> GetConsumerCounter(const EConsumer consumer);
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations

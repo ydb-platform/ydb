@@ -14,7 +14,7 @@
 
 #include "Poco/Event_POSIX.h"
 #if defined(POCO_VXWORKS)
-#include <timers.h>
+#error #include <timers.h>
 #include <cstring>
 #else
 #include <time.h>

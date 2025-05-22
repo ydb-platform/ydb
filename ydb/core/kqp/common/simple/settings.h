@@ -1,8 +1,11 @@
 #pragma once
 
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
+#include <util/generic/string.h>
 #include <util/str_stl.h>
+#include <util/string/builder.h>
 
 #include <tuple>
 
@@ -13,7 +16,6 @@ struct TKqpQuerySettings {
     bool IsInternalCall = false;
     NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
     Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
-    bool IsPrepareQuery = false;
 
     explicit TKqpQuerySettings(NKikimrKqp::EQueryType queryType)
         : QueryType(queryType) {}
@@ -38,6 +40,14 @@ struct TKqpQuerySettings {
     size_t GetHash() const noexcept {
         auto tuple = std::make_tuple(DocumentApiRestricted, IsInternalCall, QueryType, Syntax);
         return THash<decltype(tuple)>()(tuple);
+    }
+
+    TString SerializeToString() const {
+        TStringBuilder result = TStringBuilder() << "{"
+            << "DocumentApiRestricted: " << DocumentApiRestricted << ", "
+            << "IsInternalCall: " << IsInternalCall << ", "
+            << "QueryType: " << QueryType << "}";
+        return result;
     }
 };
 

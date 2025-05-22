@@ -13,7 +13,12 @@
                         "Value1",
                         "Value2"
                     ],
-                    "type": "Lookup"
+                    "scan_by": [
+                        "Key [1, 1]",
+                        "Key [3, 3]",
+                        "Key [5, 5]"
+                    ],
+                    "type": "Scan"
                 }
             ]
         }

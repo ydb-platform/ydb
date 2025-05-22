@@ -8,6 +8,7 @@
 
 #include <aws/common/common.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
 AWS_EXTERN_C_BEGIN
 
 /**
@@ -65,10 +66,11 @@ AWS_STATIC_IMPL uint16_t aws_hton16(uint16_t x);
  */
 AWS_STATIC_IMPL uint16_t aws_ntoh16(uint16_t x);
 
+AWS_EXTERN_C_END
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/byte_order.inl>
 #endif /* AWS_NO_STATIC_IMPL */
 
-AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_BYTE_ORDER_H */

@@ -34,41 +34,6 @@ DEFINE_ENUM(EExpectedItem,
 
 using TResult = std::variant<bool, i64, ui64, double, TString>;
 
-bool ParseListUntilIndex(TYsonPullParserCursor* cursor, int targetIndex)
-{
-    YT_VERIFY((*cursor)->GetType() == EYsonItemType::BeginList);
-    cursor->Next();
-    int index = 0;
-    while ((*cursor)->GetType() != EYsonItemType::EndList) {
-        if (index == targetIndex) {
-            return true;
-        }
-        ++index;
-        cursor->SkipComplexValue();
-    }
-    return false;
-}
-
-bool ParseMapOrAttributesUntilKey(TYsonPullParserCursor* cursor, TStringBuf key)
-{
-    auto endType = EYsonItemType::EndMap;
-    if ((*cursor)->GetType() != EYsonItemType::BeginMap) {
-        YT_VERIFY((*cursor)->GetType() == EYsonItemType::BeginAttributes);
-        endType = EYsonItemType::EndAttributes;
-    }
-    cursor->Next();
-    while ((*cursor)->GetType() != endType) {
-        YT_VERIFY((*cursor)->GetType() == EYsonItemType::StringValue);
-        if ((*cursor)->UncheckedAsString() == key) {
-            cursor->Next();
-            return true;
-        }
-        cursor->Next();
-        cursor->SkipComplexValue();
-    }
-    return false;
-}
-
 std::optional<TResult> TryParseValue(TYsonPullParserCursor* cursor)
 {
     switch ((*cursor)->GetType()) {
@@ -92,17 +57,6 @@ TResult ParseValue(TYsonPullParserCursor* cursor)
     auto result = TryParseValue(cursor);
     YT_VERIFY(result);
     return std::move(*result);
-}
-
-TString ParseAnyValue(TYsonPullParserCursor* cursor)
-{
-    TStringStream stream;
-    {
-        NYson::TCheckedInDebugYsonTokenWriter writer(&stream);
-        cursor->TransferComplexValue(&writer);
-        writer.Flush();
-    }
-    return std::move(stream.Str());
 }
 
 [[noreturn]] void ThrowUnexpectedToken(const TTokenizer& tokenizer)
@@ -250,12 +204,14 @@ struct TScalarTypeTraits<i64>
         if (const auto* value = std::get_if<i64>(&result)) {
             return *value;
         } else if (const auto* value = std::get_if<ui64>(&result)) {
-            i64 typedResult;
-            if (TryIntegralCast(*value, &typedResult)) {
-                return typedResult;
+            auto typedResult = TryCheckedIntegralCast<i64>(*value);
+            if (!typedResult) {
+                return std::nullopt;
             }
+            return *typedResult;
+        } else {
+            return std::nullopt;
         }
-        return std::nullopt;
     }
 };
 
@@ -267,12 +223,14 @@ struct TScalarTypeTraits<ui64>
         if (const auto* value = std::get_if<ui64>(&result)) {
             return *value;
         } else if (const auto* value = std::get_if<i64>(&result)) {
-            ui64 typedResult;
-            if (TryIntegralCast(*value, &typedResult)) {
-                return typedResult;
+            auto typedResult = TryCheckedIntegralCast<ui64>(*value);
+            if (!typedResult) {
+                return std::nullopt;
             }
+            return *typedResult;
+        } else {
+            return std::nullopt;
         }
-        return std::nullopt;
     }
 };
 
@@ -364,6 +322,54 @@ template std::optional<ui64> TryParseValue<ui64>(TYsonPullParserCursor* cursor);
 template std::optional<bool> TryParseValue<bool>(TYsonPullParserCursor* cursor);
 template std::optional<double> TryParseValue<double>(TYsonPullParserCursor* cursor);
 template std::optional<TString> TryParseValue<TString>(TYsonPullParserCursor* cursor);
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool ParseListUntilIndex(TYsonPullParserCursor* cursor, int targetIndex)
+{
+    YT_VERIFY((*cursor)->GetType() == EYsonItemType::BeginList);
+    cursor->Next();
+    int index = 0;
+    while ((*cursor)->GetType() != EYsonItemType::EndList) {
+        if (index == targetIndex) {
+            return true;
+        }
+        ++index;
+        cursor->SkipComplexValue();
+    }
+    return false;
+}
+
+bool ParseMapOrAttributesUntilKey(TYsonPullParserCursor* cursor, TStringBuf key)
+{
+    auto endType = EYsonItemType::EndMap;
+    if ((*cursor)->GetType() != EYsonItemType::BeginMap) {
+        YT_VERIFY((*cursor)->GetType() == EYsonItemType::BeginAttributes);
+        endType = EYsonItemType::EndAttributes;
+    }
+    cursor->Next();
+    while ((*cursor)->GetType() != endType) {
+        YT_VERIFY((*cursor)->GetType() == EYsonItemType::StringValue);
+        if ((*cursor)->UncheckedAsString() == key) {
+            cursor->Next();
+            return true;
+        }
+        cursor->Next();
+        cursor->SkipComplexValue();
+    }
+    return false;
+}
+
+TString ParseAnyValue(TYsonPullParserCursor* cursor)
+{
+    TStringStream stream;
+    {
+        NYson::TCheckedInDebugYsonTokenWriter writer(&stream);
+        cursor->TransferComplexValue(&writer);
+        writer.Flush();
+    }
+    return std::move(stream.Str());
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

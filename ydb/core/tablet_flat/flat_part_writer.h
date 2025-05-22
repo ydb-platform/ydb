@@ -5,18 +5,15 @@
 #include "flat_page_conf.h"
 #include "flat_page_gstat.h"
 #include "flat_page_txidstat.h"
-#include "flat_page_txstatus.h"
 #include "flat_page_writer.h"
 #include "flat_page_other.h"
 #include "flat_part_iface.h"
 #include "flat_part_overlay.h"
-#include "flat_part_screen.h"
 #include "flat_part_slice.h"
 #include "flat_part_laid.h"
 #include "flat_row_state.h"
 #include "flat_bloom_writer.h"
 #include "util_fmt_abort.h"
-#include "util_deref.h"
 
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 #include <ydb/core/util/intrusive_heap.h>
@@ -43,6 +40,7 @@ namespace NTable {
             : Final(conf.Final)
             , CutIndexKeys(conf.CutIndexKeys)
             , WriteBTreeIndex(conf.WriteBTreeIndex)
+            , WriteFlatIndex(conf.WriteFlatIndex || !conf.WriteBTreeIndex)
             , SmallEdge(conf.SmallEdge)
             , LargeEdge(conf.LargeEdge)
             , MaxLargeBlob(conf.MaxLargeBlob)
@@ -85,8 +83,8 @@ namespace NTable {
             EraseRowState.Touch(ERowOp::Erase);
         }
 
-        void BeginKey(TCellsRef key) noexcept {
-            Y_ABORT_UNLESS(Phase == 0, "BeginKey called after Finish");
+        void BeginKey(TCellsRef key) {
+            Y_ENSURE(Phase == 0, "BeginKey called after Finish");
 
             KeyState.Key = key;
             KeyState.LastVersion = TRowVersion::Max();
@@ -111,15 +109,15 @@ namespace NTable {
             }
         }
 
-        void AddKeyDelta(const TRowState& row, ui64 txId) noexcept
+        void AddKeyDelta(const TRowState& row, ui64 txId)
         {
-            Y_ABORT_UNLESS(KeyState.Written == 0, "Cannot add deltas after committed versions");
-            Y_ABORT_UNLESS(txId != 0, "Cannot add delta with txId == 0");
+            Y_ENSURE(KeyState.Written == 0, "Cannot add deltas after committed versions");
+            Y_ENSURE(txId != 0, "Cannot add delta with txId == 0");
 
             WriteDeltaRow(row, txId);
         }
 
-        void AddKeyVersion(const TRowState& row, TRowVersion version) noexcept
+        void AddKeyVersion(const TRowState& row, TRowVersion version)
         {
             Y_DEBUG_ABORT_UNLESS(version < KeyState.LastVersion, "Key versions must be in descending order");
 
@@ -132,7 +130,7 @@ namespace NTable {
             KeyState.DelayedErase = row == ERowOp::Erase;
         }
 
-        ui32 EndKey() noexcept
+        ui32 EndKey()
         {
             if (!KeyState.Final && KeyState.DelayedErase) {
                 WriteRow(EraseRowState, KeyState.LastVersion, TRowVersion::Max());
@@ -147,7 +145,7 @@ namespace NTable {
             return KeyState.Written + KeyState.WrittenDeltas;
         }
 
-        ERowOp AddRowLegacy(TCellsRef key, const TRowState& row) noexcept
+        ERowOp AddRowLegacy(TCellsRef key, const TRowState& row)
         {
             BeginKey(key);
             AddKeyVersion(row, TRowVersion::Min());
@@ -160,7 +158,7 @@ namespace NTable {
             return row.GetRowState();
         }
 
-        TWriteStats Finish() noexcept
+        TWriteStats Finish()
         {
             Flush(true);
 
@@ -168,7 +166,7 @@ namespace NTable {
         }
 
     private:
-        void WriteRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion) noexcept
+        void WriteRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion)
         {
             if (KeyState.Written == 0) {
                 WriteMainRow(row, minVersion, maxVersion);
@@ -179,9 +177,9 @@ namespace NTable {
             ++KeyState.Written;
         }
 
-        void WriteDeltaRow(const TRowState& row, ui64 txId) noexcept
+        void WriteDeltaRow(const TRowState& row, ui64 txId)
         {
-            Y_ABORT_UNLESS(Phase == 0, "WriteDeltaRow called after Finish");
+            Y_ENSURE(Phase == 0, "WriteDeltaRow called after Finish");
 
             ui64 overheadBytes = 0;
             for (size_t groupIdx : xrange(Groups.size())) {
@@ -189,7 +187,7 @@ namespace NTable {
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
                 g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId);
-                g.NextIndexSize = g.Index.CalcSize(groupKey);
+                g.NextIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(groupKey) : 0;
                 g.NextBTreeIndexSize = WriteBTreeIndex ? g.BTreeIndex.CalcSize(groupKey) : 0;
                 overheadBytes += (
                     g.NextDataSize.DataPageSize +
@@ -229,9 +227,9 @@ namespace NTable {
             ++KeyState.WrittenDeltas;
         }
 
-        void FlushDeltaRows() noexcept
+        void FlushDeltaRows()
         {
-            Y_ABORT_UNLESS(Phase == 0, "FlushDeltaRows called after Finish");
+            Y_ENSURE(Phase == 0, "FlushDeltaRows called after Finish");
 
             for (size_t groupIdx : xrange(Groups.size())) {
                 auto& g = Groups[groupIdx];
@@ -243,9 +241,9 @@ namespace NTable {
             FinishMainKey(false);
         }
 
-        void WriteMainRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion) noexcept
+        void WriteMainRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion)
         {
-            Y_ABORT_UNLESS(Phase == 0, "WriteMainRow called after Finish");
+            Y_ENSURE(Phase == 0, "WriteMainRow called after Finish");
 
             Y_DEBUG_ABORT_UNLESS(minVersion < maxVersion);
 
@@ -255,7 +253,7 @@ namespace NTable {
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
                 g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, minVersion, maxVersion, /* txId */ 0);
-                g.NextIndexSize = g.Index.CalcSize(groupKey);
+                g.NextIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(groupKey) : 0;
                 g.NextBTreeIndexSize = WriteBTreeIndex ? g.BTreeIndex.CalcSize(groupKey) : 0;
 
                 // FIXME: not each row produces index row so overhead bytes shouldn't add index size
@@ -319,7 +317,7 @@ namespace NTable {
             }
         }
 
-        void FinishMainKey(bool erased) noexcept
+        void FinishMainKey(bool erased)
         {
             KeyState.RowId = Groups[0].Data.GetLastRowId();
 
@@ -341,13 +339,13 @@ namespace NTable {
             }
 
             if (erased) {
-                Current.BTreeIndexErased++;
+                Current.BTreeIndexErasedRowCount++;
             }
         }
 
-        void WriteHistoryRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion) noexcept
+        void WriteHistoryRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion)
         {
-            Y_ABORT_UNLESS(Phase == 0, "WriteHistoryRow called after Finish");
+            Y_ENSURE(Phase == 0, "WriteHistoryRow called after Finish");
 
             Y_DEBUG_ABORT_UNLESS(minVersion < maxVersion);
 
@@ -368,7 +366,7 @@ namespace NTable {
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? syntheticKey : TCellsRef{ };
                 g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), maxVersion, /* txId */ 0);
-                g.NextIndexSize = g.Index.CalcSize(groupKey);
+                g.NextIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(groupKey) : 0;
                 g.NextBTreeIndexSize = WriteBTreeIndex ? g.BTreeIndex.CalcSize(groupKey) : 0;
 
                 // FIXME: not each row produces index row so overhead bytes shouldn't add index size
@@ -421,7 +419,7 @@ namespace NTable {
             }
         }
 
-        bool NeedFlush() const noexcept
+        bool NeedFlush() const
         {
             // Check if adding this row would overflow page collection size limits
             if (Current.Rows > 0) {
@@ -442,7 +440,9 @@ namespace NTable {
                     ui32 smallRefs = 0;
                     ui32 largeRefs = 0;
                     for (auto& g : Groups) {
-                        indexSize += g.Index.BytesUsed() + g.FirstKeyIndexSize;
+                        if (WriteFlatIndex) {
+                            indexSize += g.FlatIndex.BytesUsed() + g.FirstKeyIndexSize;
+                        }
                         if (WriteBTreeIndex) {
                             indexSize += g.BTreeIndex.EstimateBytesUsed() + g.FirstKeyBTreeIndexSize;
                         }
@@ -483,21 +483,22 @@ namespace NTable {
             return false;
         }
 
-        void Flush(bool last) noexcept
+        void Flush(bool last)
         {
             // The first group must write the last key
-            Y_ABORT_UNLESS(std::exchange(Phase, 1) == 0, "Called twice");
+            Y_ENSURE(std::exchange(Phase, 1) == 0, "Called twice");
 
-            for (auto& g : Groups) {
-                g.Data.Flush(*this);
+            for (size_t i : xrange<size_t>(1, Groups.size())) {
+                Groups[i].Data.Flush(*this);
             }
-
             for (auto& g : Histories) {
                 g.Data.Flush(*this);
             }
+            // Main index should have correct groups data size
+            Groups[0].Data.Flush(*this);
 
             if (Current.Rows > 0) {
-                Y_ABORT_UNLESS(Phase == 2, "Missed the last Save call");
+                Y_ENSURE(Phase == 2, "Missed the last Save call");
 
                 WriteStats.Rows += Current.Rows;
                 WriteStats.Drops += Current.Drops;
@@ -506,35 +507,38 @@ namespace NTable {
                 WriteStats.HiddenRows += Current.HiddenRows;
                 WriteStats.HiddenDrops += Current.HiddenDrops;
 
-                if (Current.HistoryWritten > 0) {
-                    Current.HistoricIndexes.clear();
-                    Current.HistoricIndexes.reserve(Histories.size());
-                    for (auto& g : Histories) {
-                        Current.HistoricIndexes.push_back(WritePage(g.Index.Flush(), EPage::Index));
+                Current.FlatHistoricIndexes.clear();
+                Current.FlatGroupIndexes.clear();
+                Current.FlatIndex = Max<TPageId>();
+                if (WriteFlatIndex) {
+                    if (Current.HistoryWritten > 0) {
+                        Current.FlatHistoricIndexes.reserve(Histories.size());
+                        for (auto& g : Histories) {
+                            Current.FlatHistoricIndexes.push_back(WritePage(g.FlatIndex.Flush(), EPage::FlatIndex));
+                        }
                     }
-                }
 
-                if (Groups.size() > 1) {
-                    Current.GroupIndexes.clear();
-                    Current.GroupIndexes.reserve(Groups.size() - 1);
-                    for (ui32 group : xrange(ui32(1), ui32(Groups.size()))) {
-                        Current.GroupIndexes.push_back(WritePage(Groups[group].Index.Flush(), EPage::Index));
+                    if (Groups.size() > 1) {
+                        Current.FlatGroupIndexes.reserve(Groups.size() - 1);
+                        for (ui32 group : xrange(ui32(1), ui32(Groups.size()))) {
+                            Current.FlatGroupIndexes.push_back(WritePage(Groups[group].FlatIndex.Flush(), EPage::FlatIndex));
+                        }
                     }
+
+                    Current.FlatIndex = WritePage(Groups[0].FlatIndex.Flush(), EPage::FlatIndex);
                 }
-
-                Current.Index = WritePage(Groups[0].Index.Flush(), EPage::Index);
-
+                
                 Current.BTreeGroupIndexes.clear();
                 Current.BTreeHistoricIndexes.clear();
                 if (WriteBTreeIndex) {
                     Current.BTreeGroupIndexes.reserve(Groups.size());
                     for (auto& g : Groups) {
-                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Flush(Pager, true).value());
+                        Current.BTreeGroupIndexes.push_back(g.BTreeIndex.Finish(Pager));
                     }
                     if (Current.HistoryWritten > 0) {
                         Current.BTreeHistoricIndexes.reserve(Histories.size());
                         for (auto& g : Histories) {
-                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Flush(Pager, true).value());
+                            Current.BTreeHistoricIndexes.push_back(g.BTreeIndex.Finish(Pager));
                         }
                     }
                 }
@@ -558,7 +562,7 @@ namespace NTable {
                 Current.Scheme = WritePage(SchemeData, EPage::Schem2);
                 WriteInplace(Current.Scheme, MakeMetaBlob(last));
 
-                Y_ABORT_UNLESS(Slices && *Slices, "Flushing bundle without a run");
+                Y_ENSURE(Slices && *Slices, "Flushing bundle without a run");
 
                 Pager.Finish(TOverlay{ nullptr, std::move(Slices) }.Encode());
                 ++WriteStats.Parts;
@@ -567,12 +571,12 @@ namespace NTable {
             if (!last) {
                 for (auto& g : Groups) {
                     g.Data.Reset();
-                    g.Index.Reset();
+                    g.FlatIndex.Reset();
                     g.BTreeIndex.Reset();
                 }
                 for (auto& g : Histories) {
                     g.Data.Reset();
-                    g.Index.Reset();
+                    g.FlatIndex.Reset();
                     g.BTreeIndex.Reset();
                 }
                 FrameL.Reset();
@@ -586,9 +590,9 @@ namespace NTable {
                 RegisteredGlobs.clear();
 
                 for (auto& g : Groups) {
-                    Y_ABORT_UNLESS(g.FirstKeyIndexSize == 0);
-                    Y_ABORT_UNLESS(g.FirstKeyBTreeIndexSize == 0);
-                    Y_ABORT_UNLESS(g.LastKeyIndexSize == 0);
+                    Y_ENSURE(g.FirstKeyIndexSize == 0);
+                    Y_ENSURE(g.FirstKeyBTreeIndexSize == 0);
+                    Y_ENSURE(g.LastKeyIndexSize == 0);
                 }
 
                 NextSliceFirstRowId = Max<TRowId>();
@@ -598,12 +602,12 @@ namespace NTable {
                 Phase = 0;
                 Current = { };
 
-                Y_ABORT_UNLESS(!PrevPageLastKey);
-                Y_ABORT_UNLESS(!PrevPageData);
+                Y_ENSURE(!PrevPageLastKey);
+                Y_ENSURE(!PrevPageData);
             }
         }
 
-        TString MakeMetaBlob(bool last) const noexcept
+        TString MakeMetaBlob(bool last) const
         {
             NProto::TRoot proto;
 
@@ -618,7 +622,7 @@ namespace NTable {
                 if (!last || WriteStats.Parts > 0)
                     head = Max(head, ui32(20) /* Multiple part outputs */);
 
-                if (!Current.GroupIndexes.empty())
+                if (!Current.FlatGroupIndexes.empty() || Current.BTreeGroupIndexes.size() > 1)
                     head = Max(head, ui32(26) /* Multiple column groups */);
 
                 if (Current.Versioned)
@@ -644,8 +648,9 @@ namespace NTable {
 
             if (auto *lay = proto.MutableLayout()) {
                 lay->SetScheme(Current.Scheme);
-                lay->SetIndex(Current.Index);
 
+                if (Current.FlatIndex != Max<TPageId>())
+                    lay->SetIndex(Current.FlatIndex);
                 if (Current.Globs != Max<TPageId>())
                     lay->SetGlobs(Current.Globs);
                 if (Current.Large != Max<TPageId>())
@@ -655,22 +660,26 @@ namespace NTable {
                 if (Current.ByKey != Max<TPageId>())
                     lay->SetByKey(Current.ByKey);
 
-                for (TPageId page : Current.GroupIndexes) {
+                for (TPageId page : Current.FlatGroupIndexes) {
                     lay->AddGroupIndexes(page);
                 }
-                for (TPageId page : Current.HistoricIndexes) {
+                for (TPageId page : Current.FlatHistoricIndexes) {
                     lay->AddHistoricIndexes(page);
                 }
 
-                for (bool history : {false, true}) {
-                    for (auto meta : history ? Current.BTreeHistoricIndexes : Current.BTreeGroupIndexes) {
-                        auto m = history ? lay->AddBTreeHistoricIndexes() : lay->AddBTreeGroupIndexes();
-                        m->SetRootPageId(meta.PageId);
-                        m->SetLevelCount(meta.LevelCount);
-                        m->SetIndexSize(meta.IndexSize);
-                        m->SetDataSize(meta.DataSize);
-                        m->SetRowCount(meta.RowCount);
-                        m->SetErasedRowCount(meta.ErasedRowCount);
+                if (WriteBTreeIndex) {
+                    lay->SetBTreeIndexesFormatVersion(NPage::TBtreeIndexNode::FormatVersion);
+                    for (bool history : {false, true}) {
+                        for (auto meta : history ? Current.BTreeHistoricIndexes : Current.BTreeGroupIndexes) {
+                            auto m = history ? lay->AddBTreeHistoricIndexes() : lay->AddBTreeGroupIndexes();
+                            m->SetRootPageId(meta.GetPageId());
+                            m->SetLevelCount(meta.LevelCount);
+                            m->SetIndexSize(meta.IndexSize);
+                            m->SetDataSize(meta.GetDataSize());
+                            m->SetGroupDataSize(meta.GetGroupDataSize());
+                            m->SetRowCount(meta.GetRowCount());
+                            m->SetErasedRowCount(meta.GetErasedRowCount());
+                        }
                     }
                 }
 
@@ -709,7 +718,7 @@ namespace NTable {
             return blob;
         }
 
-        TPageId WritePage(TSharedData page, EPage type, ui32 group = 0) noexcept
+        TPageId WritePage(TSharedData page, EPage type, ui32 group = 0)
         {
             NSan::CheckMemIsInitialized(page.data(), page.size());
 
@@ -720,26 +729,26 @@ namespace NTable {
             return Pager.Write(std::move(page), type, group);
         }
 
-        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept
+        void WriteInplace(TPageId page, TArrayRef<const char> body)
         {
             NSan::CheckMemIsInitialized(body.data(), body.size());
 
             Pager.WriteInplace(page, std::move(body));
         }
 
-        TPageId WriteIf(TSharedData page, EPage type) noexcept
+        TPageId WriteIf(TSharedData page, EPage type)
         {
             return page ? WritePage(std::move(page), type) : Max<TPageId>();
         }
 
-        void Save(TSharedData raw, NPage::TGroupId groupId) noexcept override
+        void Save(TSharedData raw, NPage::TGroupId groupId) override
         {
             auto& g = groupId.Historic ? Histories[groupId.Index] : Groups[groupId.Index];
 
             if (groupId.IsMain()) {
-                Y_ABORT_UNLESS(Phase < 2, "Called twice on Finish(...)");
+                Y_ENSURE(Phase < 2, "Called twice on Finish(...)");
             }
-            Y_ABORT_UNLESS(raw, "Save(...) accepts only non-trivial blobs");
+            Y_ENSURE(raw, "Save(...) accepts only non-trivial blobs");
 
             if (auto dataPage = NPage::TDataPage(&raw)) {
                 TSharedData keep; /* should preserve original data for Key */
@@ -750,8 +759,8 @@ namespace NTable {
                     TCellDefaults object for expanding defaults.
                  */
 
-                Y_ABORT_UNLESS(dataPage->Count, "Invalid EPage::DataPage blob");
-                TPgSize keySize = g.FirstKeyIndexSize;
+                Y_ENSURE(dataPage->Count, "Invalid EPage::DataPage blob");
+                TPgSize flatKeyIndexSize = g.FirstKeyIndexSize;
 
                 if (groupId.IsMain()) {
                     Y_DEBUG_ABORT_UNLESS(NextSliceFirstRowId != Max<TRowId>());
@@ -760,7 +769,7 @@ namespace NTable {
 
                     if (CutIndexKeys) {
                         CutKey(groupId);
-                        keySize = g.Index.CalcSize(Key);
+                        flatKeyIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(Key) : 0;
                     }
                 } else if (groupId.Index == 0) {
                     InitKey(Key, dataPage->Record(0), groupId);
@@ -777,7 +786,7 @@ namespace NTable {
                 Current.Bytes += raw.size(); /* before encoding */
 
                 if (g.Codec == NPage::ECodec::Plain) {
-                    /* Ecoding was not enabled, keep as is */
+                    /* Encoding was not enabled, keep as is */
                 } else if (keep = Encode(raw, g.Codec, g.ForceCompression)) {
                     std::swap(raw, keep);
                 }
@@ -786,22 +795,27 @@ namespace NTable {
 
                 auto page = WritePage(raw, EPage::DataPage, groupId.Index);
 
-                // N.B. non-main groups have no key
-                Y_DEBUG_ABORT_UNLESS(g.Index.CalcSize(Key) == keySize);
+                if (WriteFlatIndex) {
+                    // N.B. non-main groups have no key
+                    Y_DEBUG_ABORT_UNLESS(g.FlatIndex.CalcSize(Key) == flatKeyIndexSize);
 
-                g.Index.Add(keySize, Key, dataPage.BaseRow(), page);
+                    g.FlatIndex.Add(flatKeyIndexSize, Key, dataPage.BaseRow(), page);
+                }
 
                 if (WriteBTreeIndex) {
                     if (dataPage.BaseRow()) {
                         g.BTreeIndex.AddKey(Key);
                     }
                     if (groupId.IsMain()) {
-                        g.BTreeIndex.AddChild({page, dataPage->Count, raw.size(), Current.BTreeIndexErased});
-                        Current.BTreeIndexErased = 0;
+                        g.BTreeIndex.AddChild({page, dataPage->Count, raw.size(), Current.BTreeGroupDataSize, Current.BTreeIndexErasedRowCount});
+                        Current.BTreeGroupDataSize = 0;
+                        Current.BTreeIndexErasedRowCount = 0;
                     } else {
                         g.BTreeIndex.AddShortChild({page, dataPage->Count, raw.size()});
+                        // Note: group data size is approximate, includes only finished pages
+                        Current.BTreeGroupDataSize += raw.size();
                     }
-                    g.BTreeIndex.Flush(Pager, false);
+                    g.BTreeIndex.Flush(Pager);
                 }
 
                 // N.B. hack to save the last row/key for the main group
@@ -815,9 +829,11 @@ namespace NTable {
                     SaveSlice(lastRowId, TSerializedCellVec(Key));
 
                     if (Phase == 1) {
-                        Y_DEBUG_ABORT_UNLESS(g.Index.CalcSize(Key) == g.LastKeyIndexSize);
-                        g.Index.Add(g.LastKeyIndexSize, Key, lastRowId, page);
-                        Y_ABORT_UNLESS(std::exchange(Phase, 2) == 1);
+                        if (WriteFlatIndex) {
+                            Y_DEBUG_ABORT_UNLESS(g.FlatIndex.CalcSize(Key) == g.LastKeyIndexSize);
+                            g.FlatIndex.Add(g.LastKeyIndexSize, Key, lastRowId, page);
+                        }
+                        Y_ENSURE(std::exchange(Phase, 2) == 1);
                         PrevPageLastKey.clear(); // new index will be started
                         PrevPageData = { };
                     }
@@ -829,16 +845,18 @@ namespace NTable {
             }
         }
 
-        TLargeObj Save(TRowId row, ui32 tag, const TGlobId &glob) noexcept override
+        TLargeObj Save(TRowId row, ui32 tag, const TGlobId &glob) override
         {
             return Register(row, tag, glob);
         }
 
-        TLargeObj Save(TRowId row, ui32 tag, TArrayRef<const char> plain) noexcept override
+        TLargeObj Save(TRowId row, ui32 tag, TArrayRef<const char> plain) override
         {
             if (plain.size() >= LargeEdge && plain.size() <= MaxLargeBlob) {
                 auto blob = NPage::TLabelWrapper::WrapString(plain, EPage::Opaque, 0);
                 ui64 ref = Globs.Size(); /* is the current blob index */
+
+                Current.BTreeGroupDataSize += blob.size();
 
                 return Register(row, tag, Pager.WriteLarge(std::move(blob), ref));
 
@@ -850,25 +868,26 @@ namespace NTable {
                 FrameS.Put(row, tag, blob.size());
 
                 Current.SmallWritten += blob.size();
+                Current.BTreeGroupDataSize += blob.size();
 
                 return { ELargeObj::Outer, Pager.WriteOuter(std::move(blob)) };
 
             } else {
-                Y_Fail("Got ELargeObj blob " << plain.size() << "b out of limits"
+                Y_TABLET_ERROR("Got ELargeObj blob " << plain.size() << "b out of limits"
                         << " { " << SmallEdge << "b, " << LargeEdge << "b }");
             }
         }
 
-        TLargeObj Register(TRowId row, ui32 tag, const TGlobId &glob) noexcept
+        TLargeObj Register(TRowId row, ui32 tag, const TGlobId &glob)
         {
             ui32 ref;
 
             auto it = RegisteredGlobs.find(glob.Logo);
             if (it != RegisteredGlobs.end()) {
                 // It's ok to reuse, as long as the glob is on the same row and column
-                Y_ABORT_UNLESS(row == it->second.Row && tag == it->second.Tag,
-                    "Glob %s is on row %" PRIu64 " tag %" PRIu32 " but was on row %" PRIu64 " tag %" PRIu32,
-                    glob.Logo.ToString().c_str(), row, tag, it->second.Row, it->second.Tag);
+                Y_ENSURE(row == it->second.Row && tag == it->second.Tag,
+                    "Glob " << glob.Logo << " is on row " << row << " tag " << tag
+                    << " but was on row " << it->second.Row << " tag " << it->second.Tag);
 
                 ref = it->second.Ref;
             } else {
@@ -885,14 +904,14 @@ namespace NTable {
             return { ELargeObj::Extern, ref };
         }
 
-        TSharedData Encode(TArrayRef<const char> page, ECodec codec, bool force) noexcept
+        TSharedData Encode(TArrayRef<const char> page, ECodec codec, bool force)
         {
-            Y_ABORT_UNLESS(codec == ECodec::LZ4, "Only LZ4 encoding allowed");
+            Y_ENSURE(codec == ECodec::LZ4, "Only LZ4 encoding allowed");
 
             auto got = NPage::TLabelWrapper().Read(page, EPage::DataPage);
 
-            Y_ABORT_UNLESS(got == ECodec::Plain, "Page is already encoded");
-            Y_ABORT_UNLESS(got.Page.data() - page.data() == 16, "Page compression would change page header size");
+            Y_ENSURE(got == ECodec::Plain, "Page is already encoded");
+            Y_ENSURE(got.Page.data() - page.data() == 16, "Page compression would change page header size");
 
             if (!CodecImpl) {
                 CodecImpl = NBlockCodecs::Codec("lz4fast");
@@ -914,7 +933,7 @@ namespace NTable {
             } else {
                 auto label = ReadUnaligned<NPage::TLabel>(page.begin());
 
-                Y_ABORT_UNLESS(label.IsExtended(), "Expected an extended label");
+                Y_ENSURE(label.IsExtended(), "Expected an extended label");
 
                 auto ext = ReadUnaligned<NPage::TLabelExt>(page.begin() + 8);
 
@@ -929,7 +948,7 @@ namespace NTable {
             }
         }
 
-        void InitKey(TStackVec<TCell, 16>& key, const NPage::TDataPage::TRecord* record, NPage::TGroupId groupId) noexcept
+        void InitKey(TStackVec<TCell, 16>& key, const NPage::TDataPage::TRecord* record, NPage::TGroupId groupId)
         {
             const auto& layout = Scheme->GetLayout(groupId);
             key.resize(layout.ColsKeyData.size());
@@ -938,30 +957,30 @@ namespace NTable {
             }
         }
 
-        void CutKey(NPage::TGroupId groupId) noexcept
+        void CutKey(NPage::TGroupId groupId)
         {
             if (!PrevPageLastKey) {
                 return;
             }
 
-            Y_ABORT_UNLESS(PrevPageLastKey.size() == Key.size());
+            Y_ENSURE(PrevPageLastKey.size() == Key.size());
 
             const auto& layout = Scheme->GetLayout(groupId);
             
             TPos it;
             for (it = 0; it < Key.size(); it++) {
-                if (int cmp = CompareTypedCells(PrevPageLastKey[it], Key[it], layout.KeyTypes[it])) {
+                if (CompareTypedCells(PrevPageLastKey[it], Key[it], layout.KeyTypes[it]) != 0) {
                     break;
                 }
             }
 
-            Y_ABORT_UNLESS(it < Key.size(), "All keys should be different");
+            Y_ENSURE(it < Key.size(), "All keys should be different");
 
             if (!layout.Columns[it].IsFixed && IsCharPointerType(layout.KeyTypes[it].GetTypeId())) {
                 auto &prevCell = PrevPageLastKey[it];
                 auto &cell = Key[it];
 
-                Y_ABORT_UNLESS(!cell.IsNull(), "Keys should be in ascendic order");
+                Y_ENSURE(!cell.IsNull(), "Keys should be in ascendic order");
 
                 size_t index;
                 for (index = 0; index < Min(prevCell.Size(), cell.Size()); index++) {
@@ -1002,10 +1021,10 @@ namespace NTable {
             return false;
         }
 
-        void SaveSlice(TRowId lastRowId, TSerializedCellVec lastKey) noexcept
+        void SaveSlice(TRowId lastRowId, TSerializedCellVec lastKey)
         {
-            Y_ABORT_UNLESS(NextSliceFirstRowId != Max<TRowId>());
-            Y_ABORT_UNLESS(NextSliceFirstRowId <= lastRowId);
+            Y_ENSURE(NextSliceFirstRowId != Max<TRowId>());
+            Y_ENSURE(NextSliceFirstRowId <= lastRowId);
             if (!Slices) {
                 Slices = new TSlices;
             }
@@ -1024,6 +1043,7 @@ namespace NTable {
         const bool Final = false;
         const bool CutIndexKeys;
         const bool WriteBTreeIndex;
+        const bool WriteFlatIndex;
         const ui32 SmallEdge;
         const ui32 LargeEdge;
         const ui32 MaxLargeBlob;
@@ -1061,7 +1081,7 @@ namespace NTable {
             const ECodec Codec;
 
             NPage::TDataPageWriter Data;
-            NPage::TIndexWriter Index;
+            NPage::TFlatIndexWriter FlatIndex;
             NPage::TBtreeIndexBuilder BTreeIndex;
 
             NPage::TDataPageWriter::TSizeInfo NextDataSize;
@@ -1076,7 +1096,7 @@ namespace NTable {
                 : ForceCompression(conf.Groups[groupId.Index].ForceCompression)
                 , Codec(conf.Groups[groupId.Index].Codec)
                 , Data(scheme, conf, tags, groupId)
-                , Index(scheme, conf, groupId)
+                , FlatIndex(scheme, conf, groupId)
                 , BTreeIndex(scheme, groupId, conf.Groups[groupId.Index].BTreeIndexNodeTargetSize, conf.Groups[groupId.Index].BTreeIndexNodeKeysMin, conf.Groups[groupId.Index].BTreeIndexNodeKeysMax)
             { }
         };
@@ -1105,7 +1125,8 @@ namespace NTable {
             ui64 Coded = 0;
             ui64 HiddenRows = 0;
             ui64 HiddenDrops = 0;
-            ui64 BTreeIndexErased = 0;
+            ui64 BTreeIndexErasedRowCount = 0;
+            ui64 BTreeGroupDataSize = 0;
 
             // doesn't include written B-Tree index bytes
             ui64 MainWritten = 0;
@@ -1113,11 +1134,11 @@ namespace NTable {
 
             ui64 HistoryWritten = 0;
 
-            TVector<TPageId> GroupIndexes;
-            TVector<TPageId> HistoricIndexes;
+            TVector<TPageId> FlatGroupIndexes;
+            TVector<TPageId> FlatHistoricIndexes;
             TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes;
             TVector<NPage::TBtreeIndexMeta> BTreeHistoricIndexes; 
-            TPageId Index = Max<TPageId>();
+            TPageId FlatIndex = Max<TPageId>();
             TPageId Scheme = Max<TPageId>();
             TPageId Large = Max<TPageId>();
             TPageId Small = Max<TPageId>();

@@ -1,0 +1,322 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07040e547c7cdfe59c684f2a324385cc
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004 CrystalClear Software, Inc.
+         * Subject to the Boost Software License, Version 1.0. 
+         * (See accompanying file LICENSE_1_0.txt or 
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/date_duration_types.hpp [4:6]
+        include/boost/date_time/date_generator_formatter.hpp [4:6]
+        include/boost/date_time/filetime_functions.hpp [4:6]
+        include/boost/date_time/gregorian/greg_duration_types.hpp [4:8]
+        include/boost/date_time/local_time/date_duration_operators.hpp [4:6]
+        include/boost/date_time/posix_time/date_duration_operators.hpp [4:6]
+        include/boost/date_time/special_values_formatter.hpp [5:7]
+        include/boost/date_time/strings_from_facet.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 430fce41d4bc35ab3f5260a42cbede37
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2002-2005 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/date_names_put.hpp [4:6]
+        include/boost/date_time/posix_time/conversion.hpp [4:6]
+        include/boost/date_time/posix_time/posix_time.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5436f6cfa7ad970fe3000b4e5a4d7591
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2002,2003,2005 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the 
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/c_local_time_adjustor.hpp [4:6]
+        include/boost/date_time/c_time.hpp [4:6]
+        include/boost/date_time/date_clock_device.hpp [4:6]
+        include/boost/date_time/date_generators.hpp [4:6]
+        include/boost/date_time/date_parsing.hpp [4:6]
+        include/boost/date_time/dst_transition_generators.hpp [1:3]
+        include/boost/date_time/find_match.hpp [4:6]
+        include/boost/date_time/gregorian/parsers.hpp [4:6]
+        include/boost/date_time/microsec_time_clock.hpp [4:6]
+        include/boost/date_time/time_clock.hpp [4:6]
+        include/boost/date_time/time_parsing.hpp [4:6]
+        include/boost/date_time/time_system_split.hpp [4:6]
+        include/boost/date_time/wrapping_int.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5d19ba487dbef72a53fdf36bdd83309d
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2002-2003,2005 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the 
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/time_zone_names.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7835fe6ddf1d8be5d13781a9b07318af
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2002,2003,2005,2020 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the 
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/posix_time/posix_time_config.hpp [4:6]
+        include/boost/date_time/time.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c77d6e5bb89b3f88ead00b40ff306ae
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2002-2020 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/locale_config.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a0c5300b9bdea05390915ba7a0320755
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2004-2005 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/date_facet.hpp [4:6]
+        include/boost/date_time/format_date_parser.hpp [5:7]
+        include/boost/date_time/gregorian/conversion.hpp [4:6]
+        include/boost/date_time/gregorian/greg_serialize.hpp [4:6]
+        include/boost/date_time/gregorian/gregorian_io.hpp [4:6]
+        include/boost/date_time/posix_time/posix_time_io.hpp [4:6]
+        include/boost/date_time/posix_time/time_serialize.hpp [4:6]
+        include/boost/date_time/string_parse_tree.hpp [4:6]
+        include/boost/date_time/time_facet.hpp [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL af45b70e0bc5fc79d207c3139f28acec
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2002,2003,2020 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the 
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/gregorian/greg_day.hpp [4:6]
+        include/boost/date_time/gregorian/greg_weekday.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL af4aaeb4595b4e2e72d13075cdc42e70
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2005 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the 
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/date_generator_parser.hpp [5:7]
+        include/boost/date_time/special_values_parser.hpp [5:7]
+        include/boost/date_time/string_convert.hpp [4:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc186e328c5eaa608188302749112295
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/compiler_config.hpp [4:8]
+        include/boost/date_time/date_formatting.hpp [4:6]
+        include/boost/date_time/date_formatting_limited.hpp [4:6]
+        include/boost/date_time/gregorian/gregorian.hpp [4:6]
+        include/boost/date_time/period_formatter.hpp [5:7]
+        include/boost/date_time/period_parser.hpp [5:7]
+        include/boost/date_time/posix_time/posix_time_legacy_io.hpp [4:6]
+        include/boost/date_time/posix_time/time_formatters.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c5dae27a283a824cf64ca578da3ef729
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2002,2003, 2020 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/gregorian/greg_date.hpp [4:6]
+        include/boost/date_time/gregorian/greg_duration.hpp [4:6]
+        include/boost/date_time/gregorian/greg_month.hpp [4:6]
+        include/boost/date_time/gregorian/greg_year.hpp [4:6]
+        include/boost/date_time/posix_time/posix_time_duration.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db0443ef1ac24a2215b5dcee7e8a6a38
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2002,2003 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/adjust_functors.hpp [4:6]
+        include/boost/date_time/constrained_value.hpp [4:6]
+        include/boost/date_time/date.hpp [4:6]
+        include/boost/date_time/date_defs.hpp [4:6]
+        include/boost/date_time/date_duration.hpp [4:6]
+        include/boost/date_time/date_format_simple.hpp [4:6]
+        include/boost/date_time/date_formatting_locales.hpp [4:6]
+        include/boost/date_time/date_iterator.hpp [4:6]
+        include/boost/date_time/gregorian/formatters.hpp [4:6]
+        include/boost/date_time/gregorian/formatters_limited.hpp [4:6]
+        include/boost/date_time/gregorian/greg_calendar.hpp [4:6]
+        include/boost/date_time/gregorian/greg_day_of_year.hpp [4:6]
+        include/boost/date_time/gregorian/greg_facet.hpp [4:6]
+        include/boost/date_time/gregorian/greg_ymd.hpp [4:6]
+        include/boost/date_time/gregorian/gregorian_types.hpp [4:6]
+        include/boost/date_time/gregorian_calendar.hpp [4:6]
+        include/boost/date_time/gregorian_calendar.ipp [1:3]
+        include/boost/date_time/int_adapter.hpp [4:6]
+        include/boost/date_time/iso_format.hpp [4:6]
+        include/boost/date_time/local_time_adjustor.hpp [4:6]
+        include/boost/date_time/local_timezone_defs.hpp [4:6]
+        include/boost/date_time/parse_format_base.hpp [4:6]
+        include/boost/date_time/period.hpp [4:6]
+        include/boost/date_time/posix_time/posix_time_system.hpp [4:6]
+        include/boost/date_time/posix_time/posix_time_types.hpp [1:3]
+        include/boost/date_time/posix_time/ptime.hpp [4:6]
+        include/boost/date_time/posix_time/time_formatters_limited.hpp [4:6]
+        include/boost/date_time/posix_time/time_parsers.hpp [4:6]
+        include/boost/date_time/posix_time/time_period.hpp [4:6]
+        include/boost/date_time/special_defs.hpp [4:6]
+        include/boost/date_time/time_defs.hpp [4:6]
+        include/boost/date_time/time_duration.hpp [4:6]
+        include/boost/date_time/time_formatting_streams.hpp [4:6]
+        include/boost/date_time/time_iterator.hpp [4:6]
+        include/boost/date_time/time_resolution_traits.hpp [4:6]
+        include/boost/date_time/time_system_counted.hpp [4:6]
+        include/boost/date_time/year_month_day.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e4e5cd68aeaf73ab0c3db975bca46744
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2006 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the 
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ea2a1d88ab559901c962fffaa443db62
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/local_time/conversion.hpp [4:8]
+        include/boost/date_time/local_time/dst_transition_day_rules.hpp [4:8]
+        include/boost/date_time/local_time/local_time.hpp [4:8]
+        include/boost/date_time/local_time/local_time_io.hpp [4:8]
+        include/boost/date_time/local_time/local_time_types.hpp [4:8]
+        include/boost/date_time/local_time/tz_database.hpp [4:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eb6bb6f91accb539f5892840b9273ed5
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2002,2003, 2007 CrystalClear Software, Inc.
+         * Use, modification and distribution is subject to the
+         * Boost Software License, Version 1.0. (See accompanying
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/dst_rules.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f4e26fc31fa1f72f9590a00e311382b9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/date_time/local_time/custom_time_zone.hpp [4:8]
+        include/boost/date_time/local_time/local_date_time.hpp [4:8]
+        include/boost/date_time/local_time/posix_time_zone.hpp [4:8]
+        include/boost/date_time/time_zone_base.hpp [4:8]
+        include/boost/date_time/tz_db_base.hpp [4:8]

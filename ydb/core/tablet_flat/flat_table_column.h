@@ -26,18 +26,6 @@ namespace NTable {
 
         }
 
-        bool IsTheSame(const TColumn &col) const noexcept
-        {
-            return
-                Id == col.Id
-                && PType == col.PType
-                && PTypeMod == col.PTypeMod
-                && KeyOrder == col.KeyOrder
-                && Name == col.Name
-                && Family == col.Family
-                && NotNull == col.NotNull;
-        }
-
         void SetDefault(const TCell &null)
         {
             if (!null || TCell::CanInline(null.Size())) {
@@ -46,6 +34,14 @@ namespace NTable {
             } else {
                 Storage.assign(null.Data(), null.Size());
                 Null = TCell(Storage.data(), Storage.size());
+            }
+        }
+
+        std::optional<ui32> GetCorrectKeyOrder() const {
+            if (KeyOrder == Max<TPos>()) {
+                return std::nullopt;
+            } else {
+                return KeyOrder;
             }
         }
 

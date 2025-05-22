@@ -20,7 +20,8 @@ TSharedRef ConvertMessageFromFormat(
     const TSharedRef& message,
     EMessageFormat format,
     const NYson::TProtobufMessageType* messageType,
-    const NYson::TYsonString& formatOptionsYson);
+    const NYson::TYsonString& formatOptionsYson,
+    bool enveloped);
 
 ////////////////////////////////////////////////////////////////////////////////
 

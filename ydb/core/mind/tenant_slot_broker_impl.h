@@ -171,7 +171,7 @@ struct THash<NKikimr::NTenantSlotBroker::TSlotDescription> {
 namespace NKikimr {
 namespace NTenantSlotBroker {
 
-using NConsole::TEvConsole;
+namespace TEvConsole = NConsole::TEvConsole;
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
@@ -1152,7 +1152,6 @@ private:
     NKikimrTenantSlotBroker::TConfig Config;
     TDuration PendingTimeout;
     ui64 RequestId;
-    ui32 DomainId;
     TString DomainName;
     // NodeId -> DataCenter
     THashMap<ui32, TString> NodeIdToDataCenter;

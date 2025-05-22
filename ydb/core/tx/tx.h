@@ -222,10 +222,10 @@ struct TExecLevelHierarchy {
 
 struct TTestTxConfig {
     static constexpr ui64 DomainUid = 0;
-    static constexpr ui64 Coordinator = 0x0000000000800001;
-    static constexpr ui64 Mediator = 0x0000000000810001;
-    static constexpr ui64 TxAllocator = 0x0000000000820001;
-    static constexpr ui64 Moderator = 0x0000000000830001;
+    static constexpr ui64 Coordinator = MakeTabletID(false, 0x0000000000800001);
+    static constexpr ui64 Mediator = MakeTabletID(false, 0x0000000000810001);
+    static constexpr ui64 TxAllocator = MakeTabletID(false, 0x0000000000820001);
+    static constexpr ui64 Moderator = MakeTabletID(false, 0x0000000000830001);
     static constexpr ui64 TxTablet0 = 0x0000000000900000;
     static constexpr ui64 TxTablet1 = 0x0000000000900001;
     static constexpr ui64 TxTablet2 = 0x0000000000900002;
@@ -234,13 +234,13 @@ struct TTestTxConfig {
     static constexpr ui64 TxTablet5 = 0x0000000000900005;
     static constexpr ui64 TxTablet6 = 0x0000000000900006;
     static constexpr ui64 TxTablet7 = 0x0000000000900006;
-    static constexpr ui64 FakeHiveTablets = 0x000000000090000a;
-    static constexpr ui64 SchemeShard = 0x00000000008587a0;
-    static constexpr ui64 Hive =  0x000000000000A001;
+    static constexpr ui64 FakeHiveTablets = MakeTabletID(true, 0x000000000090000a);
+    static constexpr ui64 SchemeShard = MakeTabletID(false, 0x00000000008587a0);
+    static constexpr ui64 Hive = MakeTabletID(false,  0x000000000000A001);
     static constexpr ui64 UseLessId = 0xFFFFFFFFFFFFFFF;
 };
 
-struct TEvSubDomain {
+namespace TEvSubDomain {
     enum EEv {
         EvConfigure = EventSpaceBegin(TKikimrEvents::ES_SUB_DOMAIN),
         EvConfigureStatus,
@@ -265,7 +265,7 @@ struct TEvSubDomain {
     };
 };
 
-TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData *appdata, ui64 tabletId);
+TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData *appdata);
 
 }
 

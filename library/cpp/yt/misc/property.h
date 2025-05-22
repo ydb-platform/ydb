@@ -46,6 +46,24 @@ public: \
     } \
     static_assert(true)
 
+//! Defines a trivial public read-write property override that is passed by reference
+//! and is not inline-initialized.
+#define DEFINE_BYREF_RW_PROPERTY_NO_INIT_OVERRIDE(type, name) \
+protected: \
+    type name##_; \
+    \
+public: \
+    Y_FORCE_INLINE type& name() noexcept override \
+    { \
+        return name##_; \
+    } \
+    \
+    Y_FORCE_INLINE const type& name() const noexcept override \
+    { \
+        return name##_; \
+    } \
+    static_assert(true)
+
 //! Forwards a trivial public read-write property that is passed by reference.
 #define DELEGATE_BYREF_RW_PROPERTY(declaringType, type, name, delegateTo) \
     type& declaringType::name() noexcept \
@@ -92,6 +110,19 @@ public: \
     } \
     static_assert(true)
 
+//! Defines a trivial public read-only property override that is passed by reference
+//! and is not inline-initialized.
+#define DEFINE_BYREF_RO_PROPERTY_NO_INIT_OVERRIDE(type, name) \
+protected: \
+    type name##_; \
+    \
+public: \
+    Y_FORCE_INLINE const type& name() const noexcept override \
+    { \
+        return name##_; \
+    } \
+    static_assert(true)
+
 //! Forwards a trivial public read-only property that is passed by reference.
 #define DELEGATE_BYREF_RO_PROPERTY(declaringType, type, name, delegateTo) \
     const type& declaringType::name() const noexcept \
@@ -126,6 +157,36 @@ public: \
     } \
     static_assert(true)
 
+//! Defines a trivial public read-write boolean property that is passed by value.
+//! All arguments after name are used as default value (via braced-init-list).
+#define DEFINE_BYVAL_RW_BOOLEAN_PROPERTY(name, ...) \
+protected: \
+    bool name##_ { __VA_ARGS__ }; \
+    \
+public: \
+    Y_FORCE_INLINE bool Is##name() const \
+    { \
+        return name##_; \
+    } \
+    \
+    Y_FORCE_INLINE void Set##name(bool value) \
+    { \
+        name##_ = value; \
+    } \
+    static_assert(true)
+
+//! Defines a trivial public read-only boolean property that is passed by value.
+//! All arguments after name are used as default value (via braced-init-list).
+#define DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(name, ...) \
+protected: \
+    bool name##_ { __VA_ARGS__ }; \
+    \
+public: \
+    Y_FORCE_INLINE bool Is##name() const \
+    { \
+        return name##_; \
+    } \
+    static_assert(true)
 
 //! Defines a trivial public read-write property that is passed by value.
 //! All arguments after name are used as default value (via braced-init-list).
@@ -153,7 +214,7 @@ public: \
 
 //! Defines a trivial public read-write property that is passed by value
 //! and is not inline-initialized.
-#define DEFINE_BYVAL_RW_PROPERTY_NO_INIT(type, name, ...) \
+#define DEFINE_BYVAL_RW_PROPERTY_NO_INIT(type, name) \
 protected: \
     type name##_; \
     \
@@ -164,6 +225,24 @@ public: \
     } \
     \
     Y_FORCE_INLINE void Set##name(type value) \
+    { \
+        name##_ = value; \
+    } \
+    static_assert(true)
+
+//! Defines a trivial public read-write property override that is passed by value
+//! and is not inline-initialized.
+#define DEFINE_BYVAL_RW_PROPERTY_NO_INIT_OVERRIDE(type, name) \
+protected: \
+    type name##_; \
+    \
+public: \
+    Y_FORCE_INLINE type Get##name() const override \
+    { \
+        return name##_; \
+    } \
+    \
+    Y_FORCE_INLINE void Set##name(type value) override \
     { \
         name##_ = value; \
     } \
@@ -202,7 +281,6 @@ public: \
     } \
     static_assert(true)
 
-
 //! Defines a trivial public read-only property that is passed by value
 //! and is not inline-initialized.
 #define DEFINE_BYVAL_RO_PROPERTY_NO_INIT(type, name) \
@@ -211,6 +289,19 @@ protected: \
     \
 public: \
     Y_FORCE_INLINE type Get##name() const \
+    { \
+        return name##_; \
+    } \
+    static_assert(true)
+
+//! Defines a trivial public read-only property override that is passed by value
+//! and is not inline-initialized.
+#define DEFINE_BYVAL_RO_PROPERTY_NO_INIT_OVERRIDE(type, name) \
+protected: \
+    type name##_; \
+    \
+public: \
+    Y_FORCE_INLINE type Get##name() const override \
     { \
         return name##_; \
     } \

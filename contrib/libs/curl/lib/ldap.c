@@ -72,7 +72,7 @@
 # endif
 # error #include <ldap.h>
 # if (defined(HAVE_LDAP_SSL) && defined(HAVE_LDAP_SSL_H))
-#  include <ldap_ssl.h>
+#  error #include <ldap_ssl.h>
 # endif /* HAVE_LDAP_SSL && HAVE_LDAP_SSL_H */
 #endif
 

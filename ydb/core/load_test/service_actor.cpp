@@ -432,17 +432,17 @@ public:
     }
 
     void Handle(TEvLoad::TEvLoadTestRequest::TPtr& ev) {
-        ui32 status = NMsgBusProxy::MSTATUS_OK;
-        TString error;
         const auto& record = GetFixedRequest(ev);
-        Y_ENSURE(!RequestSender.contains(record.GetTag()),
-            "node is currently handling another request with tag# " << record.GetTag());
-        RequestSender[record.GetTag()] = ev->Sender;
-        UuidByTag[record.GetTag()] = record.GetUuid();
         LOG_N("Load test request arrived from " << ev->Sender.ToString() <<
             ": tag# " << record.GetTag() <<
             ", uuid# " << record.GetUuid());
+        ui32 status = NMsgBusProxy::MSTATUS_OK;
+        TString error;
         try {
+            Y_ENSURE(!RequestSender.contains(record.GetTag()),
+                "node is currently handling another request with tag# " << record.GetTag());
+            RequestSender[record.GetTag()] = ev->Sender;
+            UuidByTag[record.GetTag()] = record.GetUuid();
             ProcessCmd(record);
         } catch (const TLoadActorException& ex) {
             LOG_E("Exception while creating load actor, what# " << ex.what());
@@ -701,19 +701,12 @@ public:
         }
     }
 
-    void RunRecordOnAllNodes(const TEvLoadTestRequest& record, ui64& tag, TString& uuid, TString& msg) {
+    void RunRecordOnAllNodes(const TEvLoadTestRequest& record, ui64& tag, TString& uuid, TString& /*msg*/) {
         const auto& modifiedRequest = AddRequestInProcessing(record, /* legacyRequest */ false);
         AllNodesLoadConfigs.push_back(modifiedRequest);
-
-        if (AppData()->DomainsInfo->Domains.empty()) {
-            msg = "error while retrieving domain nodes info";
-            return;
-        }
-        auto domainInfo = AppData()->DomainsInfo->Domains.begin()->second;
         auto name = AppData()->TenantName;
         RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(name),
                                                         SelfId(),
-                                                        domainInfo->DefaultStateStorageGroup,
                                                         EBoardLookupMode::Second));
         tag = modifiedRequest.GetTag();
         uuid = modifiedRequest.GetUuid();
@@ -1067,7 +1060,7 @@ public:
                             if (result.status == "ok") {
                                 updateStatus(
                                     "text-success",
-                                    "Started: UUID# " + result.uuid + ", node tag# " + result.tag + ", status# " + result.status
+                                    "Starting: UUID# " + result.uuid + ", node tag# " + result.tag + ", status# " + result.status
                                 );
                             } else {
                                 updateStatus(

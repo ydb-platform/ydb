@@ -8,8 +8,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/testlib/default
-    ydb/public/sdk/cpp/client/ydb_coordination
-    ydb/public/sdk/cpp/client/ydb_rate_limiter
+    ydb/public/sdk/cpp/src/client/coordination
+    ydb/public/sdk/cpp/src/client/rate_limiter
 )
 
 YQL_LAST_ABI_VERSION()

@@ -36,7 +36,7 @@ void SymbolizeByExternalPProf(NProto::Profile* profile, const TSymbolizationOpti
     writeFile("llvm-symbolizer");
 
     TFileOutput output(tmpDir.Path() / "in.pb.gz");
-    WriteProfile(&output, *profile);
+    WriteCompressedProfile(&output, *profile);
     output.Finish();
 
     options.RunTool(std::vector<TString>{
@@ -48,7 +48,7 @@ void SymbolizeByExternalPProf(NProto::Profile* profile, const TSymbolizationOpti
     });
 
     TFileInput input(tmpDir.Path() / "out.pb.gz");
-    ReadProfile(&input, profile);
+    ReadCompressedProfile(&input, profile);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

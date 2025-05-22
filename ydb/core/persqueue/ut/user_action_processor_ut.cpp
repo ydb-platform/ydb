@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TUserActionProcessorTests) {
 namespace NHelpers {
 
 struct TCreatePartitionParams {
-    ui32 Partition = 1;
+    TPartitionId Partition = TPartitionId{1};
     ui64 Begin = 0;
     ui64 End = 0;
     TMaybe<ui64> PlanStep;
@@ -141,7 +141,7 @@ protected:
     void SetUp(NUnitTest::TTestContext&) override;
     void TearDown(NUnitTest::TTestContext&) override;
 
-    void CreatePartitionActor(ui32 partition,
+    void CreatePartitionActor(const TPartitionId& partition,
                               const TVector<TCreateConsumerParams>& consumers,
                               bool newPartition,
                               TVector<TTransaction> txs);
@@ -238,7 +238,7 @@ void TUserActionProcessorFixture::TearDown(NUnitTest::TTestContext&)
 {
 }
 
-void TUserActionProcessorFixture::CreatePartitionActor(ui32 id,
+void TUserActionProcessorFixture::CreatePartitionActor(const TPartitionId& id,
                                                        const TVector<TCreateConsumerParams>& consumers,
                                                        bool newPartition,
                                                        TVector<TTransaction> txs)
@@ -306,7 +306,7 @@ void TUserActionProcessorFixture::CreatePartition(const TCreatePartitionParams& 
         SendMetaReadResponse(params.PlanStep, params.TxId);
 
         WaitInfoRangeRequest();
-        SendInfoRangeResponse(params.Partition, consumers);
+        SendInfoRangeResponse(params.Partition.InternalPartitionId, consumers);
 
         WaitDataRangeRequest();
         SendDataRangeResponse(params.Begin, params.End);
@@ -378,8 +378,6 @@ void TUserActionProcessorFixture::WaitCmdWrite(const TCmdWriteMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
-
-    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetCookie(), 1);             // SET_OFFSET_COOKIE
 
     if (matcher.Count.Defined()) {
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Count,
@@ -457,7 +455,6 @@ void TUserActionProcessorFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseSt
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(status);
-    event->Record.SetCookie(1); // SET_OFFSET_COOKIE
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
@@ -636,7 +633,7 @@ void TUserActionProcessorFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     auto pair = read->AddPair();
     NPQ::TKey key(NPQ::TKeyPrefix::TypeData, 1, begin, 0, end - begin, 0);
     pair->SetStatus(NKikimrProto::OK);
-    pair->SetKey(key.ToString());
+    pair->SetKey(key.Data(), key.Size());
     //pair->SetValueSize();
     pair->SetCreationUnixTime(0);
 
@@ -650,14 +647,14 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
                                                                 bool immediate,
                                                                 ui64 txId)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSource());
     auto* body = event->Record.MutableTxBody();
     auto* operation = body->MutableOperations()->Add();
     operation->SetPartitionId(partition);
-    operation->SetBegin(begin);
-    operation->SetEnd(end);
+    operation->SetCommitOffsetsBegin(begin);
+    operation->SetCommitOffsetsEnd(end);
     operation->SetConsumer(client);
     operation->SetPath(topic);
     body->SetImmediate(immediate);
@@ -668,7 +665,7 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
 
 void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTransactionParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
 
     //
     // Source
@@ -682,8 +679,8 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(const TProposeTr
     for (auto& txOp : params.TxOps) {
         auto* operation = body->MutableOperations()->Add();
         operation->SetPartitionId(txOp.Partition);
-        operation->SetBegin(txOp.Begin);
-        operation->SetEnd(txOp.End);
+        operation->SetCommitOffsetsBegin(txOp.Begin);
+        operation->SetCommitOffsetsEnd(txOp.End);
         operation->SetConsumer(txOp.Consumer);
         operation->SetPath(txOp.Path);
     }

@@ -25,8 +25,8 @@ namespace NKikimr {
 class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     const TString Path;
     const TActorId Owner;
+    const ui64 Cookie;
     const EBoardLookupMode Mode;
-    const ui32 StateStorageGroupId;
     const bool Subscriber;
     TBoardRetrySettings BoardRetrySettings;
 
@@ -112,12 +112,12 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     void NotAvailable() {
         if (CurrentStateFunc() != &TThis::StateSubscribe) {
             Send(Owner, new TEvStateStorage::TEvBoardInfo(
-                TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path, StateStorageGroupId));
+                TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path), 0, Cookie);
         } else {
             Send(Owner,
                 new TEvStateStorage::TEvBoardInfoUpdate(
-                    TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path, StateStorageGroupId
-                )
+                    TEvStateStorage::TEvBoardInfo::EStatus::NotAvailable, Path
+                ), 0, Cookie
             );
         }
         return PassAway();
@@ -128,9 +128,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             if ((!Subscriber && Stats.HasInfo == WaitForReplicasToSuccess) ||
                     (Subscriber && Stats.HasInfo + Stats.NoInfo == WaitForReplicasToSuccess)) {
                 auto reply = MakeHolder<TEvStateStorage::TEvBoardInfo>(
-                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path, StateStorageGroupId);
+                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
                 reply->InfoEntries = std::move(Info);
-                Send(Owner, std::move(reply));
+                Send(Owner, std::move(reply), 0, Cookie);
                 if (Subscriber) {
                     Become(&TThis::StateSubscribe);
                     return;
@@ -158,7 +158,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         auto *msg = ev->Get();
 
         if (msg->Replicas.empty()) {
-            BLOG_ERROR("lookup on unconfigured statestorage board service " << StateStorageGroupId);
+            BLOG_ERROR("lookup on unconfigured statestorage board service");
             return NotAvailable();
         }
 
@@ -239,9 +239,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             }
             if (update.has_value()) {
                 auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
-                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path, StateStorageGroupId);
+                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
                 reply->Updates = { { oid, std::move(update.value()) } };
-                Send(Owner, std::move(reply));
+                Send(Owner, std::move(reply), 0, Cookie);
             }
         } else {
             if (info.GetDropped()) {
@@ -307,9 +307,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
             if (isStateSubscribe && !updates.empty()) {
                 auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
-                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path, StateStorageGroupId);
+                    TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
                 reply->Updates = std::move(updates);
-                Send(Owner, std::move(reply));
+                Send(Owner, std::move(reply), 0, Cookie);
             }
         }
 
@@ -483,9 +483,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
         if (isStateSubscribe && !updates.empty()) {
             auto reply = MakeHolder<TEvStateStorage::TEvBoardInfoUpdate>(
-                TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path, StateStorageGroupId);
+                TEvStateStorage::TEvBoardInfo::EStatus::Ok, Path);
             reply->Updates = std::move(updates);
-            Send(Owner, std::move(reply));
+            Send(Owner, std::move(reply), 0, Cookie);
         }
     }
 
@@ -495,19 +495,19 @@ public:
     }
 
     TBoardLookupActor(
-        const TString &path, TActorId owner, EBoardLookupMode mode, ui32 groupId,
-        TBoardRetrySettings boardRetrySettings)
+        const TString &path, TActorId owner, EBoardLookupMode mode,
+        TBoardRetrySettings boardRetrySettings, ui64 cookie = 0)
         : Path(path)
         , Owner(owner)
+        , Cookie(cookie)
         , Mode(mode)
-        , StateStorageGroupId(groupId)
         , Subscriber(Mode == EBoardLookupMode::Subscription)
         , BoardRetrySettings(std::move(boardRetrySettings))
         , WaitForReplicasToSuccess(0)
     {}
 
     void Bootstrap() {
-        const TActorId proxyId = MakeStateStorageProxyID(StateStorageGroupId);
+        const TActorId proxyId = MakeStateStorageProxyID();
         Send(proxyId, new TEvStateStorage::TEvResolveBoard(Path), IEventHandle::FlagTrackDelivery);
         Become(&TThis::StateResolve);
     }
@@ -546,9 +546,9 @@ public:
 };
 
 IActor* CreateBoardLookupActor(
-        const TString &path, const TActorId &owner, ui32 groupId, EBoardLookupMode mode,
-        TBoardRetrySettings boardRetrySettings) {
-    return new TBoardLookupActor(path, owner, mode, groupId, std::move(boardRetrySettings));
+        const TString &path, const TActorId &owner, EBoardLookupMode mode,
+        TBoardRetrySettings boardRetrySettings, ui64 cookie) {
+    return new TBoardLookupActor(path, owner, mode, std::move(boardRetrySettings), cookie);
 }
 
 }

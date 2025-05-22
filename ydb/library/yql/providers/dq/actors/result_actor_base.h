@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
@@ -7,14 +8,72 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
 #include <util/stream/holder.h>
 #include <util/stream/length.h>
 #include <util/generic/queue.h>
 
 namespace NYql::NDqs::NExecutionHelpers {
+
+struct TQueueItem {
+    TQueueItem(NDq::TDqSerializedBatch&& data, const TString& messageId)
+        : Data(std::move(data))
+        , MessageId(messageId)
+        , SentProcessedEvent(false)
+        , IsFinal(false)
+        , Size(Data.Size())
+        {
+        }
+
+    static TQueueItem Final() {
+        TQueueItem item({}, "FinalMessage");
+        item.SentProcessedEvent = true;
+        item.IsFinal = true;
+        return item;
+    }
+
+    NDq::TDqSerializedBatch Data;
+    const TString MessageId;
+    bool SentProcessedEvent = false;
+    bool IsFinal = false;
+    ui64 Size = 0;
+};
+
+struct TWriteQueue {
+    TQueue<TQueueItem> Queue;
+    ui64 ByteSize = 0;
+
+    template< class... Args >
+    decltype(auto) emplace( Args&&... args) {
+        Queue.emplace(std::forward<Args>(args)...);
+        ByteSize += Queue.back().Size;
+    }
+
+    auto& front() {
+        return Queue.front();
+    }
+
+    auto& back() {
+        return Queue.back();
+    }
+
+    auto pop() {
+        YQL_ENSURE(ByteSize >= Queue.front().Size);
+        ByteSize -= Queue.front().Size;
+        return Queue.pop();
+    }
+
+    auto empty() const {
+        return Queue.empty();
+    }
+
+    void clear() {
+        Queue.clear();
+        ByteSize = 0;
+    }
+};
 
     template <class TDerived>
     class TResultActorBase : public NYql::TSynchronizableRichActor<TDerived>, public NYql::TCounters {
@@ -48,14 +107,12 @@ namespace NYql::NDqs::NExecutionHelpers {
             , Truncated(false)
             , FullResultWriterID()
             , ResultBuilder(resultType ? MakeHolder<TProtoBuilder>(resultType, columns) : nullptr)
-            , ResultYson()
-            , ResultYsonOut(new THoldingStream<TCountingOutput>(MakeHolder<TStringOutput>(ResultYson)))
-            , ResultYsonWriter(MakeHolder<NYson::TYsonWriter>(ResultYsonOut.Get(), NYson::EYsonFormat::Binary, ::NYson::EYsonType::Node, true))
+            , ResultSampleDataSize(0)
+            , ResultSampleData()
             , Issues()
             , BlockingActors()
             , QueryResponse()
             , WaitingAckFromFRW(false) {
-            ResultYsonWriter->OnBeginList();
             YQL_CLOG(DEBUG, ProviderDq) << "_AllResultsBytesLimit = " << SizeLimit;
             YQL_CLOG(DEBUG, ProviderDq) << "_RowsLimitPerWrite = " << (RowsLimit.Defined() ? ToString(RowsLimit.GetRef()) : "nothing");
         }
@@ -83,19 +140,21 @@ namespace NYql::NDqs::NExecutionHelpers {
                 bool exceedRows = false;
                 try {
                     TFailureInjector::Reach("result_actor_base_fail_on_response_write", [] { throw yexception() << "result_actor_base_fail_on_response_write"; });
-                    NDq::TDqSerializedBatch dataCopy = WriteQueue.back().Data;
-                    full = ResultBuilder->WriteYsonData(std::move(dataCopy), [this, &exceedRows](const TString& rawYson) {
-                        if (RowsLimit && Rows + 1 > *RowsLimit) {
+                    if (!Truncated) {
+                        NDq::TDqSerializedBatch dataCopy = WriteQueue.back().Data;
+                        dataCopy.ConvertToNoOOB();
+                        Rows += dataCopy.RowCount();
+                        ResultSampleDataSize += dataCopy.Size();
+
+                        if (RowsLimit && Rows > *RowsLimit) {
                             exceedRows = true;
-                            return false;
-                        } else if (ResultYsonOut->Counter() + rawYson.size() > SizeLimit) {
-                            return false;
+                            full = false;
+                        } else if (ResultSampleDataSize > SizeLimit) {
+                            full = false;
                         }
-                        ResultYsonWriter->OnListItem();
-                        ResultYsonWriter->OnRaw(rawYson);
-                        ++Rows;
-                        return true;
-                    });
+
+                        ResultSampleData.emplace_back(std::move(dataCopy.Proto));
+                    }
                 } catch (...) {
                     OnError(NYql::NDqProto::StatusIds::UNSUPPORTED, CurrentExceptionMessage());
                     return;
@@ -180,10 +239,14 @@ namespace NYql::NDqs::NExecutionHelpers {
             }
         }
 
+        ui64 InflightBytes() {
+            return WriteQueue.ByteSize;
+        }
+
     private:
         void OnQueryResult(TEvQueryResponse::TPtr& ev, const NActors::TActorContext&) {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
-            YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
+            YQL_ENSURE(!ev->Get()->Record.SampleSize());
             YQL_CLOG(DEBUG, ProviderDq) << "Shutting down TResultAggregator";
 
             BlockingActors.clear();
@@ -299,17 +362,14 @@ namespace NYql::NDqs::NExecutionHelpers {
             YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
             NDqProto::TQueryResponse result = QueryResponse->Record;
 
-            YQL_ENSURE(!result.HasResultSet() && result.GetYson().empty());
+            YQL_ENSURE(!result.SampleSize());
             FlushCounters(result);
 
-            if (ResultYsonWriter) {
-                ResultYsonWriter->OnEndList();
-                ResultYsonWriter.Destroy();
+            for (const auto& x : ResultSampleData) {
+                result.AddSample()->CopyFrom(x);
             }
-            ResultYsonOut.Destroy();
 
-            *result.MutableYson() = ResultYson;
-
+            ResultSampleData.clear();
             if (!Issues.Empty()) {
                 NYql::IssuesToMessage(Issues, result.MutableIssues());
             }
@@ -341,36 +401,13 @@ namespace NYql::NDqs::NExecutionHelpers {
             req->Record.SetMessageId(src.MessageId);
             *(req->Record.MutableData()) = std::move(src.Data.Proto);
             req->Record.MutableData()->ClearPayloadId();
-            if (!src.Data.Payload.IsEmpty()) {
-                req->Record.MutableData()->SetPayloadId(req->AddPayload(std::move(src.Data.Payload)));
+            if (!src.Data.Payload.Empty()) {
+                req->Record.MutableData()->SetPayloadId(req->AddPayload(MakeReadOnlyRope(std::move(src.Data.Payload))));
             }
             req->Record.SetFinish(src.IsFinal);
 
             TBase::Send(FullResultWriterID, std::move(req));
         }
-
-    private:
-        struct TQueueItem {
-            TQueueItem(NDq::TDqSerializedBatch&& data, const TString& messageId)
-                : Data(std::move(data))
-                , MessageId(messageId)
-                , SentProcessedEvent(false)
-                , IsFinal(false)
-            {
-            }
-
-            static TQueueItem Final() {
-                TQueueItem item({}, "FinalMessage");
-                item.SentProcessedEvent = true;
-                item.IsFinal = true;
-                return item;
-            }
-
-            NDq::TDqSerializedBatch Data;
-            const TString MessageId;
-            bool SentProcessedEvent = false;
-            bool IsFinal = false;
-        };
 
     protected:
         const NActors::TActorId ExecuterID;
@@ -383,16 +420,15 @@ namespace NYql::NDqs::NExecutionHelpers {
         const bool FullResultTableEnabled;
         const NActors::TActorId GraphExecutionEventsId;
         const bool Discard;
-        TQueue<TQueueItem> WriteQueue;
+        TWriteQueue WriteQueue;
         ui64 SizeLimit;
         TMaybe<ui64> RowsLimit;
         ui64 Rows;
         bool Truncated;
         NActors::TActorId FullResultWriterID;
         THolder<TProtoBuilder> ResultBuilder;
-        TString ResultYson;
-        THolder<TCountingOutput> ResultYsonOut;
-        THolder<NYson::TYsonWriter> ResultYsonWriter;
+        ui64 ResultSampleDataSize;
+        TVector<NDqProto::TData> ResultSampleData;
         TIssues Issues;
         THashSet<NActors::TActorId> BlockingActors;
         THolder<TEvQueryResponse> QueryResponse;

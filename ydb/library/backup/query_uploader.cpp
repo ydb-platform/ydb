@@ -1,5 +1,3 @@
-#include <util/datetime/cputimer.h>
-
 #include "query_uploader.h"
 #include "util.h"
 
@@ -62,17 +60,12 @@ bool TUploader::Push(const TString& path, TValue&& value) {
 
             if (status.IsSuccess()) {
                 if (status.GetIssues()) {
-                    LOG_ERR("BulkUpsert has finished successfull, but has issues# {"
-                            << status.GetIssues().ToString() << "}");
+                    LOG_W("Bulk upsert was completed with issues: " << status.GetIssues().ToOneLineString());
                 }
                 return;
             // Since upsert of data is an idempotent operation it is possible to retry transport errors
             } else if (status.IsTransportError() && retry < Opts.TransportErrorsMaxRetries) {
-                LOG_DEBUG("Notice: transport error in BulkUpsert, issues# {" << status.GetIssues().ToString() << "}"
-                        << " current Retry is " << retry
-                        << " < MaxRetries# " << Opts.TransportErrorsMaxRetries
-                        << ", so sleep for " << retrySleep.Seconds() << "s"
-                        << " and try again");
+                LOG_D("Retry bulk upsert: " << status.GetIssues().ToOneLineString());
                 ++retry;
                 TInstant deadline = retrySleep.ToDeadLine();
                 while (TInstant::Now() < deadline) {
@@ -84,9 +77,7 @@ bool TUploader::Push(const TString& path, TValue&& value) {
                 retrySleep *= 2;
                 continue;
             } else {
-                LOG_ERR("Error in BulkUpsert, so stop working. Issues# {" << status.GetIssues().ToString() << "}"
-                        << " IsTransportError# " << (status.IsTransportError() ? "true" : "false")
-                        << " retries done# " << retry);
+                LOG_E("Bulk upsert failed: " << status.GetIssues().ToOneLineString());
                 PleaseStop();
                 return;
             }
@@ -102,20 +93,13 @@ bool TUploader::Push(TParams params) {
     }
 
     auto upload = [this, params] (NYdb::NTable::TSession session) -> NYdb::TStatus {
-        auto prepareSettings = NTable::TPrepareDataQuerySettings()
-            .RequestType(DOC_API_REQUEST_TYPE);
-        auto prepareResult = session.PrepareDataQuery(Query, prepareSettings).GetValueSync();
-        if (!prepareResult.IsSuccess()) {
-            return prepareResult;
-        }
-
-        auto dataQuery = prepareResult.GetQuery();
         auto transaction = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx();
         auto settings = NTable::TExecDataQuerySettings()
+            .KeepInQueryCache(true)
             .RequestType(DOC_API_REQUEST_TYPE)
-            .OperationTimeout(TDuration::Seconds(30))
-            .ClientTimeout(TDuration::Seconds(35));
-        return dataQuery.Execute(transaction, std::move(params), settings).GetValueSync();
+            .OperationTimeout(TDuration::Seconds(100))
+            .ClientTimeout(TDuration::Seconds(120));
+        return session.ExecuteDataQuery(Query, transaction, std::move(params), settings).GetValueSync();
     };
 
     auto task = [this, upload] () {
@@ -134,6 +118,8 @@ bool TUploader::Push(TParams params) {
 
         auto settings = NYdb::NTable::TRetryOperationSettings()
             .MaxRetries(Opts.RetryOperaionMaxRetries)
+            .FastBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(10)).Ceiling(10))
+            .SlowBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::Seconds(2)).Ceiling(6))
             .Idempotent(true);
 
         auto status = Client.RetryOperationSync(upload, settings);
@@ -141,11 +127,10 @@ bool TUploader::Push(TParams params) {
 
         if (status.IsSuccess()) {
             if (status.GetIssues()) {
-                LOG_ERR("Upload tx has finished successfull, but has issues# {"
-                    << status.GetIssues().ToString() << "}");
+                LOG_W("Write tx was completed with issues: " << status.GetIssues().ToOneLineString());
             }
         } else {
-            LOG_ERR("Error in upload tx, issues# {" << status.GetIssues().ToString() << "}");
+            LOG_E("Write tx failed: " << status.GetIssues().ToOneLineString());
             PleaseStop();
             return;
         }

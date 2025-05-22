@@ -10,6 +10,8 @@
 #include <google/protobuf/message.h>
 #include <google/protobuf/text_format.h>
 
+#include <ydb/core/protos/sqs.pb.h>
+
 namespace NKikimr::NSQS {
 
 namespace {

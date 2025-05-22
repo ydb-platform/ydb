@@ -21,12 +21,7 @@ namespace NBoot {
         TLoadBlobs() = default;
         TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeGlobId, ui64 cookie);
 
-        ~TLoadBlobs()
-        {
-            Y_ABORT_UNLESS(!RefCount(), "TLoadBlobs is still referenced somewhere");
-        }
-
-        void Start() noexcept override { }
+        void Start() override { }
 
         void Feed(TLogoBlobID blobId, TString body)
         {
@@ -34,7 +29,7 @@ namespace NBoot {
                 Env->Finish(this);
         }
 
-        const TVector<TLogoBlobID> Blobs() const
+        const TVector<TLogoBlobID>& Blobs() const
         {
             return State.GetBlobs();
         }

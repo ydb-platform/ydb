@@ -5,102 +5,208 @@
 namespace NKikimr {
 namespace NPQ {
 
-void TReadQuoter::Bootstrap(const TActorContext &ctx) {
+void TPartitionQuoterBase::Bootstrap(const TActorContext &ctx) {
+    if (TotalPartitionQuotaEnabled)
+        PartitionTotalQuotaTracker = CreatePartitionTotalQuotaTracker(PQTabletConfig, ctx);
     Become(&TThis::StateWork);
     ScheduleWakeUp(ctx);
-
-    //UpdateConsumersWithCustomQuota(ctx); // depricated. Delete this after 01.10.2023
 }
 
-void TReadQuoter::HandleQuotaRequest(TEvPQ::TEvRequestQuota::TPtr& ev, const TActorContext& ctx) {
-    auto readRequest = ev->Get()->ReadRequest;
-    GetOrCreateConsumerQuota(readRequest->Get()->ClientId, ctx);
-    QuotaRequestedTimes.emplace(readRequest->Cookie, ctx.Now());
-    if (RequestsInflight >= AppData(ctx)->PQConfig.GetMaxInflightReadRequestsPerPartition() || !WaitingInflightReadRequests.empty()) {
-        if (WaitingInflightReadRequests.empty())
+void TPartitionQuoterBase::HandleQuotaRequestOnInit(TEvPQ::TEvRequestQuota::TPtr& ev, const TActorContext&) {
+    PendingQuotaRequests.emplace_back(ev);
+}
+
+
+void TPartitionQuoterBase::HandleQuotaRequest(TEvPQ::TEvRequestQuota::TPtr& ev, const TActorContext& ctx) {
+    QuotaRequestedTimes.emplace(ev->Get()->Cookie, ctx.Now());
+    TRequestContext context{ev->Release(), ev->Sender};
+    HandleQuotaRequestImpl(context);
+    if (RequestsInflight >= MaxInflightRequests || !WaitingInflightRequests.empty()) {
+        if (WaitingInflightRequests.empty())
             InflightIsFullStartTime = ctx.Now();
-        WaitingInflightReadRequests.push_back(readRequest);
+        WaitingInflightRequests.push_back(std::move(context));
     } else {
-        StartQuoting(readRequest, ctx);
+        StartQuoting(std::move(context));
     }
 }
 
-void TReadQuoter::StartQuoting(TEvPQ::TEvRead::TPtr ev, const TActorContext& ctx) {
+void TPartitionQuoterBase::StartQuoting(TRequestContext&& context) {
     RequestsInflight++;
-    TConsumerReadQuota* consumerQuota = GetOrCreateConsumerQuota(ev->Get()->ClientId, ctx);
-    if (consumerQuota->AccountQuotaTracker) {
-        Send(consumerQuota->AccountQuotaTracker->Actor, new NAccountReadQuoterEvents::TEvRequest(ev.Release()));
+    auto& request = context.Request;
+    auto* accountQuotaTracker = GetAccountQuotaTracker(request);
+    if (accountQuotaTracker) {
+        Send(accountQuotaTracker->Actor, new NAccountQuoterEvents::TEvRequest(request->Cookie, request->Request.Release()));
+        PendingAccountQuotaRequests[request->Cookie] = std::move(context);
     } else {
-        CheckConsumerPerPartitionQuota(ev, ctx);
+        context.PartitionQuotaWaitStart = ActorContext().Now();
+        OnAccountQuotaApproved(std::move(context));
     }
 }
-
-void TReadQuoter::HandleAccountQuotaApproved(NAccountReadQuoterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    CheckConsumerPerPartitionQuota(ev->Get()->ReadRequest, ctx);
-}
-
-void TReadQuoter::CheckConsumerPerPartitionQuota(TEvPQ::TEvRead::TPtr ev, const TActorContext& ctx) {
-    auto consumerQuota = GetOrCreateConsumerQuota(ev->Get()->ClientId, ctx);
-    if (!consumerQuota->PartitionPerConsumerQuotaTracker.CanExaust(ctx.Now()) || !consumerQuota->ReadRequests.empty()) {
-        consumerQuota->ReadRequests.push_back(ev);
+void TPartitionQuoterBase::CheckTotalPartitionQuota(TRequestContext&& context) {
+    if (!PartitionTotalQuotaTracker)
+        return ApproveQuota(context);
+    if (!PartitionTotalQuotaTracker->CanExaust(ActorContext().Now()) || !WaitingTotalPartitionQuotaRequests.empty()) {
+        WaitingTotalPartitionQuotaRequests.push_back(std::move(context));
         return;
     }
-    CheckTotalPartitionQuota(ev, ctx);
+    ApproveQuota(context);
 }
 
-void TReadQuoter::CheckTotalPartitionQuota(TEvPQ::TEvRead::TPtr ev, const TActorContext& ctx) {
-    if (!PartitionTotalQuotaTracker.CanExaust(ctx.Now()) || !WaitingTotalPartitionQuotaReadRequests.empty()) {
-        WaitingTotalPartitionQuotaReadRequests.push_back(ev);
-        return;
-    }
-    ApproveQuota(ev, ctx);
+void TPartitionQuoterBase::HandleAccountQuotaApproved(NAccountQuoterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+    auto pendingIter = PendingAccountQuotaRequests.find(ev->Get()->Request->Cookie);
+    Y_ABORT_UNLESS(!pendingIter.IsEnd());
+
+    TRequestContext context{std::move(pendingIter->second.Request), pendingIter->second.PartitionActor, ev->Get()->WaitTime, ctx.Now()};
+    context.Request->Request = std::move(ev->Get()->Request->Request);
+    OnAccountQuotaApproved(std::move(context));
+    PendingAccountQuotaRequests.erase(pendingIter);
 }
 
-void TReadQuoter::ApproveQuota(TEvPQ::TEvRead::TPtr ev, const TActorContext& ctx) {
-    auto waitTime = TDuration::Zero();
-    auto waitTimeIter = QuotaRequestedTimes.find(ev->Get()->Cookie);
+void TPartitionQuoterBase::ApproveQuota(TRequestContext& context) {
+    auto waitTimeIter = QuotaRequestedTimes.find(context.Request->Cookie);
     if (waitTimeIter != QuotaRequestedTimes.end()) {
-        waitTime = ctx.Now() - waitTimeIter->second;
+        auto waitTime = ActorContext().Now() - waitTimeIter->second;
         QuotaRequestedTimes.erase(waitTimeIter);
+        context.TotalQuotaWaitTime = waitTime;
     }
-    Send(PartitionActor, new TEvPQ::TEvApproveQuota(ev, waitTime));
+    Send(context.PartitionActor, MakeQuotaApprovedEvent(context));
 }
 
-void TReadQuoter::HandleWakeUp(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
-    ProcessPerConsumerQuotaQueue(ctx);
-    ProcessPartititonTotalQuotaQueue(ctx);
+void TPartitionQuoterBase::ProcessPartitionTotalQuotaQueue() {
+    if (!PartitionTotalQuotaTracker)
+        return;
+    while (!WaitingTotalPartitionQuotaRequests.empty() && PartitionTotalQuotaTracker->CanExaust(ActorContext().Now())) {
+        auto& request = WaitingTotalPartitionQuotaRequests.front();
+        ApproveQuota(request);
+        WaitingTotalPartitionQuotaRequests.pop_front();
+    }
+}
+
+void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TActorContext& ctx) {
+    if (PartitionTotalQuotaTracker)
+        PartitionTotalQuotaTracker->Exaust(ev->Get()->ConsumedBytes, ctx.Now());
+    HandleConsumedImpl(ev);
+
+    if (ev->Get()->IsOverhead)
+        return;
+    if (RequestsInflight > 0) {
+        RequestsInflight--;
+        ProcessInflightQueue();
+    } else {
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
+                        "Attempt to make the inflight counter below zero. Topic " << TopicConverter->GetClientsideName() <<
+                        " partition " << Partition <<
+                        " readCookie " << ev->Get()->RequestCookie);
+    }
+}
+
+void TPartitionQuoterBase::ProcessInflightQueue() {
+    auto now = ActorContext().Now();
+    while (!WaitingInflightRequests.empty() && RequestsInflight < MaxInflightRequests) {
+        StartQuoting(std::move(WaitingInflightRequests.front()));
+        WaitingInflightRequests.pop_front();
+        if (WaitingInflightRequests.size() == 0) {
+            InflightLimitSlidingWindow.Update((now - InflightIsFullStartTime).MicroSeconds(), now);
+            UpdateCounters(ActorContext());
+        }
+    }
+}
+
+void TPartitionQuoterBase::HandleConfigUpdate(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
+    PQTabletConfig = ev->Get()->Config;
+    TopicConverter = ev->Get()->TopicConverter;
+    bool totalQuotaUpdated = false;
+    if (PartitionTotalQuotaTracker.Defined()) {
+        totalQuotaUpdated = PartitionTotalQuotaTracker->UpdateConfigIfChanged(
+                GetTotalPartitionSpeedBurst(PQTabletConfig, ctx), GetTotalPartitionSpeed(PQTabletConfig, ctx)
+        );
+    }
+    UpdateQuotaConfigImpl(totalQuotaUpdated, ctx);
+}
+
+
+TQuotaTracker TPartitionQuoterBase::CreatePartitionTotalQuotaTracker(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const {
+    return {GetTotalPartitionSpeedBurst(pqTabletConfig, ctx), GetTotalPartitionSpeed(pqTabletConfig, ctx), ctx.Now()};
+}
+
+void TPartitionQuoterBase::HandleWakeUp(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+    HandleWakeUpImpl();
+    ProcessPartitionTotalQuotaQueue();
     UpdateCounters(ctx);
     ScheduleWakeUp(ctx);
 }
 
-void TReadQuoter::ProcessInflightQueue(const TActorContext& ctx) {
-    auto now = ctx.Now();
-    while (!WaitingInflightReadRequests.empty() && RequestsInflight < AppData(ctx)->PQConfig.GetMaxInflightReadRequestsPerPartition()) {
-        auto readEvent(std::move(WaitingInflightReadRequests.front()));
-        WaitingInflightReadRequests.pop_front();
-        StartQuoting(readEvent, ctx);
-        if (WaitingInflightReadRequests.size() == 0) {
-            InflightLimitSlidingWindow.Update((now - InflightIsFullStartTime).MicroSeconds(), now);
-            UpdateCounters(ctx);
-        }
+void TPartitionQuoterBase::ScheduleWakeUp(const TActorContext& ctx) {
+    ctx.Schedule(WAKE_UP_TIMEOUT, new TEvents::TEvWakeup());
+}
+
+void TReadQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
+    auto* readRequest = context.Request->Request->CastAsLocal<TEvPQ::TEvRead>();
+    GetOrCreateConsumerQuota(readRequest->ClientId, ActorContext());
+}
+
+void TReadQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
+    CheckConsumerPerPartitionQuota(std::move(context));
+}
+
+TAccountQuoterHolder* TReadQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) {
+    if (!TopicConverter)
+        return nullptr;
+    auto clientId = request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId;
+    return GetOrCreateConsumerQuota(clientId, ActorContext())->AccountQuotaTracker.Get();
+}
+
+IEventBase* TReadQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
+    return new TEvPQ::TEvApproveReadQuota(IEventHandle::Downcast<TEvPQ::TEvRead>(std::move(context.Request->Request)), context.TotalQuotaWaitTime);
+};
+
+void TReadQuoter::CheckConsumerPerPartitionQuota(TRequestContext&& context) {
+    Y_ABORT_UNLESS(context.Request->Request);
+    auto consumerQuota = GetOrCreateConsumerQuota(
+            context.Request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId,
+            ActorContext()
+    );
+    if (!consumerQuota->PartitionPerConsumerQuotaTracker.CanExaust(ActorContext().Now()) || !consumerQuota->ReadRequests.empty()) {
+        consumerQuota->ReadRequests.push_back(std::move(context));
+        return;
     }
+    CheckTotalPartitionQuota(std::move(context));
+}
+
+void TReadQuoter::HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) {
+    auto consumerQuota = GetConsumerQuotaIfExists(ev->Get()->Consumer);
+    if (consumerQuota) {
+        if (consumerQuota->AccountQuotaTracker) {
+            Send(
+                consumerQuota->AccountQuotaTracker->Actor,
+                new NAccountQuoterEvents::TEvConsumed(ev->Get()->ConsumedBytes, ev->Get()->RequestCookie)
+            );
+        }
+        consumerQuota->PartitionPerConsumerQuotaTracker.Exaust(ev->Get()->ConsumedBytes, ActorContext().Now());
+    }
+}
+
+void TReadQuoter::HandleUpdateAccountQuotaCounters(NAccountQuoterEvents::TEvCounters::TPtr& ev, const TActorContext&) {
+    auto consumerQuota = GetConsumerQuotaIfExists(ev->Get()->Subject);
+    if (!consumerQuota)
+        return;
+    if (consumerQuota->AccountQuotaTracker) {
+        auto diff = ev->Get()->Counters.MakeDiffForAggr(consumerQuota->AccountQuotaTracker->Baseline);
+        ev->Get()->Counters.RememberCurrentStateAsBaseline(consumerQuota->AccountQuotaTracker->Baseline);
+        Send(Parent, new NReadQuoterEvents::TEvAccountQuotaCountersUpdated(diff));
+    }
+}
+
+void TReadQuoter::HandleWakeUpImpl() {
+    ProcessPerConsumerQuotaQueue(ActorContext());
 }
 
 void TReadQuoter::ProcessPerConsumerQuotaQueue(const TActorContext& ctx) {
     for (auto& [consumerStr, consumer] : ConsumerQuotas) {
         while (!consumer.ReadRequests.empty() && consumer.PartitionPerConsumerQuotaTracker.CanExaust(ctx.Now())) {
-            auto readEvent(std::move(consumer.ReadRequests.front()));
+            CheckTotalPartitionQuota(std::move(consumer.ReadRequests.front()));
             consumer.ReadRequests.pop_front();
-            CheckTotalPartitionQuota(readEvent, ctx);
         }
-    }
-}
-
-void TReadQuoter::ProcessPartititonTotalQuotaQueue(const TActorContext& ctx) {
-    while (!WaitingTotalPartitionQuotaReadRequests.empty() && PartitionTotalQuotaTracker.CanExaust(ctx.Now())) {
-        auto readEvent(std::move(WaitingTotalPartitionQuotaReadRequests.front()));
-        WaitingTotalPartitionQuotaReadRequests.pop_front();
-        ApproveQuota(readEvent, ctx);
     }
 }
 
@@ -114,55 +220,15 @@ void TReadQuoter::HandleConsumerRemoved(TEvPQ::TEvConsumerRemoved::TPtr& ev, con
     }
 }
 
-void TReadQuoter::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TActorContext& ctx) {
-    PartitionTotalQuotaTracker.Exaust(ev->Get()->ReadBytes, ctx.Now());
-    auto consumerQuota = GetConsumerQuotaIfExists(ev->Get()->Consumer);
-    if (consumerQuota) {
-        if (consumerQuota->AccountQuotaTracker) {
-            Send(
-                consumerQuota->AccountQuotaTracker->Actor,
-                new NAccountReadQuoterEvents::TEvConsumed(ev->Get()->ReadBytes, ev->Get()->ReadRequestCookie)
-            );
-        }
-        consumerQuota->PartitionPerConsumerQuotaTracker.Exaust(ev->Get()->ReadBytes, ctx.Now());
-    }
-    if (RequestsInflight > 0) {
-        RequestsInflight--;
-        ProcessInflightQueue(ctx);
-    } else {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-                        "Attempt to make the inflight counter below zero. Topic " << TopicConverter->GetClientsideName() <<
-                        " partition " << Partition <<
-                        " readCookie " << ev->Get()->ReadRequestCookie);
-    }
-}
-
-void TReadQuoter::HandleConfigUpdate(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
-    PQTabletConfig = ev->Get()->Config;
-    UpdateQuota(ctx);
-    //UpdateConsumersWithCustomQuota(ctx); // depricated. Delete this after 01.10.2023
-}
-
-void TReadQuoter::HandleUpdateAccountQuotaCounters(NAccountReadQuoterEvents::TEvCounters::TPtr& ev, const TActorContext&) {
-    auto consumerQuota = GetConsumerQuotaIfExists(ev->Get()->User);
-    if (!consumerQuota)
-        return;
-    if (consumerQuota->AccountQuotaTracker) {
-        auto diff = ev->Get()->Counters.MakeDiffForAggr(consumerQuota->AccountQuotaTracker->Baseline);
-        ev->Get()->Counters.RememberCurrentStateAsBaseline(consumerQuota->AccountQuotaTracker->Baseline);
-        Send(PartitionActor, new NReadQuoterEvents::TEvAccountQuotaCountersUpdated(diff));
-    }
-}
-
 void TReadQuoter::UpdateCounters(const TActorContext& ctx) {
     auto now = ctx.Now();
-    if (!WaitingInflightReadRequests.empty()) {
+    if (!WaitingInflightRequests.empty()) {
         InflightLimitSlidingWindow.Update((now - InflightIsFullStartTime).MicroSeconds(), now);
         InflightIsFullStartTime = now;
     } else {
         InflightLimitSlidingWindow.Update(now);
     }
-    Send(PartitionActor, new NReadQuoterEvents::TEvQuotaCountersUpdated(InflightLimitSlidingWindow.GetValue() / 60));
+    Send(Parent, NReadQuoterEvents::TEvQuotaCountersUpdated::ReadCounters(InflightLimitSlidingWindow.GetValue() / 60));
 }
 
 void TReadQuoter::HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
@@ -175,63 +241,89 @@ void TReadQuoter::HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&, const TActorCo
     Die(ctx);
 }
 
-void TReadQuoter::UpdateQuota(const TActorContext &ctx) {
+void TReadQuoter::UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) {
     TVector<std::pair<TString, ui64>> updatedQuotas;
     for (auto& [consumerStr, consumerQuota] : ConsumerQuotas) {
-        if (consumerQuota.PartitionPerConsumerQuotaTracker.UpdateConfigIfChanged(GetConsumerReadBurst(ctx), GetConsumerReadSpeed(ctx))) {
+        if (consumerQuota.PartitionPerConsumerQuotaTracker.UpdateConfigIfChanged(
+                GetConsumerReadBurst(PQTabletConfig, ctx), GetConsumerReadSpeed(PQTabletConfig, ctx)
+        )) {
             updatedQuotas.push_back({consumerStr, consumerQuota.PartitionPerConsumerQuotaTracker.GetTotalSpeed()});
         }
     }
-    auto totalQuotaUpdated = PartitionTotalQuotaTracker.UpdateConfigIfChanged(GetTotalPartitionReadBurst(ctx), GetTotalPartitionReadSpeed(ctx));
+
+    ui64 totalSpeed = 0;
+    if (PartitionTotalQuotaTracker.Defined()) {
+        totalSpeed = PartitionTotalQuotaTracker->GetTotalSpeed();
+    }
     if (updatedQuotas.size() || totalQuotaUpdated) {
-        Send(PartitionActor, new NReadQuoterEvents::TEvQuotaUpdated(updatedQuotas, PartitionTotalQuotaTracker.GetTotalSpeed()));
+        Send(Parent, new NReadQuoterEvents::TEvQuotaUpdated(updatedQuotas, totalSpeed));
     }
 }
 
-void TReadQuoter::UpdateConsumersWithCustomQuota(const TActorContext &ctx) {
-    TVector<std::pair<TString, ui64>> updatedQuotas;
-    for (const auto& readQuota : PQTabletConfig.GetPartitionConfig().GetReadQuota()) {
-        auto consumerQuota = GetOrCreateConsumerQuota(readQuota.GetClientId(), ctx);
-        if (consumerQuota->PartitionPerConsumerQuotaTracker.UpdateConfigIfChanged(readQuota.GetBurstSize(), readQuota.GetSpeedInBytesPerSecond())) {
-            updatedQuotas.push_back({readQuota.GetClientId(), consumerQuota->PartitionPerConsumerQuotaTracker.GetTotalSpeed()});
+ui64 TReadQuoter::GetConsumerReadSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const {
+    return AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota() ?
+        pqTabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() * 2
+        : DEFAULT_READ_SPEED_AND_BURST;
+}
+
+ui64 TReadQuoter::GetConsumerReadBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const {
+    return AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota() ?
+        pqTabletConfig.GetPartitionConfig().GetBurstSize() * 2
+        : DEFAULT_READ_SPEED_AND_BURST;
+}
+
+ui64 TReadQuoter::GetTotalPartitionSpeed(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const {
+    auto consumersPerPartition = AppData(ctx)->PQConfig.GetQuotingConfig().GetMaxParallelConsumersPerPartition();
+    return GetConsumerReadSpeed(pqTabletConfig, ctx) * consumersPerPartition;
+}
+
+ui64 TReadQuoter::GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TActorContext& ctx) const {
+    auto consumersPerPartition = AppData(ctx)->PQConfig.GetQuotingConfig().GetMaxParallelConsumersPerPartition();
+    return GetConsumerReadBurst(pqTabletConfig, ctx) * consumersPerPartition;
+}
+
+THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const {
+    const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
+    TActorId actorId;
+    Y_ENSURE(TopicConverter);
+    if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
+        if(quotingConfig.GetEnableReadQuoting()) {
+            actorId = TActivationContext::Register(
+                new TAccountReadQuoter(
+                    GetTabletActor(),
+                    ctx.SelfID,
+                    GetTabletId(),
+                    TopicConverter,
+                    GetPartition(),
+                    user,
+                    Counters
+                ),
+                Parent
+            );
         }
     }
-    if (updatedQuotas.size()) {
-        Send(PartitionActor, new NReadQuoterEvents::TEvQuotaUpdated(updatedQuotas, PartitionTotalQuotaTracker.GetTotalSpeed()));
+    if (actorId) {
+        return MakeHolder<TAccountQuoterHolder>(actorId, Counters);
+    } else {
+        return nullptr;
     }
-}
-
-ui64 TReadQuoter::GetConsumerReadSpeed(const TActorContext& ctx) const {
-    return AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota() ?
-        PQTabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() * 2
-        : DEFAULT_READ_SPEED_AND_BURST;
-}
-
-ui64 TReadQuoter::GetConsumerReadBurst(const TActorContext& ctx) const {
-    return AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota() ?
-        PQTabletConfig.GetPartitionConfig().GetBurstSize() * 2
-        : DEFAULT_READ_SPEED_AND_BURST;
-}
-
-ui64 TReadQuoter::GetTotalPartitionReadSpeed(const TActorContext& ctx) const {
-    auto consumersPerPartition = AppData(ctx)->PQConfig.GetQuotingConfig().GetMaxParallelConsumersPerPartition();
-    return GetConsumerReadSpeed(ctx) * consumersPerPartition;
-}
-
-ui64 TReadQuoter::GetTotalPartitionReadBurst(const TActorContext& ctx) const {
-    auto consumersPerPartition = AppData(ctx)->PQConfig.GetQuotingConfig().GetMaxParallelConsumersPerPartition();
-    return GetConsumerReadBurst(ctx) * consumersPerPartition;
 }
 
 TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consumerStr, const TActorContext& ctx) {
     Y_ABORT_UNLESS(!consumerStr.empty());
     auto it = ConsumerQuotas.find(consumerStr);
     if (it == ConsumerQuotas.end()) {
-        TConsumerReadQuota consumer(CreateAccountQuotaTracker(consumerStr), GetConsumerReadBurst(ctx), GetConsumerReadSpeed(ctx));
-        Send(PartitionActor, new NReadQuoterEvents::TEvQuotaUpdated({{consumerStr, consumer.PartitionPerConsumerQuotaTracker.GetTotalSpeed()}}, PartitionTotalQuotaTracker.GetTotalSpeed()));
+        TConsumerReadQuota consumer(
+                CreateAccountQuotaTracker(consumerStr, ctx),
+                GetConsumerReadBurst(PQTabletConfig, ctx),
+                GetConsumerReadSpeed(PQTabletConfig, ctx)
+        );
+        Send(Parent, new NReadQuoterEvents::TEvQuotaUpdated(
+                {{consumerStr, consumer.PartitionPerConsumerQuotaTracker.GetTotalSpeed()}},
+                GetTotalPartitionSpeed(PQTabletConfig, ctx)
+        ));
 
         auto result = ConsumerQuotas.emplace(consumerStr, std::move(consumer));
-        Y_ABORT_UNLESS(result.second);
         return &result.first->second;
     }
     return &it->second;
@@ -240,34 +332,6 @@ TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consume
 TConsumerReadQuota* TReadQuoter::GetConsumerQuotaIfExists(const TString& consumerStr) {
     auto it = ConsumerQuotas.find(consumerStr);
     return it != ConsumerQuotas.end() ? &it->second : nullptr;
-}
-
-void TReadQuoter::ScheduleWakeUp(const TActorContext& ctx) {
-    ctx.Schedule(WAKE_UP_TIMEOUT, new TEvents::TEvWakeup());
-}
-
-THolder<TAccountReadQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TString& user) const {
-    const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
-    if (TabletActor && quotingConfig.GetEnableQuoting() && quotingConfig.GetEnableReadQuoting()) {
-        TActorId actorId = TActivationContext::Register(
-            new TAccountReadQuoter(
-                TabletActor,
-                SelfId(),
-                TabletId,
-                TopicConverter,
-                Partition,
-                user,
-                Counters
-            ),
-            PartitionActor
-        );
-        return MakeHolder<TAccountReadQuoterHolder>(actorId, Counters);
-    }
-    return nullptr;
-}
-
-TQuotaTracker TReadQuoter::CreatePartitionTotalQuotaTracker(const TActorContext& ctx) const {
-    return {GetTotalPartitionReadBurst(ctx), GetTotalPartitionReadSpeed(ctx), ctx.Now()};
 }
 
 }// NPQ

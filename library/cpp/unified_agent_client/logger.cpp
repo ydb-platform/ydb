@@ -20,7 +20,7 @@ namespace NUnifiedAgent {
                      << " " << GetPID()
                      << " " << TThread::CurrentThreadId()
                      << " " << logLevel;
-                if (!scope.Empty()) {
+                if (!scope.empty()) {
                     output << " " << scope;
                 }
                 output << " " << message << "\n";

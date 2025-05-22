@@ -572,7 +572,7 @@ def execute(
     err_file, user_stderr = get_out_stream(stderr, 'err')
     in_file = stdin
 
-    if shell and type(command) == list:
+    if shell and isinstance(command, list):
         command = " ".join(command)
 
     if shell:
@@ -834,19 +834,19 @@ def _win_kill_process_tree(pid):
 def _run_readelf(binary_path):
     return str(
         subprocess.check_output(
-            [runtime.binary_path('contrib/python/pyelftools/readelf/readelf'), '-s', runtime.binary_path(binary_path)]
+            [runtime.binary_path('contrib/python/pyelftools/py3/bin/readelf'), '-s', runtime.binary_path(binary_path)]
         )
     )
 
 
 def check_glibc_version(binary_path):
-    lucid_glibc_version = packaging.version.parse("2.11")
+    baseline_glibc_version = packaging.version.parse("2.16")
 
     for line in _run_readelf(binary_path).split('\n'):
         match = GLIBC_PATTERN.search(line)
         if not match:
             continue
-        assert packaging.version.parse(match.group(1)) <= lucid_glibc_version, match.group(0)
+        assert packaging.version.parse(match.group(1)) <= baseline_glibc_version, match.group(0)
 
 
 def backtrace_to_html(bt_filename, output):

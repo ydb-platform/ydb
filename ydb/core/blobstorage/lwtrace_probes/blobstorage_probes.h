@@ -156,6 +156,9 @@ struct TEventTypeField {
     PROBE(PDiskAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double, ui64, bool, ui64), \
       NAMES("pdisk", "reqId", "creationTimeSec", "owner", "isFast", "priorityClass")) \
+    PROBE(PDiskAddToNoopScheduler, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField, ui64, double, ui64, bool, ui64), \
+      NAMES("pdisk", "reqId", "creationTimeSec", "owner", "isFast", "priorityClass")) \
     PROBE(PDiskRouteRequest, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double, ui64, bool, ui64), \
       NAMES("pdisk", "reqId", "creationTimeSec", "owner", "isFast", "priorityClass")) \
@@ -207,22 +210,22 @@ struct TEventTypeField {
       NAMES("pdisk", "schedStep")) \
     PROBE(PDiskChunkReadPieceAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui32, ui64, ui64), \
-      NAMES("pdisk", "pieceIdx", "size", "offset")) \
-    PROBE(PDiskChunkReadPieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
-      TYPES(TPDiskIdField, ui64), \
-      NAMES("pdisk", "size")) \
+      NAMES("pdisk", "pieceIdx", "offset", "size")) \
+    PROBE(PDiskChunkReadPiecesSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField), \
+      NAMES("pdisk")) \
     PROBE(PDiskChunkReadPieceComplete, GROUPS("PDisk", "PDiskRequest"), \
-      TYPES(TPDiskIdField, ui64, ui64), \
-      NAMES("pdisk", "size", "relativeOffset")) \
-    PROBE(PDiskAddWritePieceToScheduler, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField, ui64, ui64, double), \
+      NAMES("pdisk", "size", "relativeOffset", "deviceTimeMs")) \
+    PROBE(PDiskChunkWriteAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double, ui64, bool, ui64, ui64), \
       NAMES("pdisk", "reqId", "creationTimeSec", "owner", "isFast", "priorityClass", "size")) \
-    PROBE(PDiskChunkWritePieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
+    PROBE(PDiskChunkWriteLastPieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, ui64, ui64, ui64), \
       NAMES("pdisk", "owner", "chunkIdx", "pieceOffset", "pieceSize")) \
     PROBE(PDiskLogWriteComplete, GROUPS("PDisk", "PDiskRequest"), \
-      TYPES(TPDiskIdField, ui64, double, double, double, double, double, double), \
-      NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "responseTimeMs", "inputTimeMs", "scheduleTimeMs", "deviceTotalTimeMs")) \
+      TYPES(TPDiskIdField, ui64, double, double, double, double, double, double, double, ui64), \
+      NAMES("pdisk", "reqId", "creationTimeSec", "costMs", "responseTimeMs", "inputTimeMs", "scheduleTimeMs", "deviceTotalTimeMs", "deviceOnlyTimeMs", "batchSize")) \
     PROBE(PDiskChunkResponseTime, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, ui64, double, ui64), \
       NAMES("pdisk", "reqId", "priorityClass", "responseTimeMs", "sizeBytes")) \
@@ -235,6 +238,12 @@ struct TEventTypeField {
     PROBE(PDiskDeviceWriteDuration, GROUPS("PDisk"), \
       TYPES(TPDiskIdField, double, ui64), \
       NAMES("pdisk", "deviceTimeMs", "size")) \
+    PROBE(PDiskDeviceGetFromDevice, GROUPS("PDisk"), \
+      TYPES(), \
+      NAMES()) \
+    PROBE(PDiskDeviceGetFromWaiting, GROUPS("PDisk"), \
+      TYPES(), \
+      NAMES()) \
     PROBE(PDiskDeviceTrimDuration, GROUPS("PDisk"), \
       TYPES(TPDiskIdField, double, ui64), \
       NAMES("pdisk", "trimTimeMs", "trimOffset")) \
@@ -255,25 +264,44 @@ struct TEventTypeField {
       TYPES(ui32, ui64, ui64), \
       NAMES("chunkIdx", "size", "offset")) \
     PROBE(PDiskUpdateCycleDetails, GROUPS("PDisk"), \
-      TYPES(float, float, float, float, float), \
-      NAMES("entireUpdateMs", "inputQueueMs", "schedulingMs", "processingMs", "waitingMs")) \
+      TYPES(ui32, float, float, float, float, float), \
+      NAMES("pdisk", "entireUpdateMs", "inputQueueMs", "schedulingMs", "processingMs", "waitingMs")) \
+    PROBE(PDiskEnqueueAllDetails, GROUPS("PDisk"), \
+      TYPES(ui64, size_t, size_t, size_t, double), \
+      NAMES("pdisk", "initialQueueSize", "processedReqs", "pushedToSchedulerReqs", "spentTimeMs")) \
+    PROBE(PDiskUpdateStarted, GROUPS("PDisk"), TYPES(ui64), NAMES("pdisk")) \
+    PROBE(PDiskProcessLogWriteQueue, GROUPS("PDisk"), TYPES(ui64, size_t, size_t, size_t), NAMES("pdisk", "remainingLogWritesSize", "logWritesSize", "commitsSize")) \
+    PROBE(PDiskProcessLogWriteBatch, GROUPS("PDisk"), TYPES(ui64, size_t, size_t), NAMES("pdisk", "logQueueSize", "commitQueueSize")) \
+    PROBE(PDiskProcessChunkReadQueue, GROUPS("PDisk"), \
+      TYPES(ui64, size_t, size_t, size_t, double), \
+      NAMES("pdisk", "initialQueueSize", "processed", "processedBytes", "processedCostMs")) \
+    PROBE(PDiskProcessChunkWriteQueue, GROUPS("PDisk"), \
+      TYPES(ui64, size_t, size_t, size_t, double), \
+      NAMES("pdisk", "initialQueueSize", "processed", "processedBytes", "processedCostMs")) \
+    PROBE(PDiskStartWaiting, GROUPS("PDisk"), TYPES(ui64), NAMES("pdisk")) \
+    PROBE(PDiskUpdateEnded, GROUPS("PDisk"), TYPES(ui64, float), NAMES("pdisk", "entireUpdateMs")) \
     PROBE(DSProxyGetEnqueue, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
     PROBE(DSProxyGetBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyGetHandle, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
     PROBE(DSProxyGetReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
+    PROBE(DSProxyVGetSent, GROUPS("DSProxy"), TYPES(TString, ui32, ui32), NAMES("vDiskId", "vdiskOrderNum", "count")) \
+    PROBE(DSProxyGetRequest, GROUPS("DSProxy", "LWTrackStart"), TYPES(ui32, TString, TString), NAMES("groupId", "deviceType", "handleClass")) \
     PROBE(DSProxyPutEnqueue, GROUPS("DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
     PROBE(DSProxyPutHandle, GROUPS("DSProxyRequest", "DSProxy", "LWTrackStart"), TYPES(), NAMES()) \
     PROBE(DSProxyPutBootstrapStart, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyPutBootstrapDone, GROUPS("DSProxy","Durations"), \
       TYPES(ui64, double, double, double, double, ui64, ui64), \
       NAMES("size", "wilsonMs", "allocateMs", "waitTotalMs", "splitTotalMs", "splitTotalCount", "blobIdx")) \
-    PROBE(DSProxyPutReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
+    PROBE(DSProxyPutReply, GROUPS("DSProxy"), TYPES(TString, TString, TString), NAMES("blobId", "status", "errorReason")) \
     PROBE(DSProxyPutResumeBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(DSProxyPutPauseBootstrap, GROUPS("DSProxy"), TYPES(), NAMES()) \
-    PROBE(DSProxyScheduleAccelerate, GROUPS("DSProxy"), TYPES(), NAMES()) \
+    PROBE(DSProxyScheduleAccelerate, GROUPS("DSProxy"), TYPES(double, TString), NAMES("timeBeforeAccelerationMs", "reqType")) \
     PROBE(DSProxyStartTransfer, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(VDiskStartProcessing, GROUPS("DSProxy"), TYPES(), NAMES()) \
     PROBE(VDiskReply, GROUPS("DSProxy"), TYPES(), NAMES()) \
+    PROBE(DSProxyPutRequest, GROUPS("DSProxy", "LWTrackStart"), TYPES(ui32, TString, TString, TString, ui64, ui64), NAMES("groupId", "deviceType", "handleClass", "tactic", "count", "totalSize")) \
+    PROBE(DSProxyVPutSent, GROUPS("DSProxy"), TYPES(NKikimr::TEventTypeField, TString, ui32, ui32, ui64, bool), NAMES("type", "vDiskId", "vdiskOrderNum", "count", "totalSize", "accelerate")) \
+    PROBE(BackPressureRequestTrackingStats, GROUPS("BSQUEUE"), TYPES(ui32, TString, TString, double), NAMES("groupId", "deviceType", "vDiskId", "worstDurationMs")) \
 /**/
 LWTRACE_DECLARE_PROVIDER(BLOBSTORAGE_PROVIDER)
 

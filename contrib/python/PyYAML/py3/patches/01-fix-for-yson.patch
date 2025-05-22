@@ -1,0 +1,5 @@
+--- contrib/python/PyYAML/py3/yaml/representer.py	(index)
++++ contrib/python/PyYAML/py3/yaml/representer.py	(working tree)
+@@ -148 +148 @@ class SafeRepresenter(BaseRepresenter):
+-        return self.represent_scalar('tag:yaml.org,2002:str', data)
++        return self.represent_scalar('tag:yaml.org,2002:str', str(data))

@@ -29,9 +29,11 @@
 #include <random>
 
 #include "y_absl/base/config.h"
+#include "y_absl/base/nullability.h"
 #include "y_absl/random/internal/salted_seed_seq.h"
 #include "y_absl/random/internal/seed_material.h"
 #include "y_absl/random/seed_gen_exception.h"
+#include "y_absl/strings/string_view.h"
 #include "y_absl/types/span.h"
 
 namespace y_absl {

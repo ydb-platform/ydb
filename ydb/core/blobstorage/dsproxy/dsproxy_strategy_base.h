@@ -28,13 +28,14 @@ protected:
     bool IsUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState recoveryState);
     std::optional<EStrategyOutcome> SetAbsentForUnrecoverableAltruistic(TBlobStorageGroupInfo::EBlobState recoveryState, TBlobState &state);
     std::optional<EStrategyOutcome> ProcessOptimistic(TBlobStorageGroupInfo::EBlobState altruisticState,
-            TBlobStorageGroupInfo::EBlobState optimisticState, bool isDryRun, TBlobState &state);
+            TBlobStorageGroupInfo::EBlobState optimisticState, bool isDryRun, TBlobState &state,
+            const TBlobStorageGroupInfo& info);
     std::optional<EStrategyOutcome> ProcessPessimistic(const TBlobStorageGroupInfo &info, TBlobStorageGroupInfo::EBlobState pessimisticState,
             bool doVerify, TBlobState &state);
     void AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests, TLogoBlobID &fullId, ui32 partIdx,
             TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker);
     void PreparePartLayout(const TBlobState &state, const TBlobStorageGroupInfo &info,
-            TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskIdx);
+            TBlobStorageGroupType::TPartLayout *layout, ui32 slowDiskSubgroupMask);
     bool IsPutNeeded(const TBlobState &state, const TBlobStorageGroupType::TPartPlacement &partPlacement);
     void PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState &state,
             const TBlobStorageGroupInfo &info, TGroupDiskRequests &groupDiskRequests,
@@ -47,13 +48,12 @@ protected:
         TBlobStorageGroupInfo::TSubgroupVDisks &inOutSuccess,
         TBlobStorageGroupInfo::TSubgroupVDisks &inOutError,
         bool &outIsDegraded);
-    void Prepare3dcPartPlacement(const TBlobState &state, size_t numFailRealms, size_t numFailDomainsPerFailRealm,
-            ui8 preferredReplicasPerRealm, bool considerSlowAsError,
-            TBlobStorageGroupType::TPartPlacement &outPartPlacement);
+    void Prepare3dcPartPlacement(const TBlobState& state, size_t numFailRealms, size_t numFailDomainsPerFailRealm,
+            ui8 preferredReplicasPerRealm, bool considerSlowAsError, bool replaceUnresponsive,
+            TBlobStorageGroupType::TPartPlacement& outPartPlacement, bool& fullPlacement);
     // Sets IsSlow for the slow disk, resets for other disks.
-    // Returns -1 if there is no slow disk, or subgroupIdx of the slow disk.
-    i32 MarkSlowSubgroupDisk(TBlobState &state, const TBlobStorageGroupInfo &info, TBlackboard &blackboard, bool isPut);
+    // returns bit mask with 1 on positions of slow disks
+    ui32 MakeSlowSubgroupDiskMask(TBlobState &state, TBlackboard &blackboard, bool isPut, const TAccelerationParams& accelerationParams);
 };
-
 
 }//NKikimr

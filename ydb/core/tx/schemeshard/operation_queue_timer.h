@@ -113,8 +113,8 @@ struct TShardCompactionInfo {
     ui64 LastFullCompactionTs = 0;
     ui64 RowCount = 0;
     ui64 RowDeletes = 0;
-
     ui64 PartCount = 0;
+    bool HasSchemaChanges = false;
 
     explicit TShardCompactionInfo(const TShardIdx& id)
         : ShardIdx(id)
@@ -127,6 +127,7 @@ struct TShardCompactionInfo {
         , RowCount(stats.RowCount)
         , RowDeletes(stats.RowDeletes)
         , PartCount(stats.PartCount)
+        , HasSchemaChanges(stats.HasSchemaChanges)
     {}
 
     TShardCompactionInfo(const TShardCompactionInfo&) = default;
@@ -257,25 +258,29 @@ public:
     bool Enqueue(const TShardCompactionInfo& info) {
         // ignore empty shard (we don't check memtable, because it's up to DS to compact it),
         // note that Config.RowDeletesThreshold == 0 is expected in tests only
-        //
         if (info.PartCount == 0 && Config.RowCountThreshold != 0)
             return false;
 
         // ignore single parted shard if needed
         bool isSingleParted = info.PartCount == 1;
-        if (!Config.CompactSinglePartedShards && isSingleParted)
+        bool hasSchemaChanges = info.HasSchemaChanges;
+        if (!Config.CompactSinglePartedShards && isSingleParted && !hasSchemaChanges)
             return false;
 
         if (info.RowCount < Config.RowCountThreshold)
             return false;
 
+        bool enqueued = false;
+
         if (info.SearchHeight >= Config.SearchHeightThreshold)
-            QueueSearchHeight.Enqueue(info);
+            enqueued |= QueueSearchHeight.Enqueue(info);
 
         if (info.RowDeletes >= Config.RowDeletesThreshold)
-            QueueRowDeletes.Enqueue(info);
+            enqueued |= QueueRowDeletes.Enqueue(info);
 
-        return QueueLastCompaction.Enqueue(info);
+        enqueued |= QueueLastCompaction.Enqueue(info);
+
+        return enqueued;
     }
 
     bool Remove(const TShardCompactionInfo& info) {

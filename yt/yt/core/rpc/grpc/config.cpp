@@ -16,6 +16,9 @@ void TDispatcherConfig::Register(TRegistrar registrar)
     registrar.Parameter("grpc_thread_count", &TThis::GrpcThreadCount)
         .GreaterThan(0)
         .Default(4);
+    registrar.Parameter("grpc_event_engine_thread_count", &TThis::GrpcEventEngineThreadCount)
+        .GreaterThan(0)
+        .Default(4);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -73,7 +76,7 @@ void TChannelCredentialsConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TChannelConfigBase::Register(TRegistrar registrar)
+void TChannelConfigTemplate::Register(TRegistrar registrar)
 {
     registrar.Parameter("credentials", &TThis::Credentials)
         .Optional();

@@ -27,6 +27,8 @@ struct TPullRowsOptions
     NChaosClient::TReplicationProgress ReplicationProgress;
     NTransactionClient::TTimestamp UpperTimestamp = NTransactionClient::NullTimestamp;
     NTableClient::TTableSchemaPtr TableSchema;
+    i64 MaxDataWeight = 20_MB;
+    IReservingMemoryUsageTrackerPtr MemoryTracker;
 };
 
 struct TPullRowsResult
@@ -47,7 +49,7 @@ struct TPullQueueOptions
     bool UseNativeTabletNodeApi = true;
 };
 
-struct TPullConsumerOptions
+struct TPullQueueConsumerOptions
     : public TPullQueueOptions
 { };
 
@@ -73,6 +75,23 @@ struct TListQueueConsumerRegistrationsResult
     std::optional<std::vector<int>> Partitions;
 };
 
+struct TCreateQueueProducerSessionOptions
+    : public TTimeoutOptions
+{
+    NYTree::INodePtr UserMeta;
+};
+
+struct TCreateQueueProducerSessionResult
+{
+    NQueueClient::TQueueProducerSequenceNumber SequenceNumber;
+    NQueueClient::TQueueProducerEpoch Epoch;
+    NYTree::INodePtr UserMeta;
+};
+
+struct TRemoveQueueProducerSessionOptions
+    : public TTimeoutOptions
+{ };
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IQueueClientBase
@@ -92,6 +111,7 @@ struct IQueueClient
 
     //! Reads a batch of rows from a given partition of a given queue, starting at (at least) the given offset.
     //! Requires the user to have read-access to the specified queue.
+    //! There is no guarantee that `rowBatchReadOptions.MaxRowCount` rows will be returned even if they are in the queue.
     virtual TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
         const NYPath::TRichYPath& queuePath,
         i64 offset,
@@ -100,13 +120,14 @@ struct IQueueClient
         const TPullQueueOptions& options = {}) = 0;
 
     //! Same as PullQueue, but requires user to have read-access to the consumer and the consumer being registered for the given queue.
-    virtual TFuture<NQueueClient::IQueueRowsetPtr> PullConsumer(
+    //! There is no guarantee that `rowBatchReadOptions.MaxRowCount` rows will be returned even if they are in the queue.
+    virtual TFuture<NQueueClient::IQueueRowsetPtr> PullQueueConsumer(
         const NYPath::TRichYPath& consumerPath,
         const NYPath::TRichYPath& queuePath,
         std::optional<i64> offset,
         int partitionIndex,
         const NQueueClient::TQueueRowBatchReadOptions& rowBatchReadOptions,
-        const TPullConsumerOptions& options = {}) = 0;
+        const TPullQueueConsumerOptions& options = {}) = 0;
 
     virtual TFuture<void> RegisterQueueConsumer(
         const NYPath::TRichYPath& queuePath,
@@ -123,6 +144,18 @@ struct IQueueClient
         const std::optional<NYPath::TRichYPath>& queuePath,
         const std::optional<NYPath::TRichYPath>& consumerPath,
         const TListQueueConsumerRegistrationsOptions& options = {}) = 0;
+
+    virtual TFuture<TCreateQueueProducerSessionResult> CreateQueueProducerSession(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        const TCreateQueueProducerSessionOptions& options = {}) = 0;
+
+    virtual TFuture<void> RemoveQueueProducerSession(
+        const NYPath::TRichYPath& producerPath,
+        const NYPath::TRichYPath& queuePath,
+        const NQueueClient::TQueueProducerSessionId& sessionId,
+        const TRemoveQueueProducerSessionOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

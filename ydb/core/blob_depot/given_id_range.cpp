@@ -43,6 +43,7 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(it != Ranges.end());
         TChunk& chunk = it->second;
         const size_t offset = value % BitsPerChunk;
+        Y_DEBUG_ABORT_UNLESS(chunk[offset]);
         chunk.Reset(offset);
         --NumAvailableItems;
         if (chunk.Empty()) {

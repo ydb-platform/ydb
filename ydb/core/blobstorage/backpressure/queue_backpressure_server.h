@@ -196,9 +196,7 @@ namespace NKikimr {
                     }
                 }
 
-                TWindowStatus *Processed(bool checkMsgId, const TMessageId &msgId, ui64 cost, TWindowStatus *opStatus) {
-                    Y_UNUSED(checkMsgId);
-                    Y_UNUSED(msgId);
+                TWindowStatus *Processed(bool /*checkMsgId*/, const TMessageId& /*msgId*/, ui64 cost, TWindowStatus *opStatus) {
                     Y_ABORT_UNLESS(Cost >= cost);
                     Cost -= cost;
                     --InFlight;

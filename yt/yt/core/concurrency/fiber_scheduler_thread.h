@@ -16,18 +16,17 @@ class TFiberSchedulerThread
 {
 public:
     TFiberSchedulerThread(
-        const TString& threadGroupName,
-        const TString& threadName,
-        NThreading::EThreadPriority threadPriority = NThreading::EThreadPriority::Normal,
-        int shutdownPriority = 0);
+        std::string threadGroupName,
+        std::string threadName,
+        NThreading::TThreadOptions options = {});
 
     //! Empty callback signals about stopping.
     virtual TClosure OnExecute() = 0;
 
 private:
-    void ThreadMain() override;
+    const std::string ThreadGroupName_;
 
-    const TString ThreadGroupName_;
+    void ThreadMain() override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

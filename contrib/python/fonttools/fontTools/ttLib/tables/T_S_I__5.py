@@ -2,7 +2,10 @@
 tool to store its hinting source data.
 
 TSI5 contains the VTT character groups.
+
+See also https://learn.microsoft.com/en-us/typography/tools/vtt/tsi-tables
 """
+
 from fontTools.misc.textTools import safeEval
 from . import DefaultTable
 import sys

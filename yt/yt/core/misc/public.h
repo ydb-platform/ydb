@@ -1,7 +1,8 @@
 #pragma once
 
 #include "common.h"
-#include "error_code.h"
+
+#include <library/cpp/yt/error/public.h>
 
 // Google Protobuf forward declarations.
 namespace google::protobuf {
@@ -80,6 +81,14 @@ struct TValueBoundSerializer;
 template <class T, class C, class = void>
 struct TSerializerTraits;
 
+DEFINE_ENUM(ESerializationDumpMode,
+    (None)
+    (Content)
+    (Checksum)
+);
+
+using TSerializationDumpScopeFilter = std::optional<THashSet<std::string>>;
+
 template <class TKey, class TComparer>
 class TSkipList;
 
@@ -91,18 +100,20 @@ class TStringBuilder;
 DECLARE_REFCOUNTED_STRUCT(IDigest)
 DECLARE_REFCOUNTED_STRUCT(IPersistentDigest)
 
-DECLARE_REFCOUNTED_CLASS(TSlruCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TSlruCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TSlruCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TSlruCacheConfig)
 
-DECLARE_REFCOUNTED_CLASS(TAsyncExpiringCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TAsyncExpiringCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheConfig)
 
-DECLARE_REFCOUNTED_CLASS(TLogDigestConfig)
-DECLARE_REFCOUNTED_CLASS(THistogramDigestConfig)
+DECLARE_REFCOUNTED_STRUCT(TLogDigestConfig)
+DECLARE_REFCOUNTED_STRUCT(THistogramDigestConfig)
 
-DECLARE_REFCOUNTED_CLASS(THistoricUsageConfig)
+DECLARE_REFCOUNTED_STRUCT(TSingletonsConfig)
+DECLARE_REFCOUNTED_STRUCT(TSingletonsDynamicConfig)
 
-class TSignalRegistry;
+DECLARE_REFCOUNTED_STRUCT(TFairShareHierarchicalSchedulerDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(IFairShareHierarchicalSlotQueueResource)
 
 class TBloomFilterBuilder;
 class TBloomFilter;
@@ -113,9 +124,6 @@ constexpr TChecksum NullChecksum = 0;
 
 template <class T, size_t N>
 class TCompactVector;
-
-class TRef;
-class TMutableRef;
 
 template <class TProto>
 class TRefCountedProto;
@@ -140,7 +148,13 @@ using TInternedObjectDataPtr = TIntrusivePtr<TInternedObjectData<T>>;
 template <class T>
 class TInternedObject;
 
-DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
+namespace NStatisticPath {
+
+class TStatisticPathLiteral;
+class TStatisticPath;
+struct TStatisticPathSerializer;
+
+} // namespace NStatisticPath
 
 class TStatistics;
 class TSummary;
@@ -148,65 +162,51 @@ class TSummary;
 template <class TTask>
 struct IFairScheduler;
 
+using TFairShareSlotId = TGuid;
+
 template <class TTask>
 using IFairSchedulerPtr = TIntrusivePtr<IFairScheduler<TTask>>;
 
-DECLARE_REFCOUNTED_CLASS(TAdaptiveHedgingManagerConfig)
+template <typename TTag>
+class TFairShareHierarchicalSlotQueueSlot;
+
+template <typename TTag>
+using TFairShareHierarchicalSlotQueueSlotPtr = TIntrusivePtr<TFairShareHierarchicalSlotQueueSlot<TTag>>;
+
+template <typename TTag>
+class TFairShareHierarchicalSchedulerLog;
+
+template <typename TTag>
+using TFairShareHierarchicalSchedulerLogPtr = TIntrusivePtr<TFairShareHierarchicalSchedulerLog<TTag>>;
+
+template <typename TTag>
+class TFairShareHierarchicalScheduler;
+
+template <typename TTag>
+using TFairShareHierarchicalSchedulerPtr = TIntrusivePtr<TFairShareHierarchicalScheduler<TTag>>;
+
+template <typename TTag>
+class TFairShareHierarchicalSlotQueue;
+
+template <typename TTag>
+using TFairShareHierarchicalSlotQueuePtr = TIntrusivePtr<TFairShareHierarchicalSlotQueue<TTag>>;
+
+DECLARE_REFCOUNTED_STRUCT(TAdaptiveHedgingManagerConfig)
 DECLARE_REFCOUNTED_STRUCT(IHedgingManager)
 
 ////////////////////////////////////////////////////////////////////////////////
-
-YT_DEFINE_ERROR_ENUM(
-    ((OK)                    (0))
-    ((Generic)               (1))
-    ((Canceled)              (2))
-    ((Timeout)               (3))
-    ((FutureCombinerFailure) (4))
-    ((FutureCombinerShortcut)(5))
-);
 
 DEFINE_ENUM(EProcessErrorCode,
     ((NonZeroExitCode)    (10000))
     ((Signal)             (10001))
     ((CannotResolveBinary)(10002))
+    ((CannotStartProcess) (10003))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_STRUCT(IMemoryReferenceTracker)
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class TObject, class TScalar>
-concept CScalable = requires (TObject object, TScalar scalar)
-{
-    { object * scalar } -> std::same_as<TObject>;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class T, class Sig>
-struct TIsInvocable;
-
-template <class T, class TRet, bool NoExcept, class... TArgs>
-struct TIsInvocable<T, TRet(TArgs...) noexcept(NoExcept)>
-{
-private:
-    static constexpr bool IsInvocable_ = requires (T&& t, TArgs&&... args) {
-        { std::forward<T>(t)(std::forward<TArgs>(args)...) } -> std::same_as<TRet>;
-    };
-
-    static constexpr bool IsNoThrowInvocable_ = requires (T&& t, TArgs&&... args) {
-        { std::forward<T>(t)(std::forward<TArgs>(args)...) } noexcept;
-    };
-public:
-    static constexpr bool Value =
-        IsInvocable_ &&
-        (!NoExcept || IsNoThrowInvocable_);
-};
-
-template <class T, class Sig>
-concept CInvocable = TIsInvocable<T, Sig>::Value;
+DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
+DECLARE_REFCOUNTED_STRUCT(IReservingMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 

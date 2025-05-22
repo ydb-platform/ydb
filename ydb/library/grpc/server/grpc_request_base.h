@@ -46,15 +46,17 @@ public:
         ERROR,
         CANCEL
     };
+    enum class EStreamCtrl {
+        CONT = 0,   // Continue stream
+        FINISH = 1, // Finish stream just after this reply
+    };
+
     using TAsyncFinishResult = NThreading::TFuture<EFinishStatus>;
 
     using TOnNextReply = std::function<void (size_t left)>;
 
     //! Get pointer to the request's message.
     virtual const NProtoBuf::Message* GetRequest() const = 0;
-
-    //! Get mutable pointer to the request's message.
-    virtual NProtoBuf::Message* GetRequestMut() = 0;
 
     //! Get current auth state
     virtual TAuthState& GetAuthState() = 0;
@@ -65,7 +67,9 @@ public:
 
     //! Send serialised response (The request shoult be created for bytes response type)
     //! Implementation can swap ByteBuffer
-    virtual void Reply(grpc::ByteBuffer* resp, ui32 status = 0) = 0;
+
+    //! ctrl - controll stream behaviour. Ignored in case of unary call
+    virtual void Reply(grpc::ByteBuffer* resp, ui32 status = 0, EStreamCtrl ctrl = EStreamCtrl::CONT) = 0;
 
     //! Send grpc UNAUTHENTICATED status
     virtual void ReplyUnauthenticated(const TString& in) = 0;
@@ -105,6 +109,8 @@ public:
     //! reply in flight
     virtual void SetNextReplyCallback(TOnNextReply&& cb) = 0;
 
+    virtual bool IsStreamCall() const = 0;
+
     //! Finish streaming reply
     virtual void FinishStreamingOk() = 0;
 
@@ -119,6 +125,8 @@ public:
 
     //! Returns true if client was not interested in result (but we still must send response to make grpc happy)
     virtual bool IsClientLost() const = 0;
+
+    virtual TString GetEndpointId() const = 0;
 };
 
 } // namespace NYdbGrpc

@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -79,7 +79,9 @@ public:
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
         , UserRequestContext(userRequestContext)
     {
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
+        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
+            Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Literal);
+
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
@@ -146,24 +148,6 @@ public:
             return;
         }
 
-        ui64 mkqlMemoryLimit = Request.MkqlMemoryLimit > 0
-            ? Request.MkqlMemoryLimit
-            : 1_GB;
-
-        auto& alloc = Request.TxAlloc->Alloc;
-        auto rmConfig = GetKqpResourceManager()->GetConfig();
-        ui64 mkqlInitialLimit = std::min(mkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit());
-        ui64 mkqlMaxLimit = std::max(mkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit());
-        alloc.SetLimit(mkqlInitialLimit);
-
-        // TODO: KIKIMR-15350
-        alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMaxLimit](ui64 currentLimit, ui64 required) {
-            if (required < mkqlMaxLimit) {
-                LOG_D("Increase memory limit from " << currentLimit << " to " << required);
-                alloc.SetLimit(required);
-            }
-        });
-
         // task runner settings
         ComputeCtx = std::make_unique<NMiniKQL::TKqpComputeContextBase>();
         RunnerContext = CreateTaskRunnerContext(ComputeCtx.get(), &Request.TxAlloc->TypeEnv);
@@ -182,13 +166,14 @@ public:
         UpdateCounters();
     }
 
-    void RunTask(NMiniKQL::TScopedAlloc& alloc, TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
+    void RunTask(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
         auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         NDqProto::TDqTask protoTask;
         protoTask.SetId(task.Id);
         protoTask.SetStageId(task.StageId.StageId);
+        protoTask.SetEnableSpilling(false); // TODO: enable spilling
         protoTask.MutableProgram()->CopyFrom(stage.GetProgram()); // it's not good...
 
         TaskId2StageId[task.Id] = task.StageId.StageId;
@@ -227,7 +212,7 @@ public:
         auto status = taskRunner->Run();
         YQL_ENSURE(status == ERunStatus::Finished);
 
-        with_lock (alloc) { // allocator is used only by outputChannel->PopAll()
+        with_lock (*alloc) { // allocator is used only by outputChannel->PopAll()
             for (auto& taskOutput : task.Outputs) {
                 for (ui64 outputChannelId : taskOutput.Channels) {
                     auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);
@@ -266,7 +251,7 @@ public:
 
             fakeComputeActorStats.SetDurationUs(elapsedMicros);
 
-            Stats->AddComputeActorStats(OwnerActor.NodeId(), std::move(fakeComputeActorStats));
+            Stats->AddComputeActorStats(OwnerActor.NodeId(), std::move(fakeComputeActorStats), NYql::NDqProto::COMPUTE_STATE_FINISHED);
 
             Stats->ExecuterCpuTime = executerCpuTime;
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
@@ -292,7 +277,7 @@ public:
 
 private:
     void CleanupCtx() {
-        with_lock(Request.TxAlloc->Alloc) {
+        with_lock(*Request.TxAlloc->Alloc) {
             TaskRunners.erase(TaskRunners.begin(), TaskRunners.end());
             Request.Transactions.erase(Request.Transactions.begin(), Request.Transactions.end());
             ComputeCtx.reset();

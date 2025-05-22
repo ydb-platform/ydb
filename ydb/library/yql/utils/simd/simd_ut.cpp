@@ -21,6 +21,17 @@ void Reverse(ui8* buf, ui8* result_buf, int len) {
     }
 }
 
+
+template
+__attribute__((target("avx2")))
+void Reverse<NSimd::TSimdAVX2Traits>(ui8* buf, ui8* result_buf, int len);
+
+
+template
+__attribute__((target("sse4.2")))
+void Reverse<NSimd::TSimdSSE42Traits>(ui8* buf, ui8* result_buf, int len);
+
+
 struct TTestFactory {
 
     template<typename T>

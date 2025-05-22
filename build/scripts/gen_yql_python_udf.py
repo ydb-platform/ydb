@@ -1,9 +1,9 @@
 import sys
 
 TEMPLATE = """
-#include <yql/udfs/common/python/python_udf/python_udf.h>
+#include <yql/essentials/udfs/common/python/python_udf/python_udf.h>
 
-#include <contrib/ydb/library/yql/public/udf/udf_registrator.h>
+#include <yql/essentials/public/udf/udf_registrator.h>
 
 #if @WITH_LIBRA@
 #include <yql/udfs/quality/libra/module/module.h>
@@ -17,18 +17,18 @@ using namespace NKikimr::NUdf;
 LIBRA_MODULE(TLibraModule, "Libra@MODULE_NAME@");
 #endif
 
-extern "C" UDF_API void Register(IRegistrator& registrator, ui32 flags) {
+extern "C" YQL_UDF_API void Register(IRegistrator& registrator, ui32 flags) {
     RegisterYqlPythonUdf(registrator, flags, TStringBuf("@MODULE_NAME@"), TStringBuf("@PACKAGE_NAME@"), EPythonFlavor::@FLAVOR@);
 #if @WITH_LIBRA@
     RegisterHelper<TLibraModule>(registrator);
 #endif
 }
 
-extern "C" UDF_API ui32 AbiVersion() {
+extern "C" YQL_UDF_API ui32 AbiVersion() {
     return CurrentAbiVersion();
 }
 
-extern "C" UDF_API void SetBackTraceCallback(TBackTraceCallback callback) {
+extern "C" YQL_UDF_API void SetBackTraceCallback(TBackTraceCallback callback) {
     SetBackTraceCallbackImpl(callback);
 }
 

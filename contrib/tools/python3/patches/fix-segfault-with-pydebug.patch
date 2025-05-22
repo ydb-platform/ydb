@@ -1,0 +1,20 @@
+commit fc804aedfe1e844aaed4aa196830ca057f89361c (HEAD)
+author: shadchin
+date: 2024-02-07T11:13:39+03:00
+
+    Fix segfault
+
+--- contrib/tools/python3/Python/pystate.c	(bacb745829a9c01a81284c346946097c868084e0)
++++ contrib/tools/python3/Python/pystate.c	(fc804aedfe1e844aaed4aa196830ca057f89361c)
+@@ -354,6 +354,11 @@ holds_gil(PyThreadState *tstate)
+     // XXX Fall back to tstate->interp->runtime->ceval.gil.last_holder
+     // (and tstate->interp->runtime->ceval.gil.locked).
+     assert(tstate != NULL);
++#ifndef NDEBUG
++    if (!tstate_is_alive(tstate)) {
++        return PyGILState_Check();
++    }
++#endif
+     _PyRuntimeState *runtime = tstate->interp->runtime;
+     /* Must be the tstate for this thread */
+     assert(tstate == gilstate_tss_get(runtime));

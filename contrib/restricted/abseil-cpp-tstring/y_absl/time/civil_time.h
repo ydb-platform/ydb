@@ -55,7 +55,7 @@
 // Example:
 //
 //   // Construct a civil-time object for a specific day
-//   const y_absl::CivilDay cd(1969, 07, 20);
+//   const y_absl::CivilDay cd(1969, 7, 20);
 //
 //   // Construct a civil-time object for a specific second
 //   const y_absl::CivilSecond cd(2018, 8, 1, 12, 0, 1);
@@ -65,7 +65,7 @@
 // Example:
 //
 //   // Valid in C++14
-//   constexpr y_absl::CivilDay cd(1969, 07, 20);
+//   constexpr y_absl::CivilDay cd(1969, 7, 20);
 
 #ifndef Y_ABSL_TIME_CIVIL_TIME_H_
 #define Y_ABSL_TIME_CIVIL_TIME_H_
@@ -461,6 +461,32 @@ TString FormatCivilTime(CivilHour c);
 TString FormatCivilTime(CivilDay c);
 TString FormatCivilTime(CivilMonth c);
 TString FormatCivilTime(CivilYear c);
+
+// Support for StrFormat(), StrCat(), etc
+template <typename Sink>
+void AbslStringify(Sink& sink, CivilSecond c) {
+  sink.Append(FormatCivilTime(c));
+}
+template <typename Sink>
+void AbslStringify(Sink& sink, CivilMinute c) {
+  sink.Append(FormatCivilTime(c));
+}
+template <typename Sink>
+void AbslStringify(Sink& sink, CivilHour c) {
+  sink.Append(FormatCivilTime(c));
+}
+template <typename Sink>
+void AbslStringify(Sink& sink, CivilDay c) {
+  sink.Append(FormatCivilTime(c));
+}
+template <typename Sink>
+void AbslStringify(Sink& sink, CivilMonth c) {
+  sink.Append(FormatCivilTime(c));
+}
+template <typename Sink>
+void AbslStringify(Sink& sink, CivilYear c) {
+  sink.Append(FormatCivilTime(c));
+}
 
 // y_absl::ParseCivilTime()
 //

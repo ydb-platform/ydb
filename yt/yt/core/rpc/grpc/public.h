@@ -1,19 +1,23 @@
 #pragma once
 
+#include <yt/yt/core/misc/configurable_singleton_decl.h>
+
 #include <yt/yt/core/logging/log.h>
 
 namespace NYT::NRpc::NGrpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TDispatcherConfig)
-DECLARE_REFCOUNTED_CLASS(TSslPemKeyCertPairConfig)
-DECLARE_REFCOUNTED_CLASS(TServerCredentialsConfig)
-DECLARE_REFCOUNTED_CLASS(TServerAddressConfig)
-DECLARE_REFCOUNTED_CLASS(TServerConfig)
-DECLARE_REFCOUNTED_CLASS(TChannelCredentialsConfig)
-DECLARE_REFCOUNTED_CLASS(TChannelConfigBase)
-DECLARE_REFCOUNTED_CLASS(TChannelConfig)
+DECLARE_REFCOUNTED_STRUCT(TDispatcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TSslPemKeyCertPairConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerCredentialsConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerAddressConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerConfig)
+DECLARE_REFCOUNTED_STRUCT(TChannelCredentialsConfig)
+DECLARE_REFCOUNTED_STRUCT(TChannelConfigTemplate)
+DECLARE_REFCOUNTED_STRUCT(TChannelConfig)
+
+DECLARE_REFCOUNTED_STRUCT(IGrpcChannel)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -34,11 +38,15 @@ extern const char* const AuthServiceTicketMetadataKey;
 extern const char* const ErrorMetadataKey;
 extern const char* const MessageBodySizeMetadataKey;
 extern const char* const ProtocolVersionMetadataKey;
+extern const char* const RequestCodecKey;
+extern const char* const ResponseCodecKey;
 
 // After adding a new metadata key, do not forget to add it in GetNativeMetadataKeys.
 const THashSet<TStringBuf>& GetNativeMetadataKeys();
 
 constexpr int GenericErrorStatusCode = 100;
+
+YT_DECLARE_CONFIGURABLE_SINGLETON(TDispatcherConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

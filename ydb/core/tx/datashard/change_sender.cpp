@@ -107,8 +107,8 @@ class TChangeSender: public TActor<TChangeSender> {
 
         auto it = Senders.find(msg.PathId);
         if (it != Senders.end()) {
-            Y_ABORT_UNLESS(it->second.UserTableId == msg.UserTableId);
-            Y_ABORT_UNLESS(it->second.Type == msg.Type);
+            Y_ENSURE(it->second.UserTableId == msg.UserTableId);
+            Y_ENSURE(it->second.Type == msg.Type);
             LOG_W("Trying to add duplicate sender"
                 << ": userTableId# " << msg.UserTableId
                 << ", type# " << msg.Type
@@ -275,13 +275,9 @@ public:
         for (const auto& [tableId, tableInfo] : self->GetUserTables()) {
             const auto fullTableId = TTableId(self->GetPathOwnerId(), tableId);
 
-            for (const auto& [indexPathId, indexInfo] : tableInfo->Indexes) {
-                if (indexInfo.Type != TUserTable::TTableIndex::EIndexType::EIndexTypeGlobalAsync) {
-                    continue;
-                }
-
+            tableInfo->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {
                 AddChangeSender(indexPathId, fullTableId, ESenderType::AsyncIndex);
-            }
+            });
 
             for (const auto& [streamPathId, _] : tableInfo->CdcStreams) {
                 AddChangeSender(streamPathId, fullTableId, ESenderType::CdcStream);

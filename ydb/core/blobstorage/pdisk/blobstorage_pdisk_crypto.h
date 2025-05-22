@@ -1,7 +1,6 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
 
 namespace NKikimr {
@@ -15,13 +14,10 @@ class TPDiskHashCalculator : public THashCalculator {
     bool UseT1ha0Hasher;
 
 public:
-    TPDiskHashCalculator(bool useT1ha0Hasher)
+    // T1ha0 hash is default for current version, but old hash is used to test backward compatibility
+    TPDiskHashCalculator(bool useT1ha0Hasher = true)
         : UseT1ha0Hasher(useT1ha0Hasher)
     {}
-
-    void SetUseT1ha0Hasher(bool x) {
-        UseT1ha0Hasher = x;
-    };
 
     ui64 OldHashSector(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
             const ui32 sectorSize) {
@@ -62,13 +58,8 @@ public:
         // On production servers may be two versions.
         // If by default used OldHash version, then use it first
         // If by default used T1ha0NoAvx version, then use it
-        if (UseT1ha0Hasher) {
-            return sectorHash == T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize)
-                || sectorHash == OldHashSector(sectorOffset, magic, sector, sectorSize);
-        } else {
-            return sectorHash == OldHashSector(sectorOffset, magic, sector, sectorSize)
-                || sectorHash == T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize);
-        }
+        return sectorHash == T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize)
+            || sectorHash == OldHashSector(sectorOffset, magic, sector, sectorSize);
     }
 };
 
@@ -83,7 +74,11 @@ public:
 
     TPDiskStreamCypher(bool encryption)
         : Impl()
+#ifdef DISABLE_PDISK_ENCRYPTION
+        , EnableEncryption(false && encryption)
+#else
         , EnableEncryption(encryption)
+#endif
     {}
 
     void SetKey(const ui64 &key) {

@@ -19,7 +19,7 @@
 #include "readers.h"
 
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NTable {
 
 //How ofter run host scan to perform session balancing
@@ -79,7 +79,7 @@ public:
         CacheMissCounter.Inc();
 
         return ::NYdb::NSessionPool::InjectSessionStatusInterception(session.SessionImpl_,
-            ExecuteDataQueryInternal(session, query, txControl, params, settings, false),
+            ExecuteDataQueryImpl(session, query, txControl, params, settings, false),
             true, GetMinTimeToTouch(Settings_.SessionPoolSettings_));
     }
 
@@ -96,7 +96,7 @@ public:
 
         return ::NYdb::NSessionPool::InjectSessionStatusInterception<TDataQueryResult>(
             session.SessionImpl_,
-            session.Client_->ExecuteDataQueryInternal(session, dataQuery, txControl, params, settings, fromCache),
+            session.Client_->ExecuteDataQueryImpl(session, dataQuery, txControl, params, settings, fromCache),
             true,
             GetMinTimeToTouch(session.Client_->Settings_.SessionPoolSettings_),
             cb);
@@ -109,9 +109,9 @@ public:
 
     TAsyncBeginTransactionResult BeginTransaction(const TSession& session, const TTxSettings& txSettings,
         const TBeginTxSettings& settings);
-    TAsyncCommitTransactionResult CommitTransaction(const TSession& session, const TTransaction& tx,
+    TAsyncCommitTransactionResult CommitTransaction(const TSession& session, const TString& txId,
         const TCommitTxSettings& settings);
-    TAsyncStatus RollbackTransaction(const TSession& session, const TTransaction& tx,
+    TAsyncStatus RollbackTransaction(const TSession& session, const TString& txId,
         const TRollbackTxSettings& settings);
 
     TAsyncExplainDataQueryResult ExplainDataQuery(const TSession& session, const TString& query,
@@ -172,6 +172,32 @@ private:
     static void CollectQuerySize(const TDataQuery&, NSdkStats::TAtomicHistogram<::NMonitoring::THistogram>&);
 
     template <typename TQueryType, typename TParamsType>
+    TAsyncDataQueryResult ExecuteDataQueryImpl(const TSession& session, const TQueryType& query,
+        const TTxControl& txControl, TParamsType params,
+        const TExecDataQuerySettings& settings, bool fromCache
+    ) {
+        if (!txControl.Tx_.Defined() || !txControl.CommitTx_) {
+            return ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache);
+        }
+
+        auto onPrecommitCompleted = [this, session, query, txControl, params, settings, fromCache](const NThreading::TFuture<TStatus>& f) {
+            TStatus status = f.GetValueSync();
+            if (!status.IsSuccess()) {
+                return NThreading::MakeFuture(TDataQueryResult(std::move(status),
+                                                               {},
+                                                               txControl.Tx_,
+                                                               Nothing(),
+                                                               false,
+                                                               Nothing()));
+            }
+
+            return ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache);
+        };
+
+        return txControl.Tx_->Precommit().Apply(onPrecommitCompleted);
+    }
+
+    template <typename TQueryType, typename TParamsType>
     TAsyncDataQueryResult ExecuteDataQueryInternal(const TSession& session, const TQueryType& query,
         const TTxControl& txControl, TParamsType params,
         const TExecDataQuerySettings& settings, bool fromCache
@@ -180,8 +206,8 @@ private:
         request.set_session_id(session.GetId());
         auto txControlProto = request.mutable_tx_control();
         txControlProto->set_commit_tx(txControl.CommitTx_);
-        if (txControl.TxId_) {
-            txControlProto->set_tx_id(*txControl.TxId_);
+        if (txControl.Tx_.Defined()) {
+            txControlProto->set_tx_id(txControl.Tx_->GetId());
         } else {
             SetTxSettings(txControl.BeginTx_, txControlProto->mutable_begin_tx());
         }

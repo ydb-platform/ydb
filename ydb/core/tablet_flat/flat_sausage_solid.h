@@ -1,13 +1,18 @@
 #pragma once
 
+#include "util_fmt_abort.h"
+#include "flat_page_iface.h"
+
 #include <ydb/core/base/logoblob.h>
 #include <ydb/library/actors/util/shared_data.h>
 
 namespace NKikimr {
 namespace NPageCollection {
 
+    using TPageId = NTable::NPage::TPageId;
+
     struct TLargeGlobId {
-        /* ... is a piece of some data up to 4GiB placed on a continous
+        /* ... is a piece of some data up to 4GiB placed on a continuous
             series of TLogoBlobs which IDs are differs only in cookie and
             have the single upper chunk bytes limit. All blobs of span have
             the same BS storage group.
@@ -28,11 +33,11 @@ namespace NPageCollection {
             , Bytes(bytes)
             , Lead(lead)
         {
-            //Y_ABORT_UNLESS(Group != InvalidGroup, "Invalid TLargeGlobId storage group");
-            Y_ABORT_UNLESS(Lead && Lead.BlobSize() && Lead.BlobSize() <= Bytes);
+            //Y_ENSURE(Group != InvalidGroup, "Invalid TLargeGlobId storage group");
+            Y_ENSURE(Lead && Lead.BlobSize() && Lead.BlobSize() <= Bytes);
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "TLargeGlobId{" << Lead << " ~" << Bytes
@@ -130,7 +135,7 @@ namespace NPageCollection {
         }
 
         template<typename TOut>
-        void MaterializeTo(TOut &out) const noexcept
+        void MaterializeTo(TOut &out) const
         {
             for (auto blobId : Blobs()) {
                 out.emplace_back(blobId);
@@ -234,22 +239,22 @@ namespace NPageCollection {
             Bodies.resize(Blobs.size());
         }
 
-        bool Apply(const TLogoBlobID& id, TString body) noexcept {
+        bool Apply(const TLogoBlobID& id, TString body) {
             for (size_t idx = 0, end = Blobs.size(); idx < end; ++idx) {
                 if (Blobs[idx] != id) {
                     continue;
                 }
-                Y_ABORT_UNLESS(!Bodies[idx],
-                    "Apply blob %s multiple times", id.ToString().c_str());
-                Y_ABORT_UNLESS(id.BlobSize() == body.size(),
-                    "Apply blob %s and body size mismatch", id.ToString().c_str());
+                Y_ENSURE(!Bodies[idx],
+                    "Apply called for blob " << id << " multiple times");
+                Y_ENSURE(id.BlobSize() == body.size(),
+                    "Apply called for blob " << id << " with body size " << body.size());
                 // N.B. we store individual bodies to minimize upfront memory requirements
                 BytesLoaded += body.size();
                 Bodies[idx] = std::move(body);
                 return ++BlobsLoaded == Blobs.size();
             }
 
-            Y_ABORT("Apply unknown blob %s", id.ToString().c_str());
+            Y_TABLET_ERROR("Apply called for unknown blob " << id);
         }
 
         explicit operator bool() const {

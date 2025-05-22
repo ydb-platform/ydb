@@ -72,6 +72,14 @@ auto CreateUnpackMask(ui32 dataSize, ui32 stripeSize, bool needOffset) {
     return TSimdI8(indexes);
 }
 
+template
+__attribute__((target("avx2")))
+auto CreateUnpackMask<NSimd::TSimdAVX2Traits>(ui32, ui32, bool);
+
+template
+__attribute__((target("sse4.2")))
+auto CreateUnpackMask<NSimd::TSimdSSE42Traits>(ui32, ui32, bool);
+
 
 // Creates mask to advance register content for N bytes. When N is negative, move data to lower bytes.
 template<typename TTraits> auto AdvanceBytesMask(const int N) {
@@ -89,12 +97,32 @@ template<typename TTraits> auto AdvanceBytesMask(const int N) {
 }
 
 
+template
+__attribute__((target("avx2")))
+auto AdvanceBytesMask<NSimd::TSimdAVX2Traits>(const int);
+
+
+template
+__attribute__((target("sse4.2")))
+auto AdvanceBytesMask<NSimd::TSimdSSE42Traits>(const int);
+
+
 // Prepare unpack mask to merge two columns in one register. col1Bytes, col2Bytes - size of data in columns.
 template<typename TTraits>
 void PrepareMergeMasks( ui32 col1Bytes, ui32 col2Bytes, typename TTraits::TSimdI8& unpackMask1, typename TTraits::TSimdI8& unpackMask2) {
     unpackMask1 = CreateUnpackMask<TTraits>(col1Bytes, col2Bytes, false);
     unpackMask2 = CreateUnpackMask<TTraits>(col2Bytes, col1Bytes, true);
 }
+
+
+template
+__attribute__((target("avx2")))
+void PrepareMergeMasks<NSimd::TSimdAVX2Traits>(ui32, ui32, NSimd::TSimdAVX2Traits::TSimdI8 &, NSimd::TSimdAVX2Traits::TSimdI8 &);
+
+
+template
+__attribute__((target("sse4.2")))
+void PrepareMergeMasks<NSimd::TSimdSSE42Traits>(ui32, ui32, NSimd::TSimdSSE42Traits::TSimdI8 &, NSimd::TSimdSSE42Traits::TSimdI8 &);
 
 
 }

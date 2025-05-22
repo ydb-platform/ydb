@@ -2,7 +2,8 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
-#include <aws/checksums/private/crc_priv.h>
+#include <aws/checksums/private/crc32_priv.h>
+#include <aws/checksums/private/crc_util.h>
 #include <stddef.h>
 
 /* The Ethernet, gzip, et.al CRC32 polynomial (reverse of 0x04C11DB7) */
@@ -1149,7 +1150,7 @@ static uint32_t s_crc_generic_sb4(const uint8_t *input, int length, uint32_t crc
     uint32_t(*table)[16][256] = (uint32_t(*)[16][256])table_ptr;
 
     while (remaining >= 4) {
-        crc ^= *current++;
+        crc ^= aws_bswap32_if_be(*current++);
         crc = (*table)[3][crc & 0xff] ^ (*table)[2][(crc >> 8) & 0xff] ^ (*table)[1][(crc >> 16) & 0xff] ^
               (*table)[0][crc >> 24];
         remaining -= 4;
@@ -1165,8 +1166,8 @@ static uint32_t s_crc_generic_sb8(const uint8_t *input, int length, uint32_t crc
     uint32_t(*table)[16][256] = (uint32_t(*)[16][256])table_ptr;
 
     while (remaining >= 8) {
-        uint32_t c1 = *current++ ^ crc;
-        uint32_t c2 = *current++;
+        uint32_t c1 = aws_bswap32_if_be(*current++) ^ crc;
+        uint32_t c2 = aws_bswap32_if_be(*current++);
         uint32_t t1 = (*table)[7][c1 & 0xff] ^ (*table)[6][(c1 >> 8) & 0xff] ^ (*table)[5][(c1 >> 16) & 0xff] ^
                       (*table)[4][(c1 >> 24) & 0xff];
         uint32_t t2 = (*table)[3][c2 & 0xff] ^ (*table)[2][(c2 >> 8) & 0xff] ^ (*table)[1][(c2 >> 16) & 0xff] ^
@@ -1185,10 +1186,10 @@ static uint32_t s_crc_generic_sb16(const uint8_t *input, int length, uint32_t cr
     uint32_t(*table)[16][256] = (uint32_t(*)[16][256])table_ptr;
 
     while (remaining >= 16) {
-        uint32_t c1 = *current++ ^ crc;
-        uint32_t c2 = *current++;
-        uint32_t c3 = *current++;
-        uint32_t c4 = *current++;
+        uint32_t c1 = aws_bswap32_if_be(*current++) ^ crc;
+        uint32_t c2 = aws_bswap32_if_be(*current++);
+        uint32_t c3 = aws_bswap32_if_be(*current++);
+        uint32_t c4 = aws_bswap32_if_be(*current++);
         uint32_t t1 = (*table)[15][c1 & 0xff] ^ (*table)[14][(c1 >> 8) & 0xff] ^ (*table)[13][(c1 >> 16) & 0xff] ^
                       (*table)[12][(c1 >> 24) & 0xff];
         uint32_t t2 = (*table)[11][c2 & 0xff] ^ (*table)[10][(c2 >> 8) & 0xff] ^ (*table)[9][(c2 >> 16) & 0xff] ^

@@ -1,0 +1,16 @@
+--- contrib/python/typeguard/tests/test_typeguard.py	(index)
++++ contrib/python/typeguard/tests/test_typeguard.py	(working tree)
+@@ -8,11 +8,11 @@ from functools import lru_cache, partial, wraps
+ from io import BytesIO, StringIO
+ from typing import (
+     AbstractSet, Any, AnyStr, BinaryIO, Callable, Container, Dict, Generator, Generic, Iterable,
+-    Iterator, List, NamedTuple, Sequence, Set, TextIO, Tuple, Type, TypeVar, Union)
++    Iterator, List, NamedTuple, Sequence, Set, TextIO, Tuple, Type, TypeVar, Union, TypedDict)
+ from unittest.mock import MagicMock, Mock
+ 
+ import pytest
+-from typing_extensions import Literal, NoReturn, Protocol, TypedDict, runtime_checkable
++from typing_extensions import Literal, NoReturn, Protocol, runtime_checkable
+ 
+ from typeguard import (
+     ForwardRefPolicy, TypeChecker, TypeHintWarning, TypeWarning, check_argument_types,

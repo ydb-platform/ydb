@@ -2,10 +2,10 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-SRCS(ints.go)
+VERSION(v1.36.5)
 
-GO_TEST_SRCS(ints_test.go)
+SRCS(
+    ints.go
+)
 
 END()
-
-RECURSE(gotest)

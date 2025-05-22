@@ -20,10 +20,10 @@ namespace NDetail {
 constexpr int MaxHazardPointersPerThread = 2;
 using THazardPointerSet = std::array<std::atomic<void*>, MaxHazardPointersPerThread>;
 
-extern YT_THREAD_LOCAL(THazardPointerSet) HazardPointers;
+YT_DECLARE_THREAD_LOCAL(THazardPointerSet, HazardPointers);
 
 struct THazardThreadState;
-extern YT_THREAD_LOCAL(THazardThreadState*) HazardThreadState;
+YT_DECLARE_THREAD_LOCAL(THazardThreadState*, HazardThreadState);
 
 void InitHazardThreadState();
 
@@ -89,7 +89,7 @@ THazardPtr<T> THazardPtr<T>::Acquire(TPtrLoader&& ptrLoader, T* ptr)
         return {};
     }
 
-    auto& hazardPointers = GetTlsRef(NYT::NDetail::HazardPointers);
+    auto& hazardPointers = NYT::NDetail::HazardPointers();
 
     auto* hazardPtr = [&] {
         for (auto it = hazardPointers.begin(); it !=  hazardPointers.end(); ++it) {
@@ -103,7 +103,7 @@ THazardPtr<T> THazardPtr<T>::Acquire(TPtrLoader&& ptrLoader, T* ptr)
         YT_ABORT();
     }();
 
-    if (Y_UNLIKELY(!NYT::NDetail::HazardThreadState)) {
+    if (Y_UNLIKELY(!NYT::NDetail::HazardThreadState())) {
         NYT::NDetail::InitHazardThreadState();
     }
 
@@ -179,16 +179,10 @@ THazardPtr<T>::THazardPtr(T* ptr, std::atomic<void*>* hazardPtr)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class U>
-bool operator==(const THazardPtr<U>& lhs, const U* rhs)
+template <class T>
+bool operator==(const THazardPtr<T>& lhs, const T* rhs)
 {
     return lhs.Get() == rhs;
-}
-
-template <class U>
-bool operator!=(const THazardPtr<U>& lhs, const U* rhs)
-{
-    return lhs.Get() != rhs;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

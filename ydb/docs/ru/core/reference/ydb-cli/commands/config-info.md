@@ -15,14 +15,14 @@
 * [endpoint](../../../concepts/connect.md#endpoint) — URL кластера базы данных.
 * [database](../../../concepts/connect.md#database) — Путь к базе данных.
 * **Параметры аутентификации:**
-  * [token](../../../concepts/auth.md#iam) — Access Token.
-  * [yc-token](../../../concepts/auth.md#iam) — Refresh Token.
-  * [sa-key-file](../../../concepts/auth.md#iam) — Service Account Key.
-  * [use-metadata-credentials](../../../concepts/auth.md#iam) — Metadata.
-  * [user](../../../concepts/auth.md#static-credentials)
-  * [password](../../../concepts/auth.md#static-credentials)
+  * [token](../../../security/authentication.md#iam) — Access Token.
+  * [yc-token](../../../security/authentication.md#iam) — Refresh Token.
+  * [sa-key-file](../../../security/authentication.md#iam) — Service Account Key.
+  * [use-metadata-credentials](../../../security/authentication.md#iam) — Metadata.
+  * [user](../../../security/authentication.md#static-credentials)
+  * [password](../../../security/authentication.md#static-credentials)
 * [ca-file](../../../concepts/connect.md#tls-cert) — Корневой сертификат.
-* [iam-endpoint](../../../concepts/auth.md#iam) — URL IAM сервиса.
+* [iam-endpoint](../../../security/authentication.md#iam) — URL IAM сервиса.
 
 ## Примеры {#examples}
 

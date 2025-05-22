@@ -1,127 +1,177 @@
-# Примеры использования Kafka API
+# Примеры чтения и записи по Kafka API
+<!-- markdownlint-disable blanks-around-fences -->
 
-В этой статье приведены примеры использования Kafka API для работы с [топиками](../../concepts/topic.md).
+В этой статье приведены примеры чтения и записи в [топики](../../concepts/topic.md) с использованием Kafka API.
 
-Перед выполнением примеров [создайте топик](../ydb-cli/topic-create.md) и [добавьте читателя](../ydb-cli/topic-consumer-add.md).
+Перед выполнением примеров:
 
-## Примеры работы с топиками
+1. [Создайте топик](../ydb-cli/topic-create.md).
+1. [Добавьте читателя](../ydb-cli/topic-consumer-add.md).
+1. Если у вас включена аутентификация, [создайте пользователя](../../yql/reference/syntax/create-user.md).
 
-В примерах используются:
+## Начало работы {#how-to-try-kafka-api}
 
- * `ydb:9093` — имя хоста.
- * `/Root/Database` — название базы данных.
- * `/Root/Database/Topic` — имя топика.
- * `user@/Root/Database` — имя пользователя. Имя пользователя указывается полностью и включает название базы данных.
- * `*****` — пароль пользователя.
+### В Docker {#how-to-try-kafka-api-in-docker}
 
+Запустите Docker по [этой](../../quickstart#install) инструкции. Kafka API будет доступен на 9092 порте.
 
-## Запись данных в топик
+## Примеры работы с Kafka API
 
-### Запись через Kafka Java SDK
+### Чтение
 
-В этом примере приведен фрагмент кода для записи в топик через [Kafka API](https://kafka.apache.org/documentation/).
+При чтении отличительной особенностью Kafka API являются:
 
-  ```java
-  String HOST = "ydb:9093";
-  String TOPIC = "/Root/Database/Topic";
-  String USER = "user@/Root/Database";
-  String PASS = "*****";
+- отсутствие поддержки опции [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs);
+- только одна стратегия назначения партиция - roundrobin;
+- отсутствие возможности читать без предварительно созданной группы читателей.
 
-  Properties props = new Properties();
-  props.put("bootstrap.servers", HOST);
-  props.put("acks", "all");
+Поэтому в конфигурации читателя всегда нужно указывать **имя группы читателей** и параметры:
 
-  props.put("key.serializer", StringSerializer.class.getName());
-  props.put("key.deserializer", StringDeserializer.class.getName());
-  props.put("value.serializer", StringSerializer.class.getName());
-  props.put("value.deserializer", StringDeserializer.class.getName());
+- `check.crcs=false`
+- `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
 
-  props.put("security.protocol", "SASL_SSL");
-  props.put("sasl.mechanism", "PLAIN");
-  props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
+Ниже даны примеры чтения по Kafka протоколу для разных приложений, языков программирования и фреймворков подключения без аутентификации.
+Примеры того, как настроить аутентификацию, смотри в разделе [Примеры с аутентификацией](#authentication-examples)
 
-  props.put("compression.type", "none");
+{% list tabs %}
 
-  Producer<String, String> producer = new KafkaProducer<>(props);
-  producer.send(new ProducerRecord<String, String>(TOPIC, "msg-key", "msg-body"));
-  producer.flush();
-  producer.close();
-  ```
+- Консольные утилиты Kafka
 
-### Запись через Logstash
+  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
 
-Для настройки [Logstash](https://github.com/elastic/logstash) используйте следующие параметры:
+  {% include [index.md](_includes/bash/kafka-api-console-read-no-auth.md) %}
 
-  ```
-  output {
-    kafka {
-      codec => json
-      topic_id => "/Root/Database/Topic"
-      bootstrap_servers => "ydb:9093"
-      compression_type => none
-      security_protocol => SASL_SSL
-      sasl_mechanism => PLAIN
-      sasl_jaas_config => "org.apache.kafka.common.security.plain.PlainLoginModule required username='user@/Root/Database' password='*****';"
-    }
-  }
-  ```
+- kcat
 
-### Запись через Fluent Bit
+  {% include [index.md](_includes/bash/kafka-api-kcat-read-no-auth.md) %}
 
-Для настройки [Fluent Bit](https://github.com/fluent/fluent-bit) используйте следующие параметры:
+- Java
 
-  ```
-  [OUTPUT]
-    name                          kafka
-    match                         *
-    Brokers                       ydb:9093
-    Topics                        /Root/Database/Topic
-    rdkafka.client.id             Fluent-bit
-    rdkafka.request.required.acks 1
-    rdkafka.log_level             7
-    rdkafka.security.protocol     SASL_SSL
-    rdkafka.sasl.mechanism        PLAIN
-    rdkafka.sasl.username         user@/Root/Database
-    rdkafka.sasl.password         *****
-  ```
+  {% include [index.md](_includes/java/kafka-api-java-read-no-auth.md) %}
 
-## Чтение данных из топика
+- Spark
 
-### Чтение данных из топика через Kafka Java SDK
+  {% include [index.md](_includes/spark-constraints.md) %}
 
-В этом примере приведен фрагмент кода для чтения данных из топика через Kafka API.
+  {% include [index.md](_includes/java/kafka-api-spark-read-no-auth.md) %}
 
-```java
-  String HOST = "ydb:9093";
-  String TOPIC = "/Root/Database/Topic";
-  String USER = "user@/Root/Database";
-  String PASS = "*****";
+  {% include [index.md](_includes/spark-version-notice.md) %}
 
-  Properties props = new Properties();
-  props.put("bootstrap.servers", HOST);
-  props.put("auto.offset.reset", "earliest"); // to read from start
-  props.put("check.crcs", false);
+- Flink
 
-  props.put("key.deserializer", StringDeserializer.class.getName());
-  props.put("value.deserializer", StringDeserializer.class.getName());
+  {% include [index.md](_includes/flink-constraints.md) %}
 
-  props.put("security.protocol", "SASL_SSL");
-  props.put("sasl.mechanism", "PLAIN");
-  props.put("sasl.jaas.config", PlainLoginModule.class.getName() + " required username=\"" + USER + "\" password=\"" + PASS + "\";");
+  {% include [index.md](_includes/java/kafka-api-flink-read-no-auth.md) %}
 
-  Consumer<String, String> consumer = new KafkaConsumer<>(props);
+  {% include [index.md](_includes/flink-version-notice.md) %}
 
-  List<PartitionInfo> partitionInfos = consumer.partitionsFor(TOPIC);
-  List<TopicPartition> topicPartitions = new ArrayList<>();
+{% endlist %}
 
-  for (PartitionInfo partitionInfo : partitionInfos) {
-      topicPartitions.add(new TopicPartition(partitionInfo.topic(), partitionInfo.partition()));
-  }
-  consumer.assign(topicPartitions);
+#### Частые проблемы и их решение
 
-  while (true) {
-      ConsumerRecords<String, String> records = consumer.poll(1000);
-      for (ConsumerRecord<String, String> record : records) {
-          System.out.println(record.key() + ":" + record.value());
-      }
-  }
+##### Ошибка Unexpected error in join group response
+
+Полный текст ошибки:
+
+```txt
+Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.
+```
+
+Скорее всего проблема в том, что не указано имя читателя или указанное имя читателя не существует в кластере YDB.
+
+Решение: создайте читателя с помощью [CLI](../ydb-cli/topic-consumer-add) или [SDK](../ydb-sdk/topic#alter-topic)
+
+### Запись
+
+{% note info %}
+
+Сейчас не поддержана запись по Kafka API с использованием Kafka транзакций. Транзакции доступны только при использовании
+[YDB Topic API](../ydb-sdk/topic.md#write-tx).
+
+В остальном запись в Apache Kafka и в YDB Topics через Kafka API ничем не отличается.
+
+{% endnote %}
+
+{% list tabs %}
+
+- Консольные утилиты Kafka
+
+  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
+
+  {% include [index.md](_includes/bash/kafka-api-console-write-no-auth.md) %}
+
+- kcat
+
+  {% include [index.md](_includes/bash/kafka-api-kcat-write-no-auth.md) %}
+
+- Java
+
+  {% include [index.md](_includes/java/kafka-api-java-write-no-auth.md) %}
+
+- Spark
+
+  {% include [index.md](_includes/spark-constraints.md) %}
+
+  {% include [index.md](_includes/java/kafka-api-spark-write-no-auth.md) %}
+
+  {% include [index.md](_includes/spark-version-notice.md) %}
+
+- Flink
+
+  {% include [index.md](_includes/flink-constraints.md) %}
+
+  {% include [index.md](_includes/java/kafka-api-flink-write-no-auth.md) %}
+
+  {% include [index.md](_includes/flink-version-notice.md) %}
+
+- Logstash
+
+  {% include [index.md](_includes/logs-to-kafka/kafka-api-logstash.md) %}
+
+- Fluent Bit
+
+  {% include [index.md](_includes/logs-to-kafka/kafka-api-fluent-bit.md) %}
+
+{% endlist %}
+
+### Примеры с аутентификацией {#authentication-examples}
+
+Подробнее про аутентификацию смотри в разделе [Аутентификация](./auth.md). Ниже есть примеры аутентификации в облачной базе
+и в локальной базе.
+
+{% note info %}
+
+Сейчас единственным доступным механизмом аутентификации с Kafka API в YDB Topics является `SASL_PLAIN`.
+
+{% endnote %}
+
+#### Примеры аутентификации в самостоятельно развернутом YDB
+
+Для того, чтобы проверить работу с аутентификацией в локальной базе:
+
+1. Создайте пользователя. [Как это сделать в YQL](../../yql/reference/syntax/create-user.md). [Как выполнить YQL из CLI](../ydb-cli/sql.md).
+2. Подключитесь к Kafka API, как в примерах ниже. Во всех примерах предполагается, что:
+
+  - YDB запущен локально с переменной окружения YDB_KAFKA_PROXY_PORT=9092 - то есть Kafka API доступен по адресу localhost:9092. Например можно поднять YDB в докере, как указано [здесь](../../quickstart.md#install).
+  - <username> - это имя пользователя, которое вы указали при создании пользователя.
+  - <password> - это пароль пользователя, который вы указали при создании пользователя.
+
+Примеры показаны для чтения, но те же самые параметры конфигурации работают и для записи в топик.
+
+{% list tabs %}
+
+- Консольные утилиты Kafka
+
+  {% include [index.md](_includes/kafka-console-utillities-java23-fix.md) %}
+
+  {% include [index.md](_includes/bash/kafka-api-console-read-with-sasl-creds-on-prem.md) %}
+
+- kcat
+
+  {% include [index.md](_includes/bash/kafka-api-kcat-read-with-sasl-creds-on-prem.md) %}
+
+- Java
+
+  {% include [index.md](_includes/java/kafka-api-java-read-with-sasl-creds-on-prem.md) %}
+
+{% endlist %}

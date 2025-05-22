@@ -89,8 +89,11 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         configParser.SetupGlobalOpts(opts);
         NMsgBusProxy::TMsgBusClientConfig mbusConfig;
         mbusConfig.ConfigureLastGetopt(opts, "mb-");
-        opts.AddLongOption("ca-file", "Path to a file containing the PEM encoding of the server root certificates for tls connections.\n").RequiredArgument("PATH");
+        opts.AddLongOption("ca-file", "File containing PEM encoded root certificates for SSL/TLS connections. If this parameter is empty, the default roots will be used.\n").RequiredArgument("PATH");
         NDriverClient::HideOptions(opts);
+        opts.AddLongOption("client-cert-file", "File containing client certificate for SSL/TLS connections (PKCS#12 or PEM-encoded)").RequiredArgument("PATH");
+        opts.AddLongOption("client-cert-key-file", "File containing PEM encoded client certificate private key for SSL/TLS connections").RequiredArgument("PATH");
+        opts.AddLongOption("client-cert-key-password-file", "File containing password for client certificate private key (if key is encrypted). If key file is encrypted, but this option is not set, password will be asked interactively").RequiredArgument("PATH");
         opts.AddLongOption('s', "server", "Server address to connect (default $KIKIMR_SERVER)").RequiredArgument("ADDR[:NUM]");
         opts.AddLongOption('k', "token", "Security token").RequiredArgument("TOKEN");
         opts.AddLongOption('f', "token-file", "Security token file").RequiredArgument("PATH");
@@ -144,6 +147,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         case EDM_CMS:
         case EDM_DISCOVERY:
         case EDM_WHOAMI:
+        case EDM_CONFIG:
             return NDriverClient::NewClient(argc + freeArgsPos, argv - freeArgsPos, factories);
         case EDM_FORMAT_INFO:
             return MainFormatInfo(cmdConf, argc, argv);
@@ -153,18 +157,12 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
             return MainNodeByHost(cmdConf, argc, argv);
         case EDM_SCHEME_INITROOT:
             return NDriverClient::SchemeInitRoot(cmdConf, argc, argv);
-        case EDM_COMPILE_AND_EXEC_MINIKQL:
-            return NDriverClient::CompileAndExecMiniKQL(cmdConf, argc, argv);
-        case EDM_KEYVALUE_REQUEST:
-            return NDriverClient::KeyValueRequest(cmdConf, argc, argv);
         case EDM_PERSQUEUE_REQUEST:
             return NDriverClient::PersQueueRequest(cmdConf, argc, argv);
         case EDM_PERSQUEUE_STRESS:
             return NDriverClient::PersQueueStress(cmdConf, argc, argv);
         case EDM_PERSQUEUE_DISCOVER_CLUSTERS:
             return NDriverClient::PersQueueDiscoverClustersRequest(cmdConf, argc, argv);
-        case EDM_LOAD_REQUEST:
-            return NDriverClient::LoadRequest(cmdConf, argc, argv);
         case EDM_ACTORSYS_PERFTEST:
             return NDriverClient::ActorsysPerfTest(cmdConf, argc, argv);
         default:
@@ -180,6 +178,10 @@ std::terminate_handler defaultTerminateHandler;
 void KikimrTerminateHandler() {
     Cerr << "======= terminate() call stack ========\n";
     FormatBackTrace(&Cerr);
+    if (auto backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << "======== exception call stack =========\n";
+        backtrace.PrintTo(Cerr);
+    }
     Cerr << "=======================================\n";
 
     auto oldHandler = defaultTerminateHandler;
@@ -208,4 +210,3 @@ int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFac
         return 1;
     }
 }
-

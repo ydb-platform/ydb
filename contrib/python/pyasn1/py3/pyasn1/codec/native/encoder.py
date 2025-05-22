@@ -5,6 +5,7 @@
 # License: https://pyasn1.readthedocs.io/en/latest/license.html
 #
 from collections import OrderedDict
+import warnings
 
 from pyasn1 import debug
 from pyasn1 import error
@@ -60,6 +61,11 @@ class ObjectIdentifierEncoder(AbstractItemEncoder):
         return str(value)
 
 
+class RelativeOIDEncoder(AbstractItemEncoder):
+    def encode(self, value, encodeFun, **options):
+        return str(value)
+
+
 class RealEncoder(AbstractItemEncoder):
     def encode(self, value, encodeFun, **options):
         return float(value)
@@ -71,7 +77,8 @@ class SetEncoder(AbstractItemEncoder):
     def encode(self, value, encodeFun, **options):
         inconsistency = value.isInconsistent
         if inconsistency:
-            raise inconsistency
+            raise error.PyAsn1Error(
+                f"ASN.1 object {value.__class__.__name__} is inconsistent")
 
         namedTypes = value.componentType
         substrate = self.protoDict()
@@ -91,7 +98,8 @@ class SequenceOfEncoder(AbstractItemEncoder):
     def encode(self, value, encodeFun, **options):
         inconsistency = value.isInconsistent
         if inconsistency:
-            raise inconsistency
+            raise error.PyAsn1Error(
+                f"ASN.1 object {value.__class__.__name__} is inconsistent")
         return [encodeFun(x, **options) for x in value]
 
 
@@ -111,6 +119,7 @@ TAG_MAP = {
     univ.OctetString.tagSet: OctetStringEncoder(),
     univ.Null.tagSet: NullEncoder(),
     univ.ObjectIdentifier.tagSet: ObjectIdentifierEncoder(),
+    univ.RelativeOID.tagSet: RelativeOIDEncoder(),
     univ.Enumerated.tagSet: IntegerEncoder(),
     univ.Real.tagSet: RealEncoder(),
     # Sequence & Set have same tags as SequenceOf & SetOf
@@ -135,7 +144,6 @@ TAG_MAP = {
     useful.UTCTime.tagSet: OctetStringEncoder()
 }
 
-
 # Put in ambiguous & non-ambiguous types for faster codec lookup
 TYPE_MAP = {
     univ.Boolean.typeId: BooleanEncoder(),
@@ -144,6 +152,7 @@ TYPE_MAP = {
     univ.OctetString.typeId: OctetStringEncoder(),
     univ.Null.typeId: NullEncoder(),
     univ.ObjectIdentifier.typeId: ObjectIdentifierEncoder(),
+    univ.RelativeOID.typeId: RelativeOIDEncoder(),
     univ.Enumerated.typeId: IntegerEncoder(),
     univ.Real.typeId: RealEncoder(),
     # Sequence & Set have same tags as SequenceOf & SetOf
@@ -170,10 +179,6 @@ TYPE_MAP = {
     useful.GeneralizedTime.typeId: OctetStringEncoder(),
     useful.UTCTime.typeId: OctetStringEncoder()
 }
-
-# deprecated aliases, https://github.com/pyasn1/pyasn1/issues/9
-tagMap = TAG_MAP
-typeMap = TYPE_MAP
 
 
 class SingleItemEncoder(object):
@@ -272,3 +277,9 @@ class Encoder(object):
 #:    [1, 2, 3]
 #:
 encode = SingleItemEncoder()
+
+def __getattr__(attr: str):
+    if newAttr := {"tagMap": "TAG_MAP", "typeMap": "TYPE_MAP"}.get(attr):
+        warnings.warn(f"{attr} is deprecated. Please use {newAttr} instead.", DeprecationWarning)
+        return globals()[newAttr]
+    raise AttributeError(attr)

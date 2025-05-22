@@ -1,43 +1,92 @@
 #pragma once
 
-#include <ydb/core/protos/config.pb.h>
-
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/library/actors/core/log_iface.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
+#include <ydb/tests/tools/kqprun/runlib/settings.h>
+
+#include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
 
 
 namespace NKqpRun {
 
-struct TYdbSetupSettings {
-    TString DomainName = "Root";
+constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
+constexpr ui64 DEFAULT_STORAGE_SIZE = 32_GB;
+constexpr TDuration TENANT_CREATION_TIMEOUT = TDuration::Seconds(30);
 
-    bool TraceOpt = false;
-    TMaybe<TString> LogOutputFile;
+struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
+    enum class EVerbose {
+        None,
+        Info,
+        QueriesText,
+        InitLogs,
+        Max
+    };
 
-    TString YqlToken;
-    NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-    NKikimrConfig::TAppConfig AppConfig;
+    enum class EHealthCheck {
+        None,
+        NodesCount,
+        FetchDatabase,
+        ScriptRequest,
+        Max
+    };
+
+    ui32 DcCount = 1;
+    std::map<TString, TStorageMeta::TTenant> Tenants;
+    TDuration HealthCheckTimeout = TDuration::Seconds(10);
+    EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;
+    bool SameSession = false;
+
+    bool DisableDiskMock = false;
+    bool FormatStorage = false;
+    std::optional<TString> PDisksPath;
+    std::optional<ui64> DiskSize;
+
+    bool TraceOptEnabled = false;
+    EVerbose VerboseLevel = EVerbose::Info;
+    NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 };
 
 
 struct TRunnerOptions {
-    enum class EResultOutputFormat {
-        RowsJson,  // Rows in json format
-        FullJson,  // Columns, rows and types in json format
+    enum class ETraceOptType {
+        Disabled,
+        Scheme,
+        Script,
+        All,
     };
 
-    i64 ResultsRowsLimit = 1000;
-
-    IOutputStream* ResultOutput = &Cout;
+    IOutputStream* ResultOutput = nullptr;
     IOutputStream* SchemeQueryAstOutput = nullptr;
-    IOutputStream* ScriptQueryAstOutput = nullptr;
-    IOutputStream* ScriptQueryPlanOutput = nullptr;
+    std::vector<IOutputStream*> ScriptQueryAstOutputs;
+    std::vector<IOutputStream*> ScriptQueryPlanOutputs;
+    std::vector<TString> ScriptQueryTimelineFiles;
+    std::vector<TString> InProgressStatisticsOutputFiles;
 
-    EResultOutputFormat ResultOutputFormat = EResultOutputFormat::RowsJson;
-    NYdb::NConsoleClient::EOutputFormat PlanOutputFormat = NYdb::NConsoleClient::EOutputFormat::Default;
+    NKikimrRun::EResultOutputFormat ResultOutputFormat = NKikimrRun::EResultOutputFormat::RowsJson;
+    NYdb::NConsoleClient::EDataFormat PlanOutputFormat = NYdb::NConsoleClient::EDataFormat::Default;
+    ETraceOptType TraceOptType = ETraceOptType::Disabled;
+    std::optional<size_t> TraceOptScriptId;
+
+    TDuration ScriptCancelAfter;
+    std::unordered_set<Ydb::StatusIds::StatusCode> RetryableStatuses;
 
     TYdbSetupSettings YdbSettings;
+};
+
+
+struct TRequestOptions {
+    TString Query;
+    NKikimrKqp::EQueryAction Action;
+    TString TraceId;
+    TString PoolId;
+    TString UserSID;
+    TString Database;
+    TDuration Timeout;
+    size_t QueryId = 0;
+    std::unordered_map<TString, Ydb::TypedValue> Params;
 };
 
 }  // namespace NKqpRun

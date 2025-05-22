@@ -868,6 +868,9 @@ namespace boost { namespace locale { namespace boundary {
 
     typedef segment_index<std::string::const_iterator> ssegment_index;   ///< convenience typedef
     typedef segment_index<std::wstring::const_iterator> wssegment_index; ///< convenience typedef
+#ifdef __cpp_lib_char8_t
+    typedef segment_index<std::u8string::const_iterator> u8ssegment_index; ///< convenience typedef
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     typedef segment_index<std::u16string::const_iterator> u16ssegment_index; ///< convenience typedef
 #endif
@@ -877,6 +880,9 @@ namespace boost { namespace locale { namespace boundary {
 
     typedef segment_index<const char*> csegment_index;     ///< convenience typedef
     typedef segment_index<const wchar_t*> wcsegment_index; ///< convenience typedef
+#ifdef __cpp_char8_t
+    typedef segment_index<const char8_t*> u8csegment_index; ///< convenience typedef
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     typedef segment_index<const char16_t*> u16csegment_index; ///< convenience typedef
 #endif
@@ -886,6 +892,9 @@ namespace boost { namespace locale { namespace boundary {
 
     typedef boundary_point_index<std::string::const_iterator> sboundary_point_index;   ///< convenience typedef
     typedef boundary_point_index<std::wstring::const_iterator> wsboundary_point_index; ///< convenience typedef
+#ifdef __cpp_lib_char8_t
+    typedef boundary_point_index<std::u8string::const_iterator> u8sboundary_point_index; ///< convenience typedef
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     typedef boundary_point_index<std::u16string::const_iterator> u16sboundary_point_index; ///< convenience typedef
 #endif
@@ -895,6 +904,9 @@ namespace boost { namespace locale { namespace boundary {
 
     typedef boundary_point_index<const char*> cboundary_point_index;     ///< convenience typedef
     typedef boundary_point_index<const wchar_t*> wcboundary_point_index; ///< convenience typedef
+#ifdef __cpp_char8_t
+    typedef boundary_point_index<const char8_t*> u8cboundary_point_index; ///< convenience typedef
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     typedef boundary_point_index<const char16_t*> u16cboundary_point_index; ///< convenience typedef
 #endif

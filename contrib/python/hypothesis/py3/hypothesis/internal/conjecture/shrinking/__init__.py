@@ -8,9 +8,11 @@
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at https://mozilla.org/MPL/2.0/.
 
+from hypothesis.internal.conjecture.shrinking.bytes import Bytes
+from hypothesis.internal.conjecture.shrinking.collection import Collection
 from hypothesis.internal.conjecture.shrinking.floats import Float
 from hypothesis.internal.conjecture.shrinking.integer import Integer
-from hypothesis.internal.conjecture.shrinking.lexical import Lexical
 from hypothesis.internal.conjecture.shrinking.ordering import Ordering
+from hypothesis.internal.conjecture.shrinking.string import String
 
-__all__ = ["Lexical", "Integer", "Ordering", "Float"]
+__all__ = ["Integer", "Ordering", "Float", "Collection", "String", "Bytes"]

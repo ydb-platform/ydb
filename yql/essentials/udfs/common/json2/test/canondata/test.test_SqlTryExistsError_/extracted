@@ -1,0 +1,10 @@
+<tmp_path>/program.sql:<main>: Error: Execution
+
+    <tmp_path>/program.sql:<main>:12:1: Error: Execution of node: Result
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:14:12: Error: yql/essentials/udfs/common/json2/sql_exists.h:xxx: Error executing jsonpath:
+jsonpath:1:8: Error: Expected object, code: 4701
+
+        	    Json2::SqlTryExists($json, $path, AsDict());
+	           ^

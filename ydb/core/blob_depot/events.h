@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-    struct TEvBlobDepot {
+    namespace TEvBlobDepot {
         enum {
             EvApplyConfig = EventSpaceBegin(TKikimrEvents::ES_BLOB_DEPOT),
             EvApplyConfigResult,
@@ -28,6 +28,8 @@ namespace NKikimr {
             EvResolveResult,
             EvDiscardSpoiledBlobSeq,
             EvPushMetrics,
+            EvPrepareWriteS3,
+            EvPrepareWriteS3Result,
         };
 
 #define BLOBDEPOT_PARAM_ARG(ARG) std::optional<std::decay_t<decltype(Record.Get##ARG())>> param##ARG,
@@ -73,6 +75,8 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB(EvResolveResult, Status, ErrorReason);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvDiscardSpoiledBlobSeq);
         BLOBDEPOT_EVENT_PB(EvPushMetrics, BytesRead, BytesWritten);
+        BLOBDEPOT_EVENT_PB_NO_ARGS(EvPrepareWriteS3);
+        BLOBDEPOT_EVENT_PB_NO_ARGS(EvPrepareWriteS3Result);
 
         template<typename TEvent>
         struct TResponseFor {};
@@ -85,6 +89,7 @@ namespace NKikimr {
         template<> struct TResponseFor<TEvCollectGarbage> { using Type = TEvCollectGarbageResult; };
         template<> struct TResponseFor<TEvCommitBlobSeq>  { using Type = TEvCommitBlobSeqResult; };
         template<> struct TResponseFor<TEvResolve>        { using Type = TEvResolveResult; };
+        template<> struct TResponseFor<TEvPrepareWriteS3> { using Type = TEvPrepareWriteS3Result; };
 
         template<typename TRequestEvent, typename... TArgs>
         static auto MakeResponseFor(TEventHandle<TRequestEvent>& ev, TArgs&&... args) {
@@ -106,6 +111,7 @@ namespace NKikimr {
         template<> struct TEventFor<NKikimrBlobDepot::TEvResolve> { using Type = TEvResolve; };
         template<> struct TEventFor<NKikimrBlobDepot::TEvCommitBlobSeq> { using Type = TEvCommitBlobSeq; };
         template<> struct TEventFor<NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq> { using Type = TEvDiscardSpoiledBlobSeq; };
+        template<> struct TEventFor<NKikimrBlobDepot::TEvPrepareWriteS3> { using Type = TEvPrepareWriteS3; };
     };
 
 } // NKikimr

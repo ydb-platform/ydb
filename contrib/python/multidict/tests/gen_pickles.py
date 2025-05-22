@@ -1,31 +1,39 @@
 import pickle
+from importlib import import_module
+from pathlib import Path
+from typing import Union
 
-from multidict._compat import USE_EXTENSIONS
-from multidict._multidict_py import CIMultiDict as PyCIMultiDict  # noqa
-from multidict._multidict_py import MultiDict as PyMultiDict  # noqa
+from multidict import CIMultiDict, MultiDict, istr
 
-try:
-    from multidict._multidict import (  # type: ignore # noqa
-        CIMultiDict,
-        MultiDict,
-    )
-except ImportError:
-    pass
+TESTS_DIR = Path(__file__).parent.resolve()
+_MD_Classes = Union[type[MultiDict[int]], type[CIMultiDict[int]]]
 
 
-def write(name, proto):
-    cls = globals()[name]
+def write(tag: str, cls: _MD_Classes, proto: int) -> None:
     d = cls([("a", 1), ("a", 2)])
-    with open("{}.pickle.{}".format(name.lower(), proto), "wb") as f:
+    file_basename = f"{cls.__name__.lower()}-{tag}"
+    with (TESTS_DIR / f"{file_basename}.pickle.{proto}").open("wb") as f:
         pickle.dump(d, f, proto)
 
 
-def generate():
-    if not USE_EXTENSIONS:
-        raise RuntimeError("C Extension is required")
+def write_istr(tag: str, cls: type[istr], proto: int) -> None:
+    s = cls("str")
+    file_basename = f"{cls.__name__.lower()}-{tag}"
+    with (TESTS_DIR / f"{file_basename}.pickle.{proto}").open("wb") as f:
+        pickle.dump(s, f, proto)
+
+
+def generate() -> None:
+    _impl_map = {
+        "c-extension": "_multidict",
+        "pure-python": "_multidict_py",
+    }
     for proto in range(pickle.HIGHEST_PROTOCOL + 1):
-        for name in ("MultiDict", "CIMultiDict", "PyMultiDict", "PyCIMultiDict"):
-            write(name, proto)
+        for tag, impl_name in _impl_map.items():
+            impl = import_module(f"multidict.{impl_name}")
+            for cls in impl.CIMultiDict, impl.MultiDict:
+                write(tag, cls, proto)
+            write_istr(tag, impl.istr, proto)
 
 
 if __name__ == "__main__":

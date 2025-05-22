@@ -93,13 +93,19 @@ namespace NTabletFlatExecutor {
             Env.SendToPipe(Tablet, Edge, event, 0, config);
         }
 
+        void RestartTablet(ui32 flags = 0)
+        {
+            SendSync(new TEvents::TEvPoison, false, true);
+            FireDummyTablet(flags);
+        }
+
         void WaitForWakeUp(size_t num = 1) { WaitFor<TEvents::TEvWakeup>(num); }
         void WaitForGone(size_t num = 1) { WaitFor<TEvents::TEvGone>(num); }
 
         template<typename TEv>
-        typename TEv::TPtr GrabEdgeEvent()
+        typename TEv::TPtr GrabEdgeEvent(TDuration timeout = TDuration::Max())
         {
-            return Env.GrabEdgeEventRethrow<TEv>(Edge);
+            return Env.GrabEdgeEventRethrow<TEv>(Edge, timeout);
         }
 
         template<typename TEv>
@@ -116,6 +122,11 @@ namespace NTabletFlatExecutor {
             Env.Send(new IEventHandle(to, Edge, ev));
         }
 
+        void SendEvToBSProxy(ui32 groupId, IEventBase *ev)
+        {
+            Env.Send(CreateEventForBSProxy(Edge, groupId, ev, 0));
+        }
+
         static NTabletPipe::TClientConfig PipeCfgRetries()
         {
             NTabletPipe::TClientConfig pipeConfig;
@@ -123,7 +134,7 @@ namespace NTabletFlatExecutor {
             return pipeConfig;
         }
 
-        ui32 Tablet = MakeTabletID(0, 0, 1);
+        ui64 Tablet = MakeTabletID(false, 1) & 0xFFFF'FFFF;
         const TActorId Edge;
     };
 

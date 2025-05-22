@@ -1,4 +1,179 @@
+2024-01-13  Simon Josefsson  <simon@josefsson.org>
+
+	version 1.42
+	* NEWS: Record release date.
+
+	doc: Fix NEWS codespell typo.
+
+	tests: Add standalone.sh and improve tst_versions.c.  Run system tests in CI/CD.
+
+	cicd: Silence warnings.
+
+	cicd: Enable UCRT/MINGW jobs.
+
+	doc: Add NEWS entry about Windows fix.
+
+	Silence compiler warnings.
+
+2024-01-13  Francesco Pretto  <ceztko@gmail.com>
+
+	Fix type confusion for Windows.
+
+2024-01-13  Simon Josefsson  <simon@josefsson.org>
+
+	cicd: Fix coverity job.
+
+	maint: Improve compiler warning handling.
+
+	cicd: Avoid duplicate pipeline.
+
+	Bump required gettext version to 0.19.8 for musl-libc.
+
+	cicd: More make -j.
+
+	maint: Fix codespell.
+
+	doc: Rename HACKING to CONTRIBUTING.md and fix markup.
+
+	cicd: Add Windows/arm64/ppc64 jobs.  Fix macOS jobs.
+
+2024-01-01  Simon Josefsson  <simon@josefsson.org>
+
+	cicd: Use standard stage naming.  Some macOS/gcc/clang fixes.
+
+	main: Bump NEWS hash after copyright year change.
+
+	maint: Run 'make my-update-copyright'.
+
+	maint: Don't disable copyright_check.
+
+	Sync bootstrap scripts.
+
+	maint: Update gnulib submodule.
+
+	cicd: Improve macOS testing.
+
+2023-11-12  Simon Josefsson  <simon@josefsson.org>
+
+	cicd: Fix macOS dependencies.
+
+	cicd: Add macOS/gcc + use Trisquel.  Update images and stages.  Use defaults.
+
+	Drop autogen/autopull scripts (use bootstrap --gen/--pull).
+
+	Update gnulib submodule.
+
+2023-11-11  Simon Josefsson  <simon@josefsson.org>
+
+	cicd: Update build-image names.
+
+2023-11-06  Simon Josefsson  <simon@josefsson.org>
+
+	Add NEWS entries.
+
+	Indent code.
+
+	Sync bootstrap scripts.
+
+	Update gnulib.
+
+	cicd: Use stable debian releases.  Fix armcross build failure.
+
+2023-05-07  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	Merge branch 'rockdaboot/include-config.h-from-tlds.c' into 'master'
+	lib/gen-tld-tables.pl: include config.h
+
+	See merge request libidn/libidn!1
+
+2023-05-07  Tim Rühsen  <tim.ruehsen@gmx.de>
+
+	lib/gen-tld-tables.pl: include config.h
+
+2023-01-01  Simon Josefsson  <simon@josefsson.org>
+
+	maint: Fix syntax-check.
+
+	maint: Run 'make my-update-copyright'.
+
+	Sync bootstrap script.
+
+	Update gnulib git submodule.
+
+2022-11-27  Simon Josefsson  <simon@josefsson.org>
+
+	cicd: Use extends:.test more.  Check with VERBOSE=t.
+
+2022-11-05  Simon Josefsson  <simon@josefsson.org>
+
+	cicd: Test clang-15.
+
+	Update gnulib submodule.
+
+2022-09-06  Simon Josefsson  <simon@josefsson.org>
+
+	maint: Update review-diff rule.
+
+	cicd: Test coverity variables before use.
+
+	Allow coverity scan build to fail (when variables are not set up).
+
+	Update gnulib files.
+
+2022-09-05  Simon Josefsson  <simon@josefsson.org>
+
+	cicd: Add coverity and sast.
+
+2022-08-16  Simon Josefsson  <simon@josefsson.org>
+
+	Use AM_DISTCHECK_CONFIGURE_FLAGS.
+
+	Update gnulib.
+
+2022-08-14  Simon Josefsson  <simon@josefsson.org>
+
+	Sync bootstrap.
+
+	Update gdoc usage.
+
+	Update gnulib files.
+
+	Drop obsolete gdoc bootstrap.  Refresh and move gtk-doc fix into hook.
+
+2022-07-11  Simon Josefsson  <simon@josefsson.org>
+
+	doc: Drop obsolete HTML hacks (we now use gendocs).
+
+	Doc fix of bootstrap M4 hack.
+
+	Reorder diagnostic outputs.
+
+	Drop old bootstrap tarcache stuff.
+
+	configure.ac: Use new iconv summary variable.
+
+	maint: Update gnulib.
+
+2022-07-09  Simon Josefsson  <simon@josefsson.org>
+
+	Use proper variable for iconv diagnostics.  Drop obsolete warning.
+
+2022-06-26  Simon Josefsson  <simon@josefsson.org>
+
+	Update gnulib files.
+
 2022-06-25  Simon Josefsson  <simon@josefsson.org>
+
+	doc: Improve release steps.
+
+	Bump LT_REVISION.
+
+	Bump STRINGPREP_VERSION.
+
+	maint: post-release administrivia
+	* NEWS: Add header line for next release.
+	* .prev-version: Record previous version.
+	* cfg.mk (old_NEWS_hash): Auto-update.
 
 	version 1.41
 	* NEWS: Record release date.

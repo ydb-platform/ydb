@@ -12,7 +12,6 @@
 namespace NDbPool {
 
 using namespace NActors;
-using namespace NYql;
 
 class TDbPoolActor : public NActors::TActor<TDbPoolActor> {
 
@@ -23,6 +22,7 @@ class TDbPoolActor : public NActors::TActor<TDbPoolActor> {
         const NMonitoring::THistogramPtr RequestsTime;
         const ::NMonitoring::TDynamicCounterPtr StatusSubgroup;
         TMap<TString, ::NMonitoring::TDynamicCounters::TCounterPtr> Status;
+        const ::NMonitoring::TDynamicCounters::TCounterPtr IncomingRate;
 
         TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
@@ -30,6 +30,7 @@ class TDbPoolActor : public NActors::TActor<TDbPoolActor> {
             , TotalInFlight(counters->GetSubgroup("subcomponent",  "DbPool")->GetCounter("TotalInflight"))
             , RequestsTime(counters->GetSubgroup("subcomponent", "DbPool")->GetHistogram("RequestTimeMs", NMonitoring::ExponentialHistogram(6, 3, 100)))
             , StatusSubgroup(counters->GetSubgroup("subcomponent", "DbPool")->GetSubgroup("component", "status"))
+            , IncomingRate(counters->GetSubgroup("subcomponent",  "DbPool")->GetCounter("IncomingRate", true))
         {}
 
         ::NMonitoring::TDynamicCounters::TCounterPtr GetStatus(const NYdb::TStatus& status) {
@@ -62,7 +63,7 @@ public:
     )
 
     void PassAway() override {
-        NYql::TIssues issues;
+        NYdb::NIssue::TIssues issues;
         issues.AddIssue("DB connection closed");
         auto cancelled = NYdb::TStatus(NYdb::EStatus::CANCELLED, std::move(issues));
         for (const auto& x : Requests) {
@@ -93,7 +94,7 @@ public:
         if (auto pRequest = std::get_if<TRequest>(&requestVariant)) {
             auto& request = *pRequest;
             auto cookie = request.Cookie;
-            auto sharedResult = std::make_shared<TVector<NYdb::TResultSet>>();
+            auto sharedResult = std::make_shared<std::vector<NYdb::TResultSet>>();
             NYdb::NTable::TRetryOperationSettings settings;
             settings.Idempotent(request.Idempotent);
             TableClient.RetryOperation<NYdb::NTable::TDataQueryResult>([sharedResult, request](NYdb::NTable::TSession session) {
@@ -130,6 +131,7 @@ public:
 
     void HandleRequest(TEvents::TEvDbRequest::TPtr& ev) {
         LOG_D("TDbPoolActor: TEvDbRequest " << SelfId() << " Queue size = " << Requests.size());
+        Counters.IncomingRate->Inc();
         auto request = ev->Get();
         Requests.emplace_back(TRequest{ev->Sender, ev->Cookie, request->Sql, std::move(request->Params), request->Idempotent});
         ProcessQueue();
@@ -153,6 +155,7 @@ public:
 
     void HandleRequest(TEvents::TEvDbFunctionRequest::TPtr& ev) {
         LOG_T("TDbPoolActor: TEvDbFunctionRequest " << SelfId() << " Queue size = " << Requests.size());
+        Counters.IncomingRate->Inc();
         auto request = ev->Get();
         Requests.emplace_back(TFunctionRequest{ev->Sender, ev->Cookie, std::move(request->Handler)});
         ProcessQueue();
@@ -204,7 +207,6 @@ private:
     bool RequestInProgress = false;
     TInstant RequestInProgressTimestamp = TInstant::Now();
     std::shared_ptr<int> State = std::make_shared<int>();
-
 };
 
 TDbPool::TDbPool(

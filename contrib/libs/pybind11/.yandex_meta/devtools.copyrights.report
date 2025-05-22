@@ -1,0 +1,192 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0f2a651ecacbc4bcedf1088c1defa801
+BELONGS ya.make
+    License text:
+            Copyright (c) 2016 Klemens Morgenstern <klemens.morgenstern@ed-chemnitz.de> and
+                               Wenzel Jakob <wenzel.jakob@epfl.ch>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/eval.h [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29cae33f844acd91be7e74a008e4aa02
+BELONGS ya.make
+    License text:
+            Copyright (c) 2016 Trent Houliston <trent@houliston.me> and
+                               Wenzel Jakob <wenzel.jakob@epfl.ch>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/chrono.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 39386517f995a422762dbe59a40b7f86
+BELONGS ya.make
+    License text:
+            Copyright (c) 2017 Henry F. Schreiner
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/iostream.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3fa1d47de44b8c63ac5b889bd8288d6c
+BELONGS ya.make
+    License text:
+            Copyright (c) 2017 Wenzel Jakob <wenzel.jakob@epfl.ch>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/detail/class.h [4:4]
+        include/pybind11/detail/internals.h [4:4]
+        include/pybind11/embed.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 483e9e9e08fff5977faaf8bc4c2d8676
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: include/pybind11/stl/filesystem.h at line 3
+    License text:
+        // Copyright (c) 2021 The Pybind Development Team.
+        // All rights reserved. Use of this source code is governed by a
+        // BSD-style license that can be found in the LICENSE file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/stl/filesystem.h [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5d594b741dccc917679a3319ee948bcf
+BELONGS ya.make
+    License text:
+            Copyright (c) 2017 Jason Rhinelander <jason@imaginary.ca>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/detail/init.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6c6333b4e5dcdafc744e66de7d60fc4b
+BELONGS ya.make
+    License text:
+        // (C) William Swanson, Paul Fultz
+        \#    define PYBIND11_EVAL0(...) __VA_ARGS__
+        \#    define PYBIND11_EVAL1(...) PYBIND11_EVAL0(PYBIND11_EVAL0(PYBIND11_EVAL0(__VA_ARGS__)))
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/numpy.h [1628:1630]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 75f02d40d4e7b2939f1cb6fd008a6c2e
+BELONGS ya.make
+    License text:
+        Copyright (c) 2016 Wenzel Jakob <wenzel.jakob@epfl.ch>, All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [1:1]
+        include/pybind11/attr.h [5:5]
+        include/pybind11/buffer_info.h [4:4]
+        include/pybind11/cast.h [5:5]
+        include/pybind11/complex.h [4:4]
+        include/pybind11/detail/common.h [4:4]
+        include/pybind11/detail/descr.h [4:4]
+        include/pybind11/detail/type_caster_base.h [4:4]
+        include/pybind11/detail/typeid.h [4:4]
+        include/pybind11/eigen.h [4:4]
+        include/pybind11/eigen/matrix.h [4:4]
+        include/pybind11/functional.h [4:4]
+        include/pybind11/gil.h [4:4]
+        include/pybind11/numpy.h [4:4]
+        include/pybind11/operators.h [4:4]
+        include/pybind11/options.h [4:4]
+        include/pybind11/pybind11.h [5:5]
+        include/pybind11/pytypes.h [4:4]
+        include/pybind11/stl.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a1a1935881ba7abae61e7dc854903754
+BELONGS ya.make
+    License text:
+            Copyright (c) 2016 Sergey Lyskov and Wenzel Jakob
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/stl_bind.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bca6e35a7c583745acc83479c35e0d2a
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: include/pybind11/detail/value_and_holder.h at line 3
+    License text:
+        // Copyright (c) 2016-2024 The Pybind Development Team.
+        // All rights reserved. Use of this source code is governed by a
+        // BSD-style license that can be found in the LICENSE file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/detail/value_and_holder.h [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ef4f6b15befdf5e08502bd35c1d29918
+BELONGS ya.make
+    License text:
+            Copyright (c) 2024 The Pybind Development Team.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/detail/exception_translation.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f7437ff48e8ad8be1b488caceda9f70d
+BELONGS ya.make
+    License text:
+            Copyright (c) 2023 Dustin Spicuzza <dustin@virtualroadside.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/pybind11/typing.h [5:5]

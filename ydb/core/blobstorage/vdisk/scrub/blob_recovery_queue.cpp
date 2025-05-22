@@ -14,7 +14,7 @@ namespace NKikimr {
             Info->GetTotalVDisksNum() + Info->GetOrderNumber(VCtx->ShortSelfVDisk)); // distinct queue client id
         CreateQueuesForVDisks(Queues, SelfId(), Info, VCtx, Info->GetVDisks(), Counters,
             clientId, NKikimrBlobStorage::EVDiskQueueId::GetLowRead, "PeerScrub",
-            TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA, TQueueActorIdWrapper());
+            TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA, false, TQueueActorIdWrapper());
     }
 
     void TBlobRecoveryActor::StopQueues() {
@@ -34,7 +34,7 @@ namespace NKikimr {
 
     void TBlobRecoveryActor::Handle(TEvProxyQueueState::TPtr ev) {
         const auto it = Queues.find(ev->Get()->VDiskId);
-        Y_ABORT_UNLESS(it != Queues.end());
+        Y_VERIFY_S(it != Queues.end(), LogPrefix);
         it->second.IsConnected = ev->Get()->IsConnected;
         STLOG(PRI_INFO, BS_VDISK_SCRUB, VDS29, VDISKP(LogPrefix, "BS_QUEUE state update"), (SelfId, SelfId()),
             (VDiskId, it->first), (IsConnected, it->second.IsConnected));

@@ -65,7 +65,7 @@ public:
      *  to every subscriber waiting for the future previously returned by
      *  #TryBeginRequest. Such a call must be done, or the subscribers will get
      *  a 'promise abandoned' error.
-     *  NB: the returned function object may be null if there weren't any
+     *  NB: The returned function object may be null if there weren't any
      *  requests associated with #mutationId (or if response keeper isn't started).
      */
     [[nodiscard]]
@@ -103,6 +103,12 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(IResponseKeeper)
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool ValidateHeaderAndParseRememberOption(const TSharedRefArray& responseMessage);
+
+void ValidateRetry(TMutationId mutationId, bool isRetry);
 
 ////////////////////////////////////////////////////////////////////////////////
 

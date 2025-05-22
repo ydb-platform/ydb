@@ -1,13 +1,13 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
+#include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 
 #include <util/generic/string.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/threading/future/future.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 namespace NYql {
 

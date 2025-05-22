@@ -56,14 +56,14 @@ TEST(TCountDownLatch, TwoThreadsTwoLatches)
     TCountDownLatch first(1);
     TCountDownLatch second(1);
 
-    std::thread t1([&] () {
+    std::thread t1([&] {
         first.Wait();
         second.CountDown();
         EXPECT_EQ(0, first.GetCount());
         EXPECT_EQ(0, second.GetCount());
     });
 
-    std::thread t2([&] () {
+    std::thread t2([&] {
         first.CountDown();
         second.Wait();
         EXPECT_EQ(0, first.GetCount());

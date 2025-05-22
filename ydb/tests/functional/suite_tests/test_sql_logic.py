@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 from hamcrest import assert_that, raises
 
-from test_base import BaseSuiteRunner, get_token, get_test_suites, safe_execute, get_statement_and_side_effects
+from test_base import BaseSuiteRunner, get_token, get_test_suites, safe_execute
 
 """
  This module is a specific runner of sqllogic tests. Test suites for this
@@ -38,12 +38,11 @@ class TestSQLLogic(BaseSuiteRunner):
         safe_execute(lambda: self.__execute_sqlitedb(statement.text), statement)
 
     def assert_statement_error(self, statement):
-        statement_text, side_effects = get_statement_and_side_effects(statement.text)
-        assert_that(lambda: self.__execute_sqlitedb(statement_text), raises(sqlite3.Error), str(statement))
+        assert_that(lambda: self.__execute_sqlitedb(statement.text), raises(sqlite3.Error), str(statement))
         super(TestSQLLogic, self).assert_statement_error(statement)
 
-    def get_query_and_output(self, statement_text):
-        return statement_text, self.__execute_sqlitedb(statement_text, query=True)
+    def get_expected_output(self, statement_text):
+        return self.__execute_sqlitedb(statement_text, query=True)
 
     def __execute_sqlitedb(self, statement_text, query=False):
         cursor = self.sqlite_connection.cursor()

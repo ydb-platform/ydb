@@ -1,5 +1,5 @@
 #include "container.h"
-#include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {
@@ -95,7 +95,7 @@ bool TPredicateContainer::IsInclude() const {
     return CompareType == NArrow::ECompareType::GREATER_OR_EQUAL || CompareType == NArrow::ECompareType::LESS_OR_EQUAL;
 }
 
-bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) {
+bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) const {
     if (Object && ext.Object) {
         if (IsForwardInterval() == ext.IsForwardInterval()) {
             return true;
@@ -115,51 +115,59 @@ bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) {
     }
 }
 
-std::optional<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPredicateFrom(std::shared_ptr<NOlap::TPredicate> object, const TIndexInfo* indexInfo) {
+TConclusion<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPredicateFrom(
+    std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema) {
     if (!object || object->Empty()) {
         return TPredicateContainer(NArrow::ECompareType::GREATER_OR_EQUAL);
     } else {
         if (!object->Good()) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not good 'from' predicate");
-            return {};
+            return TConclusionStatus::Fail("not good 'from' predicate");
         }
         if (!object->IsFrom()) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "'from' predicate not is from");
-            return {};
+            return TConclusionStatus::Fail("'from' predicate not is from");
         }
-        if (indexInfo) {
+        if (pkSchema) {
             auto cNames = object->ColumnNames();
             i32 countSortingFields = 0;
-            for (i32 i = 0; i < indexInfo->GetReplaceKey()->num_fields(); ++i) {
-                if (i < (int)cNames.size() && cNames[i] == indexInfo->GetReplaceKey()->field(i)->name()) {
+            for (i32 i = 0; i < pkSchema->num_fields(); ++i) {
+                if (i < (int)cNames.size() && cNames[i] == pkSchema->field(i)->name()) {
                     ++countSortingFields;
                 } else {
                     break;
                 }
             }
-            Y_ABORT_UNLESS(countSortingFields == object->Batch->num_columns());
+            if (countSortingFields != object->Batch->num_columns()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "incorrect predicate")("count", countSortingFields)(
+                    "object", object->Batch->num_columns())("schema", pkSchema->ToString())(
+                    "object", JoinSeq(",", cNames));
+                return TConclusionStatus::Fail(
+                    "incorrect predicate (not prefix for pk: " + pkSchema->ToString() + " vs " + JoinSeq(",", cNames) + ")");
+            }
         }
-        return TPredicateContainer(object);
+        return TPredicateContainer(object, pkSchema ? ExtractKey(*object, pkSchema) : nullptr);
     }
 }
 
-std::optional<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPredicateTo(std::shared_ptr<NOlap::TPredicate> object, const TIndexInfo* indexInfo) {
+TConclusion<TPredicateContainer> TPredicateContainer::BuildPredicateTo(
+    std::shared_ptr<TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema) {
     if (!object || object->Empty()) {
         return TPredicateContainer(NArrow::ECompareType::LESS_OR_EQUAL);
     } else {
         if (!object->Good()) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not good 'to' predicate");
-            return {};
+            return TConclusionStatus::Fail("not good 'to' predicate");
         }
         if (!object->IsTo()) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "'to' predicate not is to");
-            return {};
+            return TConclusionStatus::Fail("'to' predicate not is to");
         }
-        if (indexInfo) {
+        if (pkSchema) {
             auto cNames = object->ColumnNames();
             i32 countSortingFields = 0;
-            for (i32 i = 0; i < indexInfo->GetReplaceKey()->num_fields(); ++i) {
-                if (i < (int)cNames.size() && cNames[i] == indexInfo->GetReplaceKey()->field(i)->name()) {
+            for (i32 i = 0; i < pkSchema->num_fields(); ++i) {
+                if (i < (int)cNames.size() && cNames[i] == pkSchema->field(i)->name()) {
                     ++countSortingFields;
                 } else {
                     break;
@@ -167,8 +175,40 @@ std::optional<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPre
             }
             Y_ABORT_UNLESS(countSortingFields == object->Batch->num_columns());
         }
-        return TPredicateContainer(object);
+        return TPredicateContainer(object, pkSchema ? TPredicateContainer::ExtractKey(*object, pkSchema) : nullptr);
     }
 }
 
+NArrow::TColumnFilter TPredicateContainer::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
+    if (!Object) {
+        auto result = NArrow::TColumnFilter::BuildAllowFilter();
+        result.Add(true, data->GetRecordsCount());
+        return result;
+    }
+    if (!data->GetRecordsCount()) {
+        return NArrow::TColumnFilter::BuildAllowFilter();
+    }
+    auto sortingFields = Object->Batch->schema()->field_names();
+    auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingFields, {}, false);
+    const auto border = NArrow::NMerger::TSortableBatchPosition(Object->Batch, 0, sortingFields, {}, false);
+    const bool needUppedBound = CompareType == NArrow::ECompareType::LESS_OR_EQUAL || CompareType == NArrow::ECompareType::GREATER;
+    const auto findBound = position.FindBound(position, 0, data->GetRecordsCount() - 1, border, needUppedBound);
+    const ui64 rowsBeforeBound = findBound ? findBound->GetPosition() : data->GetRecordsCount();
+
+    auto filter = NArrow::TColumnFilter::BuildAllowFilter();
+    switch (CompareType) {
+        case NArrow::ECompareType::LESS:
+        case NArrow::ECompareType::LESS_OR_EQUAL:
+            filter.Add(true, rowsBeforeBound);
+            filter.Add(false, data->GetRecordsCount() - rowsBeforeBound);
+            break;
+        case NArrow::ECompareType::GREATER:
+        case NArrow::ECompareType::GREATER_OR_EQUAL:
+            filter.Add(false, rowsBeforeBound);
+            filter.Add(true, data->GetRecordsCount() - rowsBeforeBound);
+            break;
+    }
+    return filter;
 }
+
+}   // namespace NKikimr::NOlap

@@ -5,7 +5,11 @@ namespace YAML {
 struct Mark;
 
 Scanner::SimpleKey::SimpleKey(const Mark& mark_, std::size_t flowLevel_)
-    : mark(mark_), flowLevel(flowLevel_), pIndent(0), pMapStart(0), pKey(0) {}
+    : mark(mark_),
+      flowLevel(flowLevel_),
+      pIndent(nullptr),
+      pMapStart(nullptr),
+      pKey(nullptr) {}
 
 void Scanner::SimpleKey::Validate() {
   // Note: pIndent will *not* be garbage here;
@@ -125,4 +129,4 @@ void Scanner::PopAllSimpleKeys() {
   while (!m_simpleKeys.empty())
     m_simpleKeys.pop();
 }
-}
+}  // namespace YAML

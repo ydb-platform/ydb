@@ -611,7 +611,8 @@ public:
 
                     if (followerGroup.RequireAllDataCenters && !followerGroup.FollowerCountPerDataCenter) {
                         followerGroup.FollowerCountPerDataCenter = true;
-                        followerGroup.SetFollowerCount((followerGroup.GetRawFollowerCount() - 1) / Self->DataCenters.size() + 1);
+                        auto dataCenters = Self->DataCenters.size() ? Self->DataCenters.size() : 3ull;
+                        followerGroup.SetFollowerCount((followerGroup.GetRawFollowerCount() + dataCenters - 1) / dataCenters); // round up
                     }
                 } else {
                     ++numMissingTablets;

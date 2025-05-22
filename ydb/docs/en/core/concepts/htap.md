@@ -46,10 +46,10 @@ Below is a simplified HTAP architecture diagram:
 
 ```mermaid
 flowchart LR
-    Client[[SQL Query]] --> UQE[Unified Query Engine]
-    UQE --> ROW[Row-oriented Data<br/>(OLTP Optimized)]
-    UQE --> COL[Column-oriented Data<br/>(OLAP Optimized)]
-    ROW --> SDS[(Shared Distributed Storage)]
+    Client(["SQL Query"]) --> UQE["Unified Query Engine"]
+    UQE --> ROW["Row-oriented Data<br/>(OLTP Optimized)"]
+    UQE --> COL["Column-oriented Data<br/>(OLAP Optimized)"]
+    ROW --> SDS[("Shared Distributed Storage")]
     COL --> SDS
 ```
 

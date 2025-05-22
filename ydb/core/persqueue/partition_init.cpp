@@ -327,6 +327,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         Partition()->EndOffset = meta.GetEndOffset();
         if (Partition()->StartOffset == Partition()->EndOffset) {
            Partition()->NewHead.Offset = Partition()->Head.Offset = Partition()->EndOffset;
+
         }
         if (meta.HasStartOffset()) {
             GetContext().StartOffset = meta.GetStartOffset();

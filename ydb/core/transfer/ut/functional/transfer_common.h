@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/tests/functional/replication/utils.h>
+#include <ydb/core/transfer/ut/common/utils.h>
 
 using namespace NReplicationTest;
 

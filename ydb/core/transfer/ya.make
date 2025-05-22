@@ -12,7 +12,12 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
+RECURSE(
+    ut/common
+)
+
 RECURSE_FOR_TESTS(
+    ut/functional
     ut/large
 )
 

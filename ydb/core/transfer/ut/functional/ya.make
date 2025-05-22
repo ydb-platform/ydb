@@ -8,15 +8,14 @@ ENV(YDB_FEATURE_FLAGS="enable_topic_transfer")
 ENV(YDB_GRPC_SERVICES="replication")
 
 PEERDIR(
-    library/cpp/threading/local_executor
-    ydb/public/sdk/cpp/src/client/table
-    ydb/public/sdk/cpp/src/client/topic
-    ydb/public/sdk/cpp/src/client/proto
-    ydb/public/sdk/cpp/src/client/draft
+    ydb/core/transfer/ut/common
 )
 
 SRCS(
-    replication.cpp
+    transfer_columntable_ut.cpp
+    transfer_common.cpp
+    transfer_rowtable_ut.cpp
+    transfer_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

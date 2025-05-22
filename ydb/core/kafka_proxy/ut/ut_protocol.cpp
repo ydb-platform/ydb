@@ -2080,7 +2080,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
 
         TString topic1 = "topic-999-test", topic2 = "topic-998-test";
-        auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
+
         {
             // Creation of two topics
             auto msg = client.CreateTopics({
@@ -2096,7 +2096,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), topic2);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[2].ErrorCode, INVALID_REQUEST);
         }
-
 
         auto getConfigsMap = [&](const auto& describeResult) {
             THashMap<TString, TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult> configs;
@@ -2152,6 +2151,16 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             });
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
             checkDescribeTopic({{topic1, "compact"}, {topic2, "compact"}});
+
+        }
+        {
+            auto msg = client.AlterConfigs({
+                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
+                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", ""}})
+            });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, INVALID_REQUEST);
+            checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
+
         }
         {
             auto msg = client.AlterConfigs({

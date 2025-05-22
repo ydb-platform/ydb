@@ -1444,6 +1444,38 @@ Y_UNIT_TEST(TestComactifiedWithRetention) {
 
         tc.Runtime->SetScheduledLimit(100);
 
+        TVector<std::pair<ui64, TString>> data;
+        activeZone = PlainOrSoSlow(true, false);
+
+        TString s{32, 'c'};
+        ui32 pp = 8 + 4 + 2 + 9;
+        for (ui32 i = 0; i < 10; ++i) {
+            data.push_back({i + 1, s.substr(pp)});
+        }
+        PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = true}, {}, tc);
+        CmdWrite(0, "sourceid0", data, tc, false, {}, true);
+        CmdWrite(0, "sourceid1", data, tc, false);
+        CmdWrite(0, "sourceid2", data, tc, false);
+        PQGetPartInfo(0, 30, tc);
+        PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = false}, {}, tc);
+        CmdWrite(0, "sourceid3", data, tc, false);
+        CmdWrite(0, "sourceid4", data, tc, false);
+        CmdWrite(0, "sourceid5", data, tc, false);
+        PQGetPartInfo(50, 60, tc);
+    });
+}
+
+Y_UNIT_TEST(TestStorageRetention) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        activeZone = false;
+        tc.Prepare(dispatchName, setup, activeZone);
+
+        tc.Runtime->SetScheduledLimit(100);
+
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         TVector<std::pair<ui64, TString>> data;

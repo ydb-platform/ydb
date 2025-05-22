@@ -854,7 +854,7 @@ private:
         if (!this->RequiredNextRevision())
             sql << "select nvl(max(`revision`), 0L) from `commited`;" << std::endl;
         else if (!Guard)
-            sql << "insert into `commited` (`revision`,`timestamp`) values ($Revision,CurrentUtcDatetime());" << std::endl;
+            sql << "insert into `commited` (`revision`,`timestamp`) values ($Revision,CurrentUtcTimestamp());" << std::endl;
         sql << "-- " << GetRequestName() << " <<<<" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;
 

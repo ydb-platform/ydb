@@ -127,7 +127,7 @@ private:
 
         std::ostringstream sql;
         sql << Stuff->TablePrefix;
-        sql << "insert into `commited` (`revision`,`timestamp`) values (" << revisionParamName << ",CurrentUtcDatetime());" << std::endl;
+        sql << "insert into `commited` (`revision`,`timestamp`) values (" << revisionParamName << ",CurrentUtcTimestamp());" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;
 
         TQueryClient::TQueryResultFunc callback = [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {

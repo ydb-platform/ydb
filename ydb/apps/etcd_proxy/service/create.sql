@@ -2,14 +2,14 @@ CREATE TABLE revision
 (
     `stub` Bool NOT NULL,
     `revision` Int64 NOT NULL,
-    `timestamp` Datetime NOT NULL,
+    `timestamp` Timestamp NOT NULL,
     PRIMARY KEY (`stub`)
 );
 
 CREATE TABLE commited
 (
     `revision` Int64 NOT NULL,
-    `timestamp` Datetime NOT NULL,
+    `timestamp` Timestamp NOT NULL,
     PRIMARY KEY (`revision`)
 );
 

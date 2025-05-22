@@ -112,13 +112,13 @@ namespace NSQLComplete {
 
     bool GetStatement(
         ILexer::TPtr& lexer,
-        TCompletionInput input,
+        const TMaterializedInput& input,
         TCompletionInput& output,
         size_t& output_position) {
         TVector<TString> statements;
         NYql::TIssues issues;
         if (!NSQLTranslationV1::SplitQueryToStatements(
-                TString(input.Text) + ";", lexer,
+                input.Text, lexer,
                 statements, issues, /* file = */ "",
                 /* areBlankSkipped = */ false)) {
             return false;
@@ -129,7 +129,7 @@ namespace NSQLComplete {
         for (const auto& statement : statements) {
             if (input.CursorPosition < cursor + statement.size()) {
                 output = {
-                    .Text = input.Text.SubStr(cursor, statement.size()),
+                    .Text = TStringBuf(input.Text).SubStr(cursor, statement.size()),
                     .CursorPosition = input.CursorPosition - cursor,
                 };
                 return true;
@@ -137,7 +137,8 @@ namespace NSQLComplete {
             cursor += statement.size();
         }
 
-        output = input;
+        output.Text = TStringBuf(input.Text);
+        output.CursorPosition = input.CursorPosition;
         return true;
     }
 

@@ -188,6 +188,17 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStringBuf spec);
+
+void Serialize(const TColumnSchema& schema, NYson::IYsonConsumer* consumer);
+
+void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema);
+void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
+
+void PrintTo(const TColumnSchema& columnSchema, std::ostream* os);
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDeletedColumn
 {
 public:
@@ -200,17 +211,8 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStringBuf spec);
-
-void Serialize(const TColumnSchema& schema, NYson::IYsonConsumer* consumer);
-
-void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema);
-void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
-
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema);
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema);
-
-void PrintTo(const TColumnSchema& columnSchema, std::ostream* os);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -419,8 +421,7 @@ private:
         TColumnInfo(std::vector<TColumnSchema> columns, std::vector<TDeletedColumn> deletedColumns)
             : Columns(std::move(columns))
             , DeletedColumns(std::move(deletedColumns))
-        {
-        }
+        { }
 
         std::vector<TColumnSchema> Columns;
         std::vector<TDeletedColumn> DeletedColumns;
@@ -447,8 +448,8 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStrin
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec);
 
 //! Returns serialized NTableClient.NProto.TTableSchemaExt.
-std::string SerializeToWireProto(const TTableSchemaPtr& schema);
 std::string SerializeToWireProto(const TTableSchema& schema);
+std::string SerializeToWireProto(const TTableSchemaPtr& schema);
 
 void DeserializeFromWireProto(TTableSchemaPtr* schema, const std::string& serializedProto);
 

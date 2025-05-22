@@ -2954,7 +2954,9 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     PutTabletLogLatency,
                     PutUserDataLatency,
                     StoragePoolId,
-                    LayoutCorrect
+                    LayoutCorrect,
+                    OperatingStatus,
+                    ExpectedStatus
                 FROM `/Root/.sys/ds_groups` WHERE GroupId >= 0x80000000;
             )").GetValueSync();
 
@@ -2970,7 +2972,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             }
         }
 
-        TYsonFieldChecker check(ysonString, 13);
+        TYsonFieldChecker check(ysonString, 15);
 
         check.Uint64(0u); // AllocatedSize
         check.Uint64GreaterOrEquals(0u); // AvailableSize
@@ -2985,6 +2987,8 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         check.Null(); // PutUserDataLatency
         check.Uint64(2u); // StoragePoolId
         check.Bool(true); // LayoutCorrect
+        check.String("DISINTEGRATED"); // OperatingStatus
+        check.String("DISINTEGRATED"); // ExpectedStatus
     }
 
     Y_UNIT_TEST(StoragePoolsFields) {

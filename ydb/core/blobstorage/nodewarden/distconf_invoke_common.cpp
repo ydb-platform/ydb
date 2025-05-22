@@ -125,6 +125,9 @@ namespace NKikimr::NStorage {
             case TQuery::kBootstrapCluster:
                 return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
 
+            case TQuery::kSwitchBridgeClusterState:
+                return SwitchBridgeClusterState(record.GetSwitchBridgeClusterState().GetNewClusterState());
+
             case TQuery::REQUEST_NOT_SET:
                 return FinishWithError(TResult::ERROR, "Request field not set");
         }

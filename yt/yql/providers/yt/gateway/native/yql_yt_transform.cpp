@@ -85,7 +85,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                 YQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
 
                 const TString cluster = ExecCtx_.Cluster_;
-                const TString tmpFolder = GetTablesTmpFolder(*Settings_);
+                const TString tmpFolder = GetTablesTmpFolder(*Settings_, cluster);
                 TTransactionCache::TEntry::TPtr entry = ExecCtx_.GetEntry();
                 auto tx = entry->Tx;
 
@@ -480,7 +480,7 @@ void TGatewayTransformer::ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRu
         opts.BypassArtifactCache(file.second.BypassArtifactCache);
         spec.AddLocalFile(file.first, opts);
     }
-    const TString binTmpFolder = Settings_->BinaryTmpFolder.Get().GetOrElse(TString());
+    const TString binTmpFolder = Settings_->BinaryTmpFolder.Get(ExecCtx_.Cluster_).GetOrElse(TString());
     const TString binCacheFolder = Settings_->_BinaryCacheFolder.Get(ExecCtx_.Cluster_).GetOrElse(TString());
     if (!localRun && binCacheFolder) {
         auto udfFiles = std::move(*DeferredUdfFiles_);

@@ -386,9 +386,5 @@ enum class ECleanupPolicy {
 
 std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(const std::optional<TString>& configValue,
                                                                                     std::optional<ECleanupPolicy>& cleanupPolicy);
-ECleanupPolicy ConvertCleanupPolicy(const std::optional<TString>& policy);
-
-std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateCleanupPolicy(std::optional<ECleanupPolicy> policy,
-                                                                                     const std::optional<TString>& origValue);
 
 } //namespace NKafka

@@ -351,10 +351,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 "(4, \"\x65\x65\3\", \"four\"),"
                 "(5, \"\x75\x75\3\", \"five\");");
 
-        // TODO: https://github.com/ydb-platform/ydb/issues/18656
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
-        //     request.SetChild(Max<ui64>() - 100);
-        // }, TStringBuilder() << "");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
+            request.SetChild(Max<ui64>() - 100);
+        }, TStringBuilder() << "");
     }
 
     Y_UNIT_TEST (MainToPosting) {

@@ -1047,13 +1047,22 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 0);
         }
-
         {
-            // Check commit
             std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
             std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+        {
+            // Check commit
+
             for (ui64 i = 0; i < minActivePartitions; ++i) {
-                partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
+                if (i == 0) {
+                    partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
+                } else if (i == 1) {
+                    partitionsAndOffsets.emplace_back(i, 0, commitedMetaData);
+                } else if (i == 2) {
+                    partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
+                } else {
+                    partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount));
+                }
             }
             offsets[firstTopicName] = partitionsAndOffsets;
             offsets[shortTopicName] = partitionsAndOffsets;
@@ -1065,11 +1074,17 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                     if (topic.Name.value() == firstTopicName) {
                         if (partition.PartitionIndex == 0) {
                             UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                        } else if (partition.PartitionIndex == 1) {
+                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                         } else {
                             UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
                         }
                     } else {
-                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
+                        if (partition.PartitionIndex == 1) {
+                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                        } else {
+                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
+                        }
                     }
                 }
             }
@@ -1087,11 +1102,18 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto partition0 = std::find_if(partitions.begin(), partitions.end(), [](const auto& partition) { return partition.PartitionIndex == 0; });
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 5);
-            for (auto p = partitions.begin(); p != partitions.end(); p++) {
-                UNIT_ASSERT_VALUES_EQUAL(p->Metadata, "");
+            UNIT_ASSERT_VALUES_EQUAL(partition0->Metadata, commitedMetaData);
+            int i = 0;
+            for (auto it = partitions.begin(); it != partitions.end(); it++) {
+                if (i != 2) {
+                    UNIT_ASSERT_VALUES_EQUAL(it->Metadata, partitionsAndOffsets[i].Metadata);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(it->Metadata, std::nullopt);
+                }
+                i += 1;
             }
         }
-
+    }
         {
             // Check fetch offsets with nonexistent topic
             std::map<TString, std::vector<i32>> topicsToPartions;
@@ -1107,6 +1129,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // Check commit with nonexistent topic
+
             std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
             std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
             for (ui64 i = 0; i < minActivePartitions; ++i) {

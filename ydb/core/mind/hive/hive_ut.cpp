@@ -6124,7 +6124,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
-    Y_UNIT_TEST(TestFollowerCompatability1) {
+    void TestAncientFollowers(unsigned followerCount) {
         static constexpr ui32 NUM_NODES = 3;
         TTestBasicRuntime runtime(NUM_NODES, NUM_NODES); // num nodes = num dcs
         Setup(runtime, true);
@@ -6144,7 +6144,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
         ev->Record.SetObjectId(1);
         auto* followerGroup = ev->Record.AddFollowerGroups();
-        followerGroup->SetFollowerCount(NUM_NODES);
+        followerGroup->SetFollowerCount(followerCount);
         followerGroup->SetFollowerCountPerDataCenter(false);
         followerGroup->SetRequireAllDataCenters(true);
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
@@ -6163,17 +6163,24 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, 3);
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, followerCount);
             runtime.DispatchEvents(options, TDuration::Seconds(1));
         }
-        // test every node has a follower running
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.ForceLocal = true;
         pipeConfig.AllowFollower = true;
         pipeConfig.ForceFollower = true;
+        unsigned actualFollowers = 0;
         for (ui32 node = 0; node < NUM_NODES; ++node) {
-            MakeSureTabletIsUp(runtime, tabletId, node, &pipeConfig);
+            if (CheckTabletIsUp(runtime, tabletId, node, &pipeConfig)) {
+                ++actualFollowers;
+            }
         }
+        UNIT_ASSERT_VALUES_EQUAL(followerCount, actualFollowers);
+    }
+
+    Y_UNIT_TEST(TestFollowerCompatability1) {
+        TestAncientFollowers(3);
     }
 
     Y_UNIT_TEST(TestFollowerCompatability2) {
@@ -6235,6 +6242,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(followers, 2);
+    }
+
+    Y_UNIT_TEST(TestFollowerCompatability3) {
+        TestAncientFollowers(0);
     }
 
     Y_UNIT_TEST(TestCreateExternalTablet) {

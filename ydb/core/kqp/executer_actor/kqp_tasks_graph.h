@@ -79,6 +79,7 @@ struct TStageInfoMeta {
     TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
     TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
     std::optional<NKikimrKqp::TKqpTableSinkSettings> ResolvedSinkSettings; // CTAS only
+    TMaybe<NKikimrSysView::ESysViewType> SysViewType;
 
     TVector<bool> SkipNullKeys;
 

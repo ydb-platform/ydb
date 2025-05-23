@@ -244,7 +244,12 @@ private:
             TableRequestIds.erase(entry.TableId);
 
             for (auto stageId : stageIds) {
-                TasksGraph.GetStageInfo(stageId).Meta.ColumnTableInfoPtr = entry.ColumnTableInfo;
+                if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+                    TasksGraph.GetStageInfo(stageId).Meta.ColumnTableInfoPtr = entry.ColumnTableInfo;
+                } else if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
+                    AFL_ENSURE(entry.SysViewInfo);
+                    TasksGraph.GetStageInfo(stageId).Meta.SysViewType = entry.SysViewInfo->Description.GetType();
+                }
             }
         }
 
@@ -354,7 +359,9 @@ private:
                                 continue;
                             }
 
-                            if (stageInfo.Meta.TableKind == ETableKind::Olap) {
+                            if (stageInfo.Meta.TableKind == ETableKind::Olap ||
+                                stageInfo.Meta.TableKind == ETableKind::SysView) {
+                                // get object specific info from TSchemeCacheNavigate response
                                 if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
                                     auto& entry = requestNavigate->ResultSet.emplace_back();
                                     entry.TableId = stageInfo.Meta.TableId;
@@ -382,7 +389,7 @@ private:
                             }
                         }
                     } else if (!ResolvingNamesFinished) {
-                        // CTAS 
+                        // CTAS
                         AFL_ENSURE(!stageInfo.Meta.TableId);
                         AFL_ENSURE(stageInfo.Meta.TablePath);
                         const auto splittedPath = SplitPath(stageInfo.Meta.TablePath);

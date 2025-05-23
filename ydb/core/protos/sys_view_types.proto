@@ -36,4 +36,5 @@ enum ESysViewType {
     EPgTables = 31;
     EInformationSchemaTables = 32;
     EPgClass = 33;
+    EShowCreate = 34;
 }

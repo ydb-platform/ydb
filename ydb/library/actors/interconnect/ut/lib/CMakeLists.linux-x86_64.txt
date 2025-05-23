@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(tls)
+
 add_library(interconnect-ut-lib INTERFACE)
 
 
@@ -19,6 +21,7 @@ target_link_libraries(interconnect-ut-lib INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  ut-lib-tls
 )
 
 target_sources(interconnect-ut-lib INTERFACE

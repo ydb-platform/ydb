@@ -9,6 +9,7 @@ namespace NFqRun {
 struct TExecutionMeta {
     TString Ast;
     TString Plan;
+    TString Statistics;
 
     FederatedQuery::QueryMeta::ComputeStatus Status;
     NYql::TIssues Issues;

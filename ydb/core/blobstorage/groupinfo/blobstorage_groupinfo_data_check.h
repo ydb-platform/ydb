@@ -125,7 +125,7 @@ public:
             std::array<std::vector<ui32>, 4> diskIdxs{
                 seen0.DiskIdxs, seen1.DiskIdxs, seen2.DiskIdxs, seen3.DiskIdxs};
 
-            auto checkErasure = [&](ui32 partId) { 
+            auto checkErasure = [&](ui32 partId) {
                 for (const auto& seen : seenParts[partId]) {
                     str << "{ ";
                     for (ui32 part = 0; part < 4; ++part) {
@@ -244,5 +244,5 @@ private:
 public:
     using TDataIntegrityCheckerMirror::TDataIntegrityCheckerMirror;
 };
-    
+
 } // NKikimr

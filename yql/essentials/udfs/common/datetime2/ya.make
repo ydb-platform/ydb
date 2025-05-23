@@ -1,22 +1,16 @@
-YQL_UDF_CONTRIB(datetime2_udf)
-    YQL_ABI_VERSION(
-        2
-        40
-        0
-    )
-    SRCS(
-        datetime_udf.cpp
-    )
-    PEERDIR(
-        util/draft
-        yql/essentials/public/udf/arrow
-        yql/essentials/minikql
-        yql/essentials/minikql/datetime
-        yql/essentials/public/udf/tz
-    )
-    END()
-
-RECURSE_FOR_TESTS(
-    test
-    test_bigdates
+YQL_UDF_YDB(datetime2_udf)
+YQL_ABI_VERSION(
+    2
+    37
+    0
 )
+SRCS(
+    datetime_udf.cpp
+)
+PEERDIR(
+    yql/essentials/public/udf/arrow
+    yql/essentials/minikql
+    yql/essentials/minikql/datetime
+    yql/essentials/public/udf/tz
+)
+END()

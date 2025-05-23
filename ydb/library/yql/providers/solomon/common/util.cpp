@@ -52,17 +52,15 @@ NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, 
         source.SetProject(project);
     }
     
+    source.SetEndpoint(config->GetCluster()); // Backward compatibility
     source.SetHttpEndpoint(config->GetCluster());
+    source.SetGrpcEndpoint(config->GetCluster());
     for (const auto& attr : config->settings()) {
         if (attr.name() == "grpc_location"sv) {
             source.SetGrpcEndpoint(attr.value());
         }
     }
 
-    if (source.GetGrpcEndpoint().empty()) {
-        source.SetGrpcEndpoint(config->GetCluster());
-    }
-    
     return source;
 }
 

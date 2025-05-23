@@ -295,8 +295,18 @@ private:
             LOG_D("Resolved key: " << entry.ToString(*AppData()->TypeRegistry));
 
             auto& stageInfo = DecodeStageInfo(entry.UserData);
-            stageInfo.Meta.ShardKey = std::move(entry.KeyDescription);
-            stageInfo.Meta.ShardKind = std::move(entry.Kind);
+
+            if (stageInfo.Meta.TableId == entry.KeyDescription->TableId) {
+                stageInfo.Meta.ShardKey = std::move(entry.KeyDescription);
+                stageInfo.Meta.ShardKind = std::move(entry.Kind);
+            } else {
+                for (auto& indexMeta : stageInfo.Meta.IndexMetas) {
+                    if (indexMeta.TableId == entry.KeyDescription->TableId) {
+                        indexMeta.ShardKey = std::move(entry.KeyDescription);
+                        break;
+                    }
+                }
+            }
         }
 
         timer.reset();
@@ -365,20 +375,28 @@ private:
                                 TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
                             }
 
-                            auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
-                            entry.UserData = EncodeStageInfo(stageInfo);
-                            switch (operation) {
-                                case TKeyDesc::ERowOperation::Read:
-                                    entry.Access = NACLib::EAccessRights::SelectRow;
-                                    break;
-                                case TKeyDesc::ERowOperation::Update:
-                                    entry.Access = NACLib::EAccessRights::UpdateRow;
-                                    break;
-                                case TKeyDesc::ERowOperation::Erase:
-                                    entry.Access = NACLib::EAccessRights::EraseRow;
-                                    break;
-                                default:
-                                    YQL_ENSURE(false, "Unsupported row operation mode: " << (ui32)operation);
+                            auto addRequest = [&](auto&& shardKey) {
+                                auto& entry = request->ResultSet.emplace_back(std::move(shardKey));
+                                entry.UserData = EncodeStageInfo(stageInfo);
+                                switch (operation) {
+                                    case TKeyDesc::ERowOperation::Read:
+                                        entry.Access = NACLib::EAccessRights::SelectRow;
+                                        break;
+                                    case TKeyDesc::ERowOperation::Update:
+                                        entry.Access = NACLib::EAccessRights::UpdateRow;
+                                        break;
+                                    case TKeyDesc::ERowOperation::Erase:
+                                        entry.Access = NACLib::EAccessRights::EraseRow;
+                                        break;
+                                    default:
+                                        YQL_ENSURE(false, "Unsupported row operation mode: " << (ui32)operation);
+                                }
+                            };
+
+                            addRequest(stageInfo.Meta.ShardKey);
+                            for (auto& indexMeta : stageInfo.Meta.IndexMetas) {
+                                indexMeta.ShardKey = ExtractKey(indexMeta.TableId, indexMeta.TableConstInfo->KeyColumnTypes, operation);
+                                addRequest(indexMeta.ShardKey);
                             }
                         }
                     } else if (!ResolvingNamesFinished) {

@@ -752,9 +752,11 @@ public:
     }
 
     TAsyncStatus Precommit() const {
+        auto self = shared_from_this();
+
         TStatus status(EStatus::SUCCESS, {});
 
-        for (auto& callback : PrecommitCallbacks) {
+        for (auto& callback : self->PrecommitCallbacks) {
             if (!callback) {
                 continue;
             }
@@ -775,7 +777,9 @@ public:
     }
 
     NThreading::TFuture<void> ProcessFailure() const {
-        for (auto& callback : OnFailureCallbacks) {
+        auto self = shared_from_this();
+
+        for (auto& callback : self->OnFailureCallbacks) {
             if (!callback) {
                 continue;
             }
@@ -803,7 +807,7 @@ public:
             co_return TCommitTransactionResult(TStatus(precommitResult));
         }
 
-        PrecommitCallbacks.clear();
+        self->PrecommitCallbacks.clear();
 
         auto commitResult = co_await self->Session_.Client_->CommitTransaction(self->TxId_, settingsCopy, self->Session_);
 

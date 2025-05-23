@@ -1909,7 +1909,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 check_both_groups_exist *= 3;
             }
 
-            UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "2");
+            UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "CompletingRebalance");
             UNIT_ASSERT_VALUES_EQUAL(*group.ProtocolType, protocolType);
 
             std::cout << "********" << std::endl;
@@ -1919,6 +1919,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         }
         UNIT_ASSERT_VALUES_EQUAL(check_both_groups_exist, 6);
+
+
         // now we want to check that after calling JoinGroup Group2 will be in state of rebalance
         clientA.JoinGroup(topics, groupId2, protocolName, heartbeatTimeout);
 
@@ -1935,10 +1937,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             if (*group.GroupId == groupId1) {
                 check_both_groups_exist *= 2;
-                UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "2");
+                UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "CompletingRebalance");
             } else if (*group.GroupId == groupId2) {
                 check_both_groups_exist *= 3;
-                UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "1"); // check that Group2 is in "preparing rebalance" state
+                UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "PreparingRebalance"); // check that Group2 is in "preparing rebalance" state
             }
             UNIT_ASSERT_VALUES_EQUAL(*group.ProtocolType, protocolType);
 
@@ -1948,6 +1950,28 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::cout << "ProtocolType: " <<  *group.ProtocolType  << std::endl;
         }
         UNIT_ASSERT_VALUES_EQUAL(check_both_groups_exist, 6);
+
+        TListGroupsRequestData requestGroupsStateFilter;
+        requestGroupsStateFilter.StatesFilter.push_back("PreparingRebalance");
+        // requestGroupsStateFilter.StatesFilter.push_back("CompletingRebalance");
+        auto responseStateFilter = clientA.ListGroupsFetch(requestGroupsStateFilter);
+
+        check_both_groups_exist = 1;
+        UNIT_ASSERT_VALUES_EQUAL(responseStateFilter->Groups.size(), 1);
+        for (auto group : responseStateFilter->Groups) {
+            UNIT_ASSERT_C(group.GroupId.has_value(),"Error, no groupId recieved");
+            UNIT_ASSERT_C(group.GroupState.has_value(),"Error, no GroupState recieved");
+            UNIT_ASSERT_C(group.ProtocolType.has_value(),"Error, no ProtocolType recieved");
+            UNIT_ASSERT_C(*group.GroupId == groupId1 || *group.GroupId == groupId2,"Error, wrong GroupId name" << group.GroupId);
+            UNIT_ASSERT_VALUES_EQUAL(*group.GroupId, groupId2);
+            UNIT_ASSERT_VALUES_EQUAL(*group.GroupState, "PreparingRebalance");
+            UNIT_ASSERT_VALUES_EQUAL(*group.ProtocolType, protocolType);
+
+            std::cout << "********" << std::endl;
+            std::cout << "GroupId: " << *group.GroupId << std::endl;
+            std::cout << "GroupState: " << *group.GroupState << std::endl;
+            std::cout << "ProtocolType: " << *group.ProtocolType  << std::endl;
+        }
     }
 
     Y_UNIT_TEST(NativeKafkaBalanceScenario) {

@@ -19,7 +19,7 @@
 
 namespace NKafka {
 
-TString SELECT_GROUPS = R"sql(
+TString SELECT_GROUPS_NO_FILTER = R"sql(
     --!syntax_v1
     DECLARE $Database AS Utf8;
 
@@ -37,6 +37,41 @@ TString SELECT_GROUPS = R"sql(
     ON A.consumer_group = B.consumer_group AND A.generation = B.generation);
 )sql";
 
+TString SELECT_GROUPS_WITH_FILTER = R"sql(
+    --!syntax_v1
+    DECLARE $Database AS Utf8;
+    DECLARE $StatesFilter AS List<Uint32>;
+
+    SELECT * FROM (SELECT * FROM (SELECT consumer_group, MAX(generation) as generation FROM `<consumer_state_table_name>`
+    VIEW PRIMARY KEY
+    WHERE database = $Database
+    GROUP BY consumer_group) AS A
+
+    INNER JOIN
+
+    (SELECT * FROM (SELECT consumer_group, generation, state, protocol_type FROM `<consumer_state_table_name>`
+    VIEW PRIMARY KEY
+    WHERE database = $Database AND state in $StatesFilter)) as B
+
+    ON A.consumer_group = B.consumer_group AND A.generation = B.generation);
+)sql";
+
+std::map<int, TString> numbersToStatesMapping = {
+    {0, "Unknown"},
+    {1, "PreparingRebalance"},
+    {2, "CompletingRebalance"},
+    {3, "Stable"},
+    {4, "Dead"},
+    {5, "Empty"}
+};
+std::map<TString, int> statesToNumbersMapping {
+    {"Unknown", 0},
+    {"PreparingRebalance", 1},
+    {"CompletingRebalance", 2},
+    {"Stable", 3},
+    {"Dead", 4},
+    {"Empty", 5}
+};
 
 std::shared_ptr<TListGroupsResponseData> BuildResponse(TListGroupsResponseData responseData) {
     auto response = std::make_shared<TListGroupsResponseData>(std::move(responseData));
@@ -64,7 +99,15 @@ void TKafkaListGroupsActor::StartKqpSession(const TActorContext& ctx) {
 NYdb::TParams TKafkaListGroupsActor::BuildSelectParams() {
     NYdb::TParamsBuilder params;
     params.AddParam("$Database").Utf8(DatabasePath).Build();
-
+    if (ListGroupsRequestData->StatesFilter.size() > 0) {
+        auto& statesFilterParams = params.AddParam("$StatesFilter").BeginList();
+        for (auto& statesNumberFilter : ListGroupsRequestData->StatesFilter) {
+            if (statesNumberFilter.has_value()) {
+                statesFilterParams.AddListItem().Uint32(statesToNumbersMapping[*statesNumberFilter]);
+            }
+        }
+        statesFilterParams.EndList().Build();
+    }
     return params.Build();
 }
 
@@ -114,11 +157,13 @@ TString TKafkaListGroupsActor::GetYqlWithTablesNames(const TString& templateStr)
     void TKafkaListGroupsActor::SendToKqpConsumerGroupsRequest(const TActorContext& ctx) {
         KAFKA_LOG_D("Sending select request to KQP for database " << DatabasePath);
         Kqp->SendYqlRequest(
-            GetYqlWithTablesNames(SELECT_GROUPS),
-            BuildSelectParams(),
-            ++KqpCookie,
-            ctx,
-            false
+        GetYqlWithTablesNames(ListGroupsRequestData->StatesFilter.size() > 0 ?
+                                        SELECT_GROUPS_WITH_FILTER :
+                                        SELECT_GROUPS_NO_FILTER),
+        BuildSelectParams(),
+        ++KqpCookie,
+        ctx,
+        false
         );
     }
 
@@ -150,8 +195,8 @@ TString TKafkaListGroupsActor::GetYqlWithTablesNames(const TString& templateStr)
             TString protocol_type = parser.ColumnParser("protocol_type").GetUtf8().c_str();
             groupInfo.GroupId = consumerName;
             groupInfo.ProtocolType = protocol_type;
-            ui64 group_state = parser.ColumnParser("state").GetUint64();
-            groupInfo.GroupState = std::to_string(group_state);
+            ui64 group_state_number = parser.ColumnParser("state").GetUint64();
+            groupInfo.GroupState = numbersToStatesMapping[group_state_number];
             listGroupsResponse.Groups.push_back(groupInfo);
         }
         return listGroupsResponse;

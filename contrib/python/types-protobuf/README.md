@@ -26,7 +26,7 @@ directory.
 
 This package was tested with
 mypy 1.15.0,
-pyright 1.1.389,
+pyright 1.1.396,
 and pytype 2024.10.11.
 It was generated from typeshed commit
-[`73ebb9dfd7dfce93c5becde4dcdd51d5626853b8`](https://github.com/python/typeshed/commit/73ebb9dfd7dfce93c5becde4dcdd51d5626853b8).
+[`cdfb10c340c3df0f8b4112705e6e229b6ae269fd`](https://github.com/python/typeshed/commit/cdfb10c340c3df0f8b4112705e6e229b6ae269fd).

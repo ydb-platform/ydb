@@ -1287,6 +1287,12 @@ void TDictLogicalType::ValidateNode(const TWalkContext&) const
                     case ESimpleLogicalValueType::Datetime64:
                     case ESimpleLogicalValueType::Timestamp64:
                     case ESimpleLogicalValueType::Interval64:
+                    case ESimpleLogicalValueType::TzDate:
+                    case ESimpleLogicalValueType::TzDatetime:
+                    case ESimpleLogicalValueType::TzTimestamp:
+                    case ESimpleLogicalValueType::TzDate32:
+                    case ESimpleLogicalValueType::TzDatetime64:
+                    case ESimpleLogicalValueType::TzTimestamp64:
                         return;
                 }
                 YT_ABORT();
@@ -1891,6 +1897,13 @@ bool IsComparable(const TLogicalTypePtr& type)
                 case ESimpleLogicalValueType::Datetime64:
                 case ESimpleLogicalValueType::Timestamp64:
                 case ESimpleLogicalValueType::Interval64:
+
+                case ESimpleLogicalValueType::TzDate:
+                case ESimpleLogicalValueType::TzDatetime:
+                case ESimpleLogicalValueType::TzTimestamp:
+                case ESimpleLogicalValueType::TzDate32:
+                case ESimpleLogicalValueType::TzDatetime64:
+                case ESimpleLogicalValueType::TzTimestamp64:
                     return true;
 
                 case ESimpleLogicalValueType::Any:
@@ -1918,6 +1931,26 @@ bool IsComparable(const TLogicalTypePtr& type)
         case ELogicalMetatype::Struct:
         case ELogicalMetatype::VariantStruct:
         case ELogicalMetatype::Dict:
+            return false;
+    }
+}
+
+bool IsTzType(const TLogicalTypePtr& logicalType)
+{
+    switch (logicalType->GetMetatype()) {
+        case ELogicalMetatype::Simple:
+            switch (logicalType->AsSimpleTypeRef().GetElement()) {
+                case ESimpleLogicalValueType::TzDate:
+                case ESimpleLogicalValueType::TzDatetime:
+                case ESimpleLogicalValueType::TzTimestamp:
+                case ESimpleLogicalValueType::TzDate32:
+                case ESimpleLogicalValueType::TzDatetime64:
+                case ESimpleLogicalValueType::TzTimestamp64:
+                    return true;
+                default:
+                    return false;
+            }
+        default:
             return false;
     }
 }
@@ -1964,6 +1997,13 @@ static const std::pair<ESimpleLogicalValueType, TString> V3SimpleLogicalValueTyp
     {ESimpleLogicalValueType::Datetime64,  "datetime64"},
     {ESimpleLogicalValueType::Timestamp64, "timestamp64"},
     {ESimpleLogicalValueType::Interval64,  "interval64"},
+
+    {ESimpleLogicalValueType::TzDate,      "tz_date"},
+    {ESimpleLogicalValueType::TzDatetime,  "tz_datetime"},
+    {ESimpleLogicalValueType::TzTimestamp, "tz_timestamp"},
+    {ESimpleLogicalValueType::TzDate32,      "tz_date32"},
+    {ESimpleLogicalValueType::TzDatetime64,  "tz_datetime64"},
+    {ESimpleLogicalValueType::TzTimestamp64, "tz_timestamp64"},
 };
 static_assert(std::size(V3SimpleLogicalValueTypeEncoding) == TEnumTraits<ESimpleLogicalValueType>::GetDomainSize());
 

@@ -4,8 +4,9 @@
 
 #include "abstract/collector.h"
 
-#include <ydb/services/bg_tasks/abstract/interface.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <ydb/services/bg_tasks/abstract/interface.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 
@@ -122,11 +123,14 @@ private:
     private:
         TPortionInfo::TConstPtr Portion;
         YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
+        YDB_READONLY_DEF(TString, ConsumerId);
 
     public:
-        TPortionToAsk(const TPortionInfo::TConstPtr& portion, const std::shared_ptr<const TAtomicCounter>& abortionFlag)
+        TPortionToAsk(
+            const TPortionInfo::TConstPtr& portion, const std::shared_ptr<const TAtomicCounter>& abortionFlag, const TString& consumerId)
             : Portion(portion)
-            , AbortionFlag(abortionFlag) {
+            , AbortionFlag(abortionFlag)
+            , ConsumerId(consumerId) {
         }
 
         TPortionInfo::TConstPtr ExtractPortion() {

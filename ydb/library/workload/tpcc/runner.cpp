@@ -120,7 +120,6 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
 
     Terminals.reserve(terminalsCount);
     for (size_t i = 0; i < terminalsCount; ++i) {
-        // note, that terminal adds itself to ready terminals
         size_t warehouseID = i % TERMINALS_PER_WAREHOUSE + 1;
         auto terminalPtr = std::make_unique<TTerminal>(
             i,
@@ -134,6 +133,13 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
             Log);
 
         Terminals.emplace_back(std::move(terminalPtr));
+    }
+
+    // we want to have even load distribution and not start terminals from first INFLIGHT warehouses,
+    // then next, etc. Long warmup resolves this, but we want to have a good start even without warmup
+    std::random_shuffle(Terminals.begin(), Terminals.end());
+    for (auto& terminal: Terminals) {
+        terminal->Start();
     }
 }
 

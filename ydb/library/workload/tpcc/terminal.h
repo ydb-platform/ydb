@@ -123,6 +123,8 @@ public:
     TTerminal(TTerminal&&) = delete;
     TTerminal& operator=(TTerminal&&) = delete;
 
+    void Start();
+
     bool IsDone() const;
     void CollectStats(TTerminalStats& dst) const;
 

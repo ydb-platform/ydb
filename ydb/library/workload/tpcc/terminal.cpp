@@ -74,6 +74,9 @@ TTerminal::TTerminal(size_t terminalID,
     , StopWarmup(stopWarmup)
     , Task(Run())
 {
+}
+
+void TTerminal::Start() {
     TaskQueue.TaskReady(Task.Handle, Context.TerminalID);
 }
 

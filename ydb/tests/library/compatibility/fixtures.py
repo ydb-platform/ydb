@@ -37,10 +37,9 @@ all_binary_combinations_ids_restart = [
     current_name + "_to_" + last_stable_name,
     current_name + "_to_" + current_name,
 
-
-    last_stable_name + "_to_" + current_name,
-    current_name + "_to_" + last_stable_name,
-    current_name + "_to_" + current_name,
+    prelast_stable_name + "_to_" + last_stable_name,
+    last_stable_name + "_to_" + prelast_stable_name,
+    last_stable_name + "_to_" + last_stable_name,
 ]
 
 

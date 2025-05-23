@@ -8,18 +8,24 @@ from os import getenv
 from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
+from enum import Enum, auto
 
 from library.python import resource
 
 STRESS_BINARIES_DEPLOY_PATH = '/tmp/stress_binaries/'
 WORKLOAD_BINARY_NAME = 'simple_queue'  # Имя бинарного файла
 
-class TestWorkloadSimpleQueue(LoadSuiteBase):
+class TableType(str, Enum):
+    """Тип таблицы"""
+    ROW = 'row'
+    COLUMN = 'column'
 
+class SimpleQueueBase(LoadSuiteBase):
     working_dir = os.path.join(tempfile.gettempdir(), "ydb_stability")
     os.makedirs(working_dir, exist_ok=True)
     
     path = get_external_param('table-path-clickbench', f'{YdbCluster.tables_path}/clickbench/hits')
+    timeout = 100  # базовый таймаут
 
     def _unpack_resource(self, name):
         """Распаковывает ресурс из пакета"""
@@ -36,7 +42,8 @@ class TestWorkloadSimpleQueue(LoadSuiteBase):
         """Распаковывает бинарный файл из ресурсов и возвращает путь к нему"""
         return self._unpack_resource(workload_binary_name)
     
-    def test_workload_simple_queue(self):
+    @pytest.mark.parametrize('table_type', [TableType.ROW, TableType.COLUMN])
+    def test_workload_simple_queue(self, table_type: TableType):
         """Тест запуска workload с простой очередью на всех нодах кластера"""
         # Распаковываем бинарный файл из ресурсов
         binary_path = self._unpack_workload_binary(WORKLOAD_BINARY_NAME)
@@ -46,7 +53,7 @@ class TestWorkloadSimpleQueue(LoadSuiteBase):
        
         # Для каждой ноды в кластере
         for node in YdbCluster.get_cluster_nodes(db_only=True):
-            with allure.step(f'Running workload on node {node.host}'):
+            with allure.step(f'Running workload on node {node.host} with table type {table_type}'):
                 node_host = node.host
                 # Проверяем, успешно ли был развернут бинарный файл
                 binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
@@ -55,10 +62,10 @@ class TestWorkloadSimpleQueue(LoadSuiteBase):
                 # Запускаем бинарный файл на ноде, если он был успешно развернут
                 if success:
                     target_path = binary_result['path']
-                    cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database {YdbCluster.ydb_database} --mode row"
+                    cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database {YdbCluster.ydb_database} --mode {table_type}"
                     allure.attach(cmd, 'Command to execute', allure.attachment_type.TEXT)
                     print(f"Executing command on node {node.host} (is_local: {node.is_local})")
-                    result = node.execute_command(cmd, raise_on_error=False, timeout=100, raise_on_timeout=False)
+                    result = node.execute_command(cmd, raise_on_error=False, timeout=self.timeout, raise_on_timeout=False)
                     print(f"Command execution result type: {type(result)}")
                     print(f"Command execution result: {result}")
                     if result is None:
@@ -72,18 +79,34 @@ class TestWorkloadSimpleQueue(LoadSuiteBase):
             print(f'res:{result}')
             print(f'path to check:{node.host.split('.')[0]}_0')
                
+        # Сохраняем состояние нод и выполняем тестовый запрос
         self.save_nodes_state()
         
         result = YdbCliHelper.workload_run(
             path=f"{node.host.split('.')[0]}_0",
-            query_name='query_name',
+            query_name=f'query_name_{table_type}',  # Добавляем тип таблицы в имя запроса для различения в отчетах
             iterations=1,
             workload_type=self.workload_type,
-            timeout=10,
+            timeout=self.timeout,
             check_canonical=self.check_canonical,
             query_syntax=self.query_syntax,
             scale=self.scale,
             query_prefix='qparams.query_prefix',
             external_path=self.get_external_path(),
         )
-        self.process_query_result(result, "SimpleQueue", False)
+        self.process_query_result(result, f"SimpleQueue_{table_type}", False)
+
+
+class TestSimpleQueue100(SimpleQueueBase):
+    """Тест с таймаутом 100 секунд"""
+    timeout = 100
+
+
+class TestSimpleQueue300(SimpleQueueBase):
+    """Тест с таймаутом 300 секунд"""
+    timeout = 300
+
+
+class TestSimpleQueue1000(SimpleQueueBase):
+    """Тест с таймаутом 1000 секунд"""
+    timeout = 1000

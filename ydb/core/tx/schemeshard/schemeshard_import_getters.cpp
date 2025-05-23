@@ -288,8 +288,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 // try search for a topic
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
                 HeadObject(SchemeKey);
+            } else {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
             }
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
+            return;
         }
 
         if (!CheckResult(result, "HeadObject")) {

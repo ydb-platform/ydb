@@ -88,6 +88,10 @@ class TRemovePortion: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TChunkAddress> Chunks;
+    virtual TString GetId() const override {
+        return "P";
+    }
+
     virtual void Apply(NIceDb::TNiceDb& db) override {
         AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion")("path_id", PortionAddress.GetPathId())(
             "portion_id", PortionAddress.GetPortionId());

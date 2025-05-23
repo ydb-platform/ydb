@@ -167,15 +167,14 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     }
 
     // apply updates for the state storage proxy
-#define FETCH_CONFIG(PART, PREFIX, PROTO) \
+#define FETCH_CONFIG(PART, PROTO) \
     Y_ABORT_UNLESS(StorageConfig.Has##PROTO##Config()); \
-    char PART##Prefix[TActorId::MaxServiceIDLength] = PREFIX; \
-    TIntrusivePtr<TStateStorageInfo> PART##Info = BuildStateStorageInfo(PART##Prefix, StorageConfig.Get##PROTO##Config());
+    TIntrusivePtr<TStateStorageInfo> PART##Info = Build##PROTO##Info(StorageConfig.Get##PROTO##Config());
 
-    FETCH_CONFIG(stateStorage, "ssr", StateStorage)
-    FETCH_CONFIG(board, "ssb", StateStorageBoard)
-    FETCH_CONFIG(schemeBoard, "sbr", SchemeBoard)
-
+    FETCH_CONFIG(stateStorage, StateStorage)
+    FETCH_CONFIG(board, StateStorageBoard)
+    FETCH_CONFIG(schemeBoard, SchemeBoard)
+    
     STLOG(PRI_DEBUG, BS_NODE, NW52, "ApplyStateStorageConfig",
         (StateStorageConfig, StorageConfig.GetStateStorageConfig()),
         (NewStateStorageInfo, *stateStorageInfo),
@@ -188,19 +187,25 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
         (CurrentSchemeBoardInfo, SchemeBoardInfo.Get()));
 
     auto changed = [](const TStateStorageInfo& prev, const TStateStorageInfo& cur) {
-        auto equalRing = [](const auto& r1, const auto& r2) {
-            return r1.IsDisabled == r2.IsDisabled
-                && r1.UseRingSpecificNodeSelection == r2.UseRingSpecificNodeSelection
-                && r1.Replicas == r2.Replicas;
+
+        auto equalGroup = [](const auto& g1, const auto& g2) {
+            auto equalRing = [](const auto& r1, const auto& r2) {
+                return r1.IsDisabled == r2.IsDisabled
+                    && r1.UseRingSpecificNodeSelection == r2.UseRingSpecificNodeSelection
+                    && r1.Replicas == r2.Replicas;
+            };
+            return g1.Rings.size() == g2.Rings.size()
+                && g1.NToSelect == g2.NToSelect
+                && std::equal(g1.Rings.begin(), g1.Rings.end(), g2.Rings.begin(), equalRing);
         };
-        return prev.NToSelect != cur.NToSelect
-            || prev.Rings.size() != cur.Rings.size()
-            || !std::equal(prev.Rings.begin(), prev.Rings.end(), cur.Rings.begin(), equalRing)
+        return prev.RingGroups.size() != cur.RingGroups.size()
+            || !std::equal(prev.RingGroups.begin(), prev.RingGroups.end(), cur.RingGroups.begin(), equalGroup)
             || prev.StateStorageVersion != cur.StateStorageVersion
             || prev.CompatibleVersions.size() != cur.CompatibleVersions.size()
             || !std::equal(prev.CompatibleVersions.begin(), prev.CompatibleVersions.end(), cur.CompatibleVersions.begin());
     };
 
+    
     TActorSystem *as = TActivationContext::ActorSystem();
     const bool changedStateStorage = !StateStorageProxyConfigured || changed(*StateStorageInfo, *stateStorageInfo);
     const bool changedBoard = !StateStorageProxyConfigured || changed(*BoardInfo, *boardInfo);
@@ -211,31 +216,37 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
 
     // start new replicas if needed
     THashSet<TActorId> localActorIds;
+    THashSet<TActorId> newActorIds;
     auto startReplicas = [&](TIntrusivePtr<TStateStorageInfo>&& info, auto&& factory, const char *comp, auto *which) {
         // collect currently running local replicas
         if (const auto& current = *which) {
-            for (const auto& ring : current->Rings) {
-                for (const auto& replicaId : ring.Replicas) {
-                    if (replicaId.NodeId() == LocalNodeId) {
-                        const auto [it, inserted] = localActorIds.insert(replicaId);
-                        Y_ABORT_UNLESS(inserted);
+            for (const auto& ringGroup : current->RingGroups) {
+                for (const auto& ring : ringGroup.Rings) {
+                    for (const auto& replicaId : ring.Replicas) {
+                        if (replicaId.NodeId() == LocalNodeId) {
+                            STLOG(PRI_INFO, BS_NODE, NW54, "Local replica found", (Component, comp), (ReplicaId, replicaId));
+                            localActorIds.insert(replicaId);
+                        }
                     }
                 }
             }
         }
 
-        for (const auto& ring : info->Rings) {
-            for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
-                if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
-                    if (!localActorIds.erase(replicaId)) {
-                        STLOG(PRI_INFO, BS_NODE, NW08, "starting new state storage replica",
-                            (Component, comp), (ReplicaId, replicaId), (Index, index), (Config, *info));
-                        as->RegisterLocalService(replicaId, as->Register(factory(info, index), TMailboxType::ReadAsFilled,
-                            AppData()->SystemPoolId));
-                    } else if (which == &StateStorageInfo) {
-                        Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
-                    } else {
-                        // TODO(alexvru): update other kinds of replicas
+        for (const auto& ringGroup : info->RingGroups) {
+            for (const auto& ring : ringGroup.Rings) {
+                for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
+                    if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
+                        if (!localActorIds.contains(replicaId) && !newActorIds.contains(replicaId)) {
+                            STLOG(PRI_INFO, BS_NODE, NW08, "starting state storage new replica",
+                                (Component, comp), (ReplicaId, replicaId), (Index, index), (Config, *info));
+                            as->RegisterLocalService(replicaId, as->Register(factory(info, index), TMailboxType::ReadAsFilled,
+                                AppData()->SystemPoolId));
+                        } else if (which == &StateStorageInfo && !newActorIds.contains(replicaId)) {
+                            Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
+                        } else {
+                            // TODO(alexvru): update other kinds of replicas
+                        }
+                        newActorIds.insert(replicaId);
                     }
                 }
             }
@@ -253,13 +264,6 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
         startReplicas(std::move(schemeBoardInfo), CreateSchemeBoardReplica, "SchemeBoard", &SchemeBoardInfo);
     }
 
-    // terminate unused replicas
-    for (const auto& replicaId : localActorIds) {
-        STLOG(PRI_INFO, BS_NODE, NW43, "terminating useless state storage replica", (ReplicaId, replicaId));
-        const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
-    }
-
     // reconfigure proxy
     STLOG(PRI_INFO, BS_NODE, NW50, "updating state storage proxy configuration");
     if (StateStorageProxyConfigured) {
@@ -271,6 +275,15 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
         const TActorId stubInstance = as->RegisterLocalService(MakeStateStorageProxyID(), newInstance);
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, stubInstance, newInstance, nullptr, 0));
         StateStorageProxyConfigured = true;
+    }
+
+    // terminate unused replicas
+    for (const auto& replicaId : localActorIds) {
+        if (!newActorIds.contains(replicaId)) {
+            STLOG(PRI_INFO, BS_NODE, NW43, "terminating useless state storage replica", (ReplicaId, replicaId));
+            const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+        }
     }
 }
 

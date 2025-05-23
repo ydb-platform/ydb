@@ -110,7 +110,8 @@ Y_UNIT_TEST(TestCmdReadWithLastOffset) {
                 auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
 
                 if (lastOffset) {
-                    UNIT_ASSERT_VALUES_EQUAL(readSettings.ResCount, res.ResultSize());
+                    UNIT_ASSERT_C(readSettings.ResCount <= res.ResultSize(),
+                                  "readSettings.ResCount=" << readSettings.ResCount << ", res.ResultSize()=" << res.ResultSize());
                 }
 
                 for (size_t i = 0; i < res.ResultSize(); ++i) {

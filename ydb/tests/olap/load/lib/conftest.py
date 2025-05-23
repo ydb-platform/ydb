@@ -30,7 +30,6 @@ class LoadSuiteBase:
     iterations: int = 5
     workload_type: WorkloadType = None
     timeout: float = 1800.
-    refference: str = ''
     check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO
     query_syntax: str = ''
     query_settings: dict[int, LoadSuiteBase.QuerySettings] = {}
@@ -308,7 +307,7 @@ class LoadSuiteBase:
             allure.attach(cls.__hide_query_text(result.stderr, query_text), 'Stderr', attachment_type=allure.attachment_type.TEXT)
         end_time = time()
         allure_test_description(
-            cls.suite(), query_name, refference_set=cls.refference,
+            cls.suite(), query_name,
             start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time)
         )
         stats = result.get_stats(query_name)
@@ -375,7 +374,7 @@ class LoadSuiteBase:
         self.save_nodes_state()
         result = YdbCliHelper.workload_run(
             path=path,
-            query_name=query_name,
+            query_names={query_name},
             iterations=qparams.iterations,
             workload_type=self.workload_type,
             timeout=qparams.timeout,
@@ -384,5 +383,43 @@ class LoadSuiteBase:
             scale=self.scale,
             query_prefix=qparams.query_prefix,
             external_path=self.get_external_path(),
-        )
+        )[query_name]
         self.process_query_result(result, query_name, True)
+
+
+class LoadSuiteParallel(LoadSuiteBase):
+    threads: int = 8
+
+    def get_query_list() -> list[str]:
+        return []
+
+    def get_path() -> str:
+        return ''
+
+    __results: dict[str, YdbCliHelper.WorkloadRunResult] = {}
+
+    @classmethod
+    def do_setup_class(cls):
+        qparams = cls._get_query_settings()
+        cls.save_nodes_state()
+        cls.__results = YdbCliHelper.workload_run(
+            path=cls.get_path(),
+            query_names=set(cls.get_query_list()),
+            iterations=qparams.iterations,
+            workload_type=cls.workload_type,
+            timeout=qparams.timeout,
+            check_canonical=cls.check_canonical,
+            query_syntax=cls.query_syntax,
+            scale=cls.scale,
+            query_prefix=qparams.query_prefix,
+            external_path=cls.get_external_path(),
+            threads=cls.threads
+        )
+
+    def test(self, query_name):
+        self.process_query_result(result=self.__results[query_name], query_name=query_name, upload=True)
+
+
+def pytest_generate_tests(metafunc):
+    if issubclass(metafunc.cls, LoadSuiteParallel):
+        metafunc.parametrize("query_name", metafunc.cls.get_query_list())

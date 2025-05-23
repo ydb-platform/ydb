@@ -33,6 +33,7 @@ private:
     BenchmarkUtils::TQueryBenchmarkSettings GetBenchmarkSettings(bool withProgress) const;
 
 private:
+    template <typename TClient> class TIterationExecution;
     EQueryExecutor QueryExecuterType = EQueryExecutor::Generic;
     TString OutFilePath;
     ui32 IterationsCount;
@@ -48,6 +49,7 @@ private:
     TDuration RequestTimeout = TDuration::Zero();
     TInstant GlobalDeadline = TInstant::Max();
     NYdb::NRetry::TRetryOperationSettings RetrySettings;
+    ui32 Threads = 1;
 };
 
 }

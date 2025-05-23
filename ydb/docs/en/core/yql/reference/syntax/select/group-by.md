@@ -2,7 +2,7 @@
 
 ## GROUP BY
 
-Group the `SELECT` results by the values of the specified columns or expressions. `GROUP BY` is often combined with [aggregate functions](../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) to perform calculations in each group.
+Group the `SELECT` results by the values of the specified columns or expressions. `GROUP BY` is often combined with [aggregate functions](../../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) to perform calculations in each group.
 
 If `GROUP BY` is present in the query, then when selecting columns (between `SELECT ... FROM`), you can use the following constructs:
 
@@ -40,7 +40,7 @@ Aggregate functions ignore `NULL` in their arguments, except for `COUNT`.
 
 {% endnote %}
 
-YQL also provides aggregation factories implemented by the functions [`AGGREGATION_FACTORY`](../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../builtins/aggregation.md#aggregateby).
+YQL also provides aggregation factories implemented by the functions [`AGGREGATION_FACTORY`](../../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../../builtins/aggregation.md#aggregateby).
 
 ### Examples {#examples}
 
@@ -71,7 +71,7 @@ GROUP BY
 
 {% note warning %}
 
-Specifying a name for a column or expression in `GROUP BY .. AS foo` it is an extension on top of YQL. Such a name becomes visible in `WHERE` despite the fact that filtering by `WHERE` is executed [before](select/where.md) the grouping. For example, if the `T` table includes two columns, `foo` and `bar`, then the query `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` would actually filter data by the `bar` column from the source table.
+Specifying a name for a column or expression in `GROUP BY .. AS foo` it is an extension on top of YQL. Such a name becomes visible in `WHERE` despite the fact that filtering by `WHERE` is executed [before](../index.md#selectexec) the grouping. For example, if the `T` table includes two columns, `foo` and `bar`, then the query `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` would actually filter data by the `bar` column from the source table.
 
 {% endnote %}
 
@@ -107,7 +107,7 @@ The following happens in this case:
 
 The `SessionWindow()` key column (in the example, it's `session_start`) has the value "the minimum `time_expr` in the session".
 If `GROUP BY` includes SessionWindow(), you can use a special aggregate function
-[SessionStart](../builtins/aggregation.md#session-start).
+[SessionStart](../../builtins/aggregation.md#session-start).
 
 An extended version of SessionWindow with four arguments is also supported:
 
@@ -229,11 +229,11 @@ GROUP BY
 
 ## DISTINCT {#distinct}
 
-Applying [aggregate functions](../builtins/aggregation.md) only to distinct values of the column.
+Applying [aggregate functions](../../builtins/aggregation.md) only to distinct values of the column.
 
 {% note info %}
 
-Applying `DISTINCT` to calculated values is not currently implemented. For this purpose, you can use a [subquery](select/from.md) or the expression `GROUP BY ... AS ...`.
+Applying `DISTINCT` to calculated values is not currently implemented. For this purpose, you can use a [subquery](from.md) or the expression `GROUP BY ... AS ...`.
 
 {% endnote %}
 
@@ -249,7 +249,7 @@ ORDER BY count DESC
 LIMIT 3;
 ```
 
-You can also use `DISTINCT` to fetch distinct rows using [`SELECT DISTINCT`](select/distinct.md).
+You can also use `DISTINCT` to fetch distinct rows using [`SELECT DISTINCT`](distinct.md).
 
 
 
@@ -257,7 +257,7 @@ You can also use `DISTINCT` to fetch distinct rows using [`SELECT DISTINCT`](sel
 
 Improves aggregation efficiency if the query author knows in advance that none of aggregation keys finds large amounts of data (i.e., with the order of magnitude exceeding a gigabyte or a million of rows). If this assumption fails to materialize, then the operation may fail with Out of Memory error or start running much slower compared to the non-COMPACT version.
 
-Unlike the usual GROUP BY, the Map-side combiner stage and additional Reduce are disabled for each field with [DISTINCT](../syntax/group_by.md#distinct) aggregation.
+Unlike the usual GROUP BY, the Map-side combiner stage and additional Reduce are disabled for each field with [DISTINCT](#distinct) aggregation.
 
 ### Example
 
@@ -306,7 +306,7 @@ The `interval` and `hop` parameters must be positive.
 The `delay` parameter is ignored in the current implementation because the data in one partition is already sorted.
 {% endif %}
 
-To set `hop`, `interval`, and `delay`, use a string expression compliant with [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601). This format is used to construct the built-in `Interval` type [from a string](../builtins/basic.md#data-type-literals).
+To set `hop`, `interval`, and `delay`, use a string expression compliant with [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601). This format is used to construct the built-in `Interval` type [from a string](../../builtins/basic.md#data-type-literals).
 
 When selecting columns (between `SELECT ... FROM`) you can use the `HOP_START` and `HOP_END` functions (without parameters), which return a value of  `Timestamp` type, corresponding to the start and end of the current window.
 
@@ -340,7 +340,7 @@ GROUP BY
 
 ## HAVING {#having}
 
-Filtering a `SELECT` based on the calculation results of [aggregate functions](../builtins/aggregation.md). The syntax is similar to [WHERE](select/where.md).
+Filtering a `SELECT` based on the calculation results of [aggregate functions](../../builtins/aggregation.md). The syntax is similar to [WHERE](where.md).
 
 ### Example
 

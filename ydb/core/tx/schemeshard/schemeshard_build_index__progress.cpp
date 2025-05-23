@@ -857,14 +857,6 @@ private:
             InitMultiKMeans(buildInfo);
             return false;
         }
-        std::array<NScheme::TTypeInfo, 1> typeInfos{ClusterIdTypeId};
-        auto range = ParentRange(buildInfo.KMeans.Parent);
-        auto addRestricted = [&] (const auto& idx) {
-            const auto& status = buildInfo.Shards.at(idx);
-            if (!Intersect(typeInfos, range.ToTableRange(), status.Range.ToTableRange()).IsEmptyRange(typeInfos)) {
-                AddShard(buildInfo, idx, status);
-            }
-        };
         if (buildInfo.KMeans.Parent == 0) {
             AddAllShards(buildInfo);
         } else {
@@ -872,7 +864,8 @@ private:
             Y_ASSERT(it != buildInfo.Cluster2Shards.end());
             if (it->second.Local == InvalidShardIdx) {
                 for (const auto& idx : it->second.Global) {
-                    addRestricted(idx);
+                    const auto& status = buildInfo.Shards.at(idx);
+                    AddShard(buildInfo, idx, status);
                 }
             }
         }

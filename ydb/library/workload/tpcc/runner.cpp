@@ -112,7 +112,6 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
         Config.MaxInflight,
         maxTerminalsPerThread,
         maxReadyTransactions,
-        TerminalsStopSource.get_token(), // awakes sleeping terminals, when stop requested
         Log);
 
     LOG_I("Creating " << terminalsCount << " terminals and " << treadCount
@@ -155,14 +154,9 @@ void TPCCRunner::Join() {
 
     LOG_I("Stopping the terminals...");
     TerminalsStopSource.request_stop();
-    for (const auto& terminal: Terminals) {
-        // terminals should wait for their query coroutines to finish
-        while (!terminal->IsDone()) {
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
-        }
-    }
 
-    // now, we can safely stop our threads, which have been executing coroutines
+    // we don't have to wait terminals to finish suspended coroutines, just stop
+    // threads executing coroutines
     LOG_I("Stopping task queue");
     TaskQueue->Join();
     LOG_I("Runner stopped");

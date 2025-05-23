@@ -45,7 +45,6 @@ public:
                size_t maxRunningTerminals,
                size_t maxReadyTerminals,
                size_t maxReadyTransactions,
-               std::stop_token stopTimer,
                std::shared_ptr<TLog> log);
 
     ~TTaskQueue() {
@@ -75,7 +74,6 @@ private:
     size_t MaxRunningTerminals;
     size_t MaxReadyTerminals;
     size_t MaxReadyTransactions;
-    std::stop_token StopTimer;
     std::shared_ptr<TLog> Log;
 
     std::atomic<size_t> RunningTerminalCount{0};
@@ -89,13 +87,11 @@ TTaskQueue::TTaskQueue(size_t threadCount,
             size_t maxRunningTerminals,
             size_t maxReadyTerminals,
             size_t maxReadyTransactions,
-            std::stop_token stopTimer,
             std::shared_ptr<TLog> log)
     : ThreadCount(threadCount)
     , MaxRunningTerminals(maxRunningTerminals)
     , MaxReadyTerminals(maxReadyTerminals)
     , MaxReadyTransactions(maxReadyTransactions)
-    , StopTimer(stopTimer)
     , Log(std::move(log))
 {
     Y_UNUSED(MaxRunningTerminals);
@@ -231,8 +227,7 @@ void TTaskQueue::RunThread(size_t threadId) {
             }
         }
 
-        while (context.SleepingTasks.GetNextDeadline() <= now
-                || (StopTimer.stop_requested() && !context.SleepingTasks.Empty())) {
+        while (!context.SleepingTasks.Empty() && context.SleepingTasks.GetNextDeadline() <= now) {
             auto handle = context.SleepingTasks.PopFront().Value;
             if (!context.ReadyTasksInternal.TryPush(std::move(handle))) {
                 HandleQueueFull("internal (awakened)");
@@ -283,7 +278,6 @@ std::unique_ptr<ITaskQueue> CreateTaskQueue(
     size_t maxRunningTerminals,
     size_t maxReadyTerminals,
     size_t maxReadyTransactions,
-    std::stop_token stopTimer,
     std::shared_ptr<TLog> log)
 {
     return std::make_unique<TTaskQueue>(
@@ -291,7 +285,6 @@ std::unique_ptr<ITaskQueue> CreateTaskQueue(
         maxRunningTerminals,
         maxReadyTerminals,
         maxReadyTransactions,
-        stopTimer,
         std::move(log));
 }
 

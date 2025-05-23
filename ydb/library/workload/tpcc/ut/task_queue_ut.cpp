@@ -60,8 +60,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
 
     Y_UNIT_TEST(ShouldExecuteTerminalTaskWithSleepsAndTransactions) {
         auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TLOG_ERR));
-        std::stop_source stopSource;
-        auto queue = CreateTaskQueue(1, 0, 10, 10, stopSource.get_token(), log);
+        auto queue = CreateTaskQueue(1, 0, 10, 10, log);
 
         int transactionCounter = 0;
         int sleepCounter = 0;
@@ -97,8 +96,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
 
     Y_UNIT_TEST(ShouldExecuteMultipleTransactionsWithSleeps) {
         auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TLOG_ERR));
-        std::stop_source stopSource;
-        auto queue = CreateTaskQueue(1, 0, 10, 10, stopSource.get_token(), log);
+        auto queue = CreateTaskQueue(1, 0, 10, 10, log);
 
         int transactionCounter = 0;
         int sleepCounter = 0;
@@ -132,8 +130,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
 
     Y_UNIT_TEST(ShouldPropagateTransactionFailure) {
         auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TLOG_ERR));
-        std::stop_source stopSource;
-        auto queue = CreateTaskQueue(1, 0, 10, 10, stopSource.get_token(), log);
+        auto queue = CreateTaskQueue(1, 0, 10, 10, log);
 
         const size_t terminalId = 1;
 
@@ -152,8 +149,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
         const int numTerminals = 147;
 
         auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TLOG_ERR));
-        std::stop_source stopSource;
-        auto queue = CreateTaskQueue(4, 0, numTerminals, numTerminals, stopSource.get_token(),log);
+        auto queue = CreateTaskQueue(4, 0, numTerminals, numTerminals, log);
 
         std::vector<int> transactionCounters(numTerminals, 0);
         std::vector<int> sleepCounters(numTerminals, 0);
@@ -186,8 +182,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
         auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TLOG_ERR));
         const size_t maxTerminals = 2;
         const size_t maxTransactions = 2;
-        std::stop_source stopSource;
-        auto queue = CreateTaskQueue(1, 0, maxTerminals, maxTransactions, stopSource.get_token(),log);
+        auto queue = CreateTaskQueue(1, 0, maxTerminals, maxTransactions,log);
 
         int transactionCounter = 0;
         int sleepCounter = 0;
@@ -243,8 +238,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
         const size_t maxRunningTerminals = 0; // unlimited
         const int numTerminals = 5;
         const int transactionsPerTerminal = 2;
-        std::stop_source stopSource;
-        auto queue = CreateTaskQueue(4, maxRunningTerminals, numTerminals, numTerminals, stopSource.get_token(), log);
+        auto queue = CreateTaskQueue(4, maxRunningTerminals, numTerminals, numTerminals, log);
 
         std::vector<int> transactionCounters(numTerminals, 0);
         std::vector<TTerminalTask> tasks;
@@ -276,8 +270,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
         const size_t maxRunningTerminals = 2; // limited to 2 concurrent
         const int numTerminals = 5;
         const int transactionsPerTerminal = 3;
-        std::stop_source stopSource;
-        auto queue = CreateTaskQueue(4, maxRunningTerminals, numTerminals, numTerminals, stopSource.get_token(), log);
+        auto queue = CreateTaskQueue(4, maxRunningTerminals, numTerminals, numTerminals, log);
 
         std::vector<int> transactionCounters(numTerminals, 0);
         std::vector<TTerminalTask> tasks;

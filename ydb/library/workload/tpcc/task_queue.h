@@ -244,7 +244,6 @@ std::unique_ptr<ITaskQueue> CreateTaskQueue(
     size_t maxRunningTerminals,
     size_t maxReadyTerminals,
     size_t maxReadyTransactions,
-    std::stop_token stopTimer,
     std::shared_ptr<TLog> log);
 
 //-----------------------------------------------------------------------------

@@ -10,20 +10,36 @@ from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable")
 current_binary_path = kikimr_driver_path()
+last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable")
+prelast_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable")
+
+current_name = "current"
+last_stable_name = "last"
+if last_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
+    last_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable-name")).read().strip()
+prelast_stable_name = "prelast"
+if prelast_stable_binary_path:  # in import_test yatest.common.binary_path returns None
+    prelast_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable-name")).read().strip()
+
 
 all_binary_combinations_restart = [
     [[last_stable_binary_path], [current_binary_path]],
-    [[last_stable_binary_path], [last_stable_binary_path, current_binary_path]],
     [[current_binary_path], [last_stable_binary_path]],
     [[current_binary_path], [current_binary_path]],
+
+    [[prelast_stable_binary_path], [last_stable_binary_path]],
+    [[last_stable_binary_path], [prelast_stable_binary_path]],
+    [[last_stable_binary_path], [last_stable_binary_path]],
 ]
 all_binary_combinations_ids_restart = [
-    "last_stable_to_current",
-    "last_stable_to_current_mixed",
-    "current_to_last_stable",
-    "current_to_current",
+    last_stable_name + "_to_" + current_name,
+    current_name + "_to_" + last_stable_name,
+    current_name + "_to_" + current_name,
+
+    prelast_stable_name + "_to_" + last_stable_name,
+    last_stable_name + "_to_" + prelast_stable_name,
+    last_stable_name + "_to_" + last_stable_name,
 ]
 
 
@@ -81,11 +97,13 @@ all_binary_combinations_mixed = [
     [current_binary_path],
     [last_stable_binary_path],
     [current_binary_path, last_stable_binary_path],
+    [last_stable_binary_path, prelast_stable_binary_path],
 ]
 all_binary_combinations_ids_mixed = [
-    "current",
-    "last_stable",
-    "current_and_last_stable",
+    current_name,
+    last_stable_name,
+    current_name + "_and_" + last_stable_name,
+    last_stable_name + "_and_" + prelast_stable_name,
 ]
 
 
@@ -116,15 +134,26 @@ class MixedClusterFixture:
         self.cluster.stop()
 
 
+all_binary_combinations_rolling = [
+    [last_stable_binary_path, current_binary_path],
+    [prelast_stable_binary_path, last_stable_binary_path],
+]
+all_binary_combinations_ids_rolling = [
+    last_stable_name + "_to_" + current_name,
+    prelast_stable_name + "_to_" + last_stable_name,
+]
+
+
 class RollingUpgradeAndDowngradeFixture:
-    @pytest.fixture(autouse=True)
-    def base_setup(self):
-        self.all_binary_paths = [last_stable_binary_path]
+    @pytest.fixture(autouse=True, params=all_binary_combinations_rolling, ids=all_binary_combinations_ids_rolling)
+    def base_setup(self, request):
+        self.all_binary_paths = request.param
 
     def setup_cluster(self, **kwargs):
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
-            binary_paths=self.all_binary_paths,
+            binary_paths=[self.all_binary_paths[0]]
+            ,
             **kwargs,
         )
 
@@ -146,14 +175,15 @@ class RollingUpgradeAndDowngradeFixture:
         # from old to new
         for node_id, node in self.cluster.nodes.items():
             node.stop()
-            node.binary_path = current_binary_path
+            node.binary_path = self.all_binary_paths[1]
             node.start()
             yield
 
         # from new to old
         for node_id, node in self.cluster.nodes.items():
             node.stop()
-            node.binary_path = last_stable_binary_path
+            node.binary_path = self.all_binary_paths[0]
+
             node.start()
             yield
 

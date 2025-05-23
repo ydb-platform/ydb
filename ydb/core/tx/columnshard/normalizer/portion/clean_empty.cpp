@@ -185,7 +185,8 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
     }
     {
         std::map<TPortionAddress, std::shared_ptr<IDBModifier>> usedPortions;
-        auto rowset = db.Table<Schema::IndexPortions>().Select<Schema::IndexPortions::PathId, Schema::IndexPortions::PortionId>();
+        auto rowset = db.Table<Schema::IndexPortions>()
+                          .Select<Schema::IndexPortions::PathId, Schema::IndexPortions::PortionId, Schema::IndexPortions::XPlanStep>();
         if (!rowset.IsReady()) {
             return false;
         }

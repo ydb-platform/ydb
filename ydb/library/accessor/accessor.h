@@ -51,6 +51,9 @@ public:\
     type& Mutable ## name() methodsModifier {\
         return name;\
     }\
+    type Detach ## name() methodsModifier {\
+        return std::move(name);\
+    }\
 private:
 
 #define YDB_ACCESSOR(type, name, defaultValue) YDB_ACCESSOR_IMPL(auto, name, type, private:, defaultValue, noexcept)

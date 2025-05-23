@@ -43,8 +43,8 @@ namespace NKikimr::NBsController {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             NIceDb::TNiceDb db(txc.DB);
             auto& conf = Self->StorageConfig;
-            GenerationOnStart = conf.GetGeneration();
-            FingerprintOnStart = conf.GetFingerprint();
+            GenerationOnStart = conf->GetGeneration();
+            FingerprintOnStart = conf->GetFingerprint();
             auto row = db.Table<Schema::State>().Key(true);
             if (YamlConfig) {
                 row.Update<Schema::State::YamlConfig>(CompressYamlConfig(*YamlConfig));
@@ -67,7 +67,7 @@ namespace NKikimr::NBsController {
 
         void Complete(const TActorContext& ctx) override {
             auto& conf = Self->StorageConfig;
-            if (conf.GetGeneration() != GenerationOnStart || conf.GetFingerprint() != FingerprintOnStart) {
+            if (conf->GetGeneration() != GenerationOnStart || conf->GetFingerprint() != FingerprintOnStart) {
                 LOG_ALERT_S(ctx, NKikimrServices::BS_CONTROLLER, "Storage config changed");
                 Y_DEBUG_ABORT("Storage config changed");
             }
@@ -100,7 +100,7 @@ namespace NKikimr::NBsController {
             }
 
             if (StorageConfig) {
-                Self->StorageConfig = std::move(*StorageConfig);
+                Self->StorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(*StorageConfig);
                 Self->ApplyStorageConfig(true);
             }
 

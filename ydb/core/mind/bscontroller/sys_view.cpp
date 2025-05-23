@@ -505,8 +505,8 @@ void TBlobStorageController::UpdateSystemViews() {
                     vslot.VDiskStatus, vslot.VDiskKind, false);
             }
         }
-        if (StorageConfig.HasBlobStorageConfig()) {
-            if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+        if (StorageConfig && StorageConfig->HasBlobStorageConfig()) {
+            if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                 const auto& ss = bsConfig.GetServiceSet();
                 for (const auto& group : ss.GetGroups()) {
                     if (!SysViewChangedGroups.count(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID))) {
@@ -547,7 +547,7 @@ void TBlobStorageController::UpdateSystemViews() {
                         NLayoutChecker::TGroupLayout layout(groupInfo->GetTopology());
                         NLayoutChecker::TDomainMapper mapper;
                         TGroupGeometryInfo geom(groupInfo->Type, SelfManagementEnabled
-                            ? StorageConfig.GetSelfManagementConfig().GetGeometry()
+                            ? StorageConfig->GetSelfManagementConfig().GetGeometry()
                             : NKikimrBlobStorage::TGroupGeometry());
 
                         Y_DEBUG_ABORT_UNLESS(pdiskIds.size() == groupInfo->GetTotalVDisksNum());

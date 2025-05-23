@@ -1681,7 +1681,7 @@ struct TWriteSettings {
 
     struct TIndex {
         TTableId TableId;
-        TString TablePath; // TODO:
+        TString TablePath;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
         std::vector<ui32> WriteIndex;

@@ -557,6 +557,12 @@ struct MainTestCase {
         return TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();
     }
 
+    void CreateUser(const std::string& username) {
+        ExecuteDDL(Sprintf(R"(
+            CREATE USER %s
+        )", username.data()));
+    }
+
     void Write(const TMessage& message) {
         TWriteSessionSettings writeSettings;
         writeSettings.Path(TopicName);

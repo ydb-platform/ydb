@@ -55,6 +55,7 @@ protected:
     NMon::TEvHttpInfo::TPtr Event;
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr HttpEvent;
     TCgiParameters Params;
+    NJson::TJsonValue PostData;
     TJsonSettings JsonSettings;
     TProto2JsonConfig Proto2JsonConfig;
     TDuration Timeout = TDuration::Seconds(10);
@@ -274,6 +275,9 @@ protected:
     static bool IsSuccess(const NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult& ev);
     static TString GetError(const NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult& ev);
 
+    static bool IsSuccess(const TEvTxUserProxy::TEvProposeTransactionStatus& ev);
+    static TString GetError(const TEvTxUserProxy::TEvProposeTransactionStatus& ev);
+
     void UpdateSharedCacheTablet(TTabletId tabletId, std::unique_ptr<IEventBase> request);
 
     TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
@@ -328,6 +332,7 @@ protected:
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);
+    void BuildParamsFromFormData(TStringBuf data);
     void SetupTracing(const TString& handlerName);
 
     template<typename TJson>

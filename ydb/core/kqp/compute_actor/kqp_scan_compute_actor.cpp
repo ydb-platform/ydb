@@ -111,6 +111,7 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
                     externalStat.SetExternalBytes(stat.ExternalBytes);
                     externalStat.SetFirstMessageMs(stat.FirstMessageMs);
                     externalStat.SetLastMessageMs(stat.LastMessageMs);
+                    externalStat.SetWaitOutputTimeUs(stat.WaitOutputTimeUs);
                 }
 
                 taskStats->SetIngressRows(taskStats->GetIngressRows() + stats->Rows);
@@ -183,9 +184,9 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
 
     auto guard = TaskRunner->BindAllocator();
     if (!!msg.GetArrowBatch()) {
-        ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes()), BlockTrackingMode), msg.GetTabletId(), TaskRunner->GetHolderFactory());
+        ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes()), BlockTrackingMode), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetWaitOutputTimeUs());
     } else if (!msg.GetRows().empty()) {
-        ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory());
+        ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetWaitOutputTimeUs());
     }
     if (IsQuotingEnabled()) {
         AcquireRateQuota();
@@ -278,7 +279,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     ScanData = &ComputeCtx.GetTableScan(0);
 
     ScanData->TaskId = GetTask().GetId();
-    ScanData->TableReader = CreateKqpTableReader(*ScanData);
+    ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, ComputeCtx.InputConsumed);
     Become(&TKqpScanComputeActor::StateFunc);
 
     TBase::DoBoostrap();

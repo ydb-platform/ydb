@@ -851,6 +851,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         externalStage->EgressRows = std::make_shared<TSingleMetric>(ExternalRows, *externalRowsNode);
                         externalStage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *externalRowsNode);
                     }
+                    if (auto* wotNode = externalNode->GetValueByPath("ExternalRows")) {
+                        externalStage->WaitOutputTime = std::make_shared<TSingleMetric>(WaitOutputTime, *wotNode);
+                    }
                     if (auto* partitionCountNode = externalNode->GetValueByPath("PartitionCount")) {
                         externalStage->Tasks = partitionCountNode->GetIntegerSafe();
                     }
@@ -1781,6 +1784,27 @@ void TPlan::PrintSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY, TStringBui
         }
 
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+        if (s->External && s->EgressBytes && s->WaitOutputTime) {
+            auto firstMessage = s->EgressBytes->FirstMessage.Avg;
+            auto lastMessage = s->EgressBytes->LastMessage.Avg;
+            if (lastMessage > firstMessage) {
+                auto durationUs = (lastMessage - firstMessage) * 1000;
+                auto waitUs = s->WaitOutputTime->Details.Avg;
+                if (waitUs) {
+                    auto height = std::min<ui64>(s->Height, s->Height * waitUs / durationUs);
+                    background
+                        << "<g><title>";
+                        FormatTooltip(background, "Wait Output Time", s->WaitOutputTime.get(), FormatUsage);
+                    background
+                        << "</title>" << Endl
+                        << "  <rect x='" << Config.TaskLeft << "' y='" << s->OffsetY + offsetY
+                        << "' width='" << Config.TaskWidth << "' height='" << height
+                        << "' stroke-width='0' fill='" << Config.Palette.OutputLight << "'/>" << Endl
+                        << "</g>" << Endl;
+                }
+            }
+        }
 
         if (s->CpuTime) {
             TString tooltip;

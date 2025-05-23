@@ -1038,9 +1038,9 @@ public:
         AFL_ENSURE(outputColumns.size() == outputWriteIndex.size());
         AFL_ENSURE(outputColumns.size() <= inputColumns.size());
 
-        THashMap<ui32, ui32> InputColumnIdToIndex;
+        THashMap<TString, ui32> InputColumnNameToIndex;
         for (size_t index = 0; index < inputColumns.size(); ++index) {
-            InputColumnIdToIndex[inputColumns[index].GetId()] = index;
+            InputColumnNameToIndex[inputColumns[index].GetName()] = index;
         }
         std::vector<ui32> reversedInputWriteIndex(inputWriteIndex.size());
         for (size_t index = 0; index < inputWriteIndex.size(); ++index) {
@@ -1050,8 +1050,8 @@ public:
         ColumnsMapping.resize(outputColumns.size());
         for (size_t index = 0; index < outputColumns.size(); ++index) {
             const auto& outputColumnIndex = outputWriteIndex[index];
-            const auto& outputColumnId = outputColumns.at(outputColumnIndex).GetId();
-            const auto& inputColumnIndex = InputColumnIdToIndex.at(outputColumnId);
+            const auto& outputColumnName = outputColumns.at(outputColumnIndex).GetName();
+            const auto& inputColumnIndex = InputColumnNameToIndex.at(outputColumnName);
             const auto& inputIndex = reversedInputWriteIndex.at(inputColumnIndex);
 
             ColumnsMapping[index] = inputIndex;

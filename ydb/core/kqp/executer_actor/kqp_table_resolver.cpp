@@ -348,7 +348,7 @@ private:
                             TablePathsById.emplace(stageInfo.Meta.TableId, tableInfo->Path);
                             stageInfo.Meta.TableKind = tableInfo->TableKind;
 
-                            stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
+                            stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo->KeyColumnTypes, operation);
 
                             if (SystemViewRewrittenResolver->IsSystemView(stageInfo.Meta.TableId.SysViewInfo)) {
                                 continue;
@@ -430,10 +430,6 @@ private:
     }
 
 private:
-    THolder<TKeyDesc> ExtractKey(const TTableId& table, const TIntrusiveConstPtr<TTableConstInfo>& tableInfo, TKeyDesc::ERowOperation operation) {
-        return ExtractKey(table, tableInfo->KeyColumnTypes, operation);
-    }
-
     THolder<TKeyDesc> ExtractKey(const TTableId& table, const TVector<NScheme::TTypeInfo>& keyTypes, TKeyDesc::ERowOperation operation) {
         auto range = GetFullRange(keyTypes.size());
         return MakeHolder<TKeyDesc>(table, range.ToTableRange(), operation, keyTypes, TVector<TKeyDesc::TColumnOp>{});

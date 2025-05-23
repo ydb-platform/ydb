@@ -11,9 +11,9 @@ using namespace NYql::NNodes;
 
 namespace {
 
-TExprBase MakeInsertIndexRows(const TDqPhyPrecompute& inputRows, const TKikimrTableDescription& table,
+TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TKikimrTableDescription& table,
     const THashSet<TStringBuf>& inputColumns, const TVector<TStringBuf>& indexColumns,
-    TPositionHandle pos, TExprContext& ctx)
+    TPositionHandle pos, TExprContext& ctx, bool useStage)
 {
     auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
 
@@ -43,6 +43,18 @@ TExprBase MakeInsertIndexRows(const TDqPhyPrecompute& inputRows, const TKikimrTa
 
             rowTuples.emplace_back(tuple);
         }
+    }
+
+    if (!useStage) {
+        return Build<TCoMap>(ctx, pos)
+            .Input(inputRows)
+            .Lambda()
+                .Args(inputRowArg)
+                .Body<TCoAsStruct>()
+                    .Add(rowTuples)
+                    .Build()
+                .Build()
+            .Done();
     }
 
     auto computeRowsStage = Build<TDqStage>(ctx, pos)
@@ -89,14 +101,46 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const bool needPrecompute = !(isSink && abortOnError);
 
     if (!needPrecompute) {
-        return Build<TKqlUpsertRows>(ctx, insert.Pos())
-            .Table(insert.Table())
-            .Input(insert.Input())
-            .Columns(insert.Columns())
-            .ReturningColumns(insert.ReturningColumns())
-            .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
-            .Settings(insert.Settings())
-            .Done();
+        TVector<TStringBuf> insertColumns;
+        THashSet<TStringBuf> inputColumnsSet;
+        for (const auto& column : insert.Columns()) {
+            YQL_ENSURE(inputColumnsSet.emplace(column.Value()).second);
+            insertColumns.emplace_back(column.Value());
+        }
+
+        auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx);
+        YQL_ENSURE(indexes);
+        THashSet<TStringBuf> requiredIndexColumnsSet;
+
+        for (const auto& [tableNode, indexDesc] : indexes) {
+            for (const auto& column : indexDesc->KeyColumns) {
+                if (requiredIndexColumnsSet.emplace(column).second && !inputColumnsSet.contains(column)) {
+                    insertColumns.emplace_back(column);
+                }
+            }
+        }
+
+        if (insertColumns.size() == insert.Columns().Size()) {
+            return Build<TKqlUpsertRows>(ctx, insert.Pos())
+                .Table(insert.Table())
+                .Input(insert.Input())
+                .Columns(insert.Columns())
+                .ReturningColumns(insert.ReturningColumns())
+                .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+                .Settings(insert.Settings())
+                .Done();
+        } else {
+            auto insertRows = MakeInsertIndexRows(
+                insert.Input(), table, inputColumnsSet, insertColumns, insert.Pos(), ctx, false);
+            return Build<TKqlUpsertRows>(ctx, insert.Pos())
+                .Table(insert.Table())
+                .Input(insertRows)
+                .Columns(BuildColumnsList(insertColumns, insert.Pos(), ctx))
+                .ReturningColumns(insert.ReturningColumns())
+                .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+                .Settings(insert.Settings())
+                .Done();
+        }
     } else {
         THashSet<TStringBuf> inputColumnsSet;
         for (const auto& column : insert.Columns()) {
@@ -149,7 +193,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             }
 
             auto upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
-                insert.Pos(), ctx);
+                insert.Pos(), ctx, true);
 
             auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
                 .Table(tableNode)

@@ -3165,10 +3165,10 @@ private:
                 AFL_ENSURE(writeIndex.size() == columnsMetadata.size());
 
                 ev->Settings->Indexes.push_back(TWriteSettings::TIndex {
-                    .TableId = TTableId(Settings.GetTable().GetOwnerId(),
-                                        Settings.GetTable().GetTableId(),
-                                        Settings.GetTable().GetVersion()),
-                    .TablePath = "",
+                    .TableId = TTableId(indexSettings.GetTable().GetOwnerId(),
+                                        indexSettings.GetTable().GetTableId(),
+                                        indexSettings.GetTable().GetVersion()),
+                    .TablePath = indexSettings.GetTable().GetPath(),
                     .KeyColumns = std::move(keyColumnsMetadata),
                     .Columns = std::move(columnsMetadata),
                     .WriteIndex = std::move(writeIndex),

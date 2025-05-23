@@ -1262,27 +1262,27 @@ private:
                         TVector<TStringBuf> indexColumns;
                         indexColumns.reserve(implTable->Columns.size());
 
-                        for (const auto& [columnName, columnMeta] : implTable->Columns) {
-                            indexColumns.emplace_back(columnName);
+                        for (const auto& columnName : columns) {
+                            const auto columnMeta = implTable->Columns.FindPtr(columnName);
+                            if (columnMeta) {
+                                indexColumns.emplace_back(columnName);
 
-                            auto columnProto = indexSettings->AddColumns();
-                            fillColumnProto(columnName, &columnMeta, columnProto);
+                                auto columnProto = indexSettings->AddColumns();
+                                fillColumnProto(columnName, columnMeta, columnProto);
+                            }
                         }
 
                         const auto indexColumnToOrder = CreateColumnToOrder(
                             indexColumns,
                             implTable,
                             true);
-                        for (const auto& [columnName, _] : implTable->Columns) {
+                        for (const auto& columnName: indexColumns) {
                             indexSettings->AddWriteIndexes(indexColumnToOrder.at(columnName));
                         }
-
-                        //const auto indexPathes = NSchemeHelpers::CreateIndexTablePath(TString(settings.Table().Cast().Path()), indexDescription);
-                        //AFL_ENSURE(indexPathes.size() == 1);
-                        //for (const auto& indexPath: indexPathes) {
-                        //    Cerr << "TEST >> " << indexPath << Endl;
-                        FillTablesMap(settings.Table().Cast().Path(), indexColumns, tablesMap);
-                        //}
+                        FillTablesMap(
+                            implTable->Name,
+                            indexColumns,
+                            tablesMap);
                     }
                 }
             } else {

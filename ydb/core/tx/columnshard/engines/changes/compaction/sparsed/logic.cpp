@@ -149,7 +149,7 @@ bool TSparsedMerger::TSparsedChunkCursor::InitGlobalRemapping(
     AFL_VERIFY(IsValid());
     GlobalResultOffset = globalResultOffset;
     RemapToGlobalResult = &remapToGlobalResult;
-    if (GetGlobalPosition() <= RemapToGlobalResult->GetMinSourceIndex()) {
+    {
         Y_UNUSED(MoveToSignificant(RemapToGlobalResult->GetMinSourceIndex()));
         AFL_VERIFY(RemapToGlobalResult->GetMinSourceIndex() <= GetGlobalPosition());
         if (!IsValid()) {

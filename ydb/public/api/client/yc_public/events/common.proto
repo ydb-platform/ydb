@@ -56,9 +56,16 @@ message Authentication {
 }
 
 message Authorization {
+  message IamTokenInfo {
+    string masked_iam_token = 1;
+  }
+
   bool authorized = 1;
 
   repeated RequestedPermissions permissions = 2 [(hide) = true];
+
+  string subject_id = 3;
+  IamTokenInfo token_info = 4;
 }
 
 message RequestedPermissions {

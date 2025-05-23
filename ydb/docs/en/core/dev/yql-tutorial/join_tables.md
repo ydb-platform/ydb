@@ -1,6 +1,6 @@
 # Joining tables with JOIN
 
-Merge the columns of the source tables `seasons` and `series`, then output all the seasons of the IT Crowd series to the resulting table using the [JOIN](../../yql/reference/syntax/join.md) operator.
+Merge the columns of the source tables `seasons` and `series`, then output all the seasons of the IT Crowd series to the resulting table using the [JOIN](../../yql/reference/syntax/select/join.md) operator.
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 

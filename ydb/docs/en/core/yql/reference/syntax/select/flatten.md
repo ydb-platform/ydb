@@ -43,11 +43,7 @@ This conversion can be convenient in the following cases:
 
 * When it is necessary to output statistics by cells from a container column (for example, via [`GROUP BY`](group-by.md)).
 
-{% if feature_join %}
-
 * When the cells in a container column store IDs from another table that you want to join with [`JOIN`](join.md).
-
-{% endif %}
 
 ### Syntax
 

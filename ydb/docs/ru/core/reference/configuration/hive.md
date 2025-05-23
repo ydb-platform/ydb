@@ -9,7 +9,7 @@
 #|
 || Название параметра в конфигурации | Название параметра в Hive web-viewer | Формат | Описание | Значение по умолчанию ||
 || `max_tablets_scheduled` | MaxTabletsScheduled | Целое число | Максимальное число таблеток, одновременно находящихся в процессе старта на одном узле. | 100 ||
-|| `max_boot_batch_size` | MaxBootBatchSize | Целое число | Максимальное число таблеток из очереди запуска Hive, обрабатываемых за раз. | 1000 ||
+|| `max_boot_batch_size` | MaxBootBatchSize | Целое число | Максимальное число таблеток из [очереди запуска](../../contributor/hive-booting.md#bootqueue) Hive, обрабатываемых за раз. | 1000 ||
 || `node_select_strategy` | NodeSelectStrategy | Перечисление | Стратегия выбора узла для запуска таблетки. Возможные варианты:
 
 - `HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM` — взвешенно-случайный выбор на основе потребления;

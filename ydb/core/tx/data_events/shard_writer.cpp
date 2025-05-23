@@ -64,7 +64,7 @@ namespace NKikimr::NEvWrite {
             DataForShard->Serialize(*ev, TableId, SchemaVersion);
             SendToTablet(std::move(ev));
         } else {
-            auto ev = MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
+            auto ev = MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), NColumnShard::TInternalPathId::FromRawValue(TableId), DedupId, "", WritePartIdx, ModificationType);
             DataForShard->Serialize(*ev);
             SendToTablet(std::move(ev));
         }

@@ -28,6 +28,15 @@ enum EResultFormat {
     FORMAT_ARROW = 1;
 }
 
+message TSchemeShardLocalPathId {
+    optional uint64 PathId = 1;
+}
+
+message TInternalPathId {
+    optional uint64 PathId = 1;
+}
+
+
 message TReadStats {
     optional uint64 BeginTimestamp = 1;
     optional uint64 DurationUsec = 2;
@@ -64,7 +73,7 @@ message TEvWrite {
     optional NActorsProto.TActorId Source = 1;
     optional uint64 TxInitiator = 2;
     optional uint64 WriteId = 3;
-    optional uint64 TableId = 4;
+    optional uint64 PathId_Deprecated = 4;
     optional string DedupId = 5;
     optional bytes Data = 6;
     optional TMetadata Meta = 7;
@@ -79,7 +88,7 @@ message TEvWrite {
         OPERATION_DELETE = 5;
     }
     optional EModificationType ModificationType = 11;
-
+    optional TInternalPathId PathId = 12; //TSchemeShardLocalPathId
 }
 
 message TLogicalMetadata {
@@ -97,8 +106,9 @@ message TEvWriteResult {
     optional uint64 Origin = 2;
     optional uint64 TxInitiator = 3;
     optional uint64 WriteId = 4;
-    optional uint64 TableId = 5;
+    optional uint64 TableId_Deprecated = 5;
     optional string DedupId = 6;
+    optional TInternalPathId PathId = 7; //TSchemeShardLocalPathId
 }
 
 message TEvRead {
@@ -112,7 +122,7 @@ message TEvRead {
     optional uint64 TxInitiator = 2;
     optional uint64 PlanStep = 3;
     optional uint64 TxId = 4;
-    optional uint64 TableId = 5;
+    optional uint64 TableId_Deprecated = 5;
     repeated uint32 ColumnIds = 6;
     repeated string ColumnNames = 7;
     optional TPredicate GreaterPredicate = 8;   // Greater[OrEqual] (or From for range)
@@ -120,6 +130,7 @@ message TEvRead {
     // Serialized Olap program
     optional bytes OlapProgram = 10;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 11;
+    optional TInternalPathId PathId = 12; //TSchemeShardLocalPathId
 }
 
 message TEvReadResult {
@@ -128,11 +139,12 @@ message TEvReadResult {
     optional uint64 TxInitiator = 3;
     optional uint64 PlanStep = 4;
     optional uint64 TxId = 5;
-    optional uint64 TableId = 6;
+    optional uint64 TableId_Deprecated = 6;
     optional uint32 Batch = 7;
     optional bool Finished = 8;
     optional bytes Data = 9;
     optional TMetadata Meta = 10;
+    optional TInternalPathId PathId = 11; //TSchemeShardLocalPathId
 }
 
 enum ETransactionKind {
@@ -248,7 +260,7 @@ message TTtlSettingsPresetVersionInfo {
 }
 
 message TTableVersionInfo {
-    optional uint64 PathId = 1;
+    optional uint64 PathId_Deprecated = 1;
     optional uint64 SinceStep = 2;
     optional uint64 SinceTxId = 3;
     optional uint32 SchemaPresetId = 5;
@@ -256,14 +268,16 @@ message TTableVersionInfo {
     optional uint32 TtlSettingsPresetId = 7;
     optional uint64 SchemaPresetVersionAdj = 8;
     optional uint64 TtlSettingsPresetVersionAdj = 9;
+    optional TInternalPathId PathId = 10; //TODO check schema caching 
 }
 
 message TCreateTable {
-    optional uint64 PathId = 1;
+    optional uint64 PathId_Deprecated = 1;
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 2;
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 3;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4;
     optional uint64 SchemaPresetVersionAdj = 6;
+    optional TInternalPathId PathId = 7; //TSchemeShardLocalPathId
 }
 
 message TInitShard {
@@ -274,15 +288,17 @@ message TInitShard {
 }
 
 message TAlterTable {
-    optional uint64 PathId = 1;
+    optional uint64 PathId_Deprecated = 1;
     optional NKikimrSchemeOp.TColumnTableSchema Schema = 3;
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 4;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 5;
     optional uint64 SchemaPresetVersionAdj = 7;
+    optional TInternalPathId PathId = 8; //TSchemeShardLocalPathId
 }
 
 message TDropTable {
-    optional uint64 PathId = 1;
+    optional uint64 PathId_Deprecated = 1;
+    optional TInternalPathId PathId = 2; //TSchemeShardLocalPathId
 }
 
 message TEnsureTables {
@@ -346,6 +362,7 @@ message TEvReadBlobRangesResult {
 message TInternalOperationData {
     repeated uint64 InternalWriteIds = 1;
     optional uint32 ModificationType = 2;
-    optional uint64 PathId = 3;
+    optional uint64 PathId_Deprecated = 3;
     optional bool WritePortions = 4;
+    optional TInternalPathId PathId = 5; //TSchemeShardLocalPathId
 }

@@ -28,7 +28,7 @@ private:
         if (!proto.HasPathId()) {
             return TConclusionStatus::Fail("no path id in proto");
         }
-        PathId = TInternalPathId::FromRawValue(proto.GetPathId());
+        PathId.FromProto(proto);
         for (auto&& portionProto : proto.GetPortions()) {
             const auto schema = versionedIndex.GetSchemaVerified(portionProto.GetSchemaVersion());
             TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, schema->GetIndexInfo(), groupSelector);
@@ -60,7 +60,7 @@ public:
     }
 
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPathIdData& proto) const {
-        proto.SetPathId(PathId.GetRawValue());
+        PathId.ToProto(proto);
         for (auto&& i : Portions) {
             i.SerializeToProto(*proto.AddPortions());
         }

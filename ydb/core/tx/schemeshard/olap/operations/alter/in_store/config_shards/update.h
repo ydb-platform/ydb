@@ -36,10 +36,10 @@ private:
             auto& alter = *result.MutableEnsureTables();
             auto& create = *alter.AddTables();
             FillToShardTx(create);
-            create.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
+            NColumnShard::TInternalPathId::FromRawValue(TargetInStoreTable->GetPathId().LocalPathId).ToProto(create);
         }
         if (DeleteShardIds.contains(tabletId)) {
-            result.MutableDropTable()->SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
+            NColumnShard::TInternalPathId::FromRawValue(TargetInStoreTable->GetPathId().LocalPathId).ToProto(*result.MutableDropTable());
         } else {
             auto container = Sharding->GetTabletShardingInfoOptional(tabletId);
             if (!!container) {

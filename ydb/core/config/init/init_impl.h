@@ -1320,9 +1320,17 @@ public:
     }
 
     void InitStaticNode() {
-        CommonAppOptions.ValidateStaticNodeConfig();
 
         Labels["dynamic"] = "false";
+        Labels["static"] = "true";
+
+        if (!AppConfig.HasStartupConfigYaml()) {
+            return;
+        }
+
+        NKikimrConfig::TAppConfig appConfig;
+        NYamlConfig::ResolveAndParseYamlConfig(AppConfig.GetStartupConfigYaml(), Labels, appConfig);
+        ApplyConfigForNode(appConfig);
     }
 
     void InitDynamicNode() {

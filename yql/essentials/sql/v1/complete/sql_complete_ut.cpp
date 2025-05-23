@@ -1,5 +1,6 @@
 #include "sql_complete.h"
 
+#include <yql/essentials/sql/v1/complete/syntax/grammar.h>
 #include <yql/essentials/sql/v1/complete/name/cluster/static/discovery.h>
 #include <yql/essentials/sql/v1/complete/name/object/dispatch/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
@@ -1174,6 +1175,32 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, "SELECT * FROM a WITH "), expected);
         }
+    }
+
+    Y_UNIT_TEST(IgnoredRules) {
+        auto lexer = MakePureLexerSupplier();
+
+        TNameSet names;
+        TFrequencyData frequency;
+        auto service = MakeStaticNameService(names, MakeDefaultRanking(frequency));
+
+        {
+            auto engine = MakeSqlCompletionEngine(lexer, service);
+            UNIT_ASSERT_UNEQUAL(Complete(engine, {"UPDA"}).size(), 0);
+            UNIT_ASSERT_UNEQUAL(Complete(engine, {"DELE"}).size(), 0);
+            UNIT_ASSERT_UNEQUAL(Complete(engine, {"ROLL"}).size(), 0);
+            UNIT_ASSERT_UNEQUAL(Complete(engine, {"INSE"}).size(), 0);
+            UNIT_ASSERT_UNEQUAL(Complete(engine, {"SELE"}).size(), 0);
+        }
+
+        auto config = MakeYQLConfiguration();
+        auto engine = MakeSqlCompletionEngine(lexer, std::move(service), config);
+
+        UNIT_ASSERT_EQUAL(Complete(engine, {"UPDA"}).size(), 0);
+        UNIT_ASSERT_EQUAL(Complete(engine, {"DELE"}).size(), 0);
+        UNIT_ASSERT_EQUAL(Complete(engine, {"ROLL"}).size(), 0);
+        UNIT_ASSERT_UNEQUAL(Complete(engine, {"INSE"}).size(), 0);
+        UNIT_ASSERT_UNEQUAL(Complete(engine, {"SELE"}).size(), 0);
     }
 
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

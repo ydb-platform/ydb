@@ -23,6 +23,9 @@ namespace NKikimr::NStorage {
             return;
         }
 
+        STLOG(PRI_DEBUG, BS_NODE, NW52, "TInvokeRequestHandlerActor::ReconfigStateStorage",
+                (StateStorageConfig, cmd));
+
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         if (cmd.HasStateStorageBoardConfig() || cmd.HasSchemeBoardConfig()) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "Board and SchemeBoard are not supported");

@@ -59,6 +59,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     TMap<TActorId, TActorId> Followers;
 
     const ui32 RingGroupIndex;
+    bool NotifyPassAway;
 
     void SelectRequestReplicas(TStateStorageInfo *info) {
         THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
@@ -88,7 +89,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 }
             }
         }
-        Send(Source, new TEvStateStorage::TEvRingGroupPassAway());
+        if(NotifyPassAway)
+            Send(Source, new TEvStateStorage::TEvRingGroupPassAway());
         TActor::PassAway();
     }
 
@@ -499,7 +501,7 @@ public:
         return NKikimrServices::TActivity::SS_PROXY_REQUEST;
     }
 
-    TStateStorageProxyRequest(const TIntrusivePtr<TStateStorageInfo> &info, ui32 ringGroupIndex)
+    TStateStorageProxyRequest(const TIntrusivePtr<TStateStorageInfo> &info, ui32 ringGroupIndex, bool notifyPassAway = true)
         : TActor(&TThis::StateInit)
         , Info(info)
         , UseInterconnectSubscribes(true)
@@ -517,6 +519,7 @@ public:
         , ReplyLocked(false)
         , ReplyLockedFor(0)
         , RingGroupIndex(ringGroupIndex)
+        , NotifyPassAway(notifyPassAway)
     {}
 
     STATEFN(StateInit) {
@@ -589,6 +592,7 @@ public:
 class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStorageRingGroupProxyRequest> {
     TIntrusivePtr<TStateStorageInfo> Info;
     THashMap<TActorId, ui32> RingGroupActors;
+    THashMap<ui32, TActorId> RingGroupActorsByIndex;
 
     TActorId Source;
     THashSet<TActorId> Replies;
@@ -618,6 +622,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
                 continue;
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
+            RingGroupActorsByIndex[ringGroupIndex] = actorId;
             Send(actorId, new TEvStateStorage::TEvLookup(*msg));
         }
     }
@@ -631,12 +636,14 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
+            RingGroupActorsByIndex[ringGroupIndex] = actorId;
             Send(actorId, new T(*msg));
         }
     }
 
     void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
-        if (Replies.size() <= 1 || !Info->RingGroups[ringGroupIdx].WriteOnly) {
+        if (!Info->RingGroups[ringGroupIdx].WriteOnly) {
+            // TODO: if ringGroups return different results? Y_ABORT("StateStorage ring groups are not synchronized");
             TabletID = msg->TabletID;
             Cookie = msg->Cookie;
             CurrentLeader = msg->CurrentLeader;
@@ -648,8 +655,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
             for (auto& [k,v] : msg->Followers) {
                 Followers[k] = v;
             }
-        } else {
-            // TODO: if ringGroups return different results? Y_ABORT("StateStorage ring groups are not synchronized");
         }
         Signature.Merge(msg->Signature);
     }
@@ -660,20 +665,26 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         Send(Source, msg);
     }
 
-    bool ShouldReply(NKikimrProto::EReplyStatus status) {
-        bool reply = Replies.size() == Info->RingGroups.size()
-            || (WaitAllReplies && status != NKikimrProto::EReplyStatus::OK)
-            || (!WaitAllReplies && status == NKikimrProto::EReplyStatus::OK);
+    bool ShouldReply() {
+        bool reply = !WaitAllReplies;
+        if(!reply) {
+            for(ui32 i : xrange(Info->RingGroups.size())) {
+                auto& rg = Info->RingGroups[i];
+                if(!rg.WriteOnly && RingGroupActorsByIndex.contains(i) && !Replies.contains(RingGroupActorsByIndex[i])) {
+                    return reply;
+                }
+            }
+            return true;
+        }
         return reply;
     }
 
     void HandleResult(TEvStateStorage::TEvInfo::TPtr &ev) {
         TEvStateStorage::TEvInfo *msg = ev->Get();
         Replies.insert(ev->Sender);
-        bool reply = ShouldReply(msg->Status);
         ProcessEvInfo(RingGroupActors[ev->Sender], msg);
         BLOG_D("RingGroupProxyRequest::HandleTEvInfo ev: " << msg->ToString());
-        if (reply) {
+        if (ShouldReply()) {
             Reply(msg->Status);
         }
     }
@@ -1025,7 +1036,7 @@ public:
             if (Info->RingGroups.size() > 1)
                 TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageRingGroupProxyRequest(Info)));
             else
-                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, 0)));
+                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, 0, false)));
             break;
         }
     }

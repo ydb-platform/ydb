@@ -336,7 +336,7 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefi
     if (config.HasRing()) {
         auto& ring = config.GetRing();
         info->RingGroups.push_back({false, ring.GetNToSelect(), {}});
-        CopyStateStorageRingInfo(ring, info->RingGroups.back(), name, offset, 0);
+        CopyStateStorageRingInfo(ring, info->RingGroups.back(), name, offset, ring.GetRingGroupActorIdOffset());
     }
     return info;
 }

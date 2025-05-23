@@ -631,8 +631,8 @@ namespace NKikimr::NKqp {
             auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(EProviderType::Ydb);
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
-            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
-                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()});
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory, DEFAULT_DOMAIN_ROOT,
+                NTestUtils::CreateCredentialProvider());
 
             // Create trash query
             NYdbGrpc::TGRpcClientLow clientLow;

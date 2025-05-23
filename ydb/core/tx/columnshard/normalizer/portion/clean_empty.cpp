@@ -2,12 +2,14 @@
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap::NSyncChunksWithPortions {
 
 class IDBModifier {
 public:
     virtual void Apply(NIceDb::TNiceDb& db) = 0;
+    virtual TString GetId() const = 0;
     virtual ~IDBModifier() = default;
 };
 
@@ -15,6 +17,10 @@ class TRemoveV0: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TColumnChunkLoadContext> Chunks;
+    virtual TString GetId() const override {
+        return "V0";
+    }
+
     virtual void Apply(NIceDb::TNiceDb& db) override {
         for (auto&& i : Chunks) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v0")("path_id", PortionAddress.GetPathId())(
@@ -37,6 +43,10 @@ class TRemoveV1: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TChunkAddress> Chunks;
+    virtual TString GetId() const override {
+        return "V1";
+    }
+
     virtual void Apply(NIceDb::TNiceDb& db) override {
         for (auto&& i : Chunks) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v1")("path_id", PortionAddress.GetPathId())(
@@ -58,6 +68,10 @@ class TRemoveV2: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TChunkAddress> Chunks;
+    virtual TString GetId() const override {
+        return "V2";
+    }
+
     virtual void Apply(NIceDb::TNiceDb& db) override {
         AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v2")("path_id", PortionAddress.GetPathId())(
             "portion_id", PortionAddress.GetPortionId());
@@ -261,12 +275,15 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
     std::vector<std::vector<std::shared_ptr<IDBModifier>>> result;
     std::vector<std::shared_ptr<IDBModifier>> modificationsPack;
     ui32 countPortionsForRemove = 0;
+    THashMap<TString, ui32> reportCount;
     while (iteration.size()) {
         auto v = iteration.begin()->second;
         const bool isCorrect = (v.size() == SourcesCount);
         iteration.erase(iteration.begin());
+        std::set<TString> problemId;
         for (auto&& i : v) {
             if (!isCorrect) {
+                problemId.emplace(i.GetModification()->GetId());
                 modificationsPack.emplace_back(i.GetModification());
                 if (modificationsPack.size() == 100) {
                     result.emplace_back(std::vector<std::shared_ptr<IDBModifier>>());
@@ -278,12 +295,23 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
                 iteration[i.GetPortionAddress()].emplace_back(i);
             }
         }
+        if (isCorrect) {
+            ++reportCount["normal"];
+        } else {
+            ++reportCount[JoinSeq(",", problemId)];
+        }
     }
-    if (modificationsPack.size()) {
-        countPortionsForRemove += modificationsPack.size();
-        result.emplace_back(std::move(modificationsPack));
+    {
+        TStringBuilder sb;
+        for (auto&& i : reportCount) {
+            sb << i.first << ":" << i.second << ";";
+        }
+        if (modificationsPack.size()) {
+            countPortionsForRemove += modificationsPack.size();
+            result.emplace_back(std::move(modificationsPack));
+        }
+        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("tasks_for_remove", countPortionsForRemove)("distribution", sb);
     }
-    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("tasks_for_remove", countPortionsForRemove);
     return result;
 }
 

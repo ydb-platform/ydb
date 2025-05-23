@@ -22,7 +22,6 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -404,15 +403,12 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         BlobEncoder.SyncHeadFromNewHead();
     }
 
-    //DumpZones(__FILE__, __LINE__);
     BlobEncoder.SyncDataKeysBody(ctx.Now(),
                                  [this](const TString& key){ return MakeBlobKeyToken(key); },
                                  BlobEncoder.StartOffset,
                                  GapOffsets,
                                  GapSize);
-    //DumpZones(__FILE__, __LINE__);
     BlobEncoder.SyncHeadFastWrite(BlobEncoder.StartOffset, BlobEncoder.EndOffset);
-    //DumpZones(__FILE__, __LINE__);
 
     EndWriteTimestamp = PendingWriteTimestamp;
 
@@ -544,7 +540,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
-    //DumpZones(__FILE__, __LINE__);
 
     if (SplitMergeEnabled(Config) && !IsSupportive()) {
         SplitMergeAvgWriteBytes->Update(writeNewSizeFull, now);
@@ -1052,13 +1047,10 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
                  " old key " << x.OldKey.ToString() << " new key " << x.NewKey.ToString() <<
                  " size " << x.Size << " WTime " << ctx.Now().MilliSeconds());
 
-        //DBGTRACE_LOG("rename key " << x.OldKey.ToString() << " to " << x.NewKey.ToString() << " (" << x.Size << ")");
         zone.CompactedKeys.emplace_back(x.NewKey, x.Size);
     }
 
     if (!formedBlobs.empty()) {
-        //DBGTRACE_LOG("offset=" << zone.PartitionedBlob.GetOffset() << ", partno=" << zone.PartitionedBlob.GetHeadPartNo());
-
         parameters.HeadCleared = true;
 
         // zone.ResetNewHead ???
@@ -1110,7 +1102,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
 
-    //DBGTRACE_LOG("p.Offset=" << p.Offset << ", curOffset=" << curOffset);
     ui64 poffset = p.Offset ? *p.Offset : curOffset;
 
     PQ_LOG_T("Topic '" << TopicName() << "' partition " << Partition
@@ -1219,7 +1210,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             request->Record.ClearCmdWrite();
             for (ui32 i = 0; i < (ui32)oldCmdWrite.size(); ++i) {
                 auto key = TKey::FromString(oldCmdWrite.Get(i).GetKey());
-                DBGTRACE_LOG("key=" << key.ToString());
                 if (key.GetType() != TKeyPrefix::TypeTmpData) {
                     request->Record.AddCmdWrite()->CopyFrom(oldCmdWrite.Get(i));
                 }
@@ -1244,7 +1234,6 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (!BlobEncoder.PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
         //this must not be happen - client sends gaps, fail this client till the end
         //now no changes will leak
-        DBGTRACE_LOG("send TEvPoisonPill");
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
 
         return false;
@@ -1413,8 +1402,6 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
     PQ_LOG_T("TPartition::AddNewWriteBlob.");
 
     const auto& key = res.first;
-    DBGTRACE_LOG("key=" << key.ToString());
-
     TString valueD = BlobEncoder.SerializeForKey(key, res.second, BlobEncoder.EndOffset, PendingWriteTimestamp);
 
     auto write = request->Record.AddCmdWrite();
@@ -1440,7 +1427,6 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
             Y_ABORT_UNLESS(BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount() <= key.GetOffset(),
                 "LAST KEY %s, HeadOffset %lu, NEWKEY %s", BlobEncoder.DataKeysBody.back().Key.ToString().c_str(), BlobEncoder.Head.Offset, key.ToString().c_str());
         }
-        DBGTRACE_LOG("add key " << res.first.ToString());
         BlobEncoder.CompactedKeys.push_back(res);
         // BlobEncoder.ResetNewHead ???
         BlobEncoder.NewHead.Clear();

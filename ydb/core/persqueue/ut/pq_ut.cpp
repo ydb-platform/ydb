@@ -12,7 +12,6 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPQ {
@@ -1295,8 +1294,6 @@ void TestWritePQImpl(bool fast) {
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        DBGTRACE("Test: " << dispatchName);
-
         activeZone = false;
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);

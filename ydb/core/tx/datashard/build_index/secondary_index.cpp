@@ -224,7 +224,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override {
         if (Uploader) {
             this->Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};

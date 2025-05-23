@@ -26,7 +26,7 @@ namespace NTable {
         Feed method may return EScan::Reset indicating that current range is
         completed and next one should be set up in Seek method.
 
-        IScan may express its desire of futher IDriver env behaviour
+        IScan may express its desire of further IDriver env behaviour
         with EScan codes where applicable.
 
         At the end IDriver calls Finish() once requesting a product. After
@@ -76,6 +76,9 @@ namespace NTable {
     class IDriver {
     public:
         virtual void Touch(EScan) = 0;
+
+        // Stops scan and calls IScan::Finish(EAbort::Host, exc)
+        virtual void Fail(const std::exception& exc) = 0;
     };
 
 
@@ -116,7 +119,7 @@ namespace NTable {
         virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) = 0;
         virtual EScan Seek(TLead&, ui64 seq) = 0;
         virtual EScan Feed(TArrayRef<const TCell>, const TRow&) = 0;
-        virtual TAutoPtr<IDestructable> Finish(EAbort) = 0;
+        virtual TAutoPtr<IDestructable> Finish(EAbort, const std::exception* exc) = 0;
         virtual void Describe(IOutputStream&) const = 0;
 
         /**

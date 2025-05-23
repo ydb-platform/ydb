@@ -1325,7 +1325,7 @@ private:
         return EScan::Reset;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) final {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) final {
         if (!Aborted) {
             switch (abort) {
                 case EAbort::None:

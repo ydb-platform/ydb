@@ -127,10 +127,10 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort reason) override {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override {
         Result = new TEvDataShard::TEvReadColumnsResponse(TabletId);
 
-        if (reason == EAbort::None) {
+        if (abort == EAbort::None) {
             TString buffer = BlockBuilder->Finish();
             buffer.resize(BlockBuilder->Bytes());
             BlockBuilder.reset();

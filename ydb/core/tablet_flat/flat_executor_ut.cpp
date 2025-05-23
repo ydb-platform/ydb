@@ -321,7 +321,7 @@ private:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override
     {
         Y_ENSURE((int)Abort == (int)abort);
 

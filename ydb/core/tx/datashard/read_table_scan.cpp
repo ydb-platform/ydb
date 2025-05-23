@@ -695,7 +695,7 @@ private:
         return cmp <= 0;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override
     {
         auto ctx = ActorContext();
 

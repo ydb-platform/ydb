@@ -217,7 +217,7 @@ public:
         return MaybeSendBuffer();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override {
         auto outcome = EExportOutcome::Success;
         if (abort != EAbort::None) {
             outcome = EExportOutcome::Aborted;

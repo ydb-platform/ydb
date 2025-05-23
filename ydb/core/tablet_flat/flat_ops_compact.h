@@ -325,7 +325,7 @@ namespace NTabletFlatExecutor {
             TxStatus.emplace_back(new NTable::TTxStatusPartStore(dataId, Conf->Epoch, data));
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort abort) override
+        TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override
         {
             const auto fail = Failed || !Finished || abort != EAbort::None;
 

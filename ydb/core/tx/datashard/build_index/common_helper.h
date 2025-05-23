@@ -128,7 +128,7 @@ public:
     }
 
     template<typename TResponse> 
-    void Finish(TResponse& response, NTable::EAbort abort) {
+    void Finish(TResponse& response, NTable::EAbort abort, const std::exception* exc) {
         if (UploaderId) {
             TlsActivationContext->Send(new IEventHandle(UploaderId, TActorId(), new TEvents::TEvPoison));
             UploaderId = {};
@@ -136,7 +136,11 @@ public:
 
         response.SetUploadRows(UploadRows);
         response.SetUploadBytes(UploadBytes);
-        if (abort != NTable::EAbort::None) {
+        if (exc) {
+            response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+            UploadStatus.Issues.AddIssue(NYql::TIssue(exc->what()));
+            NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
+        } else if (abort != NTable::EAbort::None) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else if (UploadStatus.IsNone() || UploadStatus.IsSuccess()) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);

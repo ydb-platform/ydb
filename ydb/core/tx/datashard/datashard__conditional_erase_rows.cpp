@@ -305,7 +305,7 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override {
         Reply(abort != EAbort::None);
         PassAway();
 

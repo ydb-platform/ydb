@@ -186,7 +186,7 @@ public:
         return Progress();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override {
         LOG_D("Finish " << static_cast<ui64>(abort));
 
         if (abort != EAbort::None) {

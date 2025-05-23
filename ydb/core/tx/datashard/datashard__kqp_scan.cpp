@@ -332,7 +332,7 @@ private:
     }
 
 private:
-    TAutoPtr<IDestructable> Finish(EAbort abort) final {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) final {
         auto prio = abort == EAbort::None ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan"
             << ", at: " << ScanActorId << ", scanId: " << ScanId

@@ -26,6 +26,7 @@ namespace NOps {
 
     class TDriver final
             : public ::NActors::TActor<TDriver>
+            , public IActorExceptionHandler
             , private NTable::TFeed
             , private NTable::IDriver
             , private ILoadBlob
@@ -636,7 +637,7 @@ namespace NOps {
             Terminate(EAbort::Term);
         }
 
-        void Terminate(EAbort abort)
+        void Terminate(EAbort abort, const std::exception* exc = nullptr)
         {
             auto trace = Args.Trace ? Cache->GrabTraces() : nullptr;
 
@@ -659,7 +660,7 @@ namespace NOps {
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */
 
-            auto prod = DetachScan()->Finish(abort);
+            auto prod = DetachScan()->Finish(abort, exc);
 
             if (abort != EAbort::Lost) {
                 auto ev = new TEvResult(Serial, abort, std::move(Snapshot), prod);
@@ -675,6 +676,25 @@ namespace NOps {
 
             Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
             PassAway();
+        }
+
+        bool OnUnhandledException(const std::exception& exc) override
+        {
+            if (auto logl = Logger->Log(ELnLev::Error)) {
+                logl
+                    << NFmt::Do(*this)
+                    << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+                    << TBackTrace::FromCurrentException().PrintToString();
+            }
+
+            Terminate(NTable::EAbort::Host, &exc);
+
+            return true;
+        }
+
+        void Fail(const std::exception& exc) override
+        {
+            OnUnhandledException(exc);
         }
 
         void SendToSelf(THolder<IEventBase> event)

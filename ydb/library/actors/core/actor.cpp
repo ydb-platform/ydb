@@ -278,9 +278,9 @@ namespace NActors {
 
         try {
             (this->*StateFunc_)(ev);
-        } catch(const std::exception& e) {
+        } catch(const std::exception& exc) {
             if (auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
-                !handler || !handler->OnUnhandledException(e))
+                !handler || !handler->OnUnhandledException(exc))
             {
                 throw;
             }

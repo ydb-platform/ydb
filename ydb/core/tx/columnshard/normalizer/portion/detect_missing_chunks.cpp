@@ -12,7 +12,7 @@
 namespace NKikimr::NOlap {
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TDetectMissingChunks::DoInit(
-    const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
+    const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
 
@@ -22,6 +22,13 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TDetectMissingChunks::DoInit(
     ready = ready & Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme());
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
+    }
+
+    TTablesManager tablesManager(controller.GetStoragesManager(), std::make_shared<NDataAccessorControl::TLocalManager>(nullptr),
+        std::make_shared<TSchemaObjectsCache>(), std::make_shared<TPortionIndexStats>(), 0);
+    if (!tablesManager.InitFromDB(db)) {
+        ACFL_TRACE("normalizer", "TChunksV0MetaNormalizer")("error", "can't initialize tables manager");
+        return TConclusionStatus::Fail("Can't load index");
     }
 
     THashSet<TPortionKey> portionsWithChunksV1;
@@ -58,36 +65,27 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TDetectMissingChunks::DoInit(
         }
     }
 
+    THashMap<ui64, TPortionAccessorConstructor> constructors;
+    TDbWrapper wrapper(db.GetDatabase(), nullptr);
+    if (!wrapper.LoadPortions(
+            {}, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+                const TIndexInfo& indexInfo =
+                    portion->GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
+                AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
+                const ui64 portionId = portion->GetPortionIdVerified();
+                AFL_VERIFY(constructors.emplace(portionId, TPortionAccessorConstructor(std::move(portion))).second);
+            })) {
+        return TConclusionStatus::Fail("repeated read db");
+    }
+
     AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "missing_chunks_info")("portion_v1", portionsWithChunksV1.size())(
-        "portion_v2", portionsWithChunksV2.size());
+        "portion_v2", portionsWithChunksV2.size())("portions", constructors.size());
 
-    {
-        auto rowset = db.Table<Schema::IndexPortions>().Select();
-        if (!rowset.IsReady()) {
-            return TConclusionStatus::Fail("Not ready");
-        }
-
-        if (rowset.EndOfSet()) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "empty_portions_index");
-        }
-
-        while (!rowset.EndOfSet()) {
-            TPortionKey portion(rowset.GetValue<Schema::IndexPortions::PathId>(), rowset.GetValue<Schema::IndexPortions::PortionId>());
-            TPortionLoadContext info(rowset);
-
-            if (!portionsWithChunksV1.contains(portion)) {
-                AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "missing_portion_v1")("path_id", info.GetPathId())(
-                    "portion_id", info.GetPortionId())("meta", info.GetMetaProto().DebugString());
-            }
-
-            if (!portionsWithChunksV2.contains(portion)) {
-                AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "missing_portion_v2")("path_id", info.GetPathId())(
-                    "portion_id", info.GetPortionId())("meta", info.GetMetaProto().DebugString());
-            }
-
-            if (!rowset.Next()) {
-                return TConclusionStatus::Fail("Not ready");
-            }
+    for (auto& [id, portion] : constructors) {
+        if (!portionsWithChunksV2.contains(TPortionKey(
+                portion.GetPortionConstructor().GetPathId().GetRawValue(), portion.GetPortionConstructor().GetPortionIdVerified()))) {
+            auto data = portion.MutablePortionConstructor().Build();
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("aboba", "missing_chunks")("portion", data->DebugString(true));
         }
     }
 

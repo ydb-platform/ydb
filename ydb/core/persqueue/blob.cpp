@@ -4,7 +4,6 @@
 #include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -836,13 +835,6 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     , MaxBlobSize(maxBlobSize)
     , FastWrite(fastWrite)
 {
-    if (!(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0)) {
-        DBGTRACE_LOG("NewHead.Offset=" << NewHead.Offset << ", Head.GetNextOffset()=" << Head.GetNextOffset());
-        DBGTRACE_LOG("NewHead.PartNo=" << NewHead.PartNo);
-        DBGTRACE_LOG("headCleared=" << headCleared);
-        DBGTRACE_LOG("needCompactHead=" << needCompactHead);
-        DBGTRACE_LOG("Head.PackedSize=" << Head.PackedSize);
-    }
     Y_ABORT_UNLESS(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0); // if head not cleared, then NewHead is going after Head
     if (!headCleared) {
         HeadSize = Head.PackedSize + NewHead.PackedSize;

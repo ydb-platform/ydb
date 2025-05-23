@@ -4,7 +4,6 @@
 #include "partition_util.h"
 
 #include <memory>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -111,7 +110,6 @@ const TPartitionId& TInitializerStep::PartitionId() const {
 }
 
 void TInitializerStep::PoisonPill(const TActorContext& ctx) {
-    DBGTRACE_LOG("send TEvPoisonPill");
     ctx.Send(Partition()->Tablet, new TEvents::TEvPoisonPill());
 }
 
@@ -325,8 +323,6 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         bool res = meta.ParseFromString(response.GetValue());
         Y_ABORT_UNLESS(res);
 
-        DBGTRACE_LOG("meta=" << meta.ShortDebugString());
-
         Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
         Partition()->BlobEncoder.FirstUncompactedOffset = meta.GetFirstUncompactedOffset();
@@ -495,8 +491,6 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             FormHeadAndProceed();
 
-            //Partition()->DumpZones(__FILE__, __LINE__);
-
             if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->CompactionBlobEncoder.StartOffset) {
                 PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->CompactionBlobEncoder.StartOffset);
                 Y_ABORT("meta is broken");
@@ -532,10 +526,6 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
     }
 
     std::sort(keys.begin(), keys.end());
-
-    for (size_t i = 0; i < keys.size(); ++i) {
-        DBGTRACE_LOG("key[" << i << "]=" << keys[i]);
-    }
 
     TVector<TString> filtered;
     TKey lastKey;
@@ -752,8 +742,6 @@ void TInitDataRangeStep::FormHeadAndProceed() {
     if (cz.IsEmpty()) {
         cz.Head.Offset = fwz.StartOffset;
     }
-
-    Partition()->DumpZones(__FILE__, __LINE__);
 
     Y_ABORT_UNLESS(fwz.HeadKeys.empty() || fwz.Head.Offset == fwz.HeadKeys.front().Key.GetOffset() && fwz.Head.PartNo == fwz.HeadKeys.front().Key.GetPartNo());
     Y_ABORT_UNLESS(fwz.Head.Offset < endOffset || fwz.Head.Offset == endOffset && fwz.HeadKeys.empty());

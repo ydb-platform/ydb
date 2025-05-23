@@ -332,6 +332,7 @@ protected:
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);
+    void BuildParamsFromFormData(TStringBuf data);
     void SetupTracing(const TString& handlerName);
 
     template<typename TJson>

@@ -310,7 +310,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateView().FileName);
     }
 
-    static bool IsTableScheme(TStringBuf schemeKey) {
+    static bool IsTable(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::TableScheme().FileName);
     }
 
@@ -344,7 +344,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", result# " << result);
 
         if (NoObjectFound(result.GetError().GetErrorType())) {
-            if (IsTableScheme(SchemeKey)) {
+            if (IsTable(SchemeKey)) {
                 // try search for a view
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
                 HeadObject(SchemeKey);
@@ -352,6 +352,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 // try search for a topic
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
                 HeadObject(SchemeKey);
+            } else {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
             }
             return;
         }
@@ -485,8 +487,14 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic scheme");
             }
             item.Topic = request;
-        } else if (!google::protobuf::TextFormat::ParseFromString(content, &item.Scheme)) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse scheme");
+        } else if (IsTable(SchemeKey)) {
+            Ydb::Table::CreateTableRequest request;
+            if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse scheme");
+            }
+            item.Table = request;
+        } else {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
         }
 
         auto nextStep = [this]() {

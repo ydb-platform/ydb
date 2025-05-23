@@ -1,8 +1,11 @@
+import "ydb/core/protos/tx_columnshard.proto";
+
 package NKikimrColumnShardTxProto;
 
 message TEvent {
-    optional uint64 PathId = 1;
+    optional uint64 PathId_Deprecated = 1;
     optional string ClassName = 2;
+    optional NKikimrTxColumnShard.TInternalPathId PathId = 3; //TSchemeShardLocalPathId
 
     message TReadEvent {
         optional string Filter = 1;

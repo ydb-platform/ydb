@@ -111,9 +111,6 @@ bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type, bool allow
 
 bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
-    if (features & NUdf::EDataTypeFeatures::DecimalType) {
-        return false;
-    }
     return (NUdf::EDataTypeFeatures::CanCompare  & features)
         && (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & features) ||
             (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
@@ -423,9 +420,35 @@ void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& pred
     }
 }
 
+bool IsInputTypeAllowedForPushdown(const TTypeAnnotationNode* typeAnn) {
+    const auto& nakedType = RemoveOptionality(*typeAnn);
+    YQL_ENSURE(nakedType.GetKind() == ETypeAnnotationKind::Data);
+    const auto& slot = nakedType.Cast<TDataExprType>()->GetSlot();
+
+    if (slot == EDataSlot::Timestamp) {
+        return false;
+    }
+    if (NUdf::GetDataTypeInfo(slot).Features & NUdf::DecimalType) {
+        return false;
+    }
+
+    return true;
+}
+
 } // namespace
 
 void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TPushdownOptions& options) {
+    const auto members = FindNodes(predicate.Ptr(), [&lambdaArg] (const TExprNode::TPtr& node) {
+        if (const auto maybeMember = TMaybeNode<TCoMember>(node))
+            return maybeMember.Cast().Struct().Raw() == lambdaArg;
+        return false;
+    });
+    for (const auto& m: members) {
+        if (!IsInputTypeAllowedForPushdown(m->GetTypeAnn())) {
+            return;
+        }
+    }
+
     if (predicate.Maybe<TCoNot>() || predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {
         CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, options);
     } else if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {

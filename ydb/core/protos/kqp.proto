@@ -168,6 +168,7 @@ message TQueryRequest {
     optional string PoolId = 35;
     optional string DatabaseId = 36;
     optional TKafkaApiOperationsRequest KafkaApiOperations = 37;
+    optional Ydb.ResultSet.Type ResultSetType = 38;
 }
 
 message TKqpPathIdProto {

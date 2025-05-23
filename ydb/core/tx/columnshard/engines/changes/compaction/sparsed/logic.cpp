@@ -144,11 +144,15 @@ bool TSparsedMerger::TSparsedChunkCursor::InitGlobalRemapping(
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("reason", "too_early")("idx", GetCursorIdx());
         return false;
     }
+    AFL_VERIFY(IsValid());
     GlobalResultOffset = globalResultOffset;
     RemapToGlobalResult = &remapToGlobalResult;
     if (GetGlobalPosition() <= RemapToGlobalResult->GetMinSourceIndex()) {
         MoveToSignificant(RemapToGlobalResult->GetMinSourceIndex());
         AFL_VERIFY(RemapToGlobalResult->GetMinSourceIndex() <= GetGlobalPosition());
+        if (!IsValid()) {
+            return false;
+        }
     }
     if (!GetGlobalResultIndexImpl()) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("reason", "not_index")("idx", GetCursorIdx())(

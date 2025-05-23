@@ -106,14 +106,14 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(
     }
 
     for (auto&& i : proto.GetPathIds()) {
-        auto g = index.GetGranuleOptional(TInternalPathId::FromRawValue(i.GetDestPathId()));
+        auto g = index.GetGranuleOptional(TInternalPathId::FromProto(i.GetDestPathId()));
         if (!g) {
             return TConclusionStatus::Fail("Incorrect remapping into undefined path id: " + ::ToString(i.GetDestPathId()));
         }
-        if (!i.GetSourcePathId() || !i.GetDestPathId()) {
-            return TConclusionStatus::Fail("PathIds remapping contains incorrect ids: " + i.DebugString());
-        }
-        if (!PathIds.emplace(TInternalPathId::FromRawValue(i.GetSourcePathId()), TInternalPathId::FromRawValue(i.GetDestPathId())).second) {
+        // if (!i.GetSourcePathId() || !i.GetDestPathId()) {
+        //     return TConclusionStatus::Fail("PathIds remapping contains incorrect ids: " + i.DebugString());
+        // }
+        if (!PathIds.emplace(TInternalPathId::FromProto(i.GetSourcePathId()), TInternalPathId::FromProto(i.GetDestPathId())).second) {
             return TConclusionStatus::Fail("PathIds contains duplicated values.");
         }
     }
@@ -129,8 +129,8 @@ NKikimrColumnShardDataSharingProto::TDestinationSession TDestinationSession::Ser
     TBase::SerializeToProto(result);
     for (auto&& i : PathIds) {
         auto* pathIdRemap = result.AddPathIds();
-        pathIdRemap->SetSourcePathId(i.first.GetRawValue());
-        pathIdRemap->SetDestPathId(i.second.GetRawValue());
+        i.first.ToProto(*pathIdRemap->MutableSourcePathId());
+        i.second.ToProto(*pathIdRemap->MutableDestPathId());
     }
     return result;
 }

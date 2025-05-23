@@ -2,8 +2,10 @@
 #include <util/system/types.h>
 #include <util/generic/hash.h>
 #include <util/stream/output.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 
 namespace NKikimr::NColumnShard {
+
 class TInternalPathId {
 private:
     ui64 PathId;
@@ -24,9 +26,32 @@ public:
         return TInternalPathId(pathId);
     }
 
+    static TInternalPathId FromProto(const NKikimrTxColumnShard::TInternalPathId& pathId) {
+        return TInternalPathId(pathId.GetPathId());
+    }
+
+    template<typename TProto>
+    static TInternalPathId FromProto(const TProto& proto) {
+        if (proto.HasPathId()) {
+            return FromProto(proto.GetPathId());
+        } else {
+            return TInternalPathId(proto.GetPathId_Deprecated());
+        }
+    }
+
     explicit operator bool() const {
         return PathId != 0;
     }
+
+    void ToProto(NKikimrTxColumnShard::TInternalPathId& proto) const {
+        proto.SetPathId(PathId);
+    }
+
+    template<typename Proto>
+    void ToProto(Proto& proto) const {
+        ToProto(*proto.MutablePathId());
+    }
+
 
     ui64 GetRawValue() const {
         return PathId;
@@ -37,17 +62,86 @@ public:
 
 static_assert(sizeof(TInternalPathId)==sizeof(ui64));
 
+class TSchemeShardLocalPathId {
+    ui64 PathId;
+private:
+    explicit TSchemeShardLocalPathId(const ui64 pathId)
+        : PathId(pathId) {
+    }
+public:
+    TSchemeShardLocalPathId()
+        : PathId(0) {
+    }
+    explicit operator bool() const {
+        return PathId != 0;
+    }
+
+    static TSchemeShardLocalPathId FromRawValue(const ui64 pathId) {
+        return TSchemeShardLocalPathId(pathId);
+    }
+
+    static TSchemeShardLocalPathId FromProto(const NKikimrTxColumnShard::TSchemeShardLocalPathId& protoPathId) {
+        return TSchemeShardLocalPathId(protoPathId.GetPathId());
+    }
+
+    template<typename TProto>
+    static TSchemeShardLocalPathId FromProto(const TProto& proto) {
+        if (proto.HasPathId()) {
+            return FromProto(proto.GetPathId());
+        } else {
+            return TSchemeShardLocalPathId(proto.GetPathId_Deprecated());
+        }
+    }
+
+    template<typename TProto>
+    static TSchemeShardLocalPathId FromProtoOrTableId(const TProto& proto) {
+        if (proto.HasPathId()) {
+            return FromProto(proto.GetPathId());
+        } else {
+            return TSchemeShardLocalPathId(proto.GetTableId_Deprecated());
+        }
+    }
+
+    ui64 GetRawValue() const {
+        return PathId;
+    }
+
+    void ToProto(NKikimrTxColumnShard::TSchemeShardLocalPathId& proto) const {
+        proto.SetPathId(PathId);
+    }
+
+    template<typename Proto>
+    void ToProto(Proto& proto) const {
+        ToProto(*proto.MutablePathId());
+    }
+
+    auto operator<=>(const TSchemeShardLocalPathId&) const = default;
+};
+
+struct IInternalToSchemeShardLocalPathIdConverter;
+struct ISchemeShardLocalToInternalPathIdConverter;
+
+
 } //namespace NKikimr::NColumnShard
 
 namespace NKikimr::NOlap {
 
 using TInternalPathId = NColumnShard::TInternalPathId;
-
+// using TLocalPathId = NColumnShard::TLocalPathId;
+// using TUnifiedPathId = NColumnShard::TUnifiedPathId;
+    
 } //namespace NKikimr::NOlap
 
 template <>
 struct THash<NKikimr::NColumnShard::TInternalPathId> {
     size_t operator()(const NKikimr::NColumnShard::TInternalPathId& p) const {
-        return THash<ui64>()(p.GetRawValue());
+        return p.GetRawValue();
+    }
+};
+
+template <>
+struct THash<NKikimr::NColumnShard::TSchemeShardLocalPathId> {
+    size_t operator()(const NKikimr::NColumnShard::TSchemeShardLocalPathId& p) const {
+        return p.GetRawValue();
     }
 };

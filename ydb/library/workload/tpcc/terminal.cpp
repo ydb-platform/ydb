@@ -64,6 +64,7 @@ TTerminal::TTerminal(size_t terminalID,
                      ITaskQueue& taskQueue,
                      TDriver& driver,
                      const TString& path,
+                     bool noSleep,
                      std::stop_token stopToken,
                      std::atomic<bool>& stopWarmup,
                      std::shared_ptr<TTerminalStats>& stats,
@@ -71,6 +72,7 @@ TTerminal::TTerminal(size_t terminalID,
     : TaskQueue(taskQueue)
     , Driver(driver)
     , Context(terminalID, warehouseID, warehouseCount, TaskQueue, std::make_shared<NQuery::TQueryClient>(Driver), path, log)
+    , NoSleep(noSleep)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
     , Stats(stats)
@@ -97,11 +99,13 @@ TTerminalTask TTerminal::Run() {
         auto& transaction = Transactions[txIndex];
 
         try {
-            LOG_T("Terminal " << Context.TerminalID << " keying time for " << transaction.Name << ": "
-                << transaction.KeyingTime.count() << "s");
-            co_await TSuspend(TaskQueue, Context.TerminalID, transaction.KeyingTime);
-            if (StopToken.stop_requested()) {
-                break;
+            if (!NoSleep) {
+                LOG_T("Terminal " << Context.TerminalID << " keying time for " << transaction.Name << ": "
+                    << transaction.KeyingTime.count() << "s");
+                co_await TSuspend(TaskQueue, Context.TerminalID, transaction.KeyingTime);
+                if (StopToken.stop_requested()) {
+                    break;
+                }
             }
 
             co_await TTaskHasInflight(TaskQueue, Context.TerminalID);
@@ -137,9 +141,11 @@ TTerminalTask TTerminal::Run() {
                     << execCount << " execution(s): " << result.GetStatus());
             }
 
-            LOG_T("Terminal " << Context.TerminalID << " is going to sleep for "
-                << transaction.ThinkTime.count() << "s (think time)");
-            co_await TSuspend(TaskQueue, Context.TerminalID, transaction.ThinkTime);
+            if (!NoSleep) {
+                LOG_T("Terminal " << Context.TerminalID << " is going to sleep for "
+                    << transaction.ThinkTime.count() << "s (think time)");
+                co_await TSuspend(TaskQueue, Context.TerminalID, transaction.ThinkTime);
+            }
         } catch (const TUserAbortedException& ex) {
             // it's OK, inc statistics and ignore
             Stats->IncUserAborted(static_cast<TTerminalStats::ETransactionType>(txIndex));

@@ -121,6 +121,7 @@ public:
         ITaskQueue& taskQueue,
         TDriver& driver,
         const TString& path,
+        bool noSleep,
         std::stop_token stopToken,
         std::atomic<bool>& stopWarmup,
         std::shared_ptr<TTerminalStats>& stats,
@@ -143,6 +144,7 @@ private:
     ITaskQueue& TaskQueue;
     TDriver Driver;
     TTransactionContext Context;
+    bool NoSleep;
     std::stop_token StopToken;
     std::atomic<bool>& StopWarmup;
     std::shared_ptr<TTerminalStats> Stats;

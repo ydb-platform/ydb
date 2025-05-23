@@ -19,6 +19,7 @@ struct TRunConfig {
     TString Path;
 
     ELogPriority LogPriority = ELogPriority::TLOG_INFO;
+    bool NoSleep = false;
 };
 
 void RunSync(const TRunConfig& config);

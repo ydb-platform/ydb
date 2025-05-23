@@ -133,6 +133,7 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
             *TaskQueue,
             drivers[i % drivers.size()],
             Config.Path,
+            Config.NoSleep,
             TerminalsStopSource.get_token(),
             StopWarmup,
             StatsVec[i % drivers.size()],

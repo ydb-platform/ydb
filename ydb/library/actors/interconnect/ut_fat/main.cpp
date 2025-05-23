@@ -88,7 +88,7 @@ namespace {
     };
 
     class TReceiverActor: public TReceiverBaseActor {
-        ui64 ReceivedCount = 0;
+        std::atomic<ui64> ReceivedCount = 0;
         TNode* SenderNode = nullptr;
 
     public:
@@ -98,11 +98,16 @@ namespace {
         {
         }
 
+        ui64 GetReceivedCount() const {
+            return ReceivedCount.load(std::memory_order_relaxed);
+        }
+
         void Handle(TEvTest::TPtr& ev, const TActorContext& /*ctx*/) override {
             const NInterconnectTest::TEvTest& m = ev->Get()->Record;
             Y_ABORT_UNLESS(m.HasSequenceNumber());
-            Y_ABORT_UNLESS(m.GetSequenceNumber() >= ReceivedCount, "got #%" PRIu64 " expected at least #%" PRIu64,
-                     m.GetSequenceNumber(), ReceivedCount);
+            ui64 cur = GetReceivedCount();
+            Y_ABORT_UNLESS(m.GetSequenceNumber() >= cur, "got #%" PRIu64 " expected at least #%" PRIu64,
+                     m.GetSequenceNumber(), cur);
             if (m.HasPayloadId()) {
                 auto rope = ev->Get()->GetPayload(m.GetPayloadId());
                 auto data = rope.GetContiguousSpan();
@@ -111,12 +116,12 @@ namespace {
             } else {
                 Y_ABORT_UNLESS(m.HasPayload());
             }
-            ++ReceivedCount;
+            ReceivedCount.fetch_add(1);
             SenderNode->Send(ev->Sender, new TEvTestResponse(m.GetSequenceNumber()));
         }
 
         ~TReceiverActor() override {
-            Cerr << "Received " << ReceivedCount << " messages\n";
+            Cerr << "Received " << GetReceivedCount() << " messages\n";
         }
     };
 
@@ -166,6 +171,24 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         NanoSleep(30ULL * 1000 * 1000 * 1000);
     }
 
+    Y_UNIT_TEST(InterconnectTestWithProxyTlsReestablishWithXdc) {
+        ui32 numNodes = 2;
+        double bandWidth = 1000000;
+        ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
+        TTestICCluster::TTrafficInterrupterSettings interrupterSettings{TDuration::Seconds(2), bandWidth, true};
+
+        TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings, nullptr, TTestICCluster::USE_TLS);
+
+        TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
+        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
+        TSenderActor* senderActor = new TSenderActor(recipient, flags, true);
+        testCluster.RegisterActor(senderActor, 1);
+
+        NanoSleep(30ULL * 1000 * 1000 * 1000);
+
+        UNIT_ASSERT_C(receiverActor->GetReceivedCount() > 0, "no traffic detected!");
+    }
+
     Y_UNIT_TEST(InterconnectTestWithProxy) {
         ui32 numNodes = 2;
         double bandWidth = 1000000;
@@ -203,7 +226,7 @@ Y_UNIT_TEST_SUITE(InterconnectZcLocalOp) {
         ui32 numNodes = 2;
         ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
 
-        TTestICCluster testCluster(numNodes, TChannelsConfig(), nullptr, nullptr, true);
+        TTestICCluster testCluster(numNodes, TChannelsConfig(), nullptr, nullptr, TTestICCluster::USE_ZC);
 
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
         const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);

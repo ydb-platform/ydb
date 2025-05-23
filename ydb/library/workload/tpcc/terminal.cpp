@@ -128,17 +128,13 @@ TTerminalTask TTerminal::Run() {
 
             if (result.IsSuccess()) {
                 Stats->AddOK(static_cast<TTerminalStats::ETransactionType>(txIndex), latency);
-            } else {
-                Stats->IncFailed(static_cast<TTerminalStats::ETransactionType>(txIndex));
-            }
-
-            if (!result.IsSuccess()) {
-                LOG_E("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction finished in "
-                    << execCount << " execution(s): " << result.GetStatus() << ", "
-                    << result.GetIssues().ToOneLineString());
-            } else {
                 LOG_T("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction finished in "
                     << execCount << " execution(s): " << result.GetStatus());
+            } else {
+                Stats->IncFailed(static_cast<TTerminalStats::ETransactionType>(txIndex));
+                LOG_E("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction failed in "
+                    << execCount << " execution(s): " << result.GetStatus() << ", "
+                    << result.GetIssues().ToOneLineString());
             }
 
             if (!NoSleep) {

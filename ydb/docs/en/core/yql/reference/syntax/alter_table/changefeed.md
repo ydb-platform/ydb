@@ -27,7 +27,7 @@
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc.md#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
 * `TOPIC_AUTO_PARTITIONING`: [Topic autopartitioning mode](../../../../concepts/cdc.md#topic-partitions):
     * `ENABLED` – An [autopartitioned topic](../../../../concepts/topic.md#autopartitioning) will be created for this changefeed. The number of partitions in such a topic increases automatically as the table update rate increases. Topic autopartitioning parameters [can be configured](../alter-topic.md#alter-topic).
-    * `DISABLED` - Topic without [autopartitioning](../../../../concepts/topic.md#autopartitioning) will be created for this changefeed. This is a default value.
+    * `DISABLED` – A topic without [autopartitioning](../../../../concepts/topic.md#autopartitioning) will be created for this changefeed. This is the default value.
 * `TOPIC_MIN_ACTIVE_PARTITIONS`: [The initial number of topic partitions](../../../../concepts/cdc.md#topic-partitions). By default, the initial number of topic partitions is equal to the number of table partitions. For autopartitioned topics, the number of partitions increases automatically as the table update rate increases.
 * `INITIAL_SCAN`: Enables/disables [initial table scan](../../../../concepts/cdc.md#initial-scan). Disabled by default.
 {% if audience == "tech" %}

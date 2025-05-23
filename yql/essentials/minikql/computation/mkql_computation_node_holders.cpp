@@ -2915,7 +2915,7 @@ private:
 class TListValueBuilder: public NUdf::IListValueBuilder {
 public:
     explicit TListValueBuilder(const THolderFactory& HolderFactory)
-        : HolderFactory_(HolderFactory) 
+        : HolderFactory_(HolderFactory)
     {}
 
     // Destroys (moves out from) the element
@@ -3022,15 +3022,15 @@ NUdf::TUnboxedValuePod THolderFactory::NewTemporaryVectorHolder() const {
     return NUdf::TUnboxedValuePod(new TTemporaryVectorHolder(&MemInfo));
 }
 
-const NUdf::IHash* THolderFactory::GetHash(const TType& type, bool useIHash) const {
+const NUdf::IHash* THolderFactory::GetHash(TType& type, bool useIHash) const {
     return useIHash ? HashRegistry.FindOrEmplace(type) : nullptr;
 }
 
-const NUdf::IEquate* THolderFactory::GetEquate(const TType& type, bool useIHash) const {
+const NUdf::IEquate* THolderFactory::GetEquate(TType& type, bool useIHash) const {
     return useIHash ? EquateRegistry.FindOrEmplace(type) : nullptr;
 }
 
-const NUdf::ICompare* THolderFactory::GetCompare(const TType& type, bool useIHash) const {
+const NUdf::ICompare* THolderFactory::GetCompare(TType& type, bool useIHash) const {
     return useIHash ? CompareRegistry.FindOrEmplace(type) : nullptr;
 }
 

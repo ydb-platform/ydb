@@ -2,15 +2,22 @@
 
 #include "defs.h"
 
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
+#   include <library/cpp/monlib/dynamic_counters/counters.h>
+#endif
+
 #include <yql/essentials/utils/chunked_buffer.h>
 
 #include <util/generic/noncopyable.h>
 #include <util/stream/output.h>
 #include <util/system/yassert.h>
 
-namespace NKikimr {
+namespace NKikimr::NMiniKQL {
 
-namespace NMiniKQL {
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
+extern NMonitoring::TDynamicCounters::TCounterPtr TotalBytesWastedCounter;
+void InitializeGlobalPagedBufferCounters(::NMonitoring::TDynamicCounterPtr root);
+#endif
 
 class TPagedBuffer;
 
@@ -48,6 +55,10 @@ public:
         Size_ = 0;
     }
 
+    inline size_t Wasted() const {
+        return PageCapacity - Size_;
+    }
+
 private:
     TBufferPage* Next_ = nullptr;
     size_t Size_ = 0;
@@ -75,6 +86,9 @@ class TPagedBuffer : private TNonCopyable {
 
     ~TPagedBuffer() {
         if (Head_) {
+            auto* tailPage = TBufferPage::GetPage(Tail_);
+            tailPage->Size_ = TailSize_;
+
             TBufferPage* curr = TBufferPage::GetPage(Head_);
             while (curr) {
                 auto drop = curr;
@@ -117,7 +131,6 @@ class TPagedBuffer : private TNonCopyable {
     }
 
     inline size_t Size() const {
-        //                      + (Tail_ ? TailSize_ : 0);
         size_t sizeWithReserve = ClosedPagesSize_ + ((-size_t(Tail_ != nullptr)) & TailSize_);
         Y_DEBUG_ABORT_UNLESS(sizeWithReserve >= HeadReserve_);
         return sizeWithReserve - HeadReserve_;
@@ -171,26 +184,35 @@ class TPagedBuffer : private TNonCopyable {
     }
 
     inline void Clear() {
+        // TODO: not wasted or never called?
         Tail_ = Head_;
         ClosedPagesSize_ = HeadReserve_ = 0;
-        //        = Tail_ ? 0 : TBufferPage::PageAllocSize;
         TailSize_ = (-size_t(Tail_ == nullptr)) & TBufferPage::PageCapacity;
     }
 
     inline void EraseBack(size_t len) {
         Y_DEBUG_ABORT_UNLESS(Tail_ && TailSize_ >= len);
         TailSize_ -= len;
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
+        TotalBytesWastedCounter->Add(len);
+#endif
     }
 
     inline void Advance(size_t len) {
         if (Y_LIKELY(TailSize_ + len <= TBufferPage::PageCapacity)) {
             TailSize_ += len;
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
+            TotalBytesWastedCounter->Sub(len);
+#endif
             return;
         }
 
         MKQL_ENSURE(len <= TBufferPage::PageCapacity, "Advance() size too big");
         AppendPage();
         TailSize_ = len;
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
+        TotalBytesWastedCounter->Sub(len);
+#endif
     }
 
     inline void Append(char c) {
@@ -211,6 +233,9 @@ class TPagedBuffer : private TNonCopyable {
             TailSize_ += chunk;
             data += chunk;
             size -= chunk;
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
+            TotalBytesWastedCounter->Sub(chunk);
+#endif
         }
     }
 
@@ -227,6 +252,4 @@ private:
     size_t ClosedPagesSize_ = 0;
 };
 
-} // NMiniKQL
-
-} // NKikimr
+} // namespace NKikimr::NMiniKQL

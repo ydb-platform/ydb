@@ -311,6 +311,11 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(BackupBackupCollection);
     GENERIC_HELPERS(BackupIncrementalBackupCollection);
 
+    // sysview
+    GENERIC_HELPERS(CreateSysView);
+    GENERIC_HELPERS(DropSysView);
+    DROP_BY_PATH_ID_HELPERS(DropSysView);
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -536,7 +541,7 @@ namespace NSchemeShardUT_Private {
 
     void CreateAlterLoginCreateGroup(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& group, const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
-    
+
     void CreateAlterLoginRemoveGroup(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& group, const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
@@ -561,7 +566,7 @@ namespace NSchemeShardUT_Private {
 
     void ChangePasswordHashUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user, const TString& hash);
-    
+
     // Mimics data query to a single table with multiple partitions
     class TFakeDataReq {
     public:

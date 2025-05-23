@@ -11,7 +11,7 @@ namespace NKikimr::NKqp {
 class TScriptVariator {
 private:
     std::vector<TScriptExecutor> Scripts;
-    std::shared_ptr<ICommand> BuildCommand(TString command);
+    std::shared_ptr<ICommand> BuildCommand(const TString command);
     void BuildScripts(const std::vector<std::vector<std::shared_ptr<ICommand>>>& commands, const ui32 currentLayer,
         std::vector<std::shared_ptr<ICommand>>& currentScript, std::vector<TScriptExecutor>& scripts);
 

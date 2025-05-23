@@ -30,6 +30,8 @@ class TMockClient
     : public IClient
 {
 public:
+    using TRange = std::pair<int, int>;
+
     const NTabletClient::ITableMountCachePtr& GetTableMountCache() override;
     void SetTableMountCache(NTabletClient::ITableMountCachePtr value);
 
@@ -543,6 +545,10 @@ public:
         const TPutFileToCacheOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+        const TGetCurrentUserOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, AddMember, (
         const TString& group,
         const TString& member,
@@ -881,7 +887,7 @@ public:
         const TTableFragmentWriterOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
+    MOCK_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (
         const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId parentTransactionId,
@@ -889,15 +895,17 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        const NTableClient::TTableReaderConfigPtr& config),
+        std::optional<TRange> writerIndexRange,
+        const TShuffleReaderOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        const NTableClient::TTableWriterConfigPtr& config),
+        std::optional<int> writerIndex,
+        const TShuffleWriterOptions& options),
         (override));
 
 private:

@@ -40,9 +40,19 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        include/aws/checksums/checksums.h [4:4]
         include/aws/checksums/crc.h [4:4]
         include/aws/checksums/exports.h [4:4]
-        include/aws/checksums/private/crc_priv.h [4:4]
-        source/crc.c [2:2]
+        include/aws/checksums/private/crc32_priv.h [4:4]
+        include/aws/checksums/private/crc64_priv.h [5:5]
+        include/aws/checksums/private/crc_util.h [4:4]
+        source/arm/crc32c_arm.c [2:2]
+        source/checksums.c [2:2]
+        source/crc32.c [2:2]
+        source/crc64.c [2:2]
+        source/crc64_sw.c [2:2]
         source/crc_sw.c [2:2]
         source/intel/asm/crc32c_sse42_asm.c [2:2]
+        source/intel/intrin/crc32c_sse42_avx512.c [2:2]
+        source/intel/intrin/crc64nvme_avx512.c [2:2]
+        source/intel/intrin/crc64nvme_clmul.c [2:2]

@@ -43,11 +43,7 @@ public:
 
     virtual ~IConstructor() = default;
 
-    TString SerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-        AFL_VERIFY(columnData);
-        AFL_VERIFY(columnData->GetType() == Type)("column", columnData->GetType())("current", Type);
-        return DoSerializeToString(columnData, externalInfo);
-    }
+    TString SerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const;
 
     bool IsEqualWithSameTypeTo(const IConstructor& item) const {
         return DoIsEqualWithSameTypeTo(item);

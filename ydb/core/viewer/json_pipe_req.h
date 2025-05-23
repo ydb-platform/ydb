@@ -192,6 +192,7 @@ protected:
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DatabaseNavigateResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> ResourceNavigateResponse;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfoResponse;
+    std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> ResourceBoardInfoResponse;
 
     NTabletPipe::TClientConfig GetPipeClientConfig();
 
@@ -320,7 +321,7 @@ protected:
     TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);
     void RequestTxProxyDescribe(const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {});
     void RequestStateStorageEndpointsLookup(const TString& path);
-    void RequestStateStorageMetadataCacheEndpointsLookup(const TString& path);
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageMetadataCacheEndpointsLookup(const TString& path, ui64 cookie = 0);
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);

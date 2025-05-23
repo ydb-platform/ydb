@@ -196,7 +196,7 @@ domains_config:
 
 ## domains_config — домен кластера {#domains-config}
 
-Данный раздел содержит конфигурацию кластера {{ ydb-short-name }}, включая [конфигурации Blob Storage](#domains-blob) (хранилища бинарных объектов), [State Storage](#domains-state) (хранилища состояний) и [настройки безопасности](#security).
+Данный раздел содержит конфигурацию кластера {{ ydb-short-name }}, включая [конфигурации Blob Storage](#domains-blob) (хранилища бинарных объектов) и [State Storage](#domains-state) (хранилища состояний).
 
 {% note info %}
 
@@ -421,6 +421,8 @@ domains_config:
         nto_select: 5
       ssid: 1
   ```
+
+{% endlist %}
 
 ## Настройка акторной системы {#actor-system}
 
@@ -681,14 +683,14 @@ node_broker_config:
 | Название очереди          | CPU | Memory | Описание                                        |
 |---------------------------| --- | --- |----------------------------------------------------|
 | `queue_ttl`               | 2 | — | Операции удаления данных по [TTL](../../concepts/ttl.md).                |
-| `queue_backup`            | 2 | — | Операции [резервного копирования](../../devops/manual/backup-and-recovery.md#s3).                |
-| `queue_restore`           | 2 | — | Операции [восстановления из резервной копии](../../devops/manual/backup-and-recovery.md#s3).     |
+| `queue_backup`            | 2 | — | Операции [резервного копирования](../../devops/backup-and-recovery.md#s3).                |
+| `queue_restore`           | 2 | — | Операции [восстановления из резервной копии](../../devops/backup-and-recovery.md#s3).     |
 | `queue_build_index`       | 10 | — | Операции [онлайн-создания вторичного индекса](../../concepts/secondary_indexes.md#index-add).   |
 | `queue_cdc_initial_scan` | 4 | — | [Первоначальное сканирование таблицы](../../concepts/cdc.md#initial-scan).             |
 
 {% note info %}
 
-Рекомендуется **дополнять** конфигурацию брокера ресурсов, используя [теги](../../devops/configuration-management/dynamic-config-selectors.md#dopolnitelnye-tegi-v-yaml) `!inherit` и `!append`.
+Рекомендуется **дополнять** конфигурацию брокера ресурсов, используя [теги](../../devops/configuration-management/configuration-v2/dynamic-config-selectors.md#dopolnitelnye-tegi-v-yaml) `!inherit` и `!append`.
 
 {% endnote %}
 

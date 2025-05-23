@@ -69,6 +69,11 @@ public:
 TConclusion<std::vector<INormalizerTask::TPtr>> TCleanDeprecatedSnapshotNormalizer::DoInit(
     const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
+
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        return std::vector<INormalizerTask::TPtr>();
+    }
+    
     auto batchesToDelete = GetChunksToRewrite(txc, DsGroupSelector);
     if (!batchesToDelete) {
         return TConclusionStatus::Fail("Not ready");

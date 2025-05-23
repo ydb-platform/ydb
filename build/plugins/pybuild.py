@@ -1,11 +1,19 @@
 import collections
 import json
 import os
-import six
 from hashlib import md5
 
 import ymake
-from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value, ugly_conftest_exception
+from _common import (
+    stripext,
+    rootrel_arc_src,
+    listid,
+    pathid,
+    lazy,
+    get_no_lint_value,
+    ugly_conftest_exception,
+    resolve_common_const,
+)
 
 
 PY_NAMESPACE_PREFIX = 'py/namespace'
@@ -99,7 +107,7 @@ def parse_pyx_includes(filename, path, source_root, seen=None):
 
     with open(abs_path, 'rb') as f:
         # Don't parse cimports and etc - irrelevant for cython, it's linker work
-        includes = [six.ensure_str(x) for x in ymake.parse_cython_includes(f.read())]
+        includes = [x.decode('utf-8') for x in ymake.parse_cython_includes(f.read())]
 
     abs_dirname = os.path.dirname(abs_path)
     # All includes are relative to the file which include
@@ -136,23 +144,18 @@ def get_srcdir(path, unit):
     return rootrel_arc_src(path, unit)[: -len(path)].rstrip('/')
 
 
-@lazy
-def get_ruff_configs(unit):
-    rel_config_path = rootrel_arc_src(unit.get('RUFF_CONFIG_PATHS_FILE'), unit)
-    arc_config_path = unit.resolve_arc_path(rel_config_path)
-    abs_config_path = unit.resolve(arc_config_path)
-    with open(abs_config_path, 'r') as fd:
-        return list(json.load(fd).values())
-
-
 def add_python_lint_checks(unit, py_ver, files):
     @lazy
     def get_resolved_files():
         resolved_files = []
         for path in files:
-            resolved = unit.resolve_arc_path([path])
-            if resolved.startswith('$S'):  # path was resolved as source file.
+            resolved = resolve_common_const(path)  # files can come from glob (ALL_PY_EXTRA_LINT_FILES macro)
+            if resolved.startswith('$S'):
                 resolved_files.append(resolved)
+            else:
+                resolved = unit.resolve_arc_path([path])
+                if resolved.startswith('$S'):  # path was resolved as source file.
+                    resolved_files.append(resolved)
         return resolved_files
 
     upath = unit.path()[3:]
@@ -211,7 +214,7 @@ def py_program(unit, py3):
     unit.onpeerdir(peers)
 
     # DEVTOOLSSUPPORT-53161
-    if os.name == 'nt':
+    if unit.get('OS_WINDOWS') == 'yes':
         unit.onwindows_long_path_manifest()
 
     if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL
@@ -521,8 +524,7 @@ def onpy_srcs(unit, *args):
             data = ['DONT_COMPRESS']
             prefix = 'resfs/cython/include'
             for line in sorted(
-                '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files)))
-                for filename, files in six.iteritems(include_map)
+                '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files))) for filename, files in include_map.items()
             ):
                 data += ['-', line]
             unit.onresource(data)
@@ -553,7 +555,7 @@ def onpy_srcs(unit, *args):
             resfs_mocks = []
 
             for path, mod in pys:
-                mod_list_md5.update(six.ensure_binary(mod))
+                mod_list_md5.update(mod.encode('utf-8'))
                 dest = 'py/' + mod.replace('.', '/') + '.py'
                 # In external_py_files mode we want to build python binaries without embedded python files.
                 # The application will still be able to load them from the file system.

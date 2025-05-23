@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
                 "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
 
             tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec >= cast(\"8.492\" as decimal(22,9)) order by id",
-                "[[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
+                "[[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
         };
 
         check(tester22);

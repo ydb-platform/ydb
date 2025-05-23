@@ -854,7 +854,7 @@ void TViewerPipeClient::RequestStateStorageEndpointsLookup(const TString& path) 
 }
 
 TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeClient::MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie) {
-    TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor"));
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor-Endpoints"));
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                    SelfId(),
                                                    EBoardLookupMode::Second, {}, cookie));
@@ -865,14 +865,16 @@ TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeCl
     return response;
 }
 
-void TViewerPipeClient::RequestStateStorageMetadataCacheEndpointsLookup(const TString& path) {
-    if (!AppData()->DomainsInfo->Domain) {
-        return;
-    }
+TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeClient::MakeRequestStateStorageMetadataCacheEndpointsLookup(const TString& path, ui64 cookie) {
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor-MetadataCache"));
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeDatabaseMetadataCacheBoardPath(path),
                                                    SelfId(),
-                                                   EBoardLookupMode::Second));
+                                                   EBoardLookupMode::Second, {}, cookie));
+    if (response.Span) {
+        response.Span.Attribute("path", path);
+    }
     ++DataRequests;
+    return response;
 }
 
 std::vector<TNodeId> TViewerPipeClient::GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev) {
@@ -1075,7 +1077,7 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
             TSchemeCacheNavigate::TEntry& entry(ResourceNavigateResponse->Get()->Request->ResultSet.front());
             SharedDatabase = CanonizePath(entry.Path);
             Direct |= (SharedDatabase == AppData()->TenantName);
-            DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
+            ResourceBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
             --DataRequests; // don't count this request
         } else {
             AddEvent("Failed to resolve database - shared database not found");
@@ -1112,16 +1114,25 @@ void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         DatabaseBoardInfoResponse->Set(std::move(ev));
         if (DatabaseBoardInfoResponse->IsOk()) {
             if (Direct) {
-                Bootstrap(); // retry bootstrap without redirect this time
+                return Bootstrap(); // retry bootstrap without redirect this time
             } else {
-                ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
+                return ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
             }
-        } else {
-            AddEvent("Failed to resolve database nodes");
-            Direct = true;
-            Bootstrap(); // retry bootstrap without redirect this time
         }
     }
+    if (ResourceBoardInfoResponse) {
+        ResourceBoardInfoResponse->Set(std::move(ev));
+        if (ResourceBoardInfoResponse->IsOk()) {
+            if (Direct) {
+                return Bootstrap(); // retry bootstrap without redirect this time
+            } else {
+                return ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(ResourceBoardInfoResponse->GetRef())));
+            }
+        }
+    }
+    AddEvent("Failed to resolve database nodes");
+    Direct = true;
+    Bootstrap(); // retry bootstrap without redirect this time
 }
 
 void TViewerPipeClient::HandleTimeout() {

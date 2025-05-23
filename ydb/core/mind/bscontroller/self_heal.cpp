@@ -1108,7 +1108,7 @@ namespace NKikimr::NBsController {
                 if (const TGroupInfo *group = slot->Group) {
                     const bool wasReady = slot->IsReady;
                     if (slot->GetStatus() != m.GetStatus() || slot->OnlyPhantomsRemain != m.GetOnlyPhantomsRemain()) {
-                        slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain());
+                        slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain(), this);
                         if (slot->IsReady != wasReady) {
                             ScrubState.UpdateVDiskState(slot);
                             if (wasReady) {

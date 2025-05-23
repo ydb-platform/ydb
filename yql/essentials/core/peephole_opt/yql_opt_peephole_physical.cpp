@@ -32,6 +32,8 @@ namespace {
 
 using namespace NNodes;
 
+constexpr size_t WideLimit = 101;
+
 using TPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&);
 using TPeepHoleOptimizerMap = std::unordered_map<std::string_view, TPeepHoleOptimizerPtr>;
 
@@ -3495,13 +3497,16 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TExprNode::TPtr MakeWideTableSource(const TExprNode& tableSource, TExprContext& ctx, TVector<TString>* narrowMapColumns = nullptr) {
-    // TODO check wide limit
     if (tableSource.GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
         return nullptr;
     }
 
-    YQL_CLOG(DEBUG, CorePeepHole) << "Generate WideTableSource";
     auto structType = tableSource.GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    if (structType->GetSize() > WideLimit) {
+        return nullptr;
+    }
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Generate WideTableSource";
     TVector<TString> columns;
     for (const auto& item : structType->GetItems()) {
         columns.push_back(TString(item->GetName()));
@@ -5660,6 +5665,10 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
 
     if (needKeyFlatten.front()) {
         const auto flattenSize = *needKeyFlatten.front();
+        if (flattenSize > WideLimit) {
+            return node;
+        }
+
         YQL_CLOG(DEBUG, CorePeepHole) << "Flatten key by tuple for " << node->Content() << " from " << originalKeySize << " to " << flattenSize;
         auto children = node->ChildrenList();
 
@@ -5673,6 +5682,10 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
 
     if (needKeyFlatten.back()) {
         const auto flattenSize = *needKeyFlatten.back();
+        if (flattenSize > WideLimit) {
+            return node;
+        }
+
         YQL_CLOG(DEBUG, CorePeepHole) << "Flatten key by struct for " << node->Content() << " from " << originalKeySize << " to " << flattenSize;
         auto children = node->ChildrenList();
 
@@ -5694,6 +5707,10 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
 
     if (needStateFlatten.front()) {
         const auto flattenSize = *needStateFlatten.front();
+        if (flattenSize > WideLimit) {
+            return node;
+        }
+
         YQL_CLOG(DEBUG, CorePeepHole) << "Flatten state by tuple for " << node->Content() << " from " << originalStateSize << " to " << flattenSize;
         auto children = node->ChildrenList();
 
@@ -5707,6 +5724,10 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
 
     if (needStateFlatten.back()) {
         const auto flattenSize = *needStateFlatten.back();
+        if (flattenSize > WideLimit) {
+            return node;
+        }
+
         YQL_CLOG(DEBUG, CorePeepHole) << "Flatten state by struct for " << node->Content() << " from " << originalStateSize << " to " << flattenSize;
         auto children = node->ChildrenList();
 

@@ -235,7 +235,7 @@ Change Data Capture (CDC) обеспечивает захват изменени
 
 ## Количество партиций топика {#topic-partitions}
 
-По умолчанию количество [партиций топика](topic.md#partitioning) равно количеству партиций таблицы. Количество партиций топика можно переопределить, указав параметр [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) при создании потока изменений.
+По умолчанию количество [партиций топика](topic.md#partitioning) равно количеству партиций таблицы. Количество партиций топика можно переопределить, указав параметр [TOPIC_MIN_ACTIVE_PARTITIONS](../yql/reference/syntax/alter_table/changefeed.md) при создании потока изменений. Кроме того, можно создать поток изменений, в котором количество партиций будет увеличиваться автоматически, задав параметр [TOPIC_AUTO_PARTITIONING](../yql/reference/syntax/alter_table/changefeed.md) при создании потока изменений.
 
 {% note info %}
 

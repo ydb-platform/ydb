@@ -3,22 +3,27 @@
 #include <ydb/core/tx/columnshard/data_accessor/events.h>
 namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB {
 
-void TCollector::DoAskData(
-    const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) {
+void TCollector::DoAskData(THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback) {
     if (portions.size()) {
         NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(portions, callback, consumer));
+            TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(std::move(portions), callback));
     }
 }
 
-TDataCategorized TCollector::DoAnalyzeData(const std::vector<TPortionInfo::TConstPtr>& portions, const TString& /*consumer*/) {
+TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) {
     TDataCategorized result;
-    for (auto&& p : portions) {
-        auto it = AccessorsCache.Find(p->GetPortionId());
-        if (it != AccessorsCache.End() && it.Key() == p->GetPortionId()) {
-            result.AddFromCache(it.Value());
-        } else {
-            result.AddToAsk(p);
+    for (auto&& c : portions.GetConsumers()) {
+        TConsumerPortions* cPortions = nullptr;
+        for (auto&& p : c.second.GetPortions()) {
+            auto it = AccessorsCache.Find(p->GetPortionId());
+            if (it != AccessorsCache.End() && it.Key() == p->GetPortionId()) {
+                result.AddFromCache(it.Value());
+            } else {
+                if (!cPortions) {
+                    cPortions = &portions.UpsertConsumer(c.first);
+                }
+                cPortions->AddPortion(p);
+            }
         }
     }
     return result;

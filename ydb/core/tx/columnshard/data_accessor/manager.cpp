@@ -12,9 +12,10 @@ void TLocalManager::DrainQueue() {
     TPositiveControlInteger countToFlight;
     while (PortionsAskInFlight + countToFlight < NYDBTest::TControllers::GetColumnShardController()->GetLimitForPortionsMetadataAsk() &&
            PortionsAsk.size()) {
-        THashMap<TInternalPathId, std::vector<TPortionInfo::TConstPtr>> portionsToAsk;
+        THashMap<TInternalPathId, TPortionsByConsumer> portionsToAsk;
         while (PortionsAskInFlight + countToFlight < 1000 && PortionsAsk.size()) {
             auto p = PortionsAsk.front().ExtractPortion();
+            const TString consumerId = p.front().GetConsumerId();
             PortionsAsk.pop_front();
             if (!lastPathId || *lastPathId != p->GetPathId()) {
                 lastPathId = p->GetPathId();
@@ -46,7 +47,7 @@ void TLocalManager::DrainQueue() {
                 if (!toAsk) {
                     RequestsByPortion.erase(it);
                 } else {
-                    portionsToAsk[p->GetPathId()].emplace_back(p);
+                    portionsToAsk[p->GetPathId()].UpsertConsumer(consumerId).AddPortion(p);
                     ++countToFlight;
                 }
             }
@@ -54,7 +55,7 @@ void TLocalManager::DrainQueue() {
         for (auto&& i : portionsToAsk) {
             auto it = Managers.find(i.first);
             AFL_VERIFY(it != Managers.end());
-            auto dataAnalyzed = it->second->AnalyzeData(i.second, "ANALYZE");
+            auto dataAnalyzed = it->second->AnalyzeData(i.second);
             for (auto&& accessor : dataAnalyzed.GetCachedAccessors()) {
                 auto it = RequestsByPortion.find(accessor.GetPortionInfo().GetPortionId());
                 AFL_VERIFY(it != RequestsByPortion.end());
@@ -68,8 +69,10 @@ void TLocalManager::DrainQueue() {
                 --countToFlight;
             }
             if (dataAnalyzed.GetPortionsToAsk().size()) {
+                THashMap<TInternalPathId, TPortionsByConsumer> portionsToAskImpl;
                 Counters.ResultAskDirectly->Add(dataAnalyzed.GetPortionsToAsk().size());
-                it->second->AskData(dataAnalyzed.GetPortionsToAsk(), AccessorCallback, "ANALYZE");
+                portionsToAskImpl.emplace(i.first, dataAnalyzed.DetachPortionsToAsk());
+                it->second->AskData(std::move(portionsToAskImpl), AccessorCallback);
             }
         }
     }

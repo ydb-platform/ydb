@@ -395,10 +395,12 @@ void TPlan::Load(const NJson::TJsonValue& node) {
                 auto planNodeType = planNodeTypeNode->GetStringSafe();
                 ythrow yexception() << "Unexpected plan node type [" << planNodeType << "]";
             } else {
-                Stages.push_back(std::make_shared<TStage>(nodeType));
+                Stages.push_back(std::make_shared<TStage>(this, nodeType));
                 LoadStage(Stages.back(), plan, 0);
             }
         }
+    } else if (auto* cteNameNode = node.GetValueByPath("CTE Name")) {
+        CtePlanRef = "CTE " + cteNameNode->GetStringSafe();
     }
 
     if (!TotalCpuTimes.empty()) {
@@ -414,6 +416,15 @@ void TPlan::ResolveCteRefs() {
         }
         memberRef.second.first->Operators.at(memberRef.second.second).Info = it->second;
     }
+
+    if (CtePlanRef) {
+        auto it = CteStages.find(CtePlanRef);
+        if (it == CteStages.end()) {
+            ythrow yexception() << "Can not find CTE Ref " << CtePlanRef;
+        }
+        CtePlan = it->second->Plan;
+    }
+
     for (auto& cteRef : CteRefs) {
         auto it = CteStages.find(cteRef.first);
         if (it == CteStages.end()) {
@@ -682,7 +693,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 } else if (name == "TablePointLookup" || name == "TableRangeScan") {
                     auto connection = std::make_shared<TConnection>(*stage, "Table", stage->PlanNodeId);
                     stage->Connections.push_back(connection);
-                    Stages.push_back(std::make_shared<TStage>("External"));
+                    Stages.push_back(std::make_shared<TStage>(this, "External"));
                     connection->FromStage = Stages.back();
                     Stages.back()->External = true;
                     TStringBuilder builder;
@@ -821,7 +832,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
     if (!externalOperators.empty() && !stage->External) {
         auto connection = std::make_shared<TConnection>(*stage, "External", 0);
         stage->Connections.push_back(connection);
-        Stages.push_back(std::make_shared<TStage>("External"));
+        Stages.push_back(std::make_shared<TStage>(this, "External"));
         connection->FromStage = Stages.back();
         Stages.back()->Operators = externalOperators;
         externalStage = Stages.back().get();
@@ -954,7 +965,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     // "TableLookup" => "Table" + "Lookup"
                     auto connection = std::make_shared<TConnection>(*stage, "Table", stage->PlanNodeId);
                     stage->Connections.push_back(connection);
-                    Stages.push_back(std::make_shared<TStage>("External"));
+                    Stages.push_back(std::make_shared<TStage>(this, "External"));
                     connection->FromStage = Stages.back();
                     Stages.back()->External = true;
                     TStringBuilder builder;
@@ -972,7 +983,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 } else if (subNodeType == "TableLookupJoin") {
                     auto connection = std::make_shared<TConnection>(*stage, "Table", stage->PlanNodeId);
                     stage->Connections.push_back(connection);
-                    Stages.push_back(std::make_shared<TStage>("External"));
+                    Stages.push_back(std::make_shared<TStage>(this, "External"));
                     connection->FromStage = Stages.back();
                     Stages.back()->External = true;
                     TStringBuilder builder;
@@ -1051,7 +1062,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             }
                         }
 
-                        Stages.push_back(std::make_shared<TStage>(nodeType));
+                        Stages.push_back(std::make_shared<TStage>(this, nodeType));
                         connection->FromStage = Stages.back();
                         LoadStage(Stages.back(), plan, stage->PlanNodeId);
                     }
@@ -1107,13 +1118,13 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     stage->IngressName = subNodeType;
                     auto connection = std::make_shared<TConnection>(*stage, "External", 0);
                     stage->Connections.push_back(connection);
-                    Stages.push_back(std::make_shared<TStage>("External"));
+                    Stages.push_back(std::make_shared<TStage>(this, "External"));
                     connection->FromStage = Stages.back();
                     Stages.back()->External = true;
                     LoadStage(Stages.back(), plan, stage->PlanNodeId);
                 } else {
                     stage->Connections.push_back(std::make_shared<TConnection>(*stage, "Implicit", stage->PlanNodeId));
-                    Stages.push_back(std::make_shared<TStage>(subNodeType));
+                    Stages.push_back(std::make_shared<TStage>(this, subNodeType));
                     stage->Connections.back()->FromStage = Stages.back();
                     LoadStage(Stages.back(), plan, stage->PlanNodeId);
                 }
@@ -1302,32 +1313,34 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
 }
 
 void TPlan::MarkLayout() {
-    ui32 offsetY = 0;
-    MarkStageIndent(0, offsetY, Stages.front());
-    // Compress Reference(s)
-    for (auto& stage : Stages) {
-        auto& operators = stage->Operators;
-        ui32 i = 0;
-        while (i < operators.size()) {
-            auto& o = operators[i];
-            if (o.Name == "Reference") {
-                auto next = i + 1;
-                if (next < operators.size()) {
-                    auto& on = operators[next];
-                    if (on.Name == "Reference") {
-                        while (next < operators.size()) {
-                            auto& on = operators[next];
-                            if (on.Name == "Reference") {
-                                o.Name += ", " + on.Name;
-                                operators.erase(operators.begin() + next);
-                            } else {
-                                break;
+    if (!Stages.empty()) {
+        ui32 offsetY = 0;
+        MarkStageIndent(0, offsetY, Stages.front());
+        // Compress Reference(s)
+        for (auto& stage : Stages) {
+            auto& operators = stage->Operators;
+            ui32 i = 0;
+            while (i < operators.size()) {
+                auto& o = operators[i];
+                if (o.Name == "Reference") {
+                    auto next = i + 1;
+                    if (next < operators.size()) {
+                        auto& on = operators[next];
+                        if (on.Name == "Reference") {
+                            while (next < operators.size()) {
+                                auto& on = operators[next];
+                                if (on.Name == "Reference") {
+                                    o.Name += ", " + on.Name;
+                                    operators.erase(operators.begin() + next);
+                                } else {
+                                    break;
+                                }
                             }
                         }
                     }
                 }
+                i++;
             }
-            i++;
         }
     }
 }
@@ -2174,29 +2187,34 @@ void TPlanVisualizer::LoadPlans(const TString& plans, bool simplified) {
 }
 
 void TPlanVisualizer::LoadPlan(const TString& nodeType, const NJson::TJsonValue& node) {
-    Plans.emplace_back(nodeType, Config, CteStages, CteSubPlans);
-    Plans.back().Load(node);
+    Plans.emplace_back(std::make_shared<TPlan>(nodeType, Config, CteStages, CteSubPlans));
+    Plans.back()->Load(node);
 }
 
 void TPlanVisualizer::PostProcessPlans() {
     // Fix CTE Refs
     for (auto& p : Plans) {
-        p.ResolveCteRefs();
+        p->ResolveCteRefs();
     }
     // Fix Layouts
     for (auto& p : Plans) {
-        p.MarkLayout();
+        p->MarkLayout();
         if (BaseTime == 0) {
-            BaseTime = p.BaseTime;
-        } else {
-            BaseTime = std::min(BaseTime, p.BaseTime);
+            BaseTime = p->BaseTime;
+        } else if (p->BaseTime) {
+            BaseTime = std::min(BaseTime, p->BaseTime);
+        }
+    }
+    for (auto& p : Plans) {
+        if (p->BaseTime == 0) {
+            p->BaseTime = BaseTime;
         }
     }
     // Fix time Offsets
     for (auto& p : Plans) {
-        p.TimeOffset = p.BaseTime - BaseTime;
-        MaxTime = std::max(MaxTime, p.TimeOffset + p.MaxTime);
-        UpdateTime = std::max(UpdateTime, p.TimeOffset + p.UpdateTime);
+        p->TimeOffset = p->BaseTime - BaseTime;
+        MaxTime = std::max(MaxTime, p->TimeOffset + p->MaxTime);
+        UpdateTime = std::max(UpdateTime, p->TimeOffset + p->UpdateTime);
     }
 }
 
@@ -2217,12 +2235,21 @@ TString TPlanVisualizer::PrintSvg() {
     ui32 timelineDelta = (UpdateTime > MaxTime) ? std::min<ui32>(Config.TimelineWidth * (UpdateTime - MaxTime) / UpdateTime, Config.TimelineWidth / 10) : 0;
 
     ui32 summary3 = (Config.SummaryWidth - INTERNAL_GAP_X * 2) / 3;
-    for (auto& p : Plans) {
+    for (auto plan : Plans) {
+
+        auto* p = plan.get();
+        auto planName = p->NodeType;
+
+        if (plan->Stages.empty() && plan->CtePlan != nullptr) {
+            p = plan->CtePlan;
+            planName = planName + " (reference to " + p->NodeType + ')';
+        }
+
         offsetY += GAP_Y;
         canvas
             << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
             << "' x='" << Config.HeaderLeft
-            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << p.NodeType << "</text>" << Endl
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << planName << "</text>" << Endl
             << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
             << "' x='" << Config.OperatorLeft + 2
             << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>Operators</text>" << Endl
@@ -2234,18 +2261,18 @@ TString TPlanVisualizer::PrintSvg() {
             << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>Tasks</text>" << Endl
             << "<text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
             << "' x='" << Config.TaskLeft + Config.TaskWidth - 2
-            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << p.Tasks << "</text>" << Endl;
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << p->Tasks << "</text>" << Endl;
 
         canvas
             << "<g><title>Ingress "
-            << FormatBytes(p.IngressBytes->Value) << ", Rows " << FormatIntegerValue(p.IngressRows->Value);
-        if (p.IngressRows->Value) {
+            << FormatBytes(p->IngressBytes->Value) << ", Rows " << FormatIntegerValue(p->IngressRows->Value);
+        if (p->IngressRows->Value) {
         canvas
-            << ", Width " << p.IngressBytes->Value / p.IngressRows->Value << "B";
+            << ", Width " << p->IngressBytes->Value / p->IngressRows->Value << "B";
         }
-        if (p.MaxTime) {
+        if (p->MaxTime) {
         canvas
-            << ", Avg " << FormatBytes(p.IngressBytes->Value * 1000 / p.MaxTime) << "/s";
+            << ", Avg " << FormatBytes(p->IngressBytes->Value * 1000 / p->MaxTime) << "/s";
         }
         canvas
             << "</title>" << Endl
@@ -2254,13 +2281,13 @@ TString TPlanVisualizer::PrintSvg() {
             << "' stroke-width='0' fill='" << Config.Palette.IngressMedium << "'/>" << Endl
             << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
             << "' x='" << Config.SummaryLeft + 2
-            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << FormatBytes(p.IngressBytes->Value) << "</text>" << Endl
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << FormatBytes(p->IngressBytes->Value) << "</text>" << Endl
             << "</g>" << Endl;
 
         canvas
-            << "<g><title>CPU Usage " << FormatUsage(p.CpuTime->Value);
-        if (p.MaxTime) {
-            auto usagePS = p.CpuTime->Value / p.MaxTime;
+            << "<g><title>CPU Usage " << FormatUsage(p->CpuTime->Value);
+        if (p->MaxTime) {
+            auto usagePS = p->CpuTime->Value / p->MaxTime;
             usagePS /= 10;
         canvas
             << ", Avg " << Sprintf("%lu.%.2lu", usagePS / 100, usagePS % 100) << " CPU/s";
@@ -2272,39 +2299,40 @@ TString TPlanVisualizer::PrintSvg() {
             << "' stroke-width='0' fill='" << Config.Palette.CpuMedium << "'/>" << Endl
             << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
             << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 + 2
-            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << FormatUsage(p.CpuTime->Value) << "</text>" << Endl
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y << "'>" << FormatUsage(p->CpuTime->Value) << "</text>" << Endl
             << "</g>" << Endl;
 
         canvas
-            << "<g><title>Memory " << FormatBytes(p.MaxMemoryUsage->Value) << "</title>" << Endl
+            << "<g><title>Memory " << FormatBytes(p->MaxMemoryUsage->Value) << "</title>" << Endl
             << "  <rect x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT + GAP_Y
             << "' width='" << summary3 << "' height='" << TIME_HEIGHT
             << "' stroke-width='0' fill='" << Config.Palette.MemMedium << "'/>" << Endl
             << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
             << "' x='" << Config.SummaryLeft + Config.SummaryWidth - summary3 + 2
-            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y<< "'>" << FormatBytes(p.MaxMemoryUsage->Value) << "</text>" << Endl
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT * 2 + GAP_Y<< "'>" << FormatBytes(p->MaxMemoryUsage->Value) << "</text>" << Endl
             << "</g>" << Endl;
 
-        auto x = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p.MaxTime + p.TimeOffset) / MaxTime;
+        auto x = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->MaxTime + p->TimeOffset) / MaxTime;
         canvas
-            << "<g><title>" << "Duration: " << FormatTimeMs(p.MaxTime) << ", Total " << FormatTimeMs(p.MaxTime + p.TimeOffset) << "</title>" << Endl
+            << "<g><title>" << "Duration: " << FormatTimeMs(p->MaxTime) << ", Total " << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</title>" << Endl
             << "  <rect x='" << x - summary3 << "' y='" << offsetY
             << "' width='" << summary3 << "' height='" << TIME_HEIGHT
             << "' stroke-width='0' fill='" << Config.Palette.StageGrid << "'/>" << Endl
             << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << x - 2
-            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(p.MaxTime + p.TimeOffset) << "</text>" << Endl
+            << "' y='" << offsetY + INTERNAL_TEXT_HEIGHT << "'>" << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</text>" << Endl
             << "</g>" << Endl;
 
         offsetY += TIME_HEIGHT;
-        if (!p.TotalCpuTime.Deriv.empty() && p.TotalCpuTime.MaxTime > p.TotalCpuTime.MinTime) {
+        if (!p->TotalCpuTime.Deriv.empty() && p->TotalCpuTime.MaxTime > p->TotalCpuTime.MinTime) {
 
             auto tx0 = Config.TimelineLeft;
             auto tw = Config.TimelineWidth;
-            auto maxCpu = p.TotalCpuTime.MaxDeriv * TIME_SERIES_RANGES / (p.TotalCpuTime.MaxTime - p.TotalCpuTime.MinTime);
-            p.PrintDeriv(canvas, p.TotalCpuTime, tx0, offsetY, tw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
+            auto maxCpu = p->TotalCpuTime.MaxDeriv * TIME_SERIES_RANGES / (p->TotalCpuTime.MaxTime - p->TotalCpuTime.MinTime);
+            p->PrintDeriv(canvas, p->TotalCpuTime, tx0, offsetY, tw, INTERNAL_HEIGHT, "Max CPU " + FormatMCpu(maxCpu), Config.Palette.CpuMedium, Config.Palette.CpuLight);
         }
         offsetY += INTERNAL_HEIGHT;
-        p.PrintSvg(MaxTime, timelineDelta, offsetY, background, canvas);
+
+        plan->PrintSvg(MaxTime, timelineDelta, offsetY, background, canvas);
     }
 
     svg << "<svg width='" << Config.Width << "' height='" << offsetY << "' xmlns='http://www.w3.org/2000/svg'>" << Endl;
@@ -2369,10 +2397,10 @@ TString TPlanVisualizer::PrintSvg() {
                 << "<line x1='" << x + x1 << "' y1='0' x2='" << x + x1 << "' y2='" << offsetY
                 << "' stroke-width='1' stroke='" << Config.Palette.StageGrid << "' stroke-dasharray='1,2'/>" << Endl;
             auto timeLabel = Sprintf("%lu:%.2lu", t / 60, t % 60);
-            for (auto& p : Plans) {
+            for (auto p : Plans) {
                 svg
                     << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.StageText
-                    << "' x='" << x + x1 + 2 << "' y='" << p.OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT) << "'>"
+                    << "' x='" << x + x1 + 2 << "' y='" << p->OffsetY - INTERNAL_HEIGHT - (TIME_HEIGHT - INTERNAL_TEXT_HEIGHT) << "'>"
                     << timeLabel << "</text>" << Endl;
             }
         }

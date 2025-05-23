@@ -311,6 +311,10 @@ protected:
         Register(CreateKafkaListOffsetsActor(Context, header->CorrelationId, message));
     }
 
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TListGroupsRequestData>& message) {
+        Register(CreateKafkaListGroupsActor(Context, header->CorrelationId, message));
+    }
+
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TFetchRequestData>& message) {
         Register(CreateKafkaFetchActor(Context, header->CorrelationId, message));
     }
@@ -428,6 +432,10 @@ protected:
 
             case LIST_OFFSETS:
                 HandleMessage(&Request->Header, Cast<TListOffsetsRequestData>(Request));
+                break;
+
+            case LIST_GROUPS:
+                HandleMessage(&Request->Header, Cast<TListGroupsRequestData>(Request));
                 break;
 
             case FETCH:

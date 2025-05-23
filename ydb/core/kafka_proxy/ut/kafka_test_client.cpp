@@ -394,6 +394,12 @@ TMessagePtr<TOffsetFetchResponseData> TKafkaTestClient::OffsetFetch(TOffsetFetch
     return WriteAndRead<TOffsetFetchResponseData>(header, request);
 }
 
+TMessagePtr<TListGroupsResponseData> TKafkaTestClient::ListGroupsFetch(TListGroupsRequestData request) {
+    Cerr << ">>>>> TListGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::LIST_GROUPS, 4);
+    return WriteAndRead<TListGroupsResponseData>(header, request);
+}
+
 TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset) {
     Cerr << ">>>>> TFetchRequestData\n";
 

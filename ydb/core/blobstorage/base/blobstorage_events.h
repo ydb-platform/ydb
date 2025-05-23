@@ -3,6 +3,7 @@
 
 #include "blobstorage_vdiskid.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
@@ -583,12 +584,11 @@ namespace NKikimr {
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> Config;
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> ProposedConfig;
         bool SelfManagementEnabled;
-        bool IsPrimary; // if bridge mode is enabled
-        bool IsBeingPromoted; // if bridge mode is enabled
+        TBridgeInfo::TPtr BridgeInfo;
 
         TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
                 const NKikimrBlobStorage::TStorageConfig *proposedConfig, bool selfManagementEnabled,
-                bool isPrimary, bool isBeingPromoted);
+                TBridgeInfo::TPtr bridgeInfo);
         ~TEvNodeWardenStorageConfig();
     };
 

@@ -3,6 +3,12 @@ option cc_enable_arenas = true;
 
 package NYql.NS3;
 
+message TArrowWriterSettings {
+    optional string RowType = 1;
+    optional uint64 MaxFileSize = 2; 
+    optional uint64 MaxBlockSize = 3;
+}
+
 message TSink {
     string Url = 1;
     string Token = 2;
@@ -14,6 +20,7 @@ message TSink {
     optional string Extension = 8;
     optional bool Multipart = 9;
     bool AtomicUploadCommit = 10;
+    optional TArrowWriterSettings ArrowSettings = 11; 
 }
 
 message TCommitEffect {

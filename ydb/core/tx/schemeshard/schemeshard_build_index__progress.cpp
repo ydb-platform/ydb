@@ -589,6 +589,7 @@ private:
         ev->Record.SetParent(buildInfo.KMeans.Parent);
         ev->Record.SetChild(buildInfo.KMeans.Child);
 
+        Y_VERIFY_DEBUG(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto& clusters = *ev->Record.MutableClusters();
         clusters.Reserve(buildInfo.Sample.Rows.size());
         for (const auto& [_, row] : buildInfo.Sample.Rows) {
@@ -856,14 +857,6 @@ private:
             InitMultiKMeans(buildInfo);
             return false;
         }
-        std::array<NScheme::TTypeInfo, 1> typeInfos{ClusterIdTypeId};
-        auto range = ParentRange(buildInfo.KMeans.Parent);
-        auto addRestricted = [&] (const auto& idx) {
-            const auto& status = buildInfo.Shards.at(idx);
-            if (!Intersect(typeInfos, range.ToTableRange(), status.Range.ToTableRange()).IsEmptyRange(typeInfos)) {
-                AddShard(buildInfo, idx, status);
-            }
-        };
         if (buildInfo.KMeans.Parent == 0) {
             AddAllShards(buildInfo);
         } else {
@@ -871,7 +864,8 @@ private:
             Y_ASSERT(it != buildInfo.Cluster2Shards.end());
             if (it->second.Local == InvalidShardIdx) {
                 for (const auto& idx : it->second.Global) {
-                    addRestricted(idx);
+                    const auto& status = buildInfo.Shards.at(idx);
+                    AddShard(buildInfo, idx, status);
                 }
             }
         }
@@ -900,7 +894,6 @@ private:
     }
 
     bool SendKMeansSample(TIndexBuildInfo& buildInfo) {
-        buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         if (buildInfo.Sample.MaxProbability == 0) {
             buildInfo.ToUploadShards.clear();
             buildInfo.InProgressShards.clear();
@@ -910,6 +903,7 @@ private:
     }
 
     bool SendKMeansReshuffle(TIndexBuildInfo& buildInfo) {
+        buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansReshuffleRequest(shardIdx, buildInfo); });
     }
 
@@ -1013,6 +1007,7 @@ private:
     }
 
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        // FIXME: Very non-intuitive state machine, rework it by adding an explicit vector index fill state
         LOG_D("FillVectorIndex Start " << buildInfo.DebugString());
 
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {

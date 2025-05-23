@@ -453,12 +453,12 @@ TString GetTypesHtml(const std::set<TTabletTypes::EType>& typesToShow, const std
         auto longTypeName = TTabletTypes::TypeToStr(type);
         if (it == tabletLimits.end() || it->second.GetMaxCount() > 0) {
             str << "<span class='box' title='" << longTypeName
-                << "' onclick='applySetting(this,\"DefaultTabletLimit\",\"" << shortTypeName
-                << ":0\")'>";
+                << "' onclick='changeDefaultTabletLimit(this, \"" << shortTypeName
+                << ":0\", \"" << longTypeName << "\")'>";
         } else {
             str << "<span class='box box-disabled' title='" << longTypeName
-                << "' onclick='applySetting(this, \"DefaultTabletLimit\", \"" << shortTypeName
-                << ":" << TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE << "\")'>";
+                << "' onclick='changeDefaultTabletLimit(this, \"" << shortTypeName
+                << ":" << TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE << "\", \"" << longTypeName << "\")'>";
         }
         str << shortTypeName;
         str << "</span>";

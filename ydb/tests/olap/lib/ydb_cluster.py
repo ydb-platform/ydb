@@ -515,33 +515,33 @@ class YdbCluster:
             else:
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=False, timeout=timeout)
             
-            # Проверяем код возврата вручную
-            if result.returncode != 0:
-                if raise_on_error:
-                    # Вызываем то же исключение, что и при check=True
-                    raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
-                else:
-                    # Возвращаем stderr вместо None, если команда завершилась с ошибкой
-                    return result.stderr
+            # Always return both stdout and stderr
+            output = result.stdout or ""
+            if result.stderr:
+                output += "\nSTDERR:\n" + result.stderr
             
-            return result.stdout
+            # If command failed and we should raise
+            if result.returncode != 0 and raise_on_error:
+                raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+            
+            return output
+            
         except subprocess.TimeoutExpired as e:
             if raise_on_timeout:
                 raise
             LOGGER.warning(f"Command timed out after {timeout} seconds: {e}")
-            # Возвращаем частичный вывод, если он есть
-            return e.stdout if e.stdout else None
+            # Return any partial output we got
+            output = e.stdout or ""
+            if e.stderr:
+                output += "\nSTDERR:\n" + e.stderr
+            return output
+            
         except subprocess.SubprocessError as e:
             if raise_on_error:
                 raise
             LOGGER.error(f"Error executing local command: {e}")
-            
-            # Возвращаем текст ошибки вместо None
-            if hasattr(e, 'stderr') and e.stderr:
-                return e.stderr
-            return str(e)
+            return f"Error: {str(e)}"
 
-    
     @staticmethod
     def execute_ssh_command(host: str, cmd: Union[str, list], raise_on_error: bool = True, timeout: Optional[float] = None, raise_on_timeout: bool = True) -> str:
         """
@@ -576,33 +576,34 @@ class YdbCluster:
         
         LOGGER.info(f"Executing SSH command on {host}: {full_cmd}")
         try:
-            # Используем check=False, чтобы обработать ошибки вручную
             result = subprocess.run(full_cmd, capture_output=True, text=True, check=False, timeout=timeout)
             
-            # Проверяем код возврата вручную
-            if result.returncode != 0:
-                if raise_on_error:
-                    raise subprocess.CalledProcessError(result.returncode, full_cmd, result.stdout, result.stderr)
-                else:
-                    # Возвращаем stderr вместо None при ошибке
-                    return result.stderr if result.stderr else f"SSH command failed with return code {result.returncode}"
+            # Always return both stdout and stderr
+            output = result.stdout or ""
+            if result.stderr:
+                output += "\nSTDERR:\n" + result.stderr
             
-            return result.stdout
+            # If command failed and we should raise
+            if result.returncode != 0 and raise_on_error:
+                raise subprocess.CalledProcessError(result.returncode, full_cmd, result.stdout, result.stderr)
+            
+            return output
+            
         except subprocess.TimeoutExpired as e:
             if raise_on_timeout:
                 raise
             LOGGER.warning(f"SSH command timed out after {timeout} seconds on {host}: {e}")
-            # Возвращаем частичный вывод, если он есть
-            return e.stdout if e.stdout else None
+            # Return any partial output we got
+            output = e.stdout or ""
+            if e.stderr:
+                output += "\nSTDERR:\n" + e.stderr
+            return output
+            
         except subprocess.SubprocessError as e:
             if raise_on_error:
                 raise
             LOGGER.error(f"Error executing SSH command on {host}: {e}")
-            
-            # Возвращаем текст ошибки вместо None
-            if hasattr(e, 'stderr') and e.stderr:
-                return e.stderr
-            return str(e)
+            return f"Error: {str(e)}"
 
 
     

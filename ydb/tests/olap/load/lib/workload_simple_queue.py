@@ -44,26 +44,36 @@ class TestWorkloadSimpleQueue(LoadSuiteBase):
         # Разворачиваем бинарный файл на всех нодах кластера
         deploy_results = YdbCluster.deploy_binaries_to_nodes([binary_path], STRESS_BINARIES_DEPLOY_PATH)
        
-       
         # Для каждой ноды в кластере
         for node in YdbCluster.get_cluster_nodes(db_only=True):
-            node_host = node.host
-            # Проверяем, успешно ли был развернут бинарный файл
-            binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
-            success = binary_result.get('success', False)
+            with allure.step(f'Running workload on node {node.host}'):
+                node_host = node.host
+                # Проверяем, успешно ли был развернут бинарный файл
+                binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
+                success = binary_result.get('success', False)
 
-            # Запускаем бинарный файл на ноде, если он был успешно развернут
-            if success:
-                target_path = binary_result['path']
-                cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database {YdbCluster.ydb_database} --mode row"
-                result = node.execute_command(cmd, raise_on_error=False, timeout=100, raise_on_timeout=False )
-                print(f'res:{result}')
-        result = node.execute_command(YdbCliHelper.get_cli_command() + ["scheme", "ls", "-lR"], raise_on_error=False )
-        print(f'res:{result}')
-        print(f'path to check:{node.host.split('.')[0]}_0')
+                # Запускаем бинарный файл на ноде, если он был успешно развернут
+                if success:
+                    target_path = binary_result['path']
+                    cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database {YdbCluster.ydb_database} --mode row"
+                    allure.attach(cmd, 'Command to execute', allure.attachment_type.TEXT)
+                    print(f"Executing command on node {node.host} (is_local: {node.is_local})")
+                    result = node.execute_command(cmd, raise_on_error=False, timeout=100, raise_on_timeout=False)
+                    print(f"Command execution result type: {type(result)}")
+                    print(f"Command execution result: {result}")
+                    if result is None:
+                        print("Warning: Command execution returned None")
+                    allure.attach(str(result) if result is not None else "No output", 'Command execution result', allure.attachment_type.TEXT)
+                    print(f'res:{result}')
+
+        with allure.step('Checking scheme state'):
+            result = node.execute_command(YdbCliHelper.get_cli_command() + ["scheme", "ls", "-lR"], raise_on_error=False)
+            allure.attach(str(result), 'Scheme state', allure.attachment_type.TEXT)
+            print(f'res:{result}')
+            print(f'path to check:{node.host.split('.')[0]}_0')
                
-        # Сохраняем состояние нод и выполняем тестовый запрос
         self.save_nodes_state()
+        
         result = YdbCliHelper.workload_run(
             path=f"{node.host.split('.')[0]}_0",
             query_name='query_name',

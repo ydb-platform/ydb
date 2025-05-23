@@ -1,6 +1,6 @@
 {%- macro AnnotationProcessors(funcName, annotation_processors) -%}
 {%-     if annotation_processors|length -%}
-{%-         for annotation_processor in annotation_processors %}
+{%-         for annotation_processor in annotation_processors|unique|sort %}
     {{ funcName }}(files("$arcadia_root/{{ annotation_processor }}"))
 {%-         endfor -%}
 {%-     endif -%}
@@ -8,7 +8,7 @@
 
 {%- macro Kapts(funcName, kapts) -%}
 {%-     if kapts|length -%}
-{%-         for kapt in kapts %}
+{%-         for kapt in kapts|unique|sort %}
     {{ funcName }}(files("$arcadia_root/{{ kapt }}"))
 {%-         endfor -%}
 {%-     endif -%}

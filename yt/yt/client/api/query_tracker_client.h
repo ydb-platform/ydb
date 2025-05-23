@@ -57,8 +57,8 @@ struct TStartQueryOptions
     bool Draft = false;
     NYTree::IMapNodePtr Annotations;
     std::vector<TQueryFilePtr> Files;
-    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
-    std::optional<std::vector<TString>> AccessControlObjects;
+    std::optional<std::string> AccessControlObject; // COMPAT(mpereskokova)
+    std::optional<std::vector<std::string>> AccessControlObjects;
     std::vector<TQuerySecretPtr> Secrets;
 };
 
@@ -157,8 +157,8 @@ struct TAlterQueryOptions
     , public TQueryTrackerOptions
 {
     NYTree::IMapNodePtr Annotations;
-    std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
-    std::optional<std::vector<TString>> AccessControlObjects;
+    std::optional<std::string> AccessControlObject; // COMPAT(mpereskokova)
+    std::optional<std::vector<std::string>> AccessControlObjects;
 };
 
 struct TGetQueryTrackerInfoOptions
@@ -173,7 +173,7 @@ struct TGetQueryTrackerInfoResult
     TString QueryTrackerStage;
     std::string ClusterName;
     NYson::TYsonString SupportedFeatures;
-    std::vector<TString> AccessControlObjects;
+    std::vector<std::string> AccessControlObjects;
     std::vector<std::string> Clusters;
 };
 

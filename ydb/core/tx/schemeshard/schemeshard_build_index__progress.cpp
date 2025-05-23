@@ -588,6 +588,7 @@ private:
         ev->Record.SetParent(buildInfo.KMeans.Parent);
         ev->Record.SetChild(buildInfo.KMeans.Child);
 
+        Y_VERIFY_DEBUG(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto& clusters = *ev->Record.MutableClusters();
         clusters.Reserve(buildInfo.Sample.Rows.size());
         for (const auto& [_, row] : buildInfo.Sample.Rows) {
@@ -899,7 +900,6 @@ private:
     }
 
     bool SendKMeansSample(TIndexBuildInfo& buildInfo) {
-        buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         if (buildInfo.Sample.MaxProbability == 0) {
             buildInfo.ToUploadShards.clear();
             buildInfo.InProgressShards.clear();
@@ -909,6 +909,7 @@ private:
     }
 
     bool SendKMeansReshuffle(TIndexBuildInfo& buildInfo) {
+        buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansReshuffleRequest(shardIdx, buildInfo); });
     }
 
@@ -1012,6 +1013,7 @@ private:
     }
 
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        // FIXME: Very non-intuitive state machine, rework it by adding an explicit vector index fill state
         LOG_D("FillVectorIndex Start " << buildInfo.DebugString());
 
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload) {

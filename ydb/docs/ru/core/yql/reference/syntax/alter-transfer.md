@@ -24,7 +24,7 @@ ALTER TRANSFER <name> [SET USING lambda] [SET (option = value [, ...])]
 
 ## Примеры {#examples}
 
-Следующий запрос изменяет [lambda функцию](../yql/reference/syntax/expressions.md#lambda) преобразовывающее сообщение топика:
+Следующий запрос изменяет [lambda функцию](expressions.md#lambda) преобразовывающее сообщение топика:
 
 ```yql
 $new_lambda = ...

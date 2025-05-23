@@ -60,7 +60,8 @@ public:
         bool PreTag = false;
         TActorId ActorId;
         bool UseAuth = true;
-        TMaybe<TVector<TString>> AllowedSIDs;
+        TVector<TString> AllowedSIDs;
+        bool UseFallbackSIDs = true;
         bool SortPages = true;
         TString MonServiceName = "utils";
     };

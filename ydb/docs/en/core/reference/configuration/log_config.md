@@ -41,7 +41,7 @@ When both `sys_log` and `uaclient_config` are enabled simultaneously, logs will 
 | `use_local_timestamps` | bool | false | Use local time zone for log timestamps (UTC is used by default). |
 | `backend_file_name` | string | — | File name for log output. If specified, logs are written to this file. |
 | `sys_log_service` | string | — | Service name for syslog. Corresponds to the tag field in the old syslog [RFC 3164](https://datatracker.ietf.org/doc/html/rfc3164) or the app-name field in the modern [RFC 5424](https://datatracker.ietf.org/doc/html/rfc5424) protocol. |
-| `time_threshold_ms` | uint64 | 1000 | Time threshold for log operations in milliseconds. |
+| `time_threshold_ms` | uint64 | 1000 | If `allow_drop_entries = true`, specifies how often {{ ydb-short-name }} writes buffered log messages to the output, in milliseconds. |
 | `ignore_unknown_components` | bool | true | Ignore logging requests from unknown components. |
 | `entry` | array | [] | Configuration of logging level and/or sampling for specific {{ ydb-short-name }} components, see [{#T}](#entry-objects) below. |
 | `uaclient_config` | object | — | Configuration for the Unified Agent client, see [{#T}](#uaclient-config) below. |

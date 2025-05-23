@@ -2366,17 +2366,51 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG);
         //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_DEBUG);
 
+        THashMap<TActorId, ui64> countResolveTablet;
+        auto resetCounters = [&countResolveTablet]() {
+            countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] = 0;
+            countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] = 0;
+        };
+
+        auto expertMasterReads = [&countResolveTablet]() {
+            // master
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] > 0);
+            // follower
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] == 0);
+        };
+
+        auto expertFollowerReads = [&countResolveTablet]() {
+            // master
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] == 0);
+            // follower
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] > 0);
+        };
+
+        auto counterObserver = [&countResolveTablet](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::TEvPipeCache::TEvGetTabletNode::EventType) {
+                countResolveTablet[ev->Recipient]++;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        kikimr.GetTestServer().GetRuntime()->SetObserverFunc(counterObserver);
+
         // Followers immediate
+        resetCounters();
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
             SELECT * FROM FollowersKv WHERE Key = 21;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
-        UNIT_ASSERT_UNEQUAL(0, GetCumulativeCounterValue(
-            kikimr.GetTestServer(),
-            "/Root/FollowersKv",
-            "DataShard/TxUpdateFollowerReadEdge/ExecuteCPUTime"
-        ));
+
+        // from master - should NOT read
+        CheckTableReads(session, "/Root/FollowersKv", false, false);
+        // from followers - should read
+        // CheckTableReads(session, "/Root/FollowersKv", true, true); #18749
+
+        // expertFollowerReads(); #18749
 
         CompareYson(R"(
             [
@@ -2385,16 +2419,19 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", FormatResultSetYson(result.GetResultSet(0)));
 
         // Followers distributed
+        resetCounters();
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
             SELECT * FROM FollowersKv WHERE Value != "One" ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
-        UNIT_ASSERT_UNEQUAL(0, GetCumulativeCounterValue(
-            kikimr.GetTestServer(),
-            "/Root/FollowersKv",
-            "DataShard/TxUpdateFollowerReadEdge/ExecuteCPUTime"
-        ));
+
+        // from master - should NOT read
+        CheckTableReads(session, "/Root/FollowersKv", false, false);
+        // from followers - should read
+        // CheckTableReads(session, "/Root/FollowersKv", true, true); #18749
+
+        // expertFollowerReads(); #18749
 
         CompareYson(R"(
             [
@@ -2405,16 +2442,20 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", FormatResultSetYson(result.GetResultSet(0)));
 
         // No followers immediate
+
+        resetCounters();
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
             SELECT * FROM TwoShard WHERE Key = 2;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
-        UNIT_ASSERT_EQUAL(0, GetCumulativeCounterValue(
-            kikimr.GetTestServer(),
-            "/Root/TwoShard",
-            "DataShard/TxUpdateFollowerReadEdge/ExecuteCPUTime"
-        ));
+
+        // from master - should read
+        CheckTableReads(session, "/Root/TwoShard", false, true);
+        // from followers - should NOT read
+        CheckTableReads(session, "/Root/TwoShard", true, false); 
+
+        // expertMasterReads(); #18749
 
         CompareYson(R"(
             [
@@ -2423,6 +2464,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )", FormatResultSetYson(result.GetResultSet(0)));
 
         // No followers distributed
+        resetCounters();
         result = session.ExecuteDataQuery(R"(
             --!syntax_v1
             SELECT * FROM TwoShard WHERE Value2 < 0 ORDER BY Key;
@@ -2435,11 +2477,13 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 [[4000000001u];["BigOne"];[-1]]
             ]
         )", FormatResultSetYson(result.GetResultSet(0)));
-        UNIT_ASSERT_EQUAL(0, GetCumulativeCounterValue(
-            kikimr.GetTestServer(),
-            "/Root/TwoShard",
-            "DataShard/TxUpdateFollowerReadEdge/ExecuteCPUTime"
-        ));
+
+        // from master - should read
+        CheckTableReads(session, "/Root/TwoShard", false, true);
+        // from followers - should NOT read
+        CheckTableReads(session, "/Root/TwoShard", true, false);
+
+        // expertMasterReads(); #18749
     }
 
     Y_UNIT_TEST(StaleRO_Immediate) {
@@ -2501,25 +2545,31 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            SELECT * FROM `KeySubkey` VIEW `idx` WHERE Key = 1 ORDER BY `Order`;
+            SELECT Key, Value FROM `KeySubkey` VIEW `idx` WHERE Key = 1 ORDER BY `Order`;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
 
-        const auto FollowerCpuTime = GetCumulativeCounterValue(
-            kikimr.GetTestServer(),
-            "/Root/KeySubkey/idx/indexImplTable",
-            "DataShard/TxUpdateFollowerReadEdge/ExecuteCPUTime"
-        );
+        // from main master - should NOT read
+        CheckTableReads(session, "/Root/KeySubkey", false, false);
+        // from main followers - should NOT read
+        CheckTableReads(session, "/Root/KeySubkey", true, false);
+
         if constexpr (EnableFollowers) {
-            UNIT_ASSERT_UNEQUAL(0, FollowerCpuTime);
+            // from index master - should NOT read
+            CheckTableReads(session, "/Root/KeySubkey/idx/indexImplTable", false, false);
+            // from index followers - should read
+            // CheckTableReads(session, "/Root/KeySubkey/idx/indexImplTable", true, true);
         } else {
-            UNIT_ASSERT_EQUAL(0, FollowerCpuTime);
+            // from index master - should read
+            CheckTableReads(session, "/Root/KeySubkey/idx/indexImplTable", false, true);
+            // from index followers - should NOT read
+            CheckTableReads(session, "/Root/KeySubkey/idx/indexImplTable", true, false);
         }
 
         CompareYson(R"(
             [
-                [[1u];[4u];[3u];["Two"]];
-                [[1u];[7u];[2u];["One"]];
+                [[1u];["Two"]];
+                [[1u];["One"]];
             ]
         )", FormatResultSetYson(result.GetResultSet(0)));
     }

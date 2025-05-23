@@ -87,9 +87,10 @@ public:
 class TRemovePortion: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
+    const ui64 PlanStep = 0;
     std::vector<TChunkAddress> Chunks;
     virtual TString GetId() const override {
-        return "P";
+        return TString("P::") + (PlanStep ? "DEL" : "EXIST");
     }
 
     virtual void Apply(NIceDb::TNiceDb& db) override {
@@ -99,8 +100,10 @@ private:
     }
 
 public:
-    TRemovePortion(const TPortionAddress& portionAddress)
-        : PortionAddress(portionAddress) {
+    TRemovePortion(const TPortionAddress& portionAddress, const ui64 planStep)
+        : PortionAddress(portionAddress)
+        , PlanStep(planStep)
+    {
     }
 };
 
@@ -189,7 +192,9 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
         while (!rowset.EndOfSet()) {
             TPortionAddress portionAddress(
                 TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
-            usedPortions.emplace(portionAddress, std::make_shared<TRemovePortion>(portionAddress));
+            usedPortions.emplace(portionAddress,
+                std::make_shared<TRemovePortion>(portionAddress,
+                    rowset.HaveValue<Schema::IndexPortions::XPlanStep>() ? rowset.GetValue<Schema::IndexPortions::XPlanStep>() : 0));
             if (!rowset.Next()) {
                 return false;
             }

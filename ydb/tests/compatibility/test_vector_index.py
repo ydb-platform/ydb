@@ -11,14 +11,14 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
 
-        yield from self.setup_cluster(extra_feature_flags={"enable_follower_stats": True})
+        yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
 
     def _get_random_vector(self, type, size):
-        if type == "float":
+        if type == "Float":
             values = [round(random.uniform(-100, 100), 2) for _ in range(size)]
             return ",".join(f'{val}f' for val in values)
 
-        if type == "uint8":
+        if type == "Uint8":
             values = [random.randint(0, 255) for _ in range(size)]
         else:
             values = [random.randint(-127, 127) for _ in range(size)]
@@ -29,7 +29,7 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
             create_index_sql = f"""
                 ALTER TABLE {TABLE_NAME}
                 ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
-                ON (embedding)
+                ON (vec)
                 WITH (distance={distance},
                       vector_type={vector_type},
                       vector_dimension={self.vector_dimension},
@@ -41,7 +41,7 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
             create_index_sql = f"""
                 ALTER TABLE {TABLE_NAME}
                 ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
-                ON (embedding)
+                ON (vec)
                 WITH (similarity={similarity},
                       vector_type={vector_type},
                       vector_dimension={self.vector_dimension},
@@ -71,16 +71,16 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
             VALUES {",".join(values)};
         """
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.retry_operation_sync(upsert_sql)
+            session_pool.execute_with_retries(upsert_sql)
 
     def check_statistics(self, target, name, data_type, order):
         vector = self._get_random_vector(data_type, self.vector_dimension)
         select_sql = f"""
             $Target = {name}(Cast([{vector}] AS List<{data_type}>));
-            SELECT key, vec, {target}(embedding, $Target) as target
+            SELECT key, vec, {target}(vec, $Target) as target
             FROM {TABLE_NAME}
             VIEW `{self.index_name}`
-            ORDER BY {target}(embedding, $Target) {order}
+            ORDER BY {target}(vec, $Target) {order}
             LIMIT {self.rows_count};
         """
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -152,7 +152,7 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
         self.check_statistics(
             target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
         )
-        self._drop_index
+        self._drop_index()
         self.change_cluster_version()
 
         self.write_data(name=vector_types[vector_type], vector_type=f"{vector_type}Vector")

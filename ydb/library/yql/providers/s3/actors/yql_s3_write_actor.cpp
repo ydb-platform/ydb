@@ -22,10 +22,10 @@
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 
-#include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <yql/essentials/utils/yql_panic.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #ifdef THROW
 #undef THROW

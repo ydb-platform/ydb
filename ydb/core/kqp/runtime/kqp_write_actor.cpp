@@ -1935,10 +1935,8 @@ public:
                 if (message.Data) {
                     for (size_t index = 1; index < writeInfo.Actors.size(); ++index) {
                         auto& actor = writeInfo.Actors[index];
-                        if (actor.Projections.contains(message.Token.Cookie)) {
-                            auto preparedBatch = actor.Projections.at(message.Token.Cookie)->Project(message.Data);
-                            actor.WriteActor->Write(message.Token.Cookie, preparedBatch);
-                        }
+                        auto preparedBatch = actor.Projections.at(message.Token.Cookie)->Project(message.Data);
+                        actor.WriteActor->Write(message.Token.Cookie, preparedBatch);
                     }
                     writeInfo.Actors[0].WriteActor->Write(message.Token.Cookie, std::move(message.Data));
                 }

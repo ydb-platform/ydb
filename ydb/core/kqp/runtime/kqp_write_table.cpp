@@ -1042,17 +1042,17 @@ public:
         for (size_t index = 0; index < inputColumns.size(); ++index) {
             InputColumnNameToIndex[inputColumns[index].GetName()] = index;
         }
-        std::vector<ui32> reversedInputWriteIndex(inputWriteIndex.size());
-        for (size_t index = 0; index < inputWriteIndex.size(); ++index) {
-            reversedInputWriteIndex[inputWriteIndex[index]] = index;
+        std::vector<ui32> outputOrder(outputWriteIndex.size());
+        for (size_t index = 0; index < outputWriteIndex.size(); ++index) {
+            outputOrder[outputWriteIndex[index]] = index;
         }
 
         ColumnsMapping.resize(outputColumns.size());
         for (size_t index = 0; index < outputColumns.size(); ++index) {
-            const auto& outputColumnIndex = outputWriteIndex[index];
+            const auto& outputColumnIndex = outputOrder.at(index);
             const auto& outputColumnName = outputColumns.at(outputColumnIndex).GetName();
             const auto& inputColumnIndex = InputColumnNameToIndex.at(outputColumnName);
-            const auto& inputIndex = reversedInputWriteIndex.at(inputColumnIndex);
+            const auto& inputIndex = inputWriteIndex.at(inputColumnIndex);
 
             ColumnsMapping[index] = inputIndex;
         }
@@ -1061,7 +1061,7 @@ public:
     IDataBatchPtr Project(const IDataBatchPtr& data) const override {
         auto* batch = dynamic_cast<TRowBatch*>(data.Get());
         AFL_ENSURE(batch);
-        return ProjectDataShard(*dynamic_cast<TRowBatch*>(data.Get()));
+        return ProjectDataShard(*batch);
     }
 
     IDataBatchPtr ProjectDataShard(const TRowBatch& data) const {
@@ -1074,7 +1074,9 @@ public:
             }
             rowBatcher.AddRow(cells);
         }
-        return rowBatcher.Flush(true);
+        auto result = rowBatcher.Flush(true);
+        YQL_ENSURE(rowBatcher.IsEmpty());
+        return result;
     }
 
 private:

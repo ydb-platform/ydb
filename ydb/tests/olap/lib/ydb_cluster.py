@@ -61,21 +61,23 @@ class YdbCluster:
             local_hostname = YdbCluster.get_local_hostname()
             return self.host in ['localhost', '127.0.0.1'] or self.host == local_hostname
         
-        def execute_command(self, cmd: Union[str, list], raise_on_error: bool = True) -> str:
+        def execute_command(self, cmd: Union[str, list], raise_on_error: bool = True, timeout: Optional[float] = None, raise_on_timeout: bool = True) -> str:
             """
             Выполняет команду на ноде (локально или удаленно через SSH)
             
             Args:
                 cmd: команда для выполнения (строка или список)
                 raise_on_error: вызывать ли исключение при ошибке
+                timeout: таймаут выполнения команды в секундах
+                raise_on_timeout: вызывать ли исключение при таймауте (по умолчанию True)
                 
             Returns:
                 str: вывод команды
             """
             if self.is_local:
-                return YdbCluster.execute_local_command(cmd, raise_on_error)
+                return YdbCluster.execute_local_command(cmd, raise_on_error, timeout, raise_on_timeout)
             else:
-                return YdbCluster.execute_ssh_command(self.host, cmd, raise_on_error)
+                return YdbCluster.execute_ssh_command(self.host, cmd, raise_on_error, timeout, raise_on_timeout)
         
         def copy_file(self, local_path: str, remote_path: str, raise_on_error: bool = True) -> str:
             """
@@ -283,6 +285,7 @@ class YdbCluster:
             )
         return cls._ydb_driver
 
+    
     @classmethod
     def list_directory(cls, root_path: str, rel_path: str, kind_order_key: Optional[Callable[[ydb.SchemeEntryType], int]] = None) -> List[ydb.SchemeEntry]:
         path = f'{root_path}/{rel_path}' if root_path else rel_path
@@ -342,7 +345,120 @@ class YdbCluster:
         except BaseException:
             LOGGER.error("Cannot connect to YDB")
             raise
+        
+    
+    @classmethod
+    @allure.step('Execute raw upsert query')
+    def execute_raw_upsert_query(cls, query, timeout=10):
+        """
+        Выполняет произвольный upsert запрос в YDB, переданный как строка.
+        
+        Args:
+            query (str): Полный SQL запрос UPSERT.
+            timeout (int): Таймаут выполнения запроса в секундах.
+            
+        Returns:
+            bool: True если операция выполнена успешно.
+            
+        Raises:
+            Exception: Если произошла ошибка при выполнении запроса.
+        """
+        # Прикрепляем запрос к отчету Allure
+        allure.attach(query, 'raw upsert query', attachment_type=allure.attachment_type.TEXT)
+        
+        try:
+            # Создаем сессию
+            session = cls.get_ydb_driver().table_client.session().create()
+            
+            # Устанавливаем таймаут
+            settings = ydb.BaseRequestSettings().with_timeout(timeout)
+            
+            # Выполняем запрос
+            session.transaction().execute(
+                query,
+                settings=settings,
+                commit_tx=True
+            )
+            
+            
+            LOGGER.info(f"Successfully executed upsert query")
+            return True
+        except Exception as e:
+            LOGGER.error(f"Error during raw upsert into YDB: {str(e)}")
+            raise
 
+
+
+    @classmethod
+    @allure.step('Create table in YDB')
+    def create_table(cls, ddl_query: str) -> Dict[str, Any]:
+        """
+        Создает таблицу в YDB используя DDL запрос
+        
+        Args:
+            ddl_query: DDL запрос для создания таблицы
+            session_timeout: Таймаут сессии в секундах
+            
+        Returns:
+            Dict: Результат операции с информацией об успехе или ошибке
+        """
+        result = {
+            'success': False,
+            'query': ddl_query,
+            'timestamp': time(),
+        }
+        
+        try:
+            # Получаем драйвер YDB
+            driver = cls.get_ydb_driver()
+            
+            allure.attach(ddl_query, "DDL Query", attachment_type=allure.attachment_type.TEXT)
+            LOGGER.info(f"Executing DDL query:\n{ddl_query}")
+            
+            # Создаем сессию
+            session = driver.table_client.session().create()
+            
+                # Выполняем DDL запрос
+            session.execute_scheme(ddl_query)
+            
+            # Если запрос выполнился без ошибок, помечаем операцию как успешную
+            result['success'] = True
+            result['message'] = "Table created successfully"
+            LOGGER.info("Table created successfully")
+                
+        except Exception as e:
+            # Обрабатываем возможные ошибки
+            error_message = str(e)
+            LOGGER.error(f"Error creating table: {error_message}")
+            result['error'] = error_message
+            result['exception_type'] = type(e).__name__
+            
+            # Прикрепляем информацию об ошибке к отчету
+            allure.attach(error_message, "Error creating table", attachment_type=allure.attachment_type.TEXT)
+        
+        return result
+    
+    @classmethod
+    def table_exists(cls, table_path: str) -> bool:
+        """
+        Проверяет существование таблицы по указанному пути
+        
+        Args:
+            table_path: Путь к таблице
+            
+        Returns:
+            bool: True если таблица существует, False в противном случае
+        """
+        try:
+            # Получаем описание объекта по пути
+            obj = cls._describe_path_impl(table_path)
+            
+            # Проверяем, является ли объект таблицей
+            return obj is not None and obj.is_any_table()
+            
+        except Exception as e:
+            LOGGER.error(f"Error checking if table exists: {e}")
+            return False
     @classmethod
     def get_dyn_nodes_count(cls) -> int:
         if cls._dyn_nodes_count is None:
@@ -375,35 +491,59 @@ class YdbCluster:
                 cls._local_hostname = subprocess.check_output(['hostname'], text=True).strip()
             except subprocess.SubprocessError:
                 cls._local_hostname = 'localhost'
+        LOGGER.info(f'local hostname: {cls._local_hostname}')
         return cls._local_hostname
     
     @staticmethod
-    def execute_local_command(cmd: Union[str, list], raise_on_error: bool = True) -> str:
+    def execute_local_command(cmd: Union[str, list], raise_on_error: bool = True, timeout: Optional[float] = None, raise_on_timeout: bool = True) -> str:
         """
         Выполняет команду локально
         
         Args:
             cmd: команда для выполнения (строка или список)
             raise_on_error: вызывать ли исключение при ошибке
+            timeout: таймаут выполнения команды в секундах
+            raise_on_timeout: вызывать ли исключение при таймауте (по умолчанию True)
             
         Returns:
-            str: вывод команды
+            str: вывод команды или текст ошибки, если команда завершилась с ошибкой и raise_on_error=False
         """
         LOGGER.info(f"Executing local command: {cmd}")
         try:
             if isinstance(cmd, list):
-                result = subprocess.run(cmd, capture_output=True, text=True, check=raise_on_error)
+                result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=timeout)
             else:
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=raise_on_error)
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=False, timeout=timeout)
+            
+            # Проверяем код возврата вручную
+            if result.returncode != 0:
+                if raise_on_error:
+                    # Вызываем то же исключение, что и при check=True
+                    raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+                else:
+                    # Возвращаем stderr вместо None, если команда завершилась с ошибкой
+                    return result.stderr
+            
             return result.stdout
+        except subprocess.TimeoutExpired as e:
+            if raise_on_timeout:
+                raise
+            LOGGER.warning(f"Command timed out after {timeout} seconds: {e}")
+            # Возвращаем частичный вывод, если он есть
+            return e.stdout if e.stdout else None
         except subprocess.SubprocessError as e:
             if raise_on_error:
                 raise
             LOGGER.error(f"Error executing local command: {e}")
-            return None
+            
+            # Возвращаем текст ошибки вместо None
+            if hasattr(e, 'stderr') and e.stderr:
+                return e.stderr
+            return str(e)
+
     
     @staticmethod
-    def execute_ssh_command(host: str, cmd: Union[str, list], raise_on_error: bool = True) -> str:
+    def execute_ssh_command(host: str, cmd: Union[str, list], raise_on_error: bool = True, timeout: Optional[float] = None, raise_on_timeout: bool = True) -> str:
         """
         Выполняет команду по SSH на удаленном хосте
         
@@ -411,9 +551,11 @@ class YdbCluster:
             host: имя хоста
             cmd: команда для выполнения (строка или список)
             raise_on_error: вызывать ли исключение при ошибке
+            timeout: таймаут выполнения команды в секундах
+            raise_on_timeout: вызывать ли исключение при таймауте (по умолчанию True)
             
         Returns:
-            str: вывод команды
+            str: вывод команды или текст ошибки, если команда завершилась с ошибкой и raise_on_error=False
         """
         ssh_cmd = ['ssh', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
         
@@ -434,13 +576,35 @@ class YdbCluster:
         
         LOGGER.info(f"Executing SSH command on {host}: {full_cmd}")
         try:
-            result = subprocess.run(full_cmd, capture_output=True, text=True, check=raise_on_error)
+            # Используем check=False, чтобы обработать ошибки вручную
+            result = subprocess.run(full_cmd, capture_output=True, text=True, check=False, timeout=timeout)
+            
+            # Проверяем код возврата вручную
+            if result.returncode != 0:
+                if raise_on_error:
+                    raise subprocess.CalledProcessError(result.returncode, full_cmd, result.stdout, result.stderr)
+                else:
+                    # Возвращаем stderr вместо None при ошибке
+                    return result.stderr if result.stderr else f"SSH command failed with return code {result.returncode}"
+            
             return result.stdout
+        except subprocess.TimeoutExpired as e:
+            if raise_on_timeout:
+                raise
+            LOGGER.warning(f"SSH command timed out after {timeout} seconds on {host}: {e}")
+            # Возвращаем частичный вывод, если он есть
+            return e.stdout if e.stdout else None
         except subprocess.SubprocessError as e:
             if raise_on_error:
                 raise
             LOGGER.error(f"Error executing SSH command on {host}: {e}")
-            return None
+            
+            # Возвращаем текст ошибки вместо None
+            if hasattr(e, 'stderr') and e.stderr:
+                return e.stderr
+            return str(e)
+
+
     
     @staticmethod
     def copy_file_to_remote(local_path: str, remote_host: str, remote_path: str, raise_on_error: bool = True) -> str:
@@ -494,8 +658,13 @@ class YdbCluster:
             Dict: словарь с результатами деплоя по хостам
         """
         results = {}
+        node_hosts_set = set()
         
-        for node in cls.get_cluster_nodes():
+        for node in cls.get_cluster_nodes(db_only=True):
+            if node.host not in node_hosts_set:
+                node_hosts_set.add(node.host)
+            else:
+                continue
             node_results = {}
             allure.attach(f"Node: {node.host}, Local: {node.is_local}", "Node Info", attachment_type=allure.attachment_type.TEXT)
             
@@ -537,6 +706,7 @@ class YdbCluster:
         
         return results
 
+    @classmethod
     @allure.step('Check if YDB alive')
     def check_if_ydb_alive(cls, timeout=10, balanced_paths=None) -> tuple[str, str]:
         def _check_node(n: YdbCluster.Node):

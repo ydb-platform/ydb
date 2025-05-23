@@ -6,7 +6,7 @@ PY3_LIBRARY()
         external.py
         tpcds.py
         tpch.py
-        workload_nemesis.py
+        workload_simple_queue.py
 
     )
 
@@ -21,7 +21,6 @@ PY3_LIBRARY()
     )
 
     BUNDLE(
-        ydb/tests/stress/simple_queue NAME simple_queue
         ydb/tests/stress/simple_queue NAME simple_queue
         ydb/tests/stress/olap_workload NAME olap_workload
         ydb/tests/stress/oltp_workload NAME oltp_workload 

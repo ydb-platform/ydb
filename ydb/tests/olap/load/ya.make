@@ -11,7 +11,7 @@ PY3TEST()
         test_external.py
         test_tpcds.py
         test_tpch.py
-        test_workload_nemesis.py
+        test_workload_simple_queue.py
     )
 
     PEERDIR (

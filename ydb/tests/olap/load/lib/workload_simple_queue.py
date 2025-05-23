@@ -2,6 +2,7 @@ import allure
 import pytest
 import os
 import stat
+import tempfile
 from .conftest import LoadSuiteBase
 from os import getenv
 from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper
@@ -13,9 +14,10 @@ from library.python import resource
 STRESS_BINARIES_DEPLOY_PATH = '/tmp/stress_binaries/'
 WORKLOAD_BINARY_NAME = 'simple_queue'  # Имя бинарного файла
 
-class TestWorkloadNemesis(LoadSuiteBase):
-    workload_type: WorkloadType = WorkloadType.Clickbench
-    refference: str = 'CH.60'
+class TestWorkloadSimpleQueue(LoadSuiteBase):
+
+    working_dir = os.path.join(tempfile.gettempdir(), "ydb_stability")
+    os.makedirs(working_dir, exist_ok=True)
     
     path = get_external_param('table-path-clickbench', f'{YdbCluster.tables_path}/clickbench/hits')
 
@@ -41,37 +43,37 @@ class TestWorkloadNemesis(LoadSuiteBase):
         
         # Разворачиваем бинарный файл на всех нодах кластера
         deploy_results = YdbCluster.deploy_binaries_to_nodes([binary_path], STRESS_BINARIES_DEPLOY_PATH)
-        
+       
+       
         # Для каждой ноды в кластере
-        for node in YdbCluster.get_cluster_nodes():
+        for node in YdbCluster.get_cluster_nodes(db_only=True):
             node_host = node.host
-            print(f"Node: {node_host}")
-            
             # Проверяем, успешно ли был развернут бинарный файл
             binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
             success = binary_result.get('success', False)
-            print(f"Binary status: {success}")
-            
+
             # Запускаем бинарный файл на ноде, если он был успешно развернут
             if success:
                 target_path = binary_result['path']
-                cmd = f"{target_path} --endpoint {node.host}:{node.ic_port} --database {YdbCluster.ydb_database} --mode row"
-                
-                result = node.execute_command(cmd, raise_on_error=False)
-                print(f"Execution result: {result}")
+                cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database {YdbCluster.ydb_database} --mode row"
+                result = node.execute_command(cmd, raise_on_error=False, timeout=100, raise_on_timeout=False )
+                print(f'res:{result}')
+        result = node.execute_command(YdbCliHelper.get_cli_command() + ["scheme", "ls", "-lR"], raise_on_error=False )
+        print(f'res:{result}')
+        print(f'path to check:{node.host.split('.')[0]}_0')
                
         # Сохраняем состояние нод и выполняем тестовый запрос
         self.save_nodes_state()
         result = YdbCliHelper.workload_run(
-            path='path_1',
+            path=f"{node.host.split('.')[0]}_0",
             query_name='query_name',
             iterations=1,
             workload_type=self.workload_type,
-            timeout='qparams.timeout',
+            timeout=10,
             check_canonical=self.check_canonical,
             query_syntax=self.query_syntax,
             scale=self.scale,
             query_prefix='qparams.query_prefix',
             external_path=self.get_external_path(),
         )
-        self.process_query_result(result, 'ls', False)
+        self.process_query_result(result, "SimpleQueue", False)

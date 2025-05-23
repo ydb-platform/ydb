@@ -153,10 +153,11 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
         DECLARE $coordinator_generation AS Uint64;
         DECLARE $seq_no AS Uint64;
         DECLARE $status AS Uint8;
+        DECLARE $expire_at AS Optional<Timestamp>;
         {optional_graph_description_declaration}
         INSERT INTO {checkpoints_metadata_table_name}
-          (graph_id, coordinator_generation, seq_no, status, created_by, modified_by, state_size, graph_description_id)
-          VALUES ($graph_id, $coordinator_generation, $seq_no, $status, $ts, $ts, 0, $graph_desc_id);
+          (graph_id, coordinator_generation, seq_no, status, created_by, modified_by, state_size, graph_description_id, expire_at)
+          VALUES ($graph_id, $coordinator_generation, $seq_no, $status, $ts, $ts, 0, $graph_desc_id, $expire_at);
     )sql",
     "table_path_prefix"_a = generationContext->TablePathPrefix,
     "checkpoints_metadata_table_name"_a = CheckpointsMetadataTable,
@@ -184,13 +185,16 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
             .Build()
         .AddParam("$ts")
             .Timestamp(TInstant::Now())
+            .Build()
+        .AddParam("$expire_at")
+            .OptionalTimestamp(generationContext->ExpireAt)
             .Build();
 
     if (graphDescContext->NewGraphDescription) {
         const TString graphDescriptionPart = fmt::format(R"sql(
             INSERT INTO {checkpoints_graphs_description_table_name}
-                (id, ref_count, graph_description)
-                VALUES ($graph_desc_id, 1, $graph_description);
+                (id, ref_count, graph_description, expire_at)
+                VALUES ($graph_desc_id, 1, $graph_description, $expire_at);
         )sql",
         "checkpoints_graphs_description_table_name"_a = CheckpointsGraphsDescriptionTable
         );
@@ -211,7 +215,7 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
     } else {
         const TString graphDescriptionPart = fmt::format(R"sql(
             UPDATE {checkpoints_graphs_description_table_name}
-                SET ref_count = ref_count + 1
+                SET ref_count = ref_count + 1, expire_at = $expire_at
                 WHERE id = $graph_desc_id;
         )sql",
         "checkpoints_graphs_description_table_name"_a = CheckpointsGraphsDescriptionTable
@@ -243,9 +247,10 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
         DECLARE $status AS Uint8;
         DECLARE $state_size AS Uint64;
         DECLARE $ts AS Timestamp;
+        DECLARE $expire_at AS Optional<Timestamp>;
 
-        UPSERT INTO %s (graph_id, coordinator_generation, seq_no, status, state_size, modified_by) VALUES
-            ($graph_id, $coordinator_generation, $seq_no, $status, $state_size, $ts);
+        UPSERT INTO %s (graph_id, coordinator_generation, seq_no, status, state_size, modified_by, expire_at) VALUES
+            ($graph_id, $coordinator_generation, $seq_no, $status, $state_size, $ts, $expire_at);
     )", generationContext->TablePathPrefix.c_str(),
         CheckpointsMetadataTable);
 
@@ -268,6 +273,9 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
             .Build()
         .AddParam("$ts")
             .Timestamp(TInstant::Now())
+            .Build()
+        .AddParam("$expire_at")
+            .OptionalTimestamp(generationContext->ExpireAt)
             .Build();
 
     auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
@@ -590,11 +598,12 @@ TFuture<TStatus> UpdateCheckpointWithCheckWrapper(
 
 class TCheckpointStorage : public ICheckpointStorage {
     TYdbConnectionPtr YdbConnection;
-    const NConfig::TYdbStorageConfig Config;
+    const NConfig::TCheckpointCoordinatorConfig Config;
+    TMaybe<TDuration> CheckpointsTtl;
 
 public:
     explicit TCheckpointStorage(
-        const NConfig::TYdbStorageConfig& config,
+        const NConfig::TCheckpointCoordinatorConfig& config,
         const IEntityIdGenerator::TPtr& entityIdGenerator,
         const TYdbConnectionPtr& ydbConnection);
 
@@ -651,6 +660,7 @@ public:
 
 private:
     TFuture<TCreateCheckpointResult> CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& context);
+    std::optional<TInstant> GetExpireAt();
 
 private:
     IEntityIdGenerator::TPtr EntityIdGenerator;
@@ -659,13 +669,17 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStorage::TCheckpointStorage(
-    const NConfig::TYdbStorageConfig& config,
+    const NConfig::TCheckpointCoordinatorConfig& config,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYdbConnectionPtr& ydbConnection)
     : YdbConnection(ydbConnection)
     , Config(config)
     , EntityIdGenerator(entityIdGenerator)
 {
+    TDuration ttl;
+    if (TDuration::TryParse(Config.GetCheckpointsTtl(), ttl)) {
+        CheckpointsTtl = ttl;
+    }
 }
 
 TFuture<TIssues> TCheckpointStorage::Init()
@@ -712,7 +726,9 @@ TFuture<TIssues> TCheckpointStorage::Init()
     auto graphDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("generation", EPrimitiveType::Uint64)
+        .AddNullableColumn("expire_at", EPrimitiveType::Timestamp)
         .SetPrimaryKeyColumn("graph_id")
+        .SetTtlSettings("expire_at")
         .Build();
 
     RUN_CREATE_TABLE(CoordinatorsSyncTable, graphDesc);
@@ -728,7 +744,9 @@ TFuture<TIssues> TCheckpointStorage::Init()
         .AddNullableColumn("modified_by", EPrimitiveType::Timestamp)
         .AddNullableColumn("state_size", EPrimitiveType::Uint64)
         .AddNullableColumn("graph_description_id", EPrimitiveType::String)
+        .AddNullableColumn("expire_at", EPrimitiveType::Timestamp)
         .SetPrimaryKeyColumns({"graph_id", "coordinator_generation", "seq_no"})
+        .SetTtlSettings("expire_at")
         .Build();
 
     RUN_CREATE_TABLE(CheckpointsMetadataTable, checkpointDesc);
@@ -737,7 +755,9 @@ TFuture<TIssues> TCheckpointStorage::Init()
         .AddNullableColumn("id", EPrimitiveType::String)
         .AddNullableColumn("ref_count", EPrimitiveType::Uint64)
         .AddNullableColumn("graph_description", EPrimitiveType::String)
+        .AddNullableColumn("expire_at", EPrimitiveType::Timestamp)
         .SetPrimaryKeyColumn("id")
+        .SetTtlSettings("expire_at")
         .Build();
 
     RUN_CREATE_TABLE(CheckpointsGraphsDescriptionTable, checkpointGraphsDescDesc);
@@ -747,11 +767,16 @@ TFuture<TIssues> TCheckpointStorage::Init()
     return MakeFuture(std::move(issues));
 }
 
+std::optional<TInstant> TCheckpointStorage::GetExpireAt() {
+    return CheckpointsTtl ? TInstant::Now() + *CheckpointsTtl : std::optional<TInstant>();
+}
+
 TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinatorId& coordinator)
 {
     auto future = YdbConnection->TableClient.RetryOperation(
         [prefix = YdbConnection->TablePathPrefix, coordinator,
-         execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+         execDataQuerySettings = DefaultExecDataQuerySettings(),
+         expireAt = GetExpireAt()] (TSession session) {
             auto context = MakeIntrusive<TGenerationContext>(
                 session,
                 true,
@@ -759,8 +784,10 @@ TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinator
                 CoordinatorsSyncTable,
                 "graph_id",
                 "generation",
+                "expire_at",
                 coordinator.GraphId,
                 coordinator.Generation,
+                expireAt,
                 execDataQuerySettings);
 
             return RegisterCheckGeneration(context);
@@ -773,7 +800,9 @@ TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoord
     auto getContext = MakeIntrusive<TGetCoordinatorsContext>();
 
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, getContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, getContext,
+         execDataQuerySettings = DefaultExecDataQuerySettings(),
+         expireAt = GetExpireAt()] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -781,8 +810,10 @@ TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoord
                 CoordinatorsSyncTable,
                 "graph_id",
                 "generation",
+                "expire_at",
                 "",
                 0UL,
+                expireAt,
                 execDataQuerySettings);
 
             auto future = SelectGraphCoordinators(generationContext);
@@ -828,7 +859,11 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
 TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& checkpointContext) {
     Y_ABORT_UNLESS(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId || checkpointContext->EntityIdGenerator);
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix,
+         coordinator,
+         checkpointContext,
+         execDataQuerySettings = DefaultExecDataQuerySettings(),
+         expireAt = GetExpireAt()] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -836,8 +871,10 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
                 CoordinatorsSyncTable,
                 "graph_id",
                 "generation",
+                "expire_at",
                 coordinator.GraphId,
                 coordinator.Generation,
+                expireAt,
                 execDataQuerySettings);
 
             checkpointContext->GenerationContext = generationContext;
@@ -863,7 +900,11 @@ TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
 {
     auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, newStatus, prevStatus, stateSizeBytes);
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix,
+         coordinator,
+         checkpointContext,
+         execDataQuerySettings = DefaultExecDataQuerySettings(),
+         expireAt = GetExpireAt()] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -871,8 +912,10 @@ TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
                 CoordinatorsSyncTable,
                 "graph_id",
                 "generation",
+                "expire_at",
                 coordinator.GraphId,
                 coordinator.Generation,
+                expireAt,
                 execDataQuerySettings);
 
             checkpointContext->GenerationContext = generationContext;
@@ -890,7 +933,11 @@ TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
 {
     auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, ECheckpointStatus::Aborted, ECheckpointStatus::Pending, 0ul);
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix,
+         coordinator,
+         checkpointContext,
+         execDataQuerySettings = DefaultExecDataQuerySettings(),
+         expireAt = GetExpireAt()] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -898,8 +945,10 @@ TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
                 CoordinatorsSyncTable,
                 "graph_id",
                 "generation",
+                "expire_at",
                 coordinator.GraphId,
                 coordinator.Generation,
+                expireAt,
                 execDataQuerySettings);
 
             checkpointContext->GenerationContext = generationContext;
@@ -921,7 +970,14 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
     auto getContext = MakeIntrusive<TGetCheckpointsContext>();
 
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, graph, getContext, statuses, limit, loadGraphDescription, execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix,
+         graph,
+         getContext,
+         statuses,
+         limit,
+         loadGraphDescription,
+         execDataQuerySettings = DefaultExecDataQuerySettings(),
+         expireAt = GetExpireAt()] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -929,8 +985,10 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
                 CoordinatorsSyncTable,
                 "graph_id",
                 "generation",
+                "expire_at",
                 graph,
                 0UL,
+                expireAt,
                 execDataQuerySettings);
 
             auto future = SelectGraphCheckpoints(generationContext, statuses, limit, loadGraphDescription);
@@ -1176,9 +1234,9 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
 TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {
     return TExecDataQuerySettings()
         .KeepInQueryCache(true)
-        .ClientTimeout(TDuration::Seconds(Config.GetClientTimeoutSec()))
-        .OperationTimeout(TDuration::Seconds(Config.GetOperationTimeoutSec()))
-        .CancelAfter(TDuration::Seconds(Config.GetCancelAfterSec()));
+        .ClientTimeout(TDuration::Seconds(Config.GetStorage().GetClientTimeoutSec()))
+        .OperationTimeout(TDuration::Seconds(Config.GetStorage().GetOperationTimeoutSec()))
+        .CancelAfter(TDuration::Seconds(Config.GetStorage().GetCancelAfterSec()));
 }
 
 } // namespace
@@ -1186,7 +1244,7 @@ TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStoragePtr NewYdbCheckpointStorage(
-    const NConfig::TYdbStorageConfig& config,
+    const NConfig::TCheckpointCoordinatorConfig& config,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYdbConnectionPtr& ydbConnection)
 {

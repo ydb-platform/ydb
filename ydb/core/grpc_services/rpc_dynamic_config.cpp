@@ -68,9 +68,8 @@ public:
 
         if constexpr (std::is_same_v<TRequest, TEvGetConfigurationVersionRequest>) {
             if (!AppData()->FeatureFlags.GetEnableGetConfigurationVersion()) {
-                Disabled();
-                TBase::PassAway();
-                return;
+                Cerr << "GetConfigurationVersion feature is disabled" << Endl;
+                return Disabled();
             }
         }
 
@@ -153,7 +152,7 @@ private:
     }
 
     void Handle(TEvConsole::TEvDisabled::TPtr&) {
-        Disabled();
+        return Disabled();
     }
 
     void Handle(TEvConsole::TEvGenericError::TPtr& ev) {

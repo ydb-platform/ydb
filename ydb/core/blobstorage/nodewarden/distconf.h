@@ -175,8 +175,7 @@ namespace NKikimr::NStorage {
         const bool IsSelfStatic = false;
         TIntrusivePtr<TNodeWardenConfig> Cfg;
         bool SelfManagementEnabled = false;
-        bool IsPrimary = false;
-        bool IsBeingPromoted = false;
+        TBridgeInfo::TPtr BridgeInfo;
 
         // currently active storage config
         std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;

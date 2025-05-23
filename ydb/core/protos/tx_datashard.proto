@@ -131,6 +131,7 @@ message TKqpTransaction {
         optional uint32 Type = 3;
         optional NKikimrProto.TTypeInfo TypeInfo = 4;
         optional bool NotNull = 5;
+        optional bool IsPrimary = 6;
     }
 
     message TColumnWriteMeta {
@@ -231,6 +232,8 @@ message TKqpTransaction {
 
 message TEvKqpInputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
+    optional string BatchOperationMaxKey = 2;
+    repeated uint32 BatchOperationKeyIds = 3;
 }
 
 message TKqpReadRangesSourceSettings {
@@ -263,6 +266,8 @@ message TKqpReadRangesSourceSettings {
     repeated TKqpTransaction.TColumnMeta DuplicateCheckColumns = 19;
 
     optional NKikimrDataEvents.ELockMode LockMode = 20;
+    optional uint32 OptionalSorting = 21;
+    optional bool IsBatch = 22 [default = false];
 }
 
 message TKqpTaskInfo {

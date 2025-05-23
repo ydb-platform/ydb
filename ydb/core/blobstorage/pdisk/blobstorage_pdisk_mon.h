@@ -509,6 +509,10 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr TrimThreadCPU;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU;
 
+    // counter subgroup
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CounterGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PDiskCount;
+
     TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui32 pdiskId, TPDiskConfig *cfg);
 
     ::NMonitoring::TDynamicCounters::TCounterPtr GetBusyPeriod(const TString& owner, const TString& queue);

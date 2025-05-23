@@ -941,5 +941,18 @@ public:                                                                         
             COUNTER_DEF(BarriersBalance);
         };
 
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TCounterGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TCounterGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TCounterGroup)
+            {
+                COUNTER_INIT(VDiskCount, false);
+            }
+
+            COUNTER_DEF(VDiskCount);
+        };
+
     } // NMonGroup
 } // NKikimr

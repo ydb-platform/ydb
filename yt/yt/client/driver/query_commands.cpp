@@ -63,14 +63,14 @@ void TStartQueryCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "access_control_object",
         [] (TThis* command) -> auto& {
             return command->Options.AccessControlObject;
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<std::string>>>(
         "access_control_objects",
         [] (TThis* command) -> auto& {
             return command->Options.AccessControlObjects;
@@ -270,7 +270,7 @@ void TListQueriesCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "user",
         [] (TThis* command) -> auto& {
             return command->Options.UserFilter;
@@ -339,14 +339,14 @@ void TAlterQueryCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "access_control_object",
         [] (TThis* command) -> auto& {
             return command->Options.AccessControlObject;
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::vector<std::string>>>(
         "access_control_objects",
         [] (TThis* command) -> auto& {
             return command->Options.AccessControlObjects;

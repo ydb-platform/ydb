@@ -45,12 +45,13 @@ class TUploadSampleK: public TActorBootstrapped<TUploadSampleK> {
 
 protected:
     TString LogPrefix;
-    TString TargetTable;
+    const TString TargetTable;
+    const bool IsPostingLevel;
 
     const NKikimrIndexBuilder::TIndexBuildScanSettings ScanSettings;
 
-    TActorId ResponseActorId;
-    ui64 BuildIndexId = 0;
+    const TActorId ResponseActorId;
+    const ui64 BuildIndexId = 0;
     TIndexBuildInfo::TSample::TRows Init;
 
     std::shared_ptr<NTxProxy::TUploadTypes> Types;
@@ -59,13 +60,14 @@ protected:
     TActorId Uploader;
     ui32 RetryCount = 0;
     ui32 RowsBytes = 0;
-    NTableIndex::TClusterId Parent = 0;
+    const NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
 
     NDataShard::TUploadStatus UploadStatus;
 
 public:
     TUploadSampleK(TString targetTable,
+                   bool isPostingLevel,
                    const NKikimrIndexBuilder::TIndexBuildScanSettings& scanSettings,
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
@@ -73,6 +75,7 @@ public:
                    NTableIndex::TClusterId parent,
                    NTableIndex::TClusterId child)
         : TargetTable(std::move(targetTable))
+        , IsPostingLevel(isPostingLevel)
         , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
         , BuildIndexId(buildIndexId)
@@ -108,16 +111,23 @@ public:
     void Bootstrap() {
         Rows = std::make_shared<NTxProxy::TUploadRows>();
         Rows->reserve(Init.size());
-        std::array<TCell, 2> PrimaryKeys;
-        PrimaryKeys[0] = TCell::Make(Parent);
+        std::array<TCell, 2> pk;
+        pk[0] = TCell::Make(Parent);
         for (auto& [_, row] : Init) {
             RowsBytes += row.size();
-            PrimaryKeys[1] = TCell::Make(Child++);
+            auto child = Child++;
+            if (IsPostingLevel) {
+                child = SetPostingParentFlag(child);
+            } else {
+                EnsureNoPostingParentFlag(child);
+            }
+            pk[1] = TCell::Make(child);
+
             // TODO(mbkkt) we can avoid serialization of PrimaryKeys every iter
-            Rows->emplace_back(TSerializedCellVec{PrimaryKeys}, std::move(row));
+            Rows->emplace_back(TSerializedCellVec{pk}, std::move(row));
         }
         Init = {}; // release memory
-        RowsBytes += Rows->size() * TSerializedCellVec::SerializedSize(PrimaryKeys);
+        RowsBytes += Rows->size() * TSerializedCellVec::SerializedSize(pk);
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
@@ -199,7 +209,8 @@ private:
             Types,
             Rows,
             NTxProxy::EUploadRowsMode::WriteToTableShadow, // TODO(mbkkt) is it fastest?
-            true /*writeToPrivateTable*/);
+            true /*writeToPrivateTable*/,
+            true /*writeToIndexImplTable*/);
 
         Uploader = this->Register(actor);
     }
@@ -298,6 +309,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     auto path = TPath::Init(buildInfo.TablePathId, ss);
     const auto& tableInfo = ss->Tables.at(path->PathId);
     NTableIndex::TTableColumns implTableColumns;
+    THashSet<TString> indexDataColumns;
     {
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
         const auto& indexDesc = modifyScheme.GetInitiateIndexBuild().GetIndex();
@@ -311,6 +323,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
         implTableColumns.Columns.emplace(indexKeys.KeyColumns.back());
         modifyScheme.ClearInitiateIndexBuild();
+        indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
+        indexDataColumns.insert(indexKeys.KeyColumns.back());
     }
 
     using namespace NTableIndex::NTableVectorKmeansTreeIndex;
@@ -343,7 +357,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
 
         return propose;
     }
-    op = CalcVectorKmeansTreePostingImplTableDesc({}, tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
+    op = NTableIndex::CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix);
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
 
     auto& policy = *resetPartitionsSettings();
@@ -745,12 +759,14 @@ private:
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
-        auto actor = new TUploadSampleK(path.PathString(),
+        auto actor = new TUploadSampleK(path.PathString(), !buildInfo.KMeans.NeedsAnotherLevel(),
             buildInfo.ScanSettings, Self->SelfId(), ui64(BuildId),
             buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
         buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+
+        LOG_N("TTxBuildProgress: TUploadSampleK: " << buildInfo);
     }
 
     void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {

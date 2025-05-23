@@ -1239,6 +1239,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(ChooseMembers(TableRow(), ['level', 'uid', 'resource_id']) != <|level:1, uid:"uid_3000001", resource_id:"10001"|>)",
             R"(`uid` LIKE "_id%000_")",
             R"(`uid` ILIKE "UID%002")",
+
+            R"(Udf(String::AsciiEqualsIgnoreCase)(`uid`,  "UI"))",
+            R"(Udf(String::Contains)(`uid`,  "UI"))",
+            R"(Udf(String::AsciiContainsIgnoreCase)(`uid`,  "UI"))",
+            R"(Udf(String::StartsWith)(`uid`,  "UI"))",
+            R"(Udf(String::AsciiStartsWithIgnoreCase)(`uid`,  "UI"))",
+            R"(Udf(String::EndsWith)(`uid`,  "UI"))",
+            R"(Udf(String::AsciiEndsWithIgnoreCase)(`uid`,  "UI"))",
         };
 
         for (const auto& predicate: testData) {
@@ -3212,7 +3220,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto rows = ExecuteScanQuery(tableClient, R"(
                 SELECT level, SUM(records_count) as sum_records_count FROM (
                 --!syntax_v1
-                SELECT JSON_VALUE(CAST(`Details` AS JsonDocument), '$.level') as level, CAST(JSON_VALUE(CAST(`Details` AS JsonDocument), '$.portions.records_count') AS Uint64) as records_count, Details
+                SELECT JSON_VALUE(CAST(`Details` AS JsonDocument), '$.level') as level, CAST(JSON_VALUE(CAST(`Details` AS JsonDocument), '$.selectivity.default.records_count') AS Uint64) as records_count, Details
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_optimizer_stats`
                 )
                 GROUP BY level

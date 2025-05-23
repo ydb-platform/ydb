@@ -127,6 +127,7 @@ message TGroupInfo {
     optional EPDiskType DeviceType = 14;
     optional uint64 BlobDepotId = 15; // if filled, then this is virtual group
     optional NKikimrBlobStorage.TGroupDecommitStatus.E DecommitStatus = 16;
+    repeated uint32 BridgeGroupIds = 17; // filled in for common group when operating in bridge mode
 }
 
 message TEvVPatchStart {

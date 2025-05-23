@@ -55,7 +55,7 @@ public:
         TNodeInfo* node = Self->FindNode(nodeId);
         if (node != nullptr) {
             node->UpdateResourceMaximum(record.GetResourceMaximum());
-            node->UpdateResourceTotalUsage(record);
+            node->UpdateResourceTotalUsage(record, db);
             node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
             node->ActualizeNodeStatistics(now);
             BLOG_TRACE("THive::TTxUpdateTabletMetrics UpdateResourceTotalUsage node "

@@ -499,7 +499,21 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM "), expected);
         }
         {
-            TVector<TCandidate> expected = {};
+            TString input = "SELECT * FROM pr";
+            TVector<TCandidate> expected = {
+                {FolderName, "`prod/`"},
+            };
+            TCompletion actual = engine->Complete(SharpedInput(input));
+            UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(actual.CompletedToken.Content, "pr");
+        }
+        {
+            TVector<TCandidate> expected = {
+                {FolderName, ".sys/"},
+                {FolderName, "local/"},
+                {FolderName, "prod/"},
+                {FolderName, "test/"},
+            };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `#"), expected);
         }
         {
@@ -555,6 +569,26 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
     }
 
+    Y_UNIT_TEST(SelectFromUnclosedIdQuoted) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TCandidate> expected = {
+                {FolderName, ".sys/"},
+                {FolderName, "local/"},
+                {FolderName, "prod/"},
+                {FolderName, "test/"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `#"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "meta"},
+                {FolderName, "service/"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `test/"), expected);
+        }
+    }
+
     Y_UNIT_TEST(SelectFromCluster) {
         auto engine = MakeSqlCompletionEngineUT();
         {
@@ -592,6 +626,69 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {TableName, "tutorial"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM example.`/yql/t#`"), expected);
+        }
+    }
+
+    Y_UNIT_TEST(SelectFromWithUse) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "`maxim`"},
+                {ClusterName, "example"},
+                {ClusterName, "yt:saurus"},
+                {Keyword, "ANY"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE yt:saurus; SELECT * FROM "), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "`people`"},
+                {FolderName, "`yql/`"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE yt:saurus; SELECT * FROM example."), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "`maxim`"},
+                {ClusterName, "example"},
+                {ClusterName, "yt:saurus"},
+                {Keyword, "ANY"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE example; USE yt:saurus; SELECT * FROM "), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "`maxim`"},
+                {ClusterName, "example"},
+                {ClusterName, "yt:saurus"},
+                {Keyword, "ANY"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, R"(
+                USE example; 
+                DEFINE ACTION $hello() AS 
+                    USE yt:saurus;
+                    SELECT * FROM #;
+                END DEFINE;
+            )"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "`people`"},
+                {FolderName, "`yql/`"},
+                {ClusterName, "example"},
+                {ClusterName, "yt:saurus"},
+                {Keyword, "ANY"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, R"(
+                USE example;
+
+                DEFINE ACTION $action() AS
+                    USE yt:saurus;
+                    SELECT * FROM test;
+                END DEFINE;
+
+                SELECT * FROM #
+            )"), expected);
         }
     }
 

@@ -51,7 +51,10 @@ public:
 
     virtual std::string GetTablePath() const;
     virtual TTableId GetTableId() const;
-    virtual std::vector<NScheme::TTypeInfo> GetKeyColumnTypes() const;
+
+    const std::vector<NScheme::TTypeInfo>& GetKeyColumnTypes() const {
+        return KeyColumnTypes;
+    }
 
     virtual void AddInputRow(NUdf::TUnboxedValue inputRow) = 0;
     virtual std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery, 
@@ -72,6 +75,7 @@ protected:
     std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
     std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
     std::vector<TSysTables::TTableColumnInfo> Columns;
+    std::vector<NScheme::TTypeInfo> KeyColumnTypes;
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,

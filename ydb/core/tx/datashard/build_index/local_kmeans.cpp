@@ -436,48 +436,46 @@ private:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            Clusters.AggregateToCluster(pos, row.at(EmbeddingPos).Data());
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            Clusters.AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
         }
     }
 
     void FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowMain2Build(*PostingBuf, Child + pos, key, row);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowMainToBuild(*PostingBuf, Child + *pos, key, row);
         }
     }
 
     void FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowMain2Posting(*PostingBuf, Child + pos, key, row, DataPos);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowMainToPosting(*PostingBuf, Child + *pos, key, row, DataPos);
         }
     }
 
     void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Build(*PostingBuf, Child + pos, key, row);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuildToBuild(*PostingBuf, Child + *pos, key, row);
         }
     }
 
     void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Posting(*PostingBuf, Child + pos, key, row, DataPos);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuildToPosting(*PostingBuf, Child + *pos, key, row, DataPos);
         }
     }
 
     void FormLevelRows()
     {
-        std::array<TCell, 2> pk;
-        std::array<TCell, 1> data;
+        const bool isPostingLevel = UploadState == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING
+            || UploadState == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING;
+
         for (NTable::TPos pos = 0; const auto& row : Clusters.GetClusters()) {
-            pk[0] = TCell::Make(Parent);
-            pk[1] = TCell::Make(Child + pos);
-            data[0] = TCell{row};
-            LevelBuf->AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            AddRowToLevel(*LevelBuf, Parent, Child + pos, row, isPostingLevel);
             ++pos;
         }
     }

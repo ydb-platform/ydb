@@ -2190,8 +2190,14 @@ public:
             get:
                 tags:
                   - storage
-                summary: Storage groups
-                description: Information about storage groups
+                summary: Gets information about storage and groups.
+                description: >
+                    It can get groups of storage groups or all storage groups.
+                    It's always better to get groups of storage groups first, then get all storage groups in a group.
+                    To get list of groups of storage groups we call it with `group` parameter first,
+                    then we call it with `filter_group` and `filter_group_by` parameters to get content of a group.
+                    For example, to get groups of storage groups we call it with `group=State` parameter,
+                    then we call it with `filter_group_by=State` and `filter_group=ok` parameters.
                 parameters:
                   - name: database
                     in: query
@@ -2218,56 +2224,14 @@ public:
                     description: group id
                     required: false
                     type: integer
-                  - name: need_groups
-                    in: query
-                    description: return groups information
-                    required: false
-                    type: boolean
-                    default: true
-                  - name: need_disks
-                    in: query
-                    description: return disks information
-                    required: false
-                    type: boolean
-                    default: true
-                  - name: with
-                    in: query
-                    description: >
-                        filter groups by missing or space:
-                          * `missing`
-                          * `space`
-                    required: false
-                    type: string
                   - name: filter
                     description: filter to search for in group ids and pool names
-                    required: false
-                    type: string
-                  - name: filter_group_by
-                    in: query
-                    description: >
-                        filter group by:
-                          * `GroupId`
-                          * `Erasure`
-                          * `Usage`
-                          * `DiskSpaceUsage`
-                          * `PoolName`
-                          * `Kind`
-                          * `Encryption`
-                          * `MediaType`
-                          * `MissingDisks`
-                          * `State`
-                          * `Latency`
-                    required: false
-                    type: string
-                  - name: filter_group
-                    in: query
-                    description: content for filter group by
                     required: false
                     type: string
                   - name: sort
                     in: query
                     description: >
-                        sort by:
+                        sort storage groups by:
                           * `PoolName`
                           * `Kind`
                           * `MediaType`
@@ -2291,7 +2255,8 @@ public:
                   - name: group
                     in: query
                     description: >
-                        group by:
+                        returns groups of storage groups with number of storage groups in every group.
+                        grouping by:
                           * `GroupId`
                           * `Erasure`
                           * `Usage`
@@ -2303,6 +2268,29 @@ public:
                           * `MissingDisks`
                           * `State`
                           * `Latency`
+                    required: false
+                    type: string
+                  - name: filter_group_by
+                    in: query
+                    description: >
+                        returns conent of a group of storage groups, expects to have filter_group parameter.
+                        grouping by:
+                          * `GroupId`
+                          * `Erasure`
+                          * `Usage`
+                          * `DiskSpaceUsage`
+                          * `PoolName`
+                          * `Kind`
+                          * `Encryption`
+                          * `MediaType`
+                          * `MissingDisks`
+                          * `State`
+                          * `Latency`
+                    required: false
+                    type: string
+                  - name: filter_group
+                    in: query
+                    description: name of a group of storage groups, used for filter_group_by
                     required: false
                     type: string
                   - name: fields_required
@@ -2333,12 +2321,12 @@ public:
                     type: string
                   - name: offset
                     in: query
-                    description: skip N nodes
+                    description: skip N nodes, used together with limit to implement paging
                     required: false
                     type: integer
                   - name: limit
                     in: query
-                    description: limit to N nodes
+                    description: limit result to N nodes, used together with offset to implement paging
                     required: false
                     type: integer
                   - name: timeout
@@ -2378,8 +2366,8 @@ public:
             " * `ok` - group is okay\n"
             " * `starting:n` - group is okay, but n disks are starting\n"
             " * `replicating:n` - group is okay, all disks are available, but n disks are replicating\n"
-            " * `degraded:n(m, m...)` - group is okay, but n fail realms are not available (with m fail domains)\n"
-            " * `dead:n` - group is not okay, n fail realms are not available\n";
+            " * `degraded:n(m, m...)` - group is okay, but n data centers / racks are not available (with m devices)\n"
+            " * `dead:n` - group is not okay, n data centers / racks are not available\n";
         storageGroupProperties["Kind"]["description"] = "kind of the disks in this group (specified by the user)";
         storageGroupProperties["MediaType"]["description"] = "actual physical media type of the disks in this group";
         storageGroupProperties["MissingDisks"]["description"] = "number of disks missing";

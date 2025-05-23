@@ -626,6 +626,7 @@ message TConsoleRequest {
     }
     optional string DomainName = 100;
     optional string SecurityToken = 101;
+    optional uint64 TimeoutMs = 102;
 }
 
 message TConsoleResponse {

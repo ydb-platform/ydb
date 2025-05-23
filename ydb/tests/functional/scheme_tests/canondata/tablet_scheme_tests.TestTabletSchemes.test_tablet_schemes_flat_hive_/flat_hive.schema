@@ -1125,6 +1125,11 @@
                 "ColumnId": 102,
                 "ColumnName": "MaximumNetwork",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "UsageImpact",
+                "ColumnType": "Double"
             }
         ],
         "ColumnsDropped": [],
@@ -1136,7 +1141,8 @@
                     2,
                     101,
                     3,
-                    102
+                    102,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

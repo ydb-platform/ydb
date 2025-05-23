@@ -124,8 +124,6 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kQueryRequest:
             return new TJsonQueryOld(request);
-        case NKikimrViewer::TEvViewerRequest::kRenderRequest:
-            return new TJsonRender(request);
         case NKikimrViewer::TEvViewerRequest::kAutocompleteRequest:
             return new TJsonAutocomplete(request);
         default:

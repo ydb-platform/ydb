@@ -41,6 +41,9 @@ class YsonType(object):
             raise TypeError("unhashable type: YSON has non-trivial attributes")
         return hash(type_(self))
 
+    def get_yson_type_str(selfself):
+        return None
+
 
 class YsonString(binary_type, YsonType):
     def __eq__(self, other):
@@ -59,6 +62,9 @@ class YsonString(binary_type, YsonType):
     def __repr__(self):
         return self.to_str(binary_type, repr)
 
+    def get_yson_type_str(self):
+        return "string"
+
 
 class YsonUnicode(text_type, YsonType):
     def __eq__(self, other):
@@ -74,6 +80,9 @@ class YsonUnicode(text_type, YsonType):
 
     def __repr__(self):
         return self.to_str(text_type, repr)
+
+    def get_yson_type_str(self):
+        return "string"
 
 
 class NotUnicodeError(YtError, TypeError):
@@ -165,6 +174,9 @@ class YsonStringProxy(YsonType):
     def __ne__(self, other):
         return not (self == other)
 
+    def get_yson_type_str(self):
+        return "string"
+
 
 def is_unicode(x):
     return isinstance(x, text_type)
@@ -214,11 +226,13 @@ class YsonIntegerBase(_YsonIntegerBase, YsonType):
 
 
 class YsonInt64(YsonIntegerBase):
-    pass
+    def get_yson_type_str(self):
+        return "int64"
 
 
 class YsonUint64(YsonIntegerBase):
-    pass
+    def get_yson_type_str(self):
+        return "uint64"
 
 
 class YsonDouble(float, YsonType):
@@ -238,6 +252,9 @@ class YsonDouble(float, YsonType):
 
     def __str__(self):
         return self.to_str(float, str)
+
+    def get_yson_type_str(self):
+        return "double"
 
 
 class YsonBoolean(int, YsonType):
@@ -260,6 +277,9 @@ class YsonBoolean(int, YsonType):
 
     def __str__(self):
         return self.__repr__()
+
+    def get_yson_type_str(self):
+        return "bool"
 
 
 class YsonList(list, YsonType):

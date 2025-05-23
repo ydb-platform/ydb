@@ -12,7 +12,7 @@
 if (!ProducerInRequestIsValid(ev->Get()->Request)) { \
     auto& kafkaRequest = ev->Get()->Request; \
     TString message = TStringBuilder() << "Recieved invalid request. Got: " \
-            << "transactionalId=" << kafkaRequest->TransactionalId->c_str() \
+            << "transactionalId=" << *kafkaRequest->TransactionalId \
             << ", producerId=" << kafkaRequest->ProducerId \
             << ", producerEpoch=" << kafkaRequest->ProducerEpoch; \
     SendFailResponse<ErrorResponseType>(ev, EKafkaErrors::UNKNOWN_SERVER_ERROR, message); \
@@ -27,7 +27,7 @@ namespace NKafka {
 
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
-                PartitionsInTxn.emplace(GetFullTopicPath(topicInRequest.Name->c_str()), static_cast<ui32>(partitionInRequest));
+                PartitionsInTxn.emplace(GetFullTopicPath(*topicInRequest.Name), static_cast<ui32>(partitionInRequest));
             }
         }
         SendOkResponse<TAddPartitionsToTxnResponseData>(ev);
@@ -49,11 +49,11 @@ namespace NKafka {
         // save offsets for future use
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
-                TTopicPartition topicPartition = {GetFullTopicPath(topicInRequest.Name->c_str()), static_cast<ui32>(partitionInRequest.PartitionIndex)};
+                TTopicPartition topicPartition = {GetFullTopicPath(*topicInRequest.Name), static_cast<ui32>(partitionInRequest.PartitionIndex)};
                 TPartitionCommit newCommit{
                     .Partition = partitionInRequest.PartitionIndex,
                     .Offset = partitionInRequest.CommittedOffset,
-                    .ConsumerName = ev->Get()->Request->GroupId->c_str(),
+                    .ConsumerName = ev->Get()->Request->GroupId.value(),
                     .ConsumerGeneration = ev->Get()->Request->GenerationId
                 };
                 auto it = OffsetsToCommit.find(topicPartition);
@@ -196,7 +196,7 @@ namespace NKafka {
 
     template<class EventType>
     bool TTransactionActor::ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest) {
-        return kafkaRequest->TransactionalId->c_str() == TransactionalId 
+        return *kafkaRequest->TransactionalId == TransactionalId 
             && kafkaRequest->ProducerId == ProducerInstanceId.Id 
             && kafkaRequest->ProducerEpoch == ProducerInstanceId.Epoch;
     }
@@ -313,13 +313,11 @@ namespace NKafka {
 
         KAFKA_LOG_D("Validated producer and consumers states. Everything is alright, adding kafka operations to transaction.");
         auto kqpTxnId = response.Record.GetResponse().GetTxMeta().id();
-        Cout << "txnId 1: " << kqpTxnId << Endl;
         // finally everything is valid and we can add kafka operations to transaction and attempt to commit
         SendAddKafkaOperationsToTxRequest(kqpTxnId);
     }
 
     void TTransactionActor::HandleAddKafkaOperationsResponse(const TString& kqpTransactionId, const TActorContext& ctx) {
-        Cout << "txnId 2: " << kqpTransactionId << Endl;
         KAFKA_LOG_D("Successfully added kafka operations to transaction. Committing transaction.");
         Kqp->SetTxId(kqpTransactionId);
         Kqp->CommitTx(++KqpCookie, ctx);

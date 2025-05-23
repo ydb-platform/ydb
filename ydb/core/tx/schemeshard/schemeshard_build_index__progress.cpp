@@ -209,7 +209,8 @@ private:
             Types,
             Rows,
             NTxProxy::EUploadRowsMode::WriteToTableShadow, // TODO(mbkkt) is it fastest?
-            true /*writeToPrivateTable*/);
+            true /*writeToPrivateTable*/,
+            true /*writeToIndexImplTable*/);
 
         Uploader = this->Register(actor);
     }

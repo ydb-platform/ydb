@@ -12,18 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(syncmap)
-add_subdirectory(undumpable)
-add_subdirectory(profiling)
-add_subdirectory(ytprof)
-add_subdirectory(signals)
-add_subdirectory(procfs)
-add_subdirectory(tracing)
-add_subdirectory(numeric)
-add_subdirectory(tvm)
-add_subdirectory(decimal)
-add_subdirectory(auth)
-add_subdirectory(erasure)
-add_subdirectory(quantile_digest)
-add_subdirectory(re2)
-add_subdirectory(tz_types)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
+

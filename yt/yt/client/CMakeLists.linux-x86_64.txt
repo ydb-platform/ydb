@@ -50,10 +50,11 @@ target_link_libraries(yt-yt-client PUBLIC
   yt-core-https
   yt-library-auth
   yt-library-decimal
-  yt-library-re2
   yt-library-erasure
   yt-library-numeric
   yt-library-quantile_digest
+  yt-library-re2
+  yt-library-tz_types
   yt_proto-yt-client
   cpp-digest-crc32c
   library-cpp-json

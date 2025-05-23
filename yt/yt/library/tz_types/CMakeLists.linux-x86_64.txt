@@ -12,18 +12,27 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(syncmap)
-add_subdirectory(undumpable)
-add_subdirectory(profiling)
-add_subdirectory(ytprof)
-add_subdirectory(signals)
-add_subdirectory(procfs)
-add_subdirectory(tracing)
-add_subdirectory(numeric)
-add_subdirectory(tvm)
-add_subdirectory(decimal)
-add_subdirectory(auth)
-add_subdirectory(erasure)
-add_subdirectory(quantile_digest)
-add_subdirectory(re2)
-add_subdirectory(tz_types)
+add_library(yt-library-tz_types)
+
+
+target_compile_options(yt-library-tz_types PRIVATE
+  -Wdeprecated-this-capture
+  -Wimplicit-fallthrough
+  -Wparentheses
+  -Wno-logical-op-parentheses
+  -Wno-bitwise-op-parentheses
+)
+
+target_link_libraries(yt-library-tz_types PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  cpp-type_info-tz
+  cpp-yt-memory
+  cpp-yt-error
+)
+
+target_sources(yt-library-tz_types PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yt/library/tz_types/tz_types.cpp
+)
+

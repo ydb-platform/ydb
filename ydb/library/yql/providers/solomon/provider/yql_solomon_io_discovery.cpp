@@ -58,7 +58,7 @@ const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& 
             type = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Double));
         } else if (systemColumn == SOLOMON_SCHEME_LABELS) {
             type = ctx.MakeType<NYql::TDictExprType>(stringType, stringType);
-        } else if (systemColumn = SOLOMON_SCHEME_TYPE) {
+        } else if (systemColumn == SOLOMON_SCHEME_TYPE) {
             type = stringType;
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Unknown system column " << systemColumn));
@@ -167,6 +167,7 @@ public:
                         .SystemColumns(systemColumnsNode)
                         .LabelNames(labelNamesNode)
                         .RequiredLabelNames().Build()
+                        .TotalMetricsCount().Build()
                         .RowType(rowTypeNode)
                         .ColumnOrder(std::move(userSchema.back()))
                       .Done().Ptr()
@@ -177,6 +178,7 @@ public:
                         .SystemColumns(systemColumnsNode)
                         .LabelNames(labelNamesNode)
                         .RequiredLabelNames().Build()
+                        .TotalMetricsCount().Build()
                         .RowType(rowTypeNode)
                       .Done().Ptr();
             }

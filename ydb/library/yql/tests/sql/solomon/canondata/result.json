@@ -30,6 +30,17 @@
             "uri": "file://test.test_solomon-Basic-default.txt_/plan.txt"
         }
     ],
+    "test.test[solomon-BasicExtractMembers-default.txt]": [
+        {
+            "uri": "file://test.test_solomon-BasicExtractMembers-default.txt_/results.txt"
+        },
+        {
+            "uri": "file://test.test_solomon-BasicExtractMembers-default.txt_/opt.yql"
+        },
+        {
+            "uri": "file://test.test_solomon-BasicExtractMembers-default.txt_/plan.txt"
+        }
+    ],
     "test.test[solomon-Downsampling-default.txt]": [
         {
             "uri": "file://test.test_solomon-Downsampling-default.txt_/results.txt"

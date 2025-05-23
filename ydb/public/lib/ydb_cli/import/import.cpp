@@ -855,6 +855,15 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         std::cerr << "Elapsed: " << std::setprecision(3) << duration.SecondsFloat() << " sec. Total read size: "
             << PrettifyBytes(TotalBytesRead) << ". Average processing speed: "
             << PrettifyBytes((double)TotalBytesRead / duration.SecondsFloat())  << "/s." << std::endl;
+
+        // print strcture for the pipeline:
+        //    elapsed_time_sec: [float]
+        //    total_read_size_byte: [integer]
+        //    avg_processing_speed_bytes_per_sec: [integer]
+        std::cout << "elapsed_time_sec: " << std::setprecision(5) << duration.SecondsFloat() << std::endl;
+        std::cout << "total_read_size_byte: " << TotalBytesRead << std::endl;
+        std::cout << "avg_processing_speed_MiB_per_sec: " << std::setprecision(5)
+                  << ((double)TotalBytesRead / duration.SecondsFloat()) / (1024 * 1024) << std::endl;
     }
 
     // Removing all progress files that were a part of this import

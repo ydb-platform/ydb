@@ -33,6 +33,7 @@ message TPartitionMeta {
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;
+    optional uint64 FirstUncompactedOffset = 6;
 }
 
 message TPartitionTxMeta {
@@ -433,6 +434,8 @@ message TPQTabletConfig {
     repeated TPartition AllPartitions = 36; // filled by schemeshard
 
     optional TOffloadConfig OffloadConfig = 38;
+
+    optional bool EnableCompactification = 39 [default = false];
 }
 
 message THeartbeat {

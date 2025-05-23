@@ -294,6 +294,8 @@ public:
                 "PDisk is in StateInit, wait for PDisk to read sys log. Did you ckeck EvYardInit result? Marker# BSY09";
             Become(&TThis::StateInit);
         }
+
+        *PDisk->Mon.PDiskCount = 1;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

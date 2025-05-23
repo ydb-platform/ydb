@@ -16,6 +16,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     , SchedulerGroup(Counters->GetSubgroup("subsystem", "scheduler"))
     , BandwidthGroup(Counters->GetSubgroup("subsystem", "bandwidth"))
     , PDiskGroup(Counters->GetSubgroup("subsystem", "pdisk"))
+    , CounterGroup(Counters->GetSubgroup("subsystem", "counter"))
 {
     using EVisibility = NMonitoring::TCountableBase::EVisibility;
 
@@ -257,6 +258,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(PDiskGroup, GetThreadCPU, true);
     COUNTER_INIT(PDiskGroup, TrimThreadCPU, true);
     COUNTER_INIT(PDiskGroup, CompletionThreadCPU, true);
+
+    COUNTER_INIT(CounterGroup, PDiskCount, false);
 }
 
 ::NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) {

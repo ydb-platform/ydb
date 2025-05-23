@@ -20,11 +20,15 @@ def main():
     s3_bucket = AWS_BUCKET
     remote_src = sys.argv[1]
     local_dst = sys.argv[2]
+    binary_name = sys.argv[3]
     s3_client.download_file(s3_bucket, remote_src, local_dst)
 
     # chmod +x
     st = os.stat(local_dst)
     os.chmod(local_dst, st.st_mode | stat.S_IEXEC)
+
+    with open(local_dst + "-name", "w") as f:
+        f.write(binary_name)
 
 
 if __name__ == "__main__":

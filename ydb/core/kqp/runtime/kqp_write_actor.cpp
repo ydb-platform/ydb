@@ -1940,7 +1940,7 @@ public:
                             actor.WriteActor->Write(message.Token.Cookie, preparedBatch);
                         }
                     }
-                    writeInfo.Actors[0].WriteActor->Write(message.Token.Cookie, message.Data);
+                    writeInfo.Actors[0].WriteActor->Write(message.Token.Cookie, std::move(message.Data));
                 }
 
                 if (message.Close) {

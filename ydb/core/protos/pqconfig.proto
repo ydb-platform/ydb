@@ -964,11 +964,17 @@ message TPartitionOperation {
     optional bool KillReadSession = 8;
     optional bool OnlyCheckCommitedToFinish = 9;
     optional string ReadSessionId = 10;
+    optional bool KafkaTransaction = 11 [default = false];
+    optional int64 KafkaProducerId = 12;
+    optional int32 KafkaProducerEpoch = 13;
 };
 
 message TWriteId {
     optional uint64 NodeId = 1;
     optional fixed64 KeyId = 2;
+    optional bool KafkaTransaction = 3 [default = false];
+    optional int64 KafkaProducerId = 4;
+    optional int32 KafkaProducerEpoch = 5;
 };
 
 message TDataTransaction {

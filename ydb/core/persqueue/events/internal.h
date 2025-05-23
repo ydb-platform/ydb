@@ -822,6 +822,16 @@ struct TEvPQ {
             Operations.push_back(std::move(operation));
         }
 
+        void AddKafkaOffsetCommitOperation(TString consumer, ui64 offset) {
+            NKikimrPQ::TPartitionOperation operation;
+            operation.SetConsumer(std::move(consumer));
+            operation.SetKafkaTransaction(true);
+            operation.SetCommitOffsetsEnd(offset);
+            operation.SetForceCommit(true);
+
+            Operations.push_back(std::move(operation));
+        }
+
         ui64 Step;
         ui64 TxId;
         TVector<NKikimrPQ::TPartitionOperation> Operations;

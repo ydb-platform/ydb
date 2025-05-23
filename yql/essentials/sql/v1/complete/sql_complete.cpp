@@ -1,5 +1,6 @@
 #include "sql_complete.h"
 
+#include <yql/essentials/sql/v1/complete/syntax/grammar.h>
 #include <yql/essentials/sql/v1/complete/text/word.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/syntax/local.h>
@@ -18,7 +19,7 @@ namespace NSQLComplete {
             INameService::TPtr names,
             ISqlCompletionEngine::TConfiguration configuration)
             : Configuration_(std::move(configuration))
-            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(lexer))
+            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(lexer, Configuration_.IgnoredRules))
             , GlobalAnalysis_(MakeGlobalAnalysis())
             , Names_(std::move(names))
         {
@@ -212,6 +213,41 @@ namespace NSQLComplete {
         IGlobalAnalysis::TPtr GlobalAnalysis_;
         INameService::TPtr Names_;
     };
+
+    ISqlCompletionEngine::TConfiguration MakeYDBConfiguration() {
+        return {};
+    }
+
+    ISqlCompletionEngine::TConfiguration MakeYQLConfiguration() {
+        std::unordered_set<std::string> whitelist = {
+            "lambda_stmt",
+            "sql_stmt",
+            "pragma_stmt",
+            "select_stmt",
+            "named_nodes_stmt",
+            "drop_table_stmt",
+            "use_stmt",
+            "into_table_stmt",
+            "commit_stmt",
+            "declare_stmt",
+            "import_stmt",
+            "export_stmt",
+            "do_stmt",
+            "define_action_or_subquery_stmt",
+            "if_stmt",
+            "for_stmt",
+            "values_stmt",
+        };
+
+        ISqlCompletionEngine::TConfiguration config;
+        for (const std::string& name : GetSqlGrammar().GetAllRules()) {
+            if (name.ends_with("_stmt") && !whitelist.contains(name)) {
+                config.IgnoredRules.emplace(name);
+            }
+        }
+
+        return config;
+    }
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
         TLexerSupplier lexer,

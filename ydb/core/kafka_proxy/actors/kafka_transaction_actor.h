@@ -31,19 +31,18 @@ namespace NKafka {
                 // This request selects up-to-date producer and consumers states from relevant tables
                 // After this request a check will happen, that no transaction details has expired.
                 SELECT,
+                // This requests just adds all transaction details (partitions, offsets) to KQP
+                ADD_KAFKA_OPERATIONS_TO_TXN,
                 // This request sends to KQP a command to commit transaction
-                // Both these requests happen in same transaction
-                COMMIT 
+                COMMIT
             };
 
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
-            TTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId, const TActorId& txnCoordinatorActorId) : 
+            TTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath) : 
                 TBase(&TTransactionActor::StateFunc),
                 TransactionalId(transactionalId),
                 ProducerInstanceId({producerId, producerEpoch}),
-                DatabasePath(DatabasePath),
-                TxnCoordinatorActorId(txnCoordinatorActorId),
-                KqpActorId(kqpActorId) {};
+                DatabasePath(DatabasePath) {};
 
             TStringBuilder LogPrefix() const {
                 return TStringBuilder() << "KafkaTransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerInstanceId.Id << "; ProducerEpoch=" << ProducerInstanceId.Epoch << "}: ";
@@ -62,7 +61,10 @@ namespace NKafka {
                         HFunc(TEvents::TEvPoison, Handle);
                     }
                 } catch (const yexception& y) {
-                    KAFKA_LOG_CRIT(TStringBuilder() << "Critical error happened. Reason: " << y.what());
+                    KAFKA_LOG_CRIT("Critical error happened. Reason: " << y.what());
+                    if (EndTxnRequestPtr) {
+                        SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
+                    }
                     Die(ActorContext());
                 }
             }
@@ -82,7 +84,7 @@ namespace NKafka {
             // Transaction commit logic
             void StartKqpSession(const TActorContext& ctx);
             void SendToKqpValidationRequests(const TActorContext& ctx);
-            void SendCommitTxnRequest(const TString& kqpTransactionId);
+            void SendAddKafkaOperationsToTxRequest(const TString& kqpTransactionId);
 
             // Response senders
             template<class ErrorResponseType, class EventType>
@@ -97,8 +99,9 @@ namespace NKafka {
             TString GetFullTopicPath(const TString& topicName);
             TString GetYqlWithTablesNames(const TString& templateStr);
             NYdb::TParams BuildSelectParams();
-            THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildCommitTxnRequestToKqp(const TString& kqpTransactionId);
+            THolder<NKikimr::NKqp::TEvKqp::TEvQueryRequest> BuildAddKafkaOperationsRequest(const TString& kqpTransactionId);
             void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);
+            void HandleAddKafkaOperationsResponse(const TString& kqpTransactionId, const TActorContext& ctx);
             void HandleCommitResponse(const TActorContext& ctx);
             TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
             TMaybe<TProducerState> ParseProducerState(const NKqp::TEvKqp::TEvQueryResponse& response);
@@ -112,8 +115,6 @@ namespace NKafka {
             std::unordered_set<TTopicPartition, TTopicPartitionHashFn> PartitionsInTxn = {};
             const TString TransactionalId;
             const TProducerInstanceId ProducerInstanceId;
-            // const i64 ProducerId;
-            // const i16 ProducerEpoch;
 
             // helper fields
             const TString DatabasePath;
@@ -121,11 +122,9 @@ namespace NKafka {
             // In case something goes off road, we can always send error back to client
             TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
             bool CommitStarted = false;
-            const TActorId TxnCoordinatorActorId;
 
             // communication with KQP
             std::unique_ptr<TKqpTxHelper> Kqp;
-            TActorId KqpActorId;
             TString KqpSessionId;
             ui64 KqpCookie = 0;
             EKafkaTxnKqpRequests LastSentToKqpRequest;

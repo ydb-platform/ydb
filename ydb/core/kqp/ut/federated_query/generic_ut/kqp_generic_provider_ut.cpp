@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
@@ -13,7 +14,6 @@
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/library/grpc/client/grpc_client_low.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

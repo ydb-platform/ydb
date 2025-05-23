@@ -45,4 +45,10 @@ UPDATE my_table ON
 SELECT * FROM $to_update;
 ```
 
+{% if feature_batch_operations %}
 
+## См. также
+
+* [BATCH UPDATE](batch-update.md)
+
+{% endif %}

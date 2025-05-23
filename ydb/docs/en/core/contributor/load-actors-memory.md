@@ -11,7 +11,7 @@ This ad-hoc actor is used for testing specific functionality. This is not a load
 ## Actor parameters {#options}
 
 | Parameter | Description |
---- | ---
+| --- | --- |
 | `DurationSeconds` | Load duration in seconds. |
 | `BlockSize` | Allocated block size in bytes. |
 | `IntervalUs` | Interval between block allocations in microseconds. |

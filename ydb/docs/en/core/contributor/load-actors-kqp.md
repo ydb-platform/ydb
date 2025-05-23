@@ -14,7 +14,7 @@ Before this test, the necessary tables are created. After it's completed, they a
 {% include [load-actors-params](../_includes/load-actors-params.md) %}
 
 | Parameter | Description |
---- | ---
+| --- | --- |
 | `DurationSeconds` | Load duration in seconds. |
 | `WindowDuration` | Statistics aggregation window duration. |
 | `WorkingDir` | Path to the directory to create test tables in. |

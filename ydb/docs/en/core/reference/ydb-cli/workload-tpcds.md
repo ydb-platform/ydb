@@ -14,9 +14,9 @@ All commands support the common option `--path`, which specifies the path to the
 
 ### Available options { #common_options }
 
-Name | Description | Default value
----|---|---
-`--path` or `-p` | Path to the directory with tables. | `/`
+| Name | Description | Default value |
+| ---|---|--- |
+| `--path` or `-p` | Path to the directory with tables. | `/` |
 
 ## Initializing the load test {#init}
 
@@ -81,9 +81,9 @@ See the command description:
 
 ### TPC-DS-specific options { #run_tpcds_options }
 
-Name | Description | Default value
----|---|---
-`--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-99].sql`. |
+| Name | Description | Default value |
+| ---|---|--- |
+| `--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-99].sql`. | |
 
 ## Test data cleanup { #cleanup }
 

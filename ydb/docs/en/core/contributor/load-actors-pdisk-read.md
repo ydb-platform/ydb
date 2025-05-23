@@ -12,7 +12,7 @@ You can generate two types of load:
 {% include [load-actors-params](../_includes/load-actors-params.md) %}
 
 | Parameter | Description |
---- | ---
+| --- | --- |
 | `PDiskId` | ID of the Pdisk being loaded on the node. |
 | `PDiskGuid` | Globally unique ID of the PDisk being loaded. |
 | `VDiskId` | The load is generated on behalf of a VDisk with the following parameters:<ul><li>`GroupID`: Group ID.</li><li>`GroupGeneration`: Group generation.</li><li>`Ring`: Group ring ID.</li><li>`Domain`: Ring fail domain ID.</li><li>`VDisk`: Index of the VDisk in the fail domain.</li></ul> |

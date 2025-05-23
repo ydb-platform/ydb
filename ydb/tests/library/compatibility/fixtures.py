@@ -14,6 +14,11 @@ current_binary_path = kikimr_driver_path()
 last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable")
 prelast_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable")
 
+current_name = "current"
+last_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable-name")).read().strip()
+prelast_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable-name")).read().strip()
+
+
 all_binary_combinations_restart = [
     [[last_stable_binary_path], [current_binary_path]],
     [[current_binary_path], [last_stable_binary_path]],
@@ -24,13 +29,14 @@ all_binary_combinations_restart = [
     [[last_stable_binary_path], [last_stable_binary_path]],
 ]
 all_binary_combinations_ids_restart = [
-    "last_stable_to_current",
-    "current_to_last_stable",
-    "current_to_current",
+    last_stable_name + "_to_" + current_name,
+    current_name + "_to_" + last_stable_name,
+    current_name + "_to_" + current_name,
 
-    "prelast_stable_to_last_stable",
-    "last_stable_to_prelast_stable",
-    "last_stable_to_last_stable",
+
+    last_stable_name + "_to_" + current_name,
+    current_name + "_to_" + last_stable_name,
+    current_name + "_to_" + current_name,
 ]
 
 
@@ -91,10 +97,10 @@ all_binary_combinations_mixed = [
     [last_stable_binary_path, prelast_stable_binary_path],
 ]
 all_binary_combinations_ids_mixed = [
-    "current",
-    "last_stable",
-    "current_and_last_stable",
-    "last_stable_and_prelast_stable",
+    current_name,
+    last_stable_name,
+    current_name + "_and_" + last_stable_name,
+    last_stable_name + "_and_" + prelast_stable_name,
 ]
 
 
@@ -130,8 +136,8 @@ all_binary_combinations_rolling = [
     [prelast_stable_binary_path, last_stable_binary_path],
 ]
 all_binary_combinations_ids_rolling = [
-    "last_stable_to_current",
-    "prelast_stable_to_last_stable",
+    last_stable_name + "_to_" + current_name,
+    prelast_stable_name + "_to_" + last_stable_name,
 ]
 
 

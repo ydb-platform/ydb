@@ -4493,9 +4493,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                              rowset.GetValueOrDefault<Schema::ImportItems::DstPathLocalId>(InvalidLocalPathId));
 
                     if (rowset.HaveValue<Schema::ImportItems::Scheme>()) {
-                        Ydb::Table::CreateTableRequest scheme;
-                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(scheme, rowset.GetValue<Schema::ImportItems::Scheme>()));
-                        item.Scheme = scheme;
+                        Ydb::Table::CreateTableRequest table;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(table, rowset.GetValue<Schema::ImportItems::Scheme>()));
+                        item.Table = table;
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::CreationQuery>()) {

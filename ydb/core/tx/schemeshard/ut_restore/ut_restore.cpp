@@ -5784,6 +5784,38 @@ consumers {
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
+
+    Y_UNIT_TEST(UnknownSchemeObjectImport) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TS3Mock s3Mock({
+            {"/unknown_key", "unknown_scheme_object"}, 
+            {"/metadata.json", R"({"version": 0})"}
+        }, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Unknown"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+                        .GetResponse().GetEntry().GetIssues();
+        UNIT_ASSERT(!issues.empty());
+        UNIT_ASSERT_EQUAL(issues.begin()->message(), "Unsupported scheme object type");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {

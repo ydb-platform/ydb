@@ -850,10 +850,10 @@ public:
         ui64 MaxBlockSize;
     };
 
-    TS3BlockWriteActor(const TBlockSettings& blockSettings, const TBase::TParams& params)
+    TS3BlockWriteActor(TBlockSettings&& blockSettings, const TBase::TParams& params)
         : TBase(params)
-        , ArrowSchema(blockSettings.ArrowSchema)
-        , ColumnConverters(blockSettings.ColumnConverters)
+        , ArrowSchema(std::move(blockSettings.ArrowSchema))
+        , ColumnConverters(std::move(blockSettings.ColumnConverters))
         , MaxFileSize(blockSettings.MaxFileSize ? blockSettings.MaxFileSize : 50_MB)
         , MaxBlockSize(blockSettings.MaxBlockSize ? blockSettings.MaxBlockSize : 1_MB)
     {}
@@ -921,7 +921,9 @@ private:
         }
 
         SerializedData = TString();
-        SerializedData.reserve(std::min(MaxBlockSize, MaxFileSize));
+        if (Multipart) {
+            SerializedData.reserve(std::min(MaxBlockSize, MaxFileSize));
+        }
         BatchSize = 0;
     }
 
@@ -1008,7 +1010,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     };
     BuildOutputColumnConverters(structType, settings.ColumnConverters);
 
-    const auto actor = new TS3BlockWriteActor(settings, s3Params);
+    const auto actor = new TS3BlockWriteActor(std::move(settings), s3Params);
     return {actor, actor};
 }
 

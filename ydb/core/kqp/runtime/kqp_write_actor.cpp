@@ -1933,14 +1933,14 @@ public:
 
                 // if lookup isn't needed
                 if (message.Data) {
-                    for (auto& actor : writeInfo.Actors) {
+                    for (size_t index = 1; index < writeInfo.Actors.size(); ++index) {
+                        auto& actor = writeInfo.Actors[index];
                         if (actor.Projections.contains(message.Token.Cookie)) {
                             auto preparedBatch = actor.Projections.at(message.Token.Cookie)->Project(message.Data);
                             actor.WriteActor->Write(message.Token.Cookie, preparedBatch);
-                        } else {
-                            actor.WriteActor->Write(message.Token.Cookie, message.Data);
                         }
                     }
+                    writeInfo.Actors[0].WriteActor->Write(message.Token.Cookie, message.Data);
                 }
 
                 if (message.Close) {

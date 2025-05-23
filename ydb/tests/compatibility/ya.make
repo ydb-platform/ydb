@@ -15,6 +15,8 @@ TEST_SRCS(
     test_stress.py
     test_statistics.py
     test_rolling.py
+    test_datetime2.py
+    test_vector_index.py
     udf/test_datetime2.py
     udf/test_digest.py
 )

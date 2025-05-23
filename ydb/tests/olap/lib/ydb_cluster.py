@@ -533,7 +533,7 @@ class YdbCluster:
             # Return any partial output we got
             output = e.stdout or ""
             if e.stderr:
-                output += "\nSTDERR:\n" + e.stderr
+                output += "\nSTDERR:\n" + e.stderr.decode('utf-8')
             return output
             
         except subprocess.SubprocessError as e:
@@ -581,7 +581,7 @@ class YdbCluster:
             # Always return both stdout and stderr
             output = result.stdout or ""
             if result.stderr:
-                output += "\nSTDERR:\n" + result.stderr
+                output += "\nSTDERR:\n" + result.stderr.decode('utf-8')
             
             # If command failed and we should raise
             if result.returncode != 0 and raise_on_error:
@@ -596,7 +596,7 @@ class YdbCluster:
             # Return any partial output we got
             output = e.stdout or ""
             if e.stderr:
-                output += "\nSTDERR:\n" + e.stderr
+                output += "\nSTDERR:\n" + e.stderr.decode('utf-8')
             return output
             
         except subprocess.SubprocessError as e:

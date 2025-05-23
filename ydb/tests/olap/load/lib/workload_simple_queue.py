@@ -24,8 +24,6 @@ class SimpleQueueBase(LoadSuiteBase):
     working_dir = os.path.join(tempfile.gettempdir(), "ydb_stability")
     os.makedirs(working_dir, exist_ok=True)
     
-    path = get_external_param('table-path-clickbench', f'{YdbCluster.tables_path}/clickbench/hits')
-    timeout = 100  # базовый таймаут
 
     def _unpack_resource(self, name):
         """Распаковывает ресурс из пакета"""
@@ -42,9 +40,8 @@ class SimpleQueueBase(LoadSuiteBase):
         """Распаковывает бинарный файл из ресурсов и возвращает путь к нему"""
         return self._unpack_resource(workload_binary_name)
     
-    @pytest.mark.parametrize('table_type', [TableType.ROW, TableType.COLUMN])
-    def test_workload_simple_queue(self, table_type: TableType):
-        """Тест запуска workload с простой очередью на всех нодах кластера"""
+    @pytest.mark.parametrize('table_type', [t.value for t in TableType])
+    def test_workload_simple_queue(self, table_type: str):
         # Распаковываем бинарный файл из ресурсов
         binary_path = self._unpack_workload_binary(WORKLOAD_BINARY_NAME)
         
@@ -52,26 +49,27 @@ class SimpleQueueBase(LoadSuiteBase):
         deploy_results = YdbCluster.deploy_binaries_to_nodes([binary_path], STRESS_BINARIES_DEPLOY_PATH)
        
         # Для каждой ноды в кластере
-        for node in YdbCluster.get_cluster_nodes(db_only=True):
-            with allure.step(f'Running workload on node {node.host} with table type {table_type}'):
-                node_host = node.host
-                # Проверяем, успешно ли был развернут бинарный файл
-                binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
-                success = binary_result.get('success', False)
+        nodes = YdbCluster.get_cluster_nodes(db_only=True)
+        node = nodes[0]
+        
+        with allure.step(f'Running workload on node {node.host} with table type {table_type}'):
+            node_host = node.host
+            # Проверяем, успешно ли был развернут бинарный файл
+            binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
+            success = binary_result.get('success', False)
 
-                # Запускаем бинарный файл на ноде, если он был успешно развернут
-                if success:
-                    target_path = binary_result['path']
-                    cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database {YdbCluster.ydb_database} --mode {table_type}"
-                    allure.attach(cmd, 'Command to execute', allure.attachment_type.TEXT)
-                    print(f"Executing command on node {node.host} (is_local: {node.is_local})")
-                    result = node.execute_command(cmd, raise_on_error=False, timeout=self.timeout, raise_on_timeout=False)
-                    print(f"Command execution result type: {type(result)}")
-                    print(f"Command execution result: {result}")
-                    if result is None:
-                        print("Warning: Command execution returned None")
-                    allure.attach(str(result) if result is not None else "No output", 'Command execution result', allure.attachment_type.TEXT)
-                    print(f'res:{result}')
+            # Запускаем бинарный файл на ноде, если он был успешно развернут
+            if success:
+                target_path = binary_result['path']
+                cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database {YdbCluster.ydb_database} --duration {self.timeout} --mode {table_type}"
+                allure.attach(cmd, 'Command to execute', allure.attachment_type.TEXT)
+                print(f"Executing command on node {node.host} (is_local: {node.is_local})")
+                result = node.execute_command(cmd, raise_on_error=False, timeout=int(self.timeout * 1.5), raise_on_timeout=False)
+                print(f"Command execution result: {result}")
+                if result is None:
+                    print("Warning: Command execution returned None")
+                allure.attach(str(result) if result is not None else "No output", 'Command execution result', allure.attachment_type.TEXT)
+                print(f'res:{result}')
 
         with allure.step('Checking scheme state'):
             result = node.execute_command(YdbCliHelper.get_cli_command() + ["scheme", "ls", "-lR"], raise_on_error=False)
@@ -84,7 +82,7 @@ class SimpleQueueBase(LoadSuiteBase):
         
         result = YdbCliHelper.workload_run(
             path=f"{node.host.split('.')[0]}_0",
-            query_name=f'query_name_{table_type}',  # Добавляем тип таблицы в имя запроса для различения в отчетах
+            query_name=f'SimpleQueue_{table_type}',
             iterations=1,
             workload_type=self.workload_type,
             timeout=self.timeout,
@@ -96,17 +94,6 @@ class SimpleQueueBase(LoadSuiteBase):
         )
         self.process_query_result(result, f"SimpleQueue_{table_type}", False)
 
-
-class TestSimpleQueue100(SimpleQueueBase):
-    """Тест с таймаутом 100 секунд"""
-    timeout = 100
-
-
-class TestSimpleQueue300(SimpleQueueBase):
-    """Тест с таймаутом 300 секунд"""
-    timeout = 300
-
-
-class TestSimpleQueue1000(SimpleQueueBase):
-    """Тест с таймаутом 1000 секунд"""
-    timeout = 1000
+class TestSimpleQueue(SimpleQueueBase):
+     """Тест с таймаутом из get_external_param """
+     timeout = get_external_param('workload_duration', 100)

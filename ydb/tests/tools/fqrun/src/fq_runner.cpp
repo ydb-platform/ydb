@@ -257,7 +257,9 @@ private:
             }
 
             output.Write(plan);
-            output.Write('\n');
+            if (!Options.CanonicalOutput) {
+                output.Write('\n');
+            }
         });
     }
 

@@ -9,15 +9,12 @@
 namespace NKikimr::NStorage {
 
     TDistributedConfigKeeper::TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig, bool isSelfStatic)
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> baseConfig, bool isSelfStatic)
         : IsSelfStatic(isSelfStatic)
         , Cfg(std::move(cfg))
         , BaseConfig(baseConfig)
-        , InitialConfig(baseConfig)
-    {
-        UpdateFingerprint(&BaseConfig);
-        InitialConfig.SetFingerprint(BaseConfig.GetFingerprint());
-    }
+        , InitialConfig(std::move(baseConfig))
+    {}
 
     void TDistributedConfigKeeper::Bootstrap() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
@@ -35,9 +32,9 @@ namespace NKikimr::NStorage {
 
         // generate initial drive set and query stored configuration
         if (IsSelfStatic) {
-            if (BaseConfig.GetSelfManagementConfig().GetEnabled()) {
+            if (BaseConfig->GetSelfManagementConfig().GetEnabled()) {
                 // read this only if it is possibly enabled
-                EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+                EnumerateConfigDrives(*InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
                     DrivesToRead.push_back(drive.GetPath());
                 });
                 std::sort(DrivesToRead.begin(), DrivesToRead.end());
@@ -98,7 +95,7 @@ namespace NKikimr::NStorage {
                 }
             }
 
-            SelfManagementEnabled = (!IsSelfStatic || BaseConfig.GetSelfManagementConfig().GetEnabled()) &&
+            SelfManagementEnabled = (!IsSelfStatic || BaseConfig->GetSelfManagementConfig().GetEnabled()) &&
                 config.GetSelfManagementConfig().GetEnabled() &&
                 config.GetGeneration();
 
@@ -149,7 +146,7 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(!BridgeInfo);
             }
 
-            StorageConfig.emplace(config);
+            StorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
                 ProposedStorageConfig.reset();
             }
@@ -280,8 +277,8 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(!StorageConfig || CheckFingerprint(*StorageConfig));
         Y_ABORT_UNLESS(!ProposedStorageConfig || CheckFingerprint(*ProposedStorageConfig));
-        Y_ABORT_UNLESS(CheckFingerprint(BaseConfig));
-        Y_ABORT_UNLESS(!InitialConfig.GetFingerprint() || CheckFingerprint(InitialConfig));
+        Y_ABORT_UNLESS(CheckFingerprint(*BaseConfig));
+        Y_ABORT_UNLESS(!InitialConfig->GetFingerprint() || CheckFingerprint(*InitialConfig));
 
         if (Scepter) {
             Y_ABORT_UNLESS(HasQuorum());
@@ -350,13 +347,11 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::ReportStorageConfigToNodeWarden(ui64 cookie) {
         Y_ABORT_UNLESS(StorageConfig);
         const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        const NKikimrBlobStorage::TStorageConfig *config = SelfManagementEnabled
-            ? &StorageConfig.value()
-            : &BaseConfig;
-        const NKikimrBlobStorage::TStorageConfig *proposedConfig = ProposedStorageConfig && SelfManagementEnabled
-            ? &ProposedStorageConfig.value()
+        const auto& config = SelfManagementEnabled ? StorageConfig : BaseConfig;
+        auto proposedConfig = ProposedStorageConfig && SelfManagementEnabled
+            ? std::make_shared<NKikimrBlobStorage::TStorageConfig>(*ProposedStorageConfig)
             : nullptr;
-        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*config, proposedConfig, SelfManagementEnabled,
+        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(config, std::move(proposedConfig), SelfManagementEnabled,
             BridgeInfo);
         Send(wardenId, ev.release(), 0, cookie);
     }

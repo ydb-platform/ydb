@@ -313,7 +313,7 @@ namespace NKikimr::NStorage {
             } else if (prevRootNodeId != GetRootNodeId() || configUpdate) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC13, "Binding updated", (Binding, Binding), (PrevRootNodeId, prevRootNodeId),
                     (ConfigUpdate, configUpdate));
-                FanOutReversePush(configUpdate ? &StorageConfig.value() : nullptr, record.GetRecurseConfigUpdate());
+                FanOutReversePush(configUpdate ? StorageConfig.get() : nullptr, record.GetRecurseConfigUpdate());
             }
         }
     }
@@ -426,7 +426,7 @@ namespace NKikimr::NStorage {
         TBoundNode& info = it->second;
         if (inserted) {
             SendEvent(senderNodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
-                StorageConfig ? &StorageConfig.value() : nullptr, false));
+                StorageConfig.get(), false));
             for (auto& [cookie, task] : ScatterTasks) {
                 IssueScatterTaskForNode(senderNodeId, info, cookie, task);
             }

@@ -227,6 +227,7 @@ struct TStageExecutionStats {
     TMinStats CurrentWaitInputTimeUs;
     TMinStats CurrentWaitOutputTimeUs;
     ui64 UpdateTimeMs = 0;
+    ui64 MaxFinishTimeMs = 0;
 
     TTimeSeriesStats SpillingComputeBytes;
     TTimeSeriesStats SpillingChannelBytes;

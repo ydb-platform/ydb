@@ -661,8 +661,10 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) {
 
     for (auto stat : InputStages) {
         if (stat->IsFinished()) {
-            auto finishTimeMs = ExportMaxStats(stat->FinishTimeMs);
-            if (stat->UpdateTimeMs < finishTimeMs || stat->UpdateTimeMs - finishTimeMs < deadline) {
+            if (stat->MaxFinishTimeMs == 0) {
+                stat->MaxFinishTimeMs = ExportMaxStats(stat->FinishTimeMs);
+            }
+            if (stat->UpdateTimeMs < stat->MaxFinishTimeMs || stat->UpdateTimeMs - stat->MaxFinishTimeMs < deadline) {
                 return false;
             }
         } else {

@@ -194,7 +194,7 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSour
     std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>("PLAIN::" + step.GetName());
     request->AddPortion(Portion);
     request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(step, sourcePtr));
-    GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
+    GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData((NOlap::TTabletId)GetContext()->GetReadMetadata()->GetTabletId(), request);
     return true;
 }
 

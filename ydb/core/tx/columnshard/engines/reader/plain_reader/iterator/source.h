@@ -191,6 +191,7 @@ private:
     using TBase = IDataSource;
     const TPortionInfo::TConstPtr Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
+    TTabletId TabletId;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
@@ -288,7 +289,8 @@ public:
               portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
               portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
         , Portion(portion)
-        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
+        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
+        , TabletId((NOlap::TTabletId)GetContext()->GetReadMetadata()->GetTabletId()){
     }
 };
 

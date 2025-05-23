@@ -179,12 +179,12 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushd
     return true;
 }
 
-bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambdaArg, bool allowOlapApply) {
+bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambdaArg, bool) {
 
     Y_UNUSED(ifPresent);
     Y_UNUSED(lambdaArg);
 
-    return allowOlapApply;
+    return false; // Temporary disabled
 }
 
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TPushdownOptions& options) {

@@ -15,8 +15,12 @@ last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibi
 prelast_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable")
 
 current_name = "current"
-last_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable-name")).read().strip()
-prelast_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable-name")).read().strip()
+last_stable_name = None
+if last_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
+    last_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable-name")).read().strip()
+prelast_stable_name = None
+if prelast_stable_binary_path:  # in import_test yatest.common.binary_path returns None
+    prelast_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable-name")).read().strip()
 
 
 all_binary_combinations_restart = [

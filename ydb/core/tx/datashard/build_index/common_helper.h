@@ -199,7 +199,9 @@ private:
         Y_ASSERT(Owner);
         auto actor = NTxProxy::CreateUploadRowsInternal(
             Owner, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
-            NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
+            NTxProxy::EUploadRowsMode::WriteToTableShadow,
+            true /*writeToPrivateTable*/,
+            true /*writeToIndexImplTable*/);
 
         UploaderId = TlsActivationContext->Register(actor);
     }

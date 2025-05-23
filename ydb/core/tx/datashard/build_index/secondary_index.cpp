@@ -390,7 +390,8 @@ private:
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
             UploadMode,
-            true /*writeToPrivateTable*/);
+            true /*writeToPrivateTable*/,
+            true /*writeToIndexImplTable*/);
 
         Uploader = this->Register(actor);
     }

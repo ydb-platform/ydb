@@ -60,6 +60,7 @@ private:
     std::stop_source ThreadsStopSource;
 
     std::atomic<bool> StopWarmup{false};
+    std::vector<std::shared_ptr<TTerminalStats>> StatsVec;
     std::vector<std::unique_ptr<TTerminal>> Terminals;
 
     std::unique_ptr<ITaskQueue> TaskQueue;
@@ -92,29 +93,34 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
     // we might consider using less than maxTerminalThreads
-    const size_t treadCount = std::min(maxTerminalThreadCount, terminalsCount);
+    const size_t threadCount = std::min(maxTerminalThreadCount, terminalsCount);
 
     // The number of terminals might be hundreds of thousands.
     // For now, we don't have more than 32 network threads (check TYdbCommand::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
-    const size_t driverCount = treadCount;
+    const size_t driverCount = threadCount;
     std::vector<TDriver> drivers;
     drivers.reserve(driverCount);
     for (size_t i = 0; i < driverCount; ++i) {
         drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(Config.ConnectionConfig));
     }
 
-    const size_t maxTerminalsPerThread = (terminalsCount + treadCount - 1) / treadCount;
+    StatsVec.reserve(threadCount);
+    for (size_t i = 0; i < threadCount; ++i) {
+        StatsVec.emplace_back(std::make_shared<TTerminalStats>());
+    }
+
+    const size_t maxTerminalsPerThread = (terminalsCount + threadCount - 1) / threadCount;
     const size_t maxReadyTransactions = maxTerminalsPerThread * MaxPerTerminalTransactionsInflight;
 
     TaskQueue = CreateTaskQueue(
-        treadCount,
+        threadCount,
         Config.MaxInflight,
         maxTerminalsPerThread,
         maxReadyTransactions,
         Log);
 
-    LOG_I("Creating " << terminalsCount << " terminals and " << treadCount
+    LOG_I("Creating " << terminalsCount << " terminals and " << threadCount
         << " workers on " << cpuCount << " cpus");
 
     Terminals.reserve(terminalsCount);
@@ -129,6 +135,7 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
             Config.Path,
             TerminalsStopSource.get_token(),
             StopWarmup,
+            StatsVec[i % drivers.size()],
             Log);
 
         Terminals.emplace_back(std::move(terminalPtr));
@@ -205,8 +212,8 @@ void TPCCRunner::DumpFinalStats() {
     TTerminalStats stats;
 
     // Collect stats from all terminals
-    for (const auto& terminal : Terminals) {
-        terminal->CollectStats(stats);
+    for (const auto& srcStats : StatsVec) {
+        srcStats->Collect(stats);
     }
 
     // Calculate total transactions

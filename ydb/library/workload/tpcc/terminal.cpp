@@ -66,12 +66,14 @@ TTerminal::TTerminal(size_t terminalID,
                      const TString& path,
                      std::stop_token stopToken,
                      std::atomic<bool>& stopWarmup,
+                     std::shared_ptr<TTerminalStats>& stats,
                      std::shared_ptr<TLog>& log)
     : TaskQueue(taskQueue)
     , Driver(driver)
     , Context(terminalID, warehouseID, warehouseCount, TaskQueue, std::make_shared<NQuery::TQueryClient>(Driver), path, log)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
+    , Stats(stats)
     , Task(Run())
 {
 }
@@ -87,7 +89,7 @@ TTerminalTask TTerminal::Run() {
 
     while (!StopToken.stop_requested()) {
         if (!WarmupWasStopped && StopWarmup.load(std::memory_order::relaxed)) {
-            Stats.Clear();
+            Stats->ClearOnce();
             WarmupWasStopped = true;
         }
 
@@ -121,9 +123,9 @@ TTerminalTask TTerminal::Run() {
             auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
             if (result.IsSuccess()) {
-                Stats.AddOK(static_cast<TTerminalStats::ETransactionType>(txIndex), latency);
+                Stats->AddOK(static_cast<TTerminalStats::ETransactionType>(txIndex), latency);
             } else {
-                Stats.IncFailed(static_cast<TTerminalStats::ETransactionType>(txIndex));
+                Stats->IncFailed(static_cast<TTerminalStats::ETransactionType>(txIndex));
             }
 
             if (!result.IsSuccess()) {
@@ -140,7 +142,7 @@ TTerminalTask TTerminal::Run() {
             co_await TSuspend(TaskQueue, Context.TerminalID, transaction.ThinkTime);
         } catch (const TUserAbortedException& ex) {
             // it's OK, inc statistics and ignore
-            Stats.IncUserAborted(static_cast<TTerminalStats::ETransactionType>(txIndex));
+            Stats->IncUserAborted(static_cast<TTerminalStats::ETransactionType>(txIndex));
             LOG_T("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction aborted by user");
         } catch (const yexception& ex) {
             TStringStream ss;
@@ -168,10 +170,6 @@ bool TTerminal::IsDone() const {
     }
 
     return Task.Handle.done();
-}
-
-void TTerminal::CollectStats(TTerminalStats& dst) const {
-    Stats.Collect(dst);
 }
 
 } // namespace NYdb::NTPCC

@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     common_queries.cpp
+    histogram.cpp
     runner.cpp
     task_queue.cpp
     terminal.cpp
@@ -18,7 +19,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/client/query
-    library/cpp/histogram/hdr
 )
 
 END()

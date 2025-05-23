@@ -2,11 +2,10 @@
 
 #include "task_queue.h"
 
+#include "histogram.h"
 #include "transactions.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-
-#include <library/cpp/histogram/hdr/histogram.h>
 
 #include <util/system/spinlock.h>
 
@@ -56,7 +55,7 @@ public:
         std::atomic<size_t> UserAborted = 0;
 
         mutable TSpinLock HistLock;
-        NHdr::THistogram LatencyHistogramMs{1, 8192, 5};
+        THistogram LatencyHistogramMs{256, 8192};
     };
 
 public:
@@ -96,8 +95,17 @@ public:
         }
     }
 
+    // Thread-safe clear that happens only once, even if called multiple times
+    void ClearOnce() {
+        bool expected = false;
+        if (WasCleared.compare_exchange_strong(expected, true, std::memory_order_relaxed)) {
+            Clear();
+        }
+    }
+
 private:
     std::array<TStats, 5> Stats;
+    std::atomic<bool> WasCleared{false};
 };
 
 using TTerminalTask = TTask<void>;
@@ -115,6 +123,7 @@ public:
         const TString& path,
         std::stop_token stopToken,
         std::atomic<bool>& stopWarmup,
+        std::shared_ptr<TTerminalStats>& stats,
         std::shared_ptr<TLog>& log);
 
     TTerminal(const TTerminal&) = delete;
@@ -126,7 +135,6 @@ public:
     void Start();
 
     bool IsDone() const;
-    void CollectStats(TTerminalStats& dst) const;
 
 private:
     TTerminalTask Run();
@@ -137,10 +145,9 @@ private:
     TTransactionContext Context;
     std::stop_token StopToken;
     std::atomic<bool>& StopWarmup;
+    std::shared_ptr<TTerminalStats> Stats;
 
     TTerminalTask Task;
-
-    TTerminalStats Stats;
 
     bool WarmupWasStopped = false;
 };

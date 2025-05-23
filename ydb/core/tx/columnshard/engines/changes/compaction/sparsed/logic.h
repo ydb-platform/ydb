@@ -79,8 +79,7 @@ private:
 
         bool Next() {
             ++ScanIndex;
-            MoveToSignificant();
-            return IsValid();
+            return MoveToSignificant();
         }
 
         bool AddIndexTo(TWriter& writer);

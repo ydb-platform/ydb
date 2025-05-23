@@ -4,10 +4,8 @@
 namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB {
 
 void TCollector::DoAskData(THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback) {
-    if (portions.size()) {
-        NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(std::move(portions), callback));
-    }
+    NActors::TActivationContext::Send(
+        TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(std::move(portions), callback));
 }
 
 TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) {
@@ -20,7 +18,7 @@ TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) 
                 result.AddFromCache(it.Value());
             } else {
                 if (!cPortions) {
-                    cPortions = &portions.UpsertConsumer(c.first);
+                    cPortions = &result.MutablePortionsToAsk().UpsertConsumer(c.first);
                 }
                 cPortions->AddPortion(p);
             }

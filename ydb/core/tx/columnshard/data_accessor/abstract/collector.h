@@ -20,17 +20,6 @@ public:
     }
 };
 
-class TDataCategorized {
-private:
-    YDB_ACCESSOR_DEF(TPortionsByConsumer, PortionsToAsk);
-    YDB_READONLY_DEF(std::vector<TPortionDataAccessor>, CachedAccessors);
-
-public:
-    void AddFromCache(const TPortionDataAccessor& accessor) {
-        CachedAccessors.emplace_back(accessor);
-    }
-};
-
 class TConsumerPortions {
 private:
     YDB_READONLY_DEF(TString, ConsumerId);
@@ -51,6 +40,18 @@ private:
     THashMap<TString, TConsumerPortions> Consumers;
 
 public:
+    ui64 GetPortionsCount() const {
+        ui64 result = 0;
+        for (auto&& i : Consumers) {
+            result += i.second.GetPortions().size();
+        }
+        return result;
+    }
+
+    bool IsEmpty() const {
+        return Consumers.empty();
+    }
+
     TConsumerPortions& UpsertConsumer(const TString& consumerId) {
         auto it = Consumers.find(consumerId);
         if (it == Consumers.end()) {
@@ -61,6 +62,17 @@ public:
 
     const THashMap<TString, TConsumerPortions>& GetConsumers() const {
         return Consumers;
+    }
+};
+
+class TDataCategorized {
+private:
+    YDB_ACCESSOR_DEF(TPortionsByConsumer, PortionsToAsk);
+    YDB_READONLY_DEF(std::vector<TPortionDataAccessor>, CachedAccessors);
+
+public:
+    void AddFromCache(const TPortionDataAccessor& accessor) {
+        CachedAccessors.emplace_back(accessor);
     }
 };
 

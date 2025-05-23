@@ -3,14 +3,13 @@
 namespace NKikimr::NOlap::NDataAccessorControl::NInMem {
 
 void TCollector::DoAskData(
-    const THashMap<TInternalPathId, TPortionsByConsumer>& portions, const std::shared_ptr<IAccessorCallback>& /*callback*/) {
-    AFL_VERIFY(portions.empty());
+    THashMap<TInternalPathId, TPortionsByConsumer>&& /*portions*/, const std::shared_ptr<IAccessorCallback>& /*callback*/) {
+    AFL_VERIFY(false);
 }
 
 TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) {
     TDataCategorized result;
     for (auto&& c : portions.GetConsumers()) {
-        TConsumerPortions* cPortions = nullptr;
         for (auto&& p : c.second.GetPortions()) {
             auto it = Accessors.find(p->GetPortionId());
             AFL_VERIFY(it != Accessors.end());

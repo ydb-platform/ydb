@@ -1424,13 +1424,13 @@ class TTxAskPortionChunks: public TTransactionBase<TColumnShard> {
 private:
     using TBase = TTransactionBase<TColumnShard>;
     std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback> FetchCallback;
-    THashMap<TInternalPathId, NDataAccessorControl::TPortionsByConsumer> PortionsByPath;
+    THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer> PortionsByPath;
     std::vector<TPortionConstructorV2> FetchedAccessors;
     THashMap<NOlap::TPortionAddress, TPortionConstructorV2> Constructors;
 
 public:
     TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& fetchCallback,
-        THashMap<TInternalPathId, NDataAccessorControl::TPortionsByConsumer>&& portions)
+        THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer>&& portions)
         : TBase(self)
         , FetchCallback(fetchCallback)
         , PortionsByPath(std::move(portions)) {
@@ -1444,10 +1444,9 @@ public:
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "TTxAskPortionChunks::Execute");
         for (auto&& i : PortionsByPath) {
             for (auto&& c : i.second.GetConsumers()) {
-                NActors::TLogContextGuard lcGuard =
-                    NActors::TLogContextBuilder::Build()("consumer", Consumer);
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", i.second.size())("path_id", i.first);
-                for (auto&& p : i.second) {
+                NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", c.second.GetPortions().size());
+                for (auto&& p : c.second.GetPortions()) {
                     auto itPortionConstructor = Constructors.find(p->GetAddress());
                     if (itPortionConstructor == Constructors.end()) {
                         TPortionConstructorV2 constructor(p);

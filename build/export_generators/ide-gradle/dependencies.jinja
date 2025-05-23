@@ -1,7 +1,8 @@
 {%- macro AnnotationProcessors(funcName, annotation_processors) -%}
 {%-     if annotation_processors|length -%}
-{%-         for annotation_processor in annotation_processors|unique|sort %}
-    {{ funcName }}(files("$arcadia_root/{{ annotation_processor }}"))
+{%-         for annotation_processor in annotation_processors|unique|sort -%}
+{%-             set parts = rsplit(annotation_processor, "/", 4) %}
+    {{ funcName }}("{{ parts[0]|replace("contrib/java/", "")|replace("/", ".") }}:{{ parts[1] }}:{{ parts[2] }}")
 {%-         endfor -%}
 {%-     endif -%}
 {%- endmacro -%}

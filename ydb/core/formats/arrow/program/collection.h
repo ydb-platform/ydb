@@ -71,7 +71,7 @@ public:
         if (!HasData()) {
             return false;
         }
-        return !GetRecordsCountActualVerified() || IsEmptyFilter();
+        return (RecordsCountActual && !*RecordsCountActual) || IsEmptyFilter();
     }
 
     std::optional<ui32> GetRecordsCountActualOptional() const {
@@ -96,8 +96,7 @@ public:
     TAccessorsCollection() = default;
     TAccessorsCollection(const ui32 baseRecordsCount)
         : RecordsCountActual(baseRecordsCount)
-        , RecordsCountOriginal(baseRecordsCount)
-    {
+        , RecordsCountOriginal(baseRecordsCount) {
     }
 
     std::optional<TAccessorsCollection> SelectOptional(const std::vector<ui32>& indexes, const bool withFilters) const;
@@ -345,7 +344,6 @@ public:
     std::vector<std::shared_ptr<IChunkedArray>> GetAccessors(const std::vector<ui32>& columnIds) const;
     std::vector<std::shared_ptr<IChunkedArray>> ExtractAccessors(const std::vector<ui32>& columnIds);
     std::shared_ptr<IChunkedArray> ExtractAccessorOptional(const ui32 columnId);
-
 
     std::shared_ptr<arrow::Table> GetTable(const std::vector<ui32>& columnIds) const;
 

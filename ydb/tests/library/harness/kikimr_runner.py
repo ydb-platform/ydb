@@ -53,7 +53,7 @@ def ensure_path_exists(path):
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def __init__(self, node_id, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
-                 binary_path=None, data_center=None):
+                 binary_path=None, data_center=None, use_config_store=False):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_id
@@ -63,6 +63,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__configurator = configurator
         self.__common_udfs_dir = udfs_dir
         self.__binary_path = binary_path
+        self.__use_config_store = use_config_store or self.__configurator.use_config_store
 
         self.__encryption_key = encryption_key
         self._tenant_affiliation = tenant_affiliation
@@ -180,7 +181,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__configurator.suppress_version_check:
             command.append("--suppress-version-check")
 
-        if self.__configurator.use_config_store:
+        if self.__use_config_store:
             command.append("--config-dir=%s" % self.__config_path)
         else:
             command.append("--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"))
@@ -296,7 +297,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return config.get('metadata', {}).get('version', 0)
 
     def enable_config_dir(self):
-        self.__configurator.use_config_store = True
+        self.__use_config_store = True
         self.update_command(self.__make_run_command())
 
     def make_config_dir(self, source_config_yaml_path, target_config_dir_path):
@@ -619,6 +620,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node in self.nodes.values():
             node.start()
 
+    def enable_config_dir(self, node_ids=None):
+        if node_ids is None:
+            node_ids = self.__configurator.all_node_ids()
+        self.__configurator.use_config_store = True
+        for node_id in node_ids:
+            self.nodes[node_id].enable_config_dir()
+
     @property
     def config_path(self):
         if self.__configurator.separate_node_configs:
@@ -630,8 +638,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         node_config_path = ensure_path_exists(
             os.path.join(self.__config_base_path, "node_{}".format(node_id))
         )
-        logger.info("Writing node config to %s" % node_config_path)
-        logger.info("Config: %s" % configurator.yaml_config)
         configurator.write_proto_configs(node_config_path)
 
     def __write_configs(self):
@@ -644,11 +650,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def overwrite_configs(self, config):
         self.__configurator.full_config = config
         self.__write_configs()
-
-    def enable_config_dir(self):
-        self.__configurator.use_config_store = True
-        for node in self.nodes.values():
-            node.enable_config_dir()
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()

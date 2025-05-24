@@ -46,6 +46,9 @@ using TEvResolveAllConfigRequest = TGrpcRequestOperationCall<DynamicConfig::Reso
 using TEvFetchStartupConfigRequest = TGrpcRequestOperationCall<DynamicConfig::FetchStartupConfigRequest,
     DynamicConfig::FetchStartupConfigResponse>;
 
+using TEvGetConfigurationVersionRequest = TGrpcRequestOperationCall<DynamicConfig::GetConfigurationVersionRequest,
+    DynamicConfig::GetConfigurationVersionResponse>;
+
 template <typename TRequest, typename TConsoleRequest, typename TConsoleResponse>
 class TDynamicConfigRPC : public TRpcOperationRequestActor<TDynamicConfigRPC<TRequest, TConsoleRequest, TConsoleResponse>, TRequest> {
     using TThis = TDynamicConfigRPC<TRequest, TConsoleRequest, TConsoleResponse>;
@@ -62,6 +65,13 @@ public:
     void Bootstrap()
     {
         TBase::Bootstrap(TActivationContext::AsActorContext());
+
+        if constexpr (std::is_same_v<TRequest, TEvGetConfigurationVersionRequest>) {
+            if (!AppData()->FeatureFlags.GetEnableGetConfigurationVersion()) {
+                Cerr << "GetConfigurationVersion feature is disabled" << Endl;
+                return Disabled();
+            }
+        }
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
@@ -128,6 +138,10 @@ private:
         return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
     }
 
+    void Handle(TEvConsole::TEvGetConfigurationVersionResponse::TPtr& ev) {
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
+    }
+
     void Handle(TEvConsole::TEvUnauthorized::TPtr&) {
         ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage> issues;
         auto issue = issues.Add();
@@ -138,12 +152,7 @@ private:
     }
 
     void Handle(TEvConsole::TEvDisabled::TPtr&) {
-        ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage> issues;
-        auto issue = issues.Add();
-        issue->set_severity(NYql::TSeverityIds::S_ERROR);
-        issue->set_message("Feature is disabled");
-
-        return TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
+        return Disabled();
     }
 
     void Handle(TEvConsole::TEvGenericError::TPtr& ev) {
@@ -184,6 +193,14 @@ private:
         this->Request_->RaiseIssue(NYql::TIssue("Console is unavailable"));
         this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
         PassAway();
+    }
+
+    void Disabled() {
+        ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage> issues;
+        auto issue = issues.Add();
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        issue->set_message("Feature is disabled");
+        return TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) noexcept
@@ -296,4 +313,12 @@ void DoFetchStartupConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacili
                     TEvConsole::TEvFetchStartupConfigRequest,
                     TEvConsole::TEvFetchStartupConfigResponse>(p.release()));
 }
+
+void DoGetConfigurationVersionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TDynamicConfigRPC<TEvGetConfigurationVersionRequest,
+                    TEvConsole::TEvGetConfigurationVersionRequest,
+                    TEvConsole::TEvGetConfigurationVersionResponse>(p.release()));
+}
+
 } // namespace NKikimr::NGRpcService

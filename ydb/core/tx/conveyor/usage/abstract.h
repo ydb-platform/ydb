@@ -19,6 +19,14 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr Success;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessDuration;
 
+    TTaskSignals(const NColumnShard::TCommonCountersOwner& baseObject, const TString& taskClassIdentifier)
+        : TBase(baseObject, "task_class_name", taskClassIdentifier) {
+        Fails = TBase::GetDeriviative("Fails");
+        FailsDuration = TBase::GetDeriviative("FailsDuration");
+        Success = TBase::GetDeriviative("Success");
+        SuccessDuration = TBase::GetDeriviative("SuccessDuration");
+    }
+
     TTaskSignals(const TString& moduleId, const TString& taskClassIdentifier, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr)
         : TBase(moduleId, baseSignals) {
         DeepSubGroup("task_class", taskClassIdentifier);

@@ -169,6 +169,7 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[87]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[93]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
 ydb/tests/olap sole chunk chunk
+ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test
 ydb/tests/olap/column_family/compression sole chunk chunk
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]

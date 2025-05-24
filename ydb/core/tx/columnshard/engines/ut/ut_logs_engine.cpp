@@ -388,7 +388,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
         auto request = changes->ExtractDataAccessorsRequest();
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
-        engine.FetchDataAccessors(changes->ExtractDataAccessorsRequest());
+        engine.FetchDataAccessors(request);
     }
     changes->Blobs = std::move(blobs);
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"), NOlap::TSnapshot(step, 1));
@@ -478,7 +478,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInter
         auto request = changes->ExtractDataAccessorsRequest();
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
-        engine.FetchDataAccessors(changes->ExtractDataAccessorsRequest());
+        engine.FetchDataAccessors(request);
     }
     const bool result = engine.ApplyChangesOnTxCreate(changes, TSnapshot(1, 1)) && engine.ApplyChangesOnExecute(db, changes, TSnapshot(1, 1));
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, TSnapshot(1, 1));

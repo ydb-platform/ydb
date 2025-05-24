@@ -46,9 +46,6 @@ public:
         , Portions(portions) {
     }
 
-    std::vector<TPortionDataAccessor> DetachPortions() {
-        return std::move(Portions);
-    }
     THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId,
         const TTransferContext& context, const TVersionedIndex& index);
 

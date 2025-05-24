@@ -44,6 +44,7 @@ struct TEvScanExchange {
         YDB_READONLY(ui64, TabletId, 0);
         YDB_ACCESSOR_DEF(std::vector<ui32>, DataIndexes);
         YDB_READONLY_DEF(TLocksInfo, LocksInfo);
+        YDB_ACCESSOR_DEF(ui64, WaitOutputTimeUs);
     public:
         ui32 GetRowsCount() const {
             return ArrowBatch ? ArrowBatch->num_rows() : Rows.size();

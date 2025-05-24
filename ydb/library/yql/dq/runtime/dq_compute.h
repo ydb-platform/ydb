@@ -7,6 +7,9 @@ namespace NYql::NDq {
 class TDqComputeContextBase : private TNonCopyable {
 public:
     virtual ~TDqComputeContextBase() = default;
+
+    bool InputConsumed = false;
+    TInstant* StartTs = nullptr;
 };
 
 NKikimr::NMiniKQL::TComputationNodeFactory GetDqBaseComputeFactory(const TDqComputeContextBase* computeCtx);

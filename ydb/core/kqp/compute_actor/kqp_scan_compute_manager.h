@@ -33,6 +33,9 @@ private:
     bool NeedAck = true;
     bool Finished = false;
     bool AllowPings = false;
+    TDuration WaitOutputTime;
+    TInstant StartWaitOutputTime;
+    ui64 PendingMessageCount = 0;
 
     void DoAck() {
         if (Finished) {
@@ -129,11 +132,29 @@ public:
             DoAck();
         }
     }
+
+    void IncPending() {
+        if (PendingMessageCount++ == 0) {
+            StartWaitOutputTime = TInstant::Now();
+        }
+    }
+
+    void DecPending() {
+        AFL_ENSURE(PendingMessageCount > 0);
+        auto now = TInstant::Now();
+        WaitOutputTime += (now - StartWaitOutputTime);
+        StartWaitOutputTime = --PendingMessageCount ? now : TInstant::Zero();
+    }
+
+    ui64 GetPendingTimeUs() const {
+        return WaitOutputTime.MicroSeconds();
+    }
 };
 
 class TComputeTaskData {
-private:
+public:
     std::shared_ptr<TShardScannerInfo> Info;
+private:
     std::unique_ptr<TEvScanExchange::TEvSendData> Event;
     bool Finished = false;
     const std::optional<ui32> ComputeShardId;
@@ -144,6 +165,7 @@ public:
     }
 
     std::unique_ptr<TEvScanExchange::TEvSendData> ExtractEvent() {
+        Event->SetWaitOutputTimeUs(Info->GetPendingTimeUs());
         return std::move(Event);
     }
 
@@ -251,6 +273,7 @@ public:
         }
         it->second->OnAckReceived(freeSpace);
         if (it->second->IsFree() && UndefinedShardTaskData.size()) {
+            UndefinedShardTaskData.front()->Info->DecPending();
             it->second->AddDataToSend(std::move(UndefinedShardTaskData.front()));
             UndefinedShardTaskData.pop_front();
         }
@@ -266,6 +289,7 @@ public:
                     return;
                 }
             }
+            sendTask->Info->IncPending();
             UndefinedShardTaskData.emplace_back(std::move(sendTask));
         } else {
             AFL_ENSURE(*computeShardId < ComputeActors.size())("compute_shard_id", *computeShardId);

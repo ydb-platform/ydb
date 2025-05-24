@@ -176,12 +176,13 @@ DEFINE_ENUM(EAbortReason,
 DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);
 
 DEFINE_ENUM(EInterruptionReason,
-    ((None)               (0))
-    ((Preemption)         (1))
-    ((UserRequest)        (2))
-    ((JobSplit)           (3))
-    ((Unknown)            (4))
-    ((JobsDisabledOnNode) (5))
+    ((None)                (0))
+    ((Preemption)          (1))
+    ((UserRequest)         (2))
+    ((JobSplit)            (3))
+    ((Unknown)             (4))
+    ((JobsDisabledOnNode)  (5))
+    ((NbdDeviceStopping)   (6))
 );
 
 DEFINE_ENUM_UNKNOWN_VALUE(EInterruptionReason, Unknown);

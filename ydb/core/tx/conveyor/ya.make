@@ -7,3 +7,5 @@ PEERDIR(
     ydb/core/tx/conveyor/service
     ydb/core/tx/conveor/usage
 )
+
+END()

@@ -227,8 +227,14 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
-            explain = "unsupported index type to build";
-            return false;
+            if (AppData()->FeatureFlags.GetEnableAddUniqueIndex()) {
+                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
+                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
+                break;
+            } else {
+                explain = "unsupported index type to build";
+                return false;
+            }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex

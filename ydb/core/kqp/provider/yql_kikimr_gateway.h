@@ -489,6 +489,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
     EStoreType StoreType = EStoreType::Row;
     bool IsIndexImplTable = false;
 
+    // If writes are disabled, query that writes to table must finish with error.
+    bool WritesToTableAreDisabled = false;
+    TString DisableWritesReason;
+
     ui64 RecordsCount = 0;
     ui64 DataSize = 0;
     ui64 MemorySize = 0;

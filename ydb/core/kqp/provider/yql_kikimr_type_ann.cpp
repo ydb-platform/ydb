@@ -476,6 +476,15 @@ private:
             return TStatus::Error;
         }
 
+        if (table->Metadata->WritesToTableAreDisabled) {
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue(ctx.GetPosition(node.Pos()),
+                TStringBuilder() << "Table " << table->Metadata->Name << " modification is disabled: "
+                    << table->Metadata->DisableWritesReason));
+            ctx.IssueManager.AddIssues(ctx.GetPosition(node.Pos()), issues);
+            return TStatus::Error;
+        }
+
         auto pos = ctx.GetPosition(node.Pos());
         if (auto maybeTuple = node.Input().Maybe<TExprList>()) {
             auto tuple = maybeTuple.Cast();

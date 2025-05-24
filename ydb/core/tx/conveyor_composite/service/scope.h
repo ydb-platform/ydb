@@ -31,7 +31,9 @@ public:
 
     void PutTaskResult(TWorkerTaskResult&& result) {
         const ui64 id = result.GetProcessId();
-        MutableProcessVerified(id).PutTaskResult(std::move(result));
+        if (auto* process = MutableProcessOptional(id)) {
+            process->PutTaskResult(std::move(result));
+        }
     }
 
     TProcessScope(TCPUGroup::TPtr&& limits, const std::shared_ptr<TCPUUsage>& categoryScope)
@@ -43,6 +45,15 @@ public:
         auto it = Processes.find(processId);
         AFL_VERIFY(it != Processes.end());
         return it->second;
+    }
+
+    TProcess* MutableProcessOptional(const ui64 processId) {
+        auto it = Processes.find(processId);
+        if (it != Processes.end()) {
+            return &it->second;
+        } else {
+            return nullptr;
+        }
     }
 
     void RegisterProcess(const ui64 processId) {

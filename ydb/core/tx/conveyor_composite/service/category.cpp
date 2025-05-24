@@ -41,6 +41,15 @@ TProcessScope& TProcessCategory::MutableProcessScope(const TString& scopeName) {
     return *it->second;
 }
 
+TProcessScope* TProcessCategory::MutableProcessScopeOptional(const TString& scopeName) {
+    auto it = Scopes.find(scopeName);
+    if (it != Scopes.end()) {
+        return it->second.get();
+    } else {
+        return nullptr;
+    }
+}
+
 TProcessScope& TProcessCategory::RegisterScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits) {
     TCPUGroup::TPtr cpuGroup = std::make_shared<TCPUGroup>(processCpuLimits.GetCPUGroupThreadsLimitDef(256));
     auto info = Scopes.emplace(scopeId, std::make_shared<TProcessScope>(std::move(cpuGroup), CPUUsage));

@@ -30,13 +30,16 @@ public:
 
     void PutTaskResult(TWorkerTaskResult&& result) {
         const TString id = result.GetScopeId();
-        MutableProcessScope(id).PutTaskResult(std::move(result));
+        if (TProcessScope* scope = MutableProcessScopeOptional(id)) {
+            scope->PutTaskResult(std::move(result));
+        }
     }
 
     bool HasTasks() const;
     void DoQuant(const TMonotonic newStart);
     TWorkerTask ExtractTaskWithPrediction();
     TProcessScope& MutableProcessScope(const TString& scopeName);
+    TProcessScope* MutableProcessScopeOptional(const TString& scopeName);
     TProcessScope& RegisterScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits);
     TProcessScope& UpsertScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits);
 

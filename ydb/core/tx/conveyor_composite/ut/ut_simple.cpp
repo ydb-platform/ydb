@@ -128,11 +128,16 @@ class TTestingExecutor {
 private:
     virtual TString GetConveyorConfig() = 0;
     virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() = 0;
-
+    virtual ui32 GetTasksCount() const {
+        return 1000000;
+    }
 public:
+    virtual double GetThreadsCount() const {
+        return 9.5;
+    }
+
     void Execute() {
         const ui64 threadsCount = 64;
-        const ui64 tasksCount = 1000000;
         THolder<NActors::TActorSystemSetup> actorSystemSetup = NKikimr::BuildActorSystemSetup(threadsCount, 1);
         NActors::TActorSystem actorSystem(actorSystemSetup);
 
@@ -150,7 +155,7 @@ public:
         for (auto&& i : requests) {
             i->Initialize(actorSystem, actorId);
         }
-        for (ui32 i = 0; i < tasksCount; ++i) {
+        for (ui32 i = 0; i < GetTasksCount(); ++i) {
             for (auto&& i : requests) {
                 i->AddTask(actorSystem, actorId);
             }
@@ -186,6 +191,8 @@ public:
                 ++idx;
             }
         }
+        Cerr << (GetThreadsCount() * (TMonotonic::Now() - globalStart) / (1.0 * requests.size() * GetTasksCount())).MicroSeconds() << "us per task"
+             << Endl;
         TStringBuilder sb;
         for (auto&& i : durations) {
             sb << i << ";";
@@ -198,7 +205,7 @@ public:
     };
 };
 
-Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
+Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
     class TTestingExecutor10xDistribution: public TTestingExecutor {
     private:
         virtual TString GetConveyorConfig() override {
@@ -228,7 +235,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                     Name: "scan"
                 }
                 )",
-                9.5);
+                GetThreadsCount());
         }
         virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() override {
             return { std::make_shared<TSimpleRequest>("I", ESpecialTaskCategory::Insert, "1", 1),
@@ -278,7 +285,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                     Name: "scan"
                 }
                 )",
-                9.5, 9.5);
+                GetThreadsCount(), GetThreadsCount());
         }
         virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() override {
             return { std::make_shared<TSimpleRequest>("I", ESpecialTaskCategory::Insert, "1", 1),
@@ -292,7 +299,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestingExecutor10xMultiDistribution().Execute();
     }
 
-    class TTestingExecutorUniformDistribution: public TTestingExecutor {
+    class TTestingExecutorUniformProcessDistribution: public TTestingExecutor {
     private:
         virtual TString GetConveyorConfig() override {
             return Sprintf(R"(
@@ -307,7 +314,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                     Name: "insert"
                 }
                 )",
-                9.5, 9.5);
+                GetThreadsCount());
         }
         virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() override {
             return { std::make_shared<TSimpleRequest>("1", ESpecialTaskCategory::Insert, "1", 1),
@@ -317,11 +324,11 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     public:
     };
-    Y_UNIT_TEST(TestUniformDistribution) {
-        TTestingExecutorUniformDistribution().Execute();
+    Y_UNIT_TEST(TestUniformProcessDistribution) {
+        TTestingExecutorUniformProcessDistribution().Execute();
     }
 
-    class TTestingExecutorScopesDistribution: public TTestingExecutor {
+    class TTestingExecutorUniformScopesDistribution: public TTestingExecutor {
     private:
         virtual TString GetConveyorConfig() override {
             return Sprintf(R"(
@@ -336,7 +343,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                     Name: "insert"
                 }
                 )",
-                9.5);
+                GetThreadsCount());
         }
         virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() override {
             return { std::make_shared<TSimpleRequest>("1", ESpecialTaskCategory::Insert, "1", 1),
@@ -346,7 +353,73 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     public:
     };
-    Y_UNIT_TEST(TestScopesDistribution) {
-        TTestingExecutorScopesDistribution().Execute();
+    Y_UNIT_TEST(TestUniformScopesDistribution) {
+        TTestingExecutorUniformScopesDistribution().Execute();
+    }
+
+    class TTestingExecutorUniformDistribution: public TTestingExecutor {
+    private:
+        virtual ui32 GetTasksCount() const override {
+            return 1000000;
+        }
+        virtual double GetThreadsCount() const override {
+            return 16.4;
+        }
+        virtual TString GetConveyorConfig() override {
+            return Sprintf(R"(
+                WorkerPools {
+                    WorkersCount: %f
+                    Links {
+                        Category: "insert"
+                        Weight: 0.1
+                    }
+                    Links {
+                        Category: "scan"
+                        Weight: 0.1
+                    }
+                    Links {
+                        Category: "normalizer"
+                        Weight: 0.1
+                    }
+                }
+                Categories {
+                    Name: "insert"
+                }
+                Categories {
+                    Name: "normalizer"
+                }
+                Categories {
+                    Name: "scan"
+                }
+                )",
+                GetThreadsCount());
+        }
+        virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() override {
+            return { 
+                std::make_shared<TSimpleRequest>("I_1_1", ESpecialTaskCategory::Insert, "1", 1),
+                std::make_shared<TSimpleRequest>("I_2_1", ESpecialTaskCategory::Insert, "2", 1),
+                std::make_shared<TSimpleRequest>("I_3_1", ESpecialTaskCategory::Insert, "3", 1),
+                std::make_shared<TSimpleRequest>("S_1_1", ESpecialTaskCategory::Scan, "1", 1),
+                std::make_shared<TSimpleRequest>("S_2_1", ESpecialTaskCategory::Scan, "2", 1),
+                std::make_shared<TSimpleRequest>("S_3_1", ESpecialTaskCategory::Scan, "3", 1),
+                std::make_shared<TSimpleRequest>("N_1_1", ESpecialTaskCategory::Normalizer, "1", 1),
+                std::make_shared<TSimpleRequest>("N_2_1", ESpecialTaskCategory::Normalizer, "2", 1),
+                std::make_shared<TSimpleRequest>("N_3_1", ESpecialTaskCategory::Normalizer, "3", 1),
+                std::make_shared<TSimpleRequest>("I_1_2", ESpecialTaskCategory::Insert, "1", 2),
+                std::make_shared<TSimpleRequest>("I_2_2", ESpecialTaskCategory::Insert, "2", 2),
+                std::make_shared<TSimpleRequest>("I_3_2", ESpecialTaskCategory::Insert, "3", 2),
+                std::make_shared<TSimpleRequest>("S_1_2", ESpecialTaskCategory::Scan, "1", 2),
+                std::make_shared<TSimpleRequest>("S_2_2", ESpecialTaskCategory::Scan, "2", 2),
+                std::make_shared<TSimpleRequest>("S_3_2", ESpecialTaskCategory::Scan, "3", 2),
+                std::make_shared<TSimpleRequest>("N_1_2", ESpecialTaskCategory::Normalizer, "1", 2),
+                std::make_shared<TSimpleRequest>("N_2_2", ESpecialTaskCategory::Normalizer, "2", 2),
+                std::make_shared<TSimpleRequest>("N_3_2", ESpecialTaskCategory::Normalizer, "3", 2)
+            };
+        }
+
+    public:
+    };
+    Y_UNIT_TEST(TestUniformDistribution) {
+        TTestingExecutorUniformDistribution().Execute();
     }
 }

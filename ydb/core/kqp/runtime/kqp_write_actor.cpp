@@ -1899,7 +1899,6 @@ public:
 
     bool Process() {
         ProcessRequestQueue();
-        // TODO: process lookup result queue
         if (!ProcessFlush()) {
             return false;
         }

@@ -799,7 +799,7 @@ message TKqpTableSinkSettings {
 
     optional NKqpProto.TKqpPhyTableId Table = 3;
     repeated TKqpColumnMetadataProto KeyColumns = 4;
-    repeated TKqpColumnMetadataProto Columns = 5; // = Input Columns
+    repeated TKqpColumnMetadataProto Columns = 5;
     optional uint64 LockTxId = 6;
     optional uint64 LockNodeId = 7;
     optional bool InconsistentTx = 8; // Write each batch in it's own single immediate tx

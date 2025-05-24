@@ -1239,11 +1239,7 @@ private:
                         const auto& indexDescription = tableMeta->Indexes[index];
                         const auto& implTable = tableMeta->ImplTables[index];
 
-                        if (indexDescription.Type != TIndexDescription::EType::GlobalSync && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
-                            // Only sync secondary indexes are supported.
-                            continue;
-                        }
-
+                        AFL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync);
                         AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
                         auto indexSettings = settingsProto.AddIndexes();

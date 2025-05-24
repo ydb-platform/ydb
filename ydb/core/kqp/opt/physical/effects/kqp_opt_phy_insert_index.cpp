@@ -98,7 +98,14 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, insert.Table().Path());
 
     const bool isSink = NeedSinks(table, kqpCtx) && kqpCtx.Config->EnableIndexStreamWrite;
-    const bool needPrecompute = !(isSink && abortOnError);
+
+    auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx);
+    YQL_ENSURE(indexes);
+    const bool hasUniqIndex = std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
+        return index.second->Type == TIndexDescription::EType::GlobalSyncUnique;
+    });;
+
+    const bool needPrecompute = !(isSink && abortOnError) || hasUniqIndex;
 
     if (!needPrecompute) {
         TVector<TStringBuf> insertColumns;
@@ -108,10 +115,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             insertColumns.emplace_back(column.Value());
         }
 
-        auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx);
-        YQL_ENSURE(indexes);
         THashSet<TStringBuf> requiredIndexColumnsSet;
-
         for (const auto& [tableNode, indexDesc] : indexes) {
             for (const auto& column : indexDesc->KeyColumns) {
                 if (requiredIndexColumnsSet.emplace(column).second && !inputColumnsSet.contains(column)) {
@@ -155,9 +159,6 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
         auto insertRowsPrecompute = Build<TDqPhyPrecompute>(ctx, node.Pos())
             .Connection(insertRows.Cast())
             .Done();
-
-        auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx);
-        YQL_ENSURE(indexes);
 
         auto upsertTable = Build<TKqlUpsertRows>(ctx, insert.Pos())
             .Table(insert.Table())

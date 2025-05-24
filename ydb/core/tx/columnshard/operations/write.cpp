@@ -109,7 +109,7 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
     }
     proto.SetModificationType((ui32)ModificationType);
     proto.SetWritePortions(WritePortions);
-    proto.SetPathId(PathId.GetRawValue());
+    PathId.ToProto(proto);
 }
 
 void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
@@ -117,7 +117,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
         InsertWriteIds.push_back(TInsertWriteId(writeId));
     }
     WritePortions = proto.GetWritePortions();
-    PathId = TInternalPathId::FromRawValue(proto.GetPathId());
+    PathId = TInternalPathId::FromProto(proto);
     AFL_VERIFY(!WritePortions || PathId);
     if (proto.HasModificationType()) {
         ModificationType = (NEvWrite::EModificationType)proto.GetModificationType();

@@ -49,7 +49,7 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
     if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batchResult.GetContainer(), Context);
-        NConveyor::TCompServiceOperator::SendTaskToExecute(task, NConveyor::ESpecialTaskProcesses::Insert);
+        NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
     } else {
         NActors::TActivationContext::ActorSystem()->Send(
             Context.GetBufferizationPortionsActorId(), new NWritingPortions::TEvAddInsertedDataToBuffer(

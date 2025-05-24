@@ -12,10 +12,16 @@ namespace NYql {
 
 struct TPqSettings {
     using TConstPtr = std::shared_ptr<const TPqSettings>;
-
-    NCommon::TConfSetting<TString, false> Consumer;
-    NCommon::TConfSetting<TString, false> Database; // It is needed in case of Cloud.LB for external users, but can be taken from config for internal LB.
-    NCommon::TConfSetting<TString, false> PqReadByRtmrCluster_;
+private:
+#ifdef YQL_BETTER_CONF_SETTING_API
+    static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
+#else
+    static constexpr bool Static = false;
+#endif
+public:
+    NCommon::TConfSetting<TString, Static> Consumer;
+    NCommon::TConfSetting<TString, Static> Database; // It is needed in case of Cloud.LB for external users, but can be taken from config for internal LB.
+    NCommon::TConfSetting<TString, Static> PqReadByRtmrCluster_;
 };
 
 struct TPqClusterConfigurationSettings {

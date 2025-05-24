@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/conveyor_composite/service)
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
+SIZE(MEDIUM)
 
 PEERDIR(
     contrib/libs/apache/arrow

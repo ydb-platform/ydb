@@ -1844,7 +1844,6 @@ public:
 
             for (const auto& indexSettings : settings.Indexes) {
                 if (!writeInfo.Actors.contains(indexSettings.TableId)) {
-                    Cerr << SelfId() << ">> Create new TableWriteActor for index `" << indexSettings.TablePath << "` (" << indexSettings.TableId << ")" << Endl;
                     const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns);
                     writeInfo.Actors.emplace(indexSettings.TableId, TWriteInfo::TActorInfo{
                         .WriteActor = ptr,

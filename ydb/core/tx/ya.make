@@ -24,6 +24,8 @@ END()
 
 RECURSE(
     balance_coverage
+    conveyor
+    conveyor_composite
     columnshard
     coordinator
     datashard

@@ -191,20 +191,22 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     Counters.GetCSCounters().OnStartWriteRequest();
 
     const auto& record = Proto(ev->Get());
-    const auto pathId = TInternalPathId::FromProto(record);
+    const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(record);
+    const auto& internalPathId = PathIdTranslator.GetInternalPathId(schemeShardLocalPathId);
+    AFL_VERIFY(internalPathId);
     const ui64 writeId = record.GetWriteId();
     const ui64 cookie = ev->Cookie;
     const TString dedupId = record.GetDedupId();
     const auto source = ev->Sender;
 
-    Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId)->OnWriteEvent();
+    Counters.GetColumnTablesCounters()->GetPathIdCounter(*internalPathId)->OnWriteEvent();
 
     std::optional<ui32> granuleShardingVersion;
     if (record.HasGranuleShardingVersion()) {
         granuleShardingVersion = record.GetGranuleShardingVersion();
     }
 
-    auto writeMetaPtr = std::make_shared<NEvWrite::TWriteMeta>(writeId, pathId, source, granuleShardingVersion,
+    auto writeMetaPtr = std::make_shared<NEvWrite::TWriteMeta>(writeId, *internalPathId, source, granuleShardingVersion,
         TGUID::CreateTimebased().AsGuidString(), Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters());
     auto& writeMeta = *writeMetaPtr;
     if (record.HasModificationType()) {
@@ -236,7 +238,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::Disabled, NKikimrTxColumnShard::EResultStatus::ERROR);
     }
 
-    if (!TablesManager.IsReadyForStartWrite(pathId, false)) {
+    if (!TablesManager.IsReadyForStartWrite(*internalPathId, false)) {
         LOG_S_NOTICE("Write (fail) into pathId:" << writeMeta.GetTableId() << (TablesManager.HasPrimaryIndex() ? "" : " no index")
                                                  << " at tablet " << TabletID());
 
@@ -264,9 +266,9 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 
     NEvWrite::TWriteData writeData(writeMetaPtr, arrowData, snapshotSchema->GetIndexInfo().GetReplaceKey(),
         StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING), false);
-    auto overloadStatus = CheckOverloadedImmediate(pathId);
+    auto overloadStatus = CheckOverloadedImmediate(*internalPathId);
     if (overloadStatus == EOverloadStatus::None) {
-        overloadStatus = CheckOverloadedWait(pathId);
+        overloadStatus = CheckOverloadedWait(*internalPathId);
     }
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = std::make_unique<TEvColumnShard::TEvWriteResult>(

@@ -61,6 +61,7 @@ public:
         TActorId ActorId;
         bool UseAuth = true;
         TVector<TString> AllowedSIDs;
+        bool UseFallbackSIDs = true;
         bool SortPages = true;
         TString MonServiceName = "utils";
     };

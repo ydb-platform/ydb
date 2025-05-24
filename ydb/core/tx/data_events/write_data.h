@@ -38,6 +38,7 @@ class TWriteMeta: public NColumnShard::TMonitoringObjectsCounter<TWriteMeta>, TN
 private:
     YDB_ACCESSOR(ui64, WriteId, 0);
     YDB_READONLY_DEF(NColumnShard::TInternalPathId, TableId);
+    YDB_READONLY_DEF(NColumnShard::TSchemeShardLocalPathId, SchemeShardLocalPathId);
     YDB_ACCESSOR_DEF(NActors::TActorId, Source);
     YDB_ACCESSOR_DEF(std::optional<ui32>, GranuleShardingVersion);
     YDB_READONLY(TString, Id, TGUID::CreateTimebased().AsUuidString());
@@ -92,6 +93,7 @@ public:
         const TString& writingIdentifier, const std::shared_ptr<TWriteFlowCounters>& counters)
         : WriteId(writeId)
         , TableId(tableId)
+        , SchemeShardLocalPathId(NColumnShard::TSchemeShardLocalPathId::FromRawValue(9)) //Fixme
         , Source(source)
         , GranuleShardingVersion(granuleShardingVersion)
         , Id(writingIdentifier)

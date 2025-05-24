@@ -242,7 +242,7 @@ namespace TEvColumnShard {
     struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite> {
         TEvWrite() = default;
 
-        TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, NColumnShard::TInternalPathId tableId,
+        TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, NColumnShard::TSchemeShardLocalPathId tableId,
                  const TString& dedupId, const TString& data, const ui32 writePartId,
                 const NEvWrite::EModificationType modificationType) {
             ActorIdToProto(source, Record.MutableSource());
@@ -279,7 +279,7 @@ namespace TEvColumnShard {
             Record.SetOrigin(origin);
             Record.SetTxInitiator(0);
             Record.SetWriteId(writeId);
-            writeMeta.GetTableId().ToProto(Record);
+            writeMeta.GetSchemeShardLocalPathId().ToProto(Record);
             Record.SetDedupId(writeMeta.GetDedupId());
             Record.SetStatus(status);
         }

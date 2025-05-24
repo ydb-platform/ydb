@@ -273,7 +273,7 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         tx.MutableSeqNo()->SetGeneration(generation);
         auto* table = tx.MutableEnsureTables()->AddTables();
-        NColumnShard::TInternalPathId::FromRawValue(pathId).ToProto(*table);
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         {   // preset
             auto* preset = table->MutableSchemaPreset();
@@ -299,7 +299,7 @@ struct TTestSchema {
         auto* table = tx.MutableInitShard()->AddTables();
         tx.MutableInitShard()->SetOwnerPath(ownerPath);
         tx.MutableInitShard()->SetOwnerPathId(pathId);
-        NColumnShard::TInternalPathId::FromRawValue(pathId).ToProto(*table);
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         {   // preset
             auto* preset = table->MutableSchemaPreset();
@@ -325,7 +325,7 @@ struct TTestSchema {
         auto* table = tx.MutableInitShard()->AddTables();
         tx.MutableInitShard()->SetOwnerPath(path);
         tx.MutableInitShard()->SetOwnerPathId(pathId);
-        NColumnShard::TInternalPathId::FromRawValue(pathId).ToProto(*table);
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*table);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
         InitTiersAndTtl(specials, table->MutableTtlSettings());
@@ -341,7 +341,7 @@ struct TTestSchema {
         const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();
-        NColumnShard::TInternalPathId::FromRawValue(pathId).ToProto(*table);
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*table);
         tx.MutableSeqNo()->SetRound(version);
 
         auto* preset = table->MutableSchemaPreset();
@@ -363,7 +363,7 @@ struct TTestSchema {
 
     static TString DropTableTxBody(ui64 pathId, ui32 version) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
-        NColumnShard::TInternalPathId::FromRawValue(pathId).ToProto(*tx.MutableDropTable());
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*tx.MutableDropTable());
         tx.MutableSeqNo()->SetRound(version);
 
         TString out;

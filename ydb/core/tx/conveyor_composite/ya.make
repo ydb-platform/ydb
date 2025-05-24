@@ -5,7 +5,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/conveyor_composite/service
-    ydb/core/tx/conveor_composite/usage
+    ydb/core/tx/conveyor_composite/usage
 )
 
 END()

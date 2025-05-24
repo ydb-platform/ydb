@@ -175,7 +175,7 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
                               ui64 tableId, const ui64 writePartId, const TString& data,
                               const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const NEvWrite::EModificationType mType)
 {
-    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, NColumnShard::TInternalPathId::FromRawValue(tableId), "0", data, writePartId, mType);
+    auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, longTxId, NColumnShard::TSchemeShardLocalPathId::FromRawValue(tableId), "0", data, writePartId, mType);
     write->SetArrowSchema(NArrow::SerializeSchema(*NArrow::MakeArrowSchema(ydbSchema)));
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());

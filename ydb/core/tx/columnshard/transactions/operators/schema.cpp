@@ -171,9 +171,11 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
         {
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
-                const auto& pathId = TInternalPathId::FromProto(i.GetPathId());
-                if (owner.TablesManager.HasTable(pathId, true) && !owner.TablesManager.HasTable(pathId)) {
-                    WaitPathIdsToErase.emplace(pathId);
+                const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(i.GetPathId());
+                const auto internalPathId = owner.PathIdTranslator.GetInternalPathId(schemeShardLocalPathId);
+                AFL_VERIFY(internalPathId);
+                if (owner.TablesManager.HasTable(*internalPathId, true) && !owner.TablesManager.HasTable(*internalPathId)) {
+                    WaitPathIdsToErase.emplace(*internalPathId);
                 }
             }
         }

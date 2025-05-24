@@ -98,7 +98,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , SysLocks(this) {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
     SpaceWatcher = new TSpaceWatcher(this);
-    SpaceWatcherId = TActorContext::AsActorContext().Register(SpaceWatcher);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -1438,7 +1437,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
         NIceDb::TNiceDb db(txc.DB);
-        
+
         TBlobGroupSelector selector(Self->Info());
         bool reask = false;
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "TTxAskPortionChunks::Execute");

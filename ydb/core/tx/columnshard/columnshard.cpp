@@ -119,6 +119,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
 
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
     auto& icb = *AppData(ctx)->Icb;
+    SpaceWatcherId = RegisterWithSameMailbox(SpaceWatcher);
     Limits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));

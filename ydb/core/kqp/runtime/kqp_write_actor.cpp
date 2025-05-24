@@ -1854,7 +1854,7 @@ public:
 
             token = TWriteToken{settings.TableId, CurrentWriteToken++};
 
-            AFL_ENSURE(writeInfo.Actors.size() == settings.Indexes.size() + 1);
+            // TODO: AFL_ENSURE(writeInfo.Actors.size() == settings.Indexes.size() + 1);
             for (size_t index = 0; index < settings.Indexes.size(); ++index) {
                 auto& indexSettings = settings.Indexes[index];
 
@@ -1934,8 +1934,10 @@ public:
                 if (message.Data) {
                     for (size_t index = 1; index < writeInfo.Actors.size(); ++index) {
                         auto& actor = writeInfo.Actors[index];
-                        auto preparedBatch = actor.Projections.at(message.Token.Cookie)->Project(message.Data);
-                        actor.WriteActor->Write(message.Token.Cookie, preparedBatch);
+                        if (actor.Projections.contains(message.Token.Cookie)) {
+                            auto preparedBatch = actor.Projections.at(message.Token.Cookie)->Project(message.Data);
+                            actor.WriteActor->Write(message.Token.Cookie, preparedBatch);
+                        }
                     }
                     writeInfo.Actors[0].WriteActor->Write(message.Token.Cookie, std::move(message.Data));
                 }

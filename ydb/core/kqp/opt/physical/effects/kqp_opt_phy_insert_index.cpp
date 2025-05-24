@@ -97,15 +97,16 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     bool abortOnError = insert.OnConflict().Value() == "abort"sv;
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, insert.Table().Path());
 
-    const bool isSink = NeedSinks(table, kqpCtx) && kqpCtx.Config->EnableIndexStreamWrite;
+    const bool isSink = NeedSinks(table, kqpCtx);
 
     auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx);
     YQL_ENSURE(indexes);
-    const bool hasUniqIndex = std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
-        return index.second->Type == TIndexDescription::EType::GlobalSyncUnique;
-    });;
+    const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
+        && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
+            return index.second->Type == TIndexDescription::EType::GlobalSync;
+        });
 
-    const bool needPrecompute = !(isSink && abortOnError) || hasUniqIndex;
+    const bool needPrecompute = !(isSink && abortOnError && canUseStreamIndex);
 
     if (!needPrecompute) {
         TVector<TStringBuf> insertColumns;

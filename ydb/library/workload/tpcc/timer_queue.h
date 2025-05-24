@@ -146,6 +146,10 @@ public:
         return Size_;
     }
 
+    bool Empty() const {
+        return Size_ == 0;
+    }
+
     // just for tests
     bool Validate() const {
         // Check current bucket is sorted from CurrentCursor forward

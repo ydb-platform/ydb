@@ -374,7 +374,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         }
     }
     policy.SetMinPartitionsCount(op.SplitBoundarySize() + 1);
-    policy.SetMaxPartitionsCount(op.SplitBoundarySize() + 1);
 
     LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
         "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());

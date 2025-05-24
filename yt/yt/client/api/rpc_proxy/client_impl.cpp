@@ -2533,7 +2533,7 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
-            .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
+            .QueryTrackerStage = FromProto<std::string>(rsp->query_tracker_stage()),
             .ClusterName = FromProto<std::string>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<std::string>>(rsp->access_control_objects()),

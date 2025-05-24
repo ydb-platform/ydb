@@ -259,3 +259,25 @@ AUTO_PARTITIONING_MIN_PARTITIONS_COUNT определяет минимально
 Значение по умолчанию: 64.
 
 С учетом, что остальные параметры партицирования игнорируются, это же значение определяет и верхнее число партиций.
+
+### Импорт и экспорт данных между колоночными таблицами и S3
+
+Колоночные таблицы {{ ydb-short-name }} поддерживают экспорт данных в S3 ({{ objstorage-full-name }}), а также импорт из S3 в новые колоночные таблицы. Это позволяет быстро переносить большие объемы данных между хранилищами и {{ ydb-short-name }}.
+
+Пример запроса для [экспорта данных](../../federated_query/s3/import_and_export.md#export-from-olap-to-s3):
+
+```yql
+INSERT INTO s3_external_table SELECT * FROM article_column_table
+```
+
+Пример запроса для [импорта данных](../../federated_query/s3/import_and_export.md#import-from-s3-to-olap):
+
+```yql
+CREATE TABLE article_column_table (
+    PRIMARY KEY (id)
+)
+WITH (STORE = COLUMN)
+AS SELECT * FROM s3_external_table
+```
+
+Подробнее смотрите: ["Экспорт и импорт данных между колоночными таблицами и S3"](../../federated_query/s3/import_and_export.md).

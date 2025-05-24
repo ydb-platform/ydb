@@ -13,6 +13,7 @@ namespace NKikimr::NColumnShard {
 class TBackgroundController {
 private:
     THashMap<TString, TMonotonic> ActiveIndexationTasks;
+    TPathIdTranslator PathIdTranslator; //TODO init me
 
     using TCurrentCompaction = THashMap<TInternalPathId, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;

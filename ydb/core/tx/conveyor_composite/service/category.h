@@ -11,7 +11,7 @@ namespace NKikimr::NConveyorComposite {
 class TProcessCategory: public TNonCopyable {
 private:
     const ESpecialTaskCategory Category;
-    std::shared_ptr<TCPUUsage> CPUUsage = std::make_shared<TCPUUsage>();
+    std::shared_ptr<TCPUUsage> CPUUsage = std::make_shared<TCPUUsage>(nullptr);
     TPositiveControlInteger WaitingTasksCount;
     YDB_READONLY_DEF(std::shared_ptr<TCategorySignals>, Counters);
     THashMap<TString, std::shared_ptr<TProcessScope>> Scopes;

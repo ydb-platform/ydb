@@ -18,7 +18,7 @@ TWorkerTask TProcessScope::ExtractTaskWithPrediction() {
         if (!p.HasTasks()) {
             continue;
         }
-        const TDuration d = p.GetCPUUsage()->GetDuration() * p.GetWeight();
+        const TDuration d = p.GetCPUUsage()->CalcWeight(p.GetWeight());
         if (!pMin || d < dMin) {
             pMin = &p;
             dMin = d;

@@ -125,10 +125,11 @@ public:
 namespace NKikimr::NConveyorComposite {
 class TCPULimitsConfig {
     YDB_OPT(double, CPUGroupThreadsLimit);
+    YDB_READONLY(double, Weight, 1);
 
 public:
     TCPULimitsConfig() = default;
-    TCPULimitsConfig(const double cpuGroupThreadsLimit);
+    TCPULimitsConfig(const double cpuGroupThreadsLimit, const double weight = 1);
 
     TConclusionStatus DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config);
     TString DebugString() const;

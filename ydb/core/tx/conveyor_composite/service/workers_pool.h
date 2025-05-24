@@ -9,7 +9,7 @@ namespace NKikimr::NConveyorComposite {
 
 class TWeightedCategory {
 private:
-    YDB_READONLY(std::shared_ptr<TCPUUsage>, CPUUsage, std::make_shared<TCPUUsage>());
+    YDB_READONLY(std::shared_ptr<TCPUUsage>, CPUUsage, std::make_shared<TCPUUsage>(nullptr));
     YDB_READONLY_DEF(std::shared_ptr<TProcessCategory>, Category);
     YDB_READONLY(double, Weight, 1);
 

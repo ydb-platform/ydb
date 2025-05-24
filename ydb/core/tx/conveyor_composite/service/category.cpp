@@ -25,7 +25,7 @@ TWorkerTask TProcessCategory::ExtractTaskWithPrediction() {
         if (!scope->HasTasks()) {
             continue;
         }
-        const TDuration d = scope->GetCPUUsage()->GetDuration() * scope->GetWeight();
+        const TDuration d = scope->GetCPUUsage()->CalcWeight(scope->GetWeight());
         if (!scopeMin || d < dMin) {
             dMin = d;
             scopeMin = scope;
@@ -43,15 +43,14 @@ TProcessScope& TProcessCategory::MutableProcessScope(const TString& scopeName) {
 
 TProcessScope& TProcessCategory::RegisterScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits) {
     TCPUGroup::TPtr cpuGroup = std::make_shared<TCPUGroup>(processCpuLimits.GetCPUGroupThreadsLimitDef(256));
-    auto info = Scopes.emplace(scopeId, std::make_shared<TProcessScope>(std::move(cpuGroup)));
+    auto info = Scopes.emplace(scopeId, std::make_shared<TProcessScope>(std::move(cpuGroup), CPUUsage));
     AFL_VERIFY(info.second);
     return *info.first->second;
 }
 
 TProcessScope& TProcessCategory::UpdateScope(const TString& scopeId, const TCPULimitsConfig& processCpuLimits) {
-    TCPUGroup::TPtr cpuGroup = std::make_shared<TCPUGroup>(processCpuLimits.GetCPUGroupThreadsLimitDef(256));
     auto& scope = MutableProcessScope(scopeId);
-    scope.UpdateLimits(std::move(cpuGroup));
+    scope.UpdateLimits(processCpuLimits);
     return scope;
 }
 

@@ -63,6 +63,10 @@ private:
     std::shared_ptr<TCPUUsage> Parent;
 
 public:
+    TCPUUsage(const std::shared_ptr<TCPUUsage>& parent)
+        : Parent(parent) {
+    }
+
     TDuration CalcWeight(const double w) const {
         if (w <= 0) {
             return TDuration::Max();
@@ -92,13 +96,16 @@ public:
 
 class TCPUGroup {
     YDB_ACCESSOR_DEF(double, CPUThreadsLimit);
+    YDB_ACCESSOR(double, Weight, 1);
     TPositiveControlInteger ProcessesCount;
 
 public:
     using TPtr = std::shared_ptr<TCPUGroup>;
 
-    TCPUGroup(const double cpuThreadsLimit)
-        : CPUThreadsLimit(cpuThreadsLimit) {
+    TCPUGroup(const double cpuThreadsLimit, const double weight = 1)
+        : CPUThreadsLimit(cpuThreadsLimit)
+        , Weight(weight)
+    {
     }
 
     ~TCPUGroup();

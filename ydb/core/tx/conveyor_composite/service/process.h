@@ -66,7 +66,7 @@ public:
 class TProcess: public TMoveOnly {
 private:
     YDB_READONLY(ui64, ProcessId, 0);
-    YDB_READONLY(std::shared_ptr<TCPUUsage>, CPUUsage, std::make_shared<TCPUUsage>());
+    YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
     YDB_ACCESSOR_DEF(TDequePriorityFIFO, Tasks);
     TAverageCalcer<TDuration> AverageTaskDuration;
     ui32 LinksCount = 0;
@@ -105,8 +105,10 @@ public:
         ++LinksCount;
     }
 
-    TProcess(const ui64 processId)
-        : ProcessId(processId) {
+    TProcess(const ui64 processId, const std::shared_ptr<TCPUUsage>& scopeUsage)
+        : ProcessId(processId)
+    {
+        CPUUsage = std::make_shared<TCPUUsage>(scopeUsage);
         IncRegistration();
     }
 

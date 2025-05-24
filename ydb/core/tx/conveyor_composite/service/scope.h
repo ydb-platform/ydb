@@ -6,12 +6,15 @@ namespace NKikimr::NConveyorComposite {
 
 class TProcessScope: public TNonCopyable {
 private:
-    YDB_READONLY(std::shared_ptr<TCPUUsage>, CPUUsage, std::make_shared<TCPUUsage>());
+    YDB_READONLY_DEF(std::shared_ptr<TCPUUsage>, CPUUsage);
     TCPUGroup::TPtr ScopeLimits;
     THashMap<ui64, TProcess> Processes;
-    YDB_READONLY(double, Weight, 1);
 
 public:
+    double GetWeight() const {
+        return ScopeLimits->GetWeight();
+    }
+
     ui32 GetProcessesCount() const {
         return Processes.size();
     }
@@ -21,8 +24,9 @@ public:
 
     void DoQuant(const TMonotonic newStart);
 
-    void UpdateLimits(TCPUGroup::TPtr&& limits) {
-        ScopeLimits = std::move(limits);
+    void UpdateLimits(const TCPULimitsConfig& processCpuLimits) {
+        ScopeLimits->SetCPUThreadsLimit(processCpuLimits.GetCPUGroupThreadsLimitDef(256));
+        ScopeLimits->SetWeight(processCpuLimits.GetWeight());
     }
 
     void PutTaskResult(TWorkerTaskResult&& result) {
@@ -30,8 +34,9 @@ public:
         MutableProcessVerified(id).PutTaskResult(std::move(result));
     }
 
-    TProcessScope(TCPUGroup::TPtr&& limits)
-        : ScopeLimits(std::move(limits)) {
+    TProcessScope(TCPUGroup::TPtr&& limits, const std::shared_ptr<TCPUUsage>& categoryScope)
+        : CPUUsage(std::make_shared<TCPUUsage>(categoryScope))
+        , ScopeLimits(std::move(limits)) {
     }
 
     TProcess& MutableProcessVerified(const ui64 processId) {
@@ -41,7 +46,7 @@ public:
     }
 
     void RegisterProcess(const ui64 processId) {
-        TProcess process(processId);
+        TProcess process(processId, CPUUsage);
         AFL_VERIFY(Processes.emplace(processId, std::move(process)).second);
         ScopeLimits->IncProcesses();
     }

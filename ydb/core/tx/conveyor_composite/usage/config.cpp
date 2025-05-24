@@ -181,8 +181,9 @@ TString TWorkerPoolCategoryUsage::DebugString() const {
 }   // namespace NKikimr::NConveyorComposite::NConfig
 
 namespace NKikimr::NConveyorComposite {
-TCPULimitsConfig::TCPULimitsConfig(const double cpuGroupThreadsLimit)
-    : CPUGroupThreadsLimit(cpuGroupThreadsLimit) {
+TCPULimitsConfig::TCPULimitsConfig(const double cpuGroupThreadsLimit, const double weight)
+    : CPUGroupThreadsLimit(cpuGroupThreadsLimit)
+    , Weight(weight) {
 }
 
 TConclusionStatus TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config) {

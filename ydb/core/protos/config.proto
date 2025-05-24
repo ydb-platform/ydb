@@ -654,6 +654,28 @@ message TConveyorConfig {
     optional double WorkersCountDouble = 5;
 }
 
+message TCompositeConveyorConfig {
+    message TCategory {
+        optional string Name = 1;
+        optional uint64 QueueSizeLimit = 2;
+    }
+
+    message TWorkerPoolCategoryLink {
+        optional string Category = 1;
+        optional double Weight = 2;
+    }
+
+    message TWorkersPool {
+        optional double WorkersCount = 1;
+        optional double DefaultFractionOfThreadsCount = 2;
+        repeated TWorkerPoolCategoryLink Links = 3;
+    }
+
+    optional bool Enabled = 1 [default = true];
+    repeated TWorkersPool WorkerPools = 2;
+    repeated TCategory Categories = 3;
+}
+
 message TPrioritiesQueueConfig {
     optional bool Enabled = 1 [default = true];
     optional uint32 Limit = 2 [default = 32];
@@ -1116,7 +1138,7 @@ message TQueryServiceConfig {
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
-    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];   
+    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
 }
 
 // Config describes immediate controls and allows
@@ -2375,6 +2397,7 @@ message TAppConfig {
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
     optional string StartupConfigYaml = 107;
     optional string StartupStorageYaml = 108;
+    optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
 }
 
 message TYdbVersion {

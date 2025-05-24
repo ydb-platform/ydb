@@ -24,7 +24,6 @@ GLOBAL_SRCS(
     tcmalloc/pagemap.cc
     tcmalloc/parameters.cc
     tcmalloc/peak_heap_tracker.cc
-    # tcmalloc/profile_marshaler.cc
     tcmalloc/reuse_size_classes.cc
     tcmalloc/sampler.cc
     tcmalloc/segv_handler.cc
@@ -57,7 +56,6 @@ GLOBAL_SRCS(
     tcmalloc/internal/percpu_rseq_unsupported.cc
     tcmalloc/internal/percpu_rseq_asm.S
     tcmalloc/internal/proc_maps.cc
-    # tcmalloc/internal/profile_builder.cc
     tcmalloc/internal/residency.cc
     tcmalloc/internal/sysinfo.cc
     tcmalloc/internal/util.cc

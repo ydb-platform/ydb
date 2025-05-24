@@ -26,17 +26,17 @@ namespace NYT::NApi {
 using TClusterTag = NObjectClient::TCellTag;
 
 // Keep in sync with NRpcProxy::NProto::EMasterReadKind.
-// On cache miss request is redirected to next level cache:
-// Local cache -> (node) cache -> master cache
+// On cache miss request is redirected to next level as follows:
+// Client-side cache -> cache -> master-side cache
 DEFINE_ENUM(EMasterChannelKind,
+    // These options cover the majority of cases.
     ((Leader)                (0))
     ((Follower)              (1))
-    // Use local (per-connection) cache.
-    ((LocalCache)            (4))
-    // Use cache located on nodes.
-    ((Cache)                 (2))
-    // Use cache located on masters (if caching on masters is enabled).
-    ((MasterCache)           (3))
+    ((Cache)                 (2)) // cluster-wide cache
+
+    // These are advanced options. Typically you don't need these.
+    ((MasterSideCache)       (3)) // cache located on masters
+    ((ClientSideCache)       (4)) // local (per-connection) cache
 );
 
 DEFINE_ENUM(EUserWorkloadCategory,

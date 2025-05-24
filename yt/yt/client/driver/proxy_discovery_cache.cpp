@@ -92,7 +92,7 @@ private:
         }
 
         TGetNodeOptions options;
-        options.ReadFrom = EMasterChannelKind::LocalCache;
+        options.ReadFrom = EMasterChannelKind::ClientSideCache;
         options.Attributes = {BalancersAttributeName};
 
         TYPath path;
@@ -123,7 +123,7 @@ private:
     TFuture<TProxyDiscoveryResponse> GetResponseByAddresses(const TProxyDiscoveryRequest& request)
     {
         TGetNodeOptions options;
-        options.ReadFrom = EMasterChannelKind::LocalCache;
+        options.ReadFrom = EMasterChannelKind::ClientSideCache;
         options.SuppressUpstreamSync = true;
         options.SuppressTransactionCoordinatorSync = true;
         options.Attributes = {BannedAttributeName, RoleAttributeName, AddressesAttributeName};

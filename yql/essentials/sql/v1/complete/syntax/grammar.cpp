@@ -34,6 +34,18 @@ namespace NSQLComplete {
             return Parser_->getRuleNames().at(rule);
         }
 
+        TRuleId GetRuleId(std::string_view symbolized) const override {
+            TRuleId index = Parser_->getRuleIndex(std::string(symbolized));
+            if (index == INVALID_INDEX) {
+                ythrow yexception() << "Rule \"" << symbolized << "\" not found";
+            }
+            return index;
+        }
+
+        const std::vector<std::string>& GetAllRules() const override {
+            return Parser_->getRuleNames();
+        }
+
     private:
         static THolder<antlr4::Parser> MakeDummyParser() {
             return MakeHolder<NALADefaultAntlr4::SQLv1Antlr4Parser>(nullptr);

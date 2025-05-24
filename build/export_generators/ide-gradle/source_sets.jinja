@@ -61,7 +61,7 @@ sourceSets {
 {%-             set resdir_glob = split(resource_set, ':', 2) -%}
 {%-             if resdir_glob[0][0] == "/" -%}
 {#-                 Absolute path in glob -#}
-{%-                 set srcdir = resdir_glob[0] -%}
+{%-                 set resdir = resdir_glob[0] -%}
 {%-             else -%}
 {%-                 set resdir = reldir + resdir_glob[0] -%}
 {%-             endif -%}

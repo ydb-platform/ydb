@@ -23,8 +23,6 @@
 #include <limits.h>
 
 #include "y_absl/base/thread_annotations.h"
-#include "y_absl/time/clock.h"
-#include "y_absl/time/time.h"
 
 #include <grpc/fork.h>
 #include <grpc/grpc.h>
@@ -230,17 +228,4 @@ void grpc_maybe_wait_for_async_shutdown(void) {
   while (g_shutting_down) {
     g_shutting_down_cv->Wait(g_init_mu);
   }
-}
-
-bool grpc_wait_for_shutdown_with_timeout(y_absl::Duration timeout) {
-  const auto started = y_absl::Now();
-  const auto deadline = started + timeout;
-  gpr_once_init(&g_basic_init, do_basic_init);
-  grpc_core::MutexLock lock(g_init_mu);
-  while (g_initializations != 0) {
-    if (g_shutting_down_cv->WaitWithDeadline(g_init_mu, deadline)) {
-      return false;
-    }
-  }
-  return true;
 }

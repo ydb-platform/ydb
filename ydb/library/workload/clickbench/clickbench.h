@@ -12,11 +12,6 @@ public:
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     TString GetWorkloadName() const override;
-    YDB_READONLY_DEF(TString, ExternalQueries);
-    YDB_READONLY_DEF(TFsPath, ExternalQueriesFile);
-    YDB_READONLY_DEF(TFsPath, ExternalResultsDir);
-    YDB_READONLY_DEF(TString, ExternalVariablesString);
-    YDB_READONLY_DEF(TFsPath, ExternalQueriesDir);
     YDB_READONLY_DEF(TFsPath, DataFiles);
     YDB_READONLY_FLAG(CheckCanonical, false);
     YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
@@ -36,7 +31,6 @@ protected:
 
 private:
     class TDataGenerartor;
-    TMap<ui32, TString> LoadExternalResults() const;
     const TClickbenchWorkloadParams& Params;
 };
 

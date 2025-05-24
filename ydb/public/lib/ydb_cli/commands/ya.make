@@ -10,7 +10,6 @@ SRCS(
     topic_read_scenario.cpp
     topic_write_scenario.cpp
     topic_readwrite_scenario.cpp
-    query_workload.cpp
     ydb_admin.cpp
     ydb_benchmark.cpp
     ydb_cluster.cpp

@@ -189,4 +189,16 @@ bool IsBuildImplTable(std::string_view tableName) {
         || tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix1);
 }
 
+static constexpr TClusterId PostingParentFlag = (1ull << 63ull);
+
+// Note: if cluster id is too big, something is wrong with cluster enumeration 
+void EnsureNoPostingParentFlag(TClusterId parent) {
+    Y_ENSURE((parent & PostingParentFlag) == 0);
+}
+
+TClusterId SetPostingParentFlag(TClusterId parent) {
+    EnsureNoPostingParentFlag(parent);
+    return (parent | PostingParentFlag);
+}
+
 }

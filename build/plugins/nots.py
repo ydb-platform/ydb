@@ -654,7 +654,6 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     unit.on_peerdir_ts_resource("typescript")
     user_recipes = unit.get("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
 
     test_type = TsTestType.TSC_TYPECHECK
 
@@ -707,7 +706,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     recipes_value = unit.get("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
 
     test_type = TsTestType.TS_STYLELINT
 

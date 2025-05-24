@@ -379,6 +379,8 @@ void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateT
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 
+void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user);
+
 THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp op);
 
@@ -392,6 +394,8 @@ TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, cons
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 void WaitForZeroReadIterators(Tests::TServer& server, const TString& path);
 int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName);
+
+void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, bool checkFollower, bool readsExpected);
 
 void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed = false);
 

@@ -194,9 +194,12 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     const auto& item = importInfo.Items.at(itemIdx);
 
     auto record = db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx);
-    record.Update(
-        NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Scheme.SerializeAsString())
-    );
+
+    if (item.Table) {
+        record.Update(
+            NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Table->SerializeAsString())
+        );
+    }
 
     if (item.Topic) {
         record.Update(

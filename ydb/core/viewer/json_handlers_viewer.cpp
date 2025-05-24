@@ -133,6 +133,11 @@ NKikimrViewer::EFlag GetBSGroupOverallFlag(
     return GetBSGroupOverallState(info, vDisksIndex, pDisksIndex).Overall;
 }
 
+TJsonACL::TKikimrDialect TJsonACL::KikimrDialect;
+TJsonACL::TYdbShortDialect TJsonACL::YdbShortDialect;
+TJsonACL::TYdbDialect TJsonACL::YdbDialect;
+TJsonACL::TYqlDialect TJsonACL::YqlDialect;
+
 void InitViewerCapabilitiesJsonHandler(TJsonHandlers& jsonHandlers) {
     TSimpleYamlBuilder yaml({
         .Method = "get",

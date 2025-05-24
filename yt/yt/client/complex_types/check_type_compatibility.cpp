@@ -229,6 +229,12 @@ static TCompatibilityPair CheckTypeCompatibilitySimple(
         case ESimpleLogicalValueType::Datetime64:
         case ESimpleLogicalValueType::Timestamp64:
         case ESimpleLogicalValueType::Interval64:
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
         case ESimpleLogicalValueType::Any: {
             const auto compatibility =
                 oldElement == newElement ? ESchemaCompatibility::FullyCompatible : ESchemaCompatibility::Incompatible;

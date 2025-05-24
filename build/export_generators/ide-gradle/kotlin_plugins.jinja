@@ -59,7 +59,6 @@ noArg {
 {%- if with_kotlin %}
 
 kotlin {
-    kotlinDaemonJvmArgs = listOf("-Xmx2G")
     jvmToolchain({{ jdk_version }})
 }
 {%  endif -%}

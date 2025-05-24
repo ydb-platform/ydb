@@ -82,9 +82,9 @@ namespace NKafka {
         return new TTransactionsCoordinator();
     };
 
-    inline TActorId MakeTransactionsServiceID() {
+    inline TActorId MakeTransactionsServiceID(ui32 nodeId) {
         static const char x[12] = "kafka_txns";
-        return TActorId(0, TStringBuf(x, 12));
+        return TActorId(nodeId, TStringBuf(x, 12));
     };
     
 } // namespace NKafka

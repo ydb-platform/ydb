@@ -1802,48 +1802,51 @@ public:
                 InconsistentTx = settings.TransactionSettings.InconsistentTx;
             }
 
-            auto& writeInfo = WriteInfos[settings.TableId];
-            if (writeInfo.Actors.empty()) {
-                auto createWriteActor = [&](const TTableId tableId, const TString& tablePath, const TVector<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns) -> std::pair<TKqpTableWriteActor*, TActorId> {
-                    TVector<NScheme::TTypeInfo> keyColumnTypes;
-                    keyColumnTypes.reserve(keyColumns.size());
-                    for (const auto& column : keyColumns) {
-                        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
-                            column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-                        keyColumnTypes.push_back(typeInfoMod.TypeInfo);
-                    }
-                    TKqpTableWriteActor* ptr = new TKqpTableWriteActor(
-                        this,
-                        tableId,
-                        tablePath,
-                        LockTxId,
-                        LockNodeId,
-                        InconsistentTx,
-                        settings.IsOlap,
-                        std::move(keyColumnTypes),
-                        Alloc,
-                        settings.TransactionSettings.MvccSnapshot,
-                        settings.TransactionSettings.LockMode,
-                        TxManager,
-                        SessionActorId,
-                        Counters);
-                    ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
-                    TActorId id = RegisterWithSameMailbox(ptr);
-                    CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
-
-                    return {ptr, id};
-                };
-
-                {
-                    const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns);
-                    writeInfo.Actors.emplace_back(TWriteInfo::TActorInfo{
-                        .WriteActor = ptr,
-                        .Id = id,
-                    });
+            auto createWriteActor = [&](const TTableId tableId, const TString& tablePath, const TVector<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns) -> std::pair<TKqpTableWriteActor*, TActorId> {
+                TVector<NScheme::TTypeInfo> keyColumnTypes;
+                keyColumnTypes.reserve(keyColumns.size());
+                for (const auto& column : keyColumns) {
+                    auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                        column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+                    keyColumnTypes.push_back(typeInfoMod.TypeInfo);
                 }
-                for (const auto& indexSettings : settings.Indexes) {
+                TKqpTableWriteActor* ptr = new TKqpTableWriteActor(
+                    this,
+                    tableId,
+                    tablePath,
+                    LockTxId,
+                    LockNodeId,
+                    InconsistentTx,
+                    settings.IsOlap,
+                    std::move(keyColumnTypes),
+                    Alloc,
+                    settings.TransactionSettings.MvccSnapshot,
+                    settings.TransactionSettings.LockMode,
+                    TxManager,
+                    SessionActorId,
+                    Counters);
+                ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
+                TActorId id = RegisterWithSameMailbox(ptr);
+                CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
+
+                return {ptr, id};
+            };
+
+            auto& writeInfo = WriteInfos[settings.TableId];
+            if (!writeInfo.Actors.contains(settings.TableId)) {
+                AFL_ENSURE(writeInfo.Actors.empty());
+                const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns);
+                writeInfo.Actors.emplace(settings.TableId, TWriteInfo::TActorInfo{
+                    .WriteActor = ptr,
+                    .Id = id,
+                });
+            }
+
+            for (const auto& indexSettings : settings.Indexes) {
+                if (!writeInfo.Actors.contains(indexSettings.TableId)) {
+                    Cerr << SelfId() << ">> Create new TableWriteActor for index `" << indexSettings.TablePath << "` (" << indexSettings.TableId << ")" << Endl;
                     const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns);
-                    writeInfo.Actors.emplace_back(TWriteInfo::TActorInfo{
+                    writeInfo.Actors.emplace(indexSettings.TableId, TWriteInfo::TActorInfo{
                         .WriteActor = ptr,
                         .Id = id,
                     });
@@ -1854,18 +1857,16 @@ public:
 
             token = TWriteToken{settings.TableId, CurrentWriteToken++};
 
-            // TODO: AFL_ENSURE(writeInfo.Actors.size() == settings.Indexes.size() + 1);
-            for (size_t index = 0; index < settings.Indexes.size(); ++index) {
-                auto& indexSettings = settings.Indexes[index];
-
-                writeInfo.Actors[index + 1].Projections[token.Cookie] = CreateDataBatchProjection(
+            AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
+            for (auto& indexSettings : settings.Indexes) {
+                writeInfo.Actors.at(indexSettings.TableId).Projections.emplace(token.Cookie, CreateDataBatchProjection(
                     settings.Columns,
                     settings.WriteIndex,
                     indexSettings.Columns,
                     indexSettings.WriteIndex,
-                    Alloc);
+                    Alloc));
 
-                writeInfo.Actors[index + 1].WriteActor->Open(
+                writeInfo.Actors.at(indexSettings.TableId).WriteActor->Open(
                     token.Cookie,
                     NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, // TODO: Operation for index (delete by key + upsert)
                     std::move(indexSettings.KeyColumns),
@@ -1874,7 +1875,7 @@ public:
                     settings.Priority);
             }
 
-            writeInfo.Actors[0].WriteActor->Open(
+            writeInfo.Actors.at(settings.TableId).WriteActor->Open(
                 token.Cookie,
                 settings.OperationType,
                 std::move(settings.KeyColumns),
@@ -1920,7 +1921,7 @@ public:
         for (auto& [tableId, queue] : RequestQueues) {
             auto& writeInfo = WriteInfos.at(tableId);
 
-            for (auto& actor : writeInfo.Actors) {
+            for (const auto& [_, actor] : writeInfo.Actors) {
                 if (!actor.WriteActor->IsReady()) {
                     CA_LOG_D("ProcessRequestQueue " << tableId << " NOT READY queue=" << queue.size());
                     return;
@@ -1932,20 +1933,22 @@ public:
 
                 // if lookup isn't needed
                 if (message.Data) {
-                    for (size_t index = 1; index < writeInfo.Actors.size(); ++index) {
-                        auto& actor = writeInfo.Actors[index];
-                        if (actor.Projections.contains(message.Token.Cookie)) {
+                    for (auto& [actorTableId, actor] : writeInfo.Actors) {
+                        if (actorTableId != tableId && actor.Projections.contains(message.Token.Cookie)) {
                             auto preparedBatch = actor.Projections.at(message.Token.Cookie)->Project(message.Data);
                             actor.WriteActor->Write(message.Token.Cookie, preparedBatch);
                         }
                     }
-                    writeInfo.Actors[0].WriteActor->Write(message.Token.Cookie, std::move(message.Data));
+                    writeInfo.Actors.at(tableId).WriteActor->Write(message.Token.Cookie, std::move(message.Data));
                 }
 
                 if (message.Close) {
-                    for (auto& actor : writeInfo.Actors) {
-                        actor.WriteActor->Close(message.Token.Cookie);
+                    for (auto& [actorTableId, actor] : writeInfo.Actors) {
+                        if (actorTableId != tableId && actor.Projections.contains(message.Token.Cookie)) {
+                            actor.WriteActor->Close(message.Token.Cookie);
+                        }
                     }
+                    writeInfo.Actors.at(tableId).WriteActor->Close(message.Token.Cookie);
                 }
 
                 AckQueue.push(TAckMessage{
@@ -2950,7 +2953,7 @@ public:
 
     void ForEachWriteActor(std::function<void(TKqpTableWriteActor*, const TActorId)>&& func) {
         for (auto& [_, writeInfo] : WriteInfos) {
-            for (auto& actorInfo : writeInfo.Actors) {
+            for (auto& [_, actorInfo] : writeInfo.Actors) {
                 func(actorInfo.WriteActor, actorInfo.Id);
             }
         }
@@ -2958,7 +2961,7 @@ public:
 
     void ForEachWriteActor(std::function<void(const TKqpTableWriteActor*, const TActorId)>&& func) const {
         for (const auto& [_, writeInfo] : WriteInfos) {
-            for (const auto& actorInfo : writeInfo.Actors) {
+            for (const auto& [_, actorInfo] : writeInfo.Actors) {
                 func(actorInfo.WriteActor, actorInfo.Id);
             }
         }
@@ -2991,9 +2994,7 @@ private:
             TActorId Id;
         };
 
-        // 0  -- main table
-        // 1+ -- indexes
-        std::vector<TActorInfo> Actors;
+        THashMap<TTableId, TActorInfo> Actors;
     };
 
     THashMap<TTableId, TWriteInfo> WriteInfos;

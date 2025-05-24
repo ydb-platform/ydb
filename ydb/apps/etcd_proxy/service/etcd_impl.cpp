@@ -1139,12 +1139,14 @@ private:
     TQueryClient::TQueryResultFunc GetQueryAsyncResultFunc() const {
         std::ostringstream sql;
         NYdb::TParamsBuilder params;
+        const auto& paramName = AddParam("Revision", params, KeyRevision);
         sql << Stuff->TablePrefix;
         sql << "$Trash = select c.key as key, c.modified as modified from `history` as c inner join (" << std::endl;
         sql << "select max_by((`key`, `modified`), `modified`) as pair from `history`" << std::endl;
-        sql << "where `modified` < " << AddParam("Revision", params, KeyRevision) << " and 0L = `version` group by `key`" << std::endl;
+        sql << "where `modified` < " << paramName << " and 0L = `version` group by `key`" << std::endl;
         sql << ") as keys on keys.pair.0 = c.key where c.modified <= keys.pair.1;" << std::endl;
         sql << "delete from `history` on select * from $Trash;" << std::endl;
+        sql << "delete from `commited` where `revision` < " << paramName << ';' << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;
 
         return [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
@@ -1163,11 +1165,13 @@ private:
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
         if (Physical) {
+            const auto& paramName = AddParam("Revision", params, KeyRevision);
             sql << "$Trash = select c.key as key, c.modified as modified from `history` as c inner join (" << std::endl;
             sql << "select max_by((`key`, `modified`), `modified`) as pair from `history`" << std::endl;
-            sql << "where `modified` < " << AddParam("Revision", params, KeyRevision) << " and 0L = `version` group by `key`" << std::endl;
+            sql << "where `modified` < " << paramName << " and 0L = `version` group by `key`" << std::endl;
             sql << ") as keys on keys.pair.0 = c.key where c.modified <= keys.pair.1;" << std::endl;
             sql << "delete from `history` on select * from $Trash;" << std::endl;
+            sql << "delete from `commited` where `revision` < " << paramName << ';' << std::endl;
             sql << "select count(*) from $Trash;" << std::endl;
         }
     }

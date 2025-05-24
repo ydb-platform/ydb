@@ -257,8 +257,8 @@ ASSIGN_EXTERNAL_YSON_SERIALIZER(TListJobsContinuationToken, TListJobsContinuatio
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString EncodeNewToken(TListJobsOptions&& options, int jobCount);
-TListJobsOptions DecodeListJobsOptionsFromToken(const TString& continuationToken);
+std::string EncodeNewToken(TListJobsOptions&& options, int jobCount);
+TListJobsOptions DecodeListJobsOptionsFromToken(const std::string& continuationToken);
 
 ////////////////////////////////////////////////////////////////////////////////
 

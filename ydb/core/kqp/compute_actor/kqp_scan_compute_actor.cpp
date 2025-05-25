@@ -279,7 +279,7 @@ void TKqpScanComputeActor::DoBootstrap() {
     ScanData = &ComputeCtx.GetTableScan(0);
 
     ScanData->TaskId = GetTask().GetId();
-    ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, ComputeCtx.InputConsumed);
+    ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, *ComputeCtx.InputConsumed);
     Become(&TKqpScanComputeActor::StateFunc);
 
     TBase::DoBoostrap();

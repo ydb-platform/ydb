@@ -119,7 +119,7 @@ void TKqpComputeActor::DoBootstrap() {
 
     if (ScanData) {
         ScanData->TaskId = GetTask().GetId();
-        ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, ComputeCtx.InputConsumed);
+        ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, *ComputeCtx.InputConsumed);
 
         auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, ranges, columns, UserToken, Database, reverse);
 

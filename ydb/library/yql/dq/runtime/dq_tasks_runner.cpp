@@ -249,7 +249,10 @@ public:
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
         Stats->CreateTs = TInstant::Now();
-        Context.ComputeCtx->StartTs = &Stats->StartTs;
+        if (Context.ComputeCtx) {
+            Context.ComputeCtx->StartTs = &Stats->StartTs;
+            Context.ComputeCtx->InputConsumed = &InputConsumed;
+        }
         if (Y_UNLIKELY(CollectFull())) {
             Stats->ComputeCpuTimeByRun = NMonitoring::ExponentialHistogram(6, 10, 10);
         }
@@ -614,16 +617,16 @@ public:
             auto entryNode = AllocatedHolder->ProgramParsed.CompGraph->GetEntryPoint(i, false);
             if (entryNode) {
                 if (transform) {
-                    transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {}, Stats->StartTs, Context.ComputeCtx->InputConsumed, PgBuilder_.get());
+                    transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory, {}, Stats->StartTs, InputConsumed, PgBuilder_.get());
                     inputs.clear();
                     inputs.emplace_back(transform->TransformOutput);
                     entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
                         CreateInputUnionValue(transform->TransformOutput->GetInputType(), std::move(inputs), holderFactory,
-                            {inputStats, transform->TransformOutputType}, Stats->StartTs, Context.ComputeCtx->InputConsumed));
+                            {inputStats, transform->TransformOutputType}, Stats->StartTs, InputConsumed));
                 } else {
                     entryNode->SetValue(AllocatedHolder->ProgramParsed.CompGraph->GetContext(),
                         DqBuildInputValue(inputDesc, entry->InputItemTypes[i], std::move(inputs), holderFactory,
-                            {inputStats, entry->InputItemTypes[i]}, Stats->StartTs, Context.ComputeCtx->InputConsumed, PgBuilder_.get()));
+                            {inputStats, entry->InputItemTypes[i]}, Stats->StartTs, InputConsumed, PgBuilder_.get()));
                 }
             } else {
                 // In some cases we don't need input. For example, for joining EmptyIterator with table.
@@ -758,7 +761,7 @@ public:
             StopWaiting();
         }
 
-        Context.ComputeCtx->InputConsumed = false;
+        InputConsumed = false;
         auto runStatus = FetchAndDispatch();
 
         if (Y_UNLIKELY(CollectFull())) {
@@ -798,7 +801,7 @@ public:
                 case ERunStatus::PendingInput:
                     // output is checked first => not waiting for output
                     Stats->CurrentWaitOutputStartTime = TInstant::Zero();
-                    if (Y_LIKELY(Context.ComputeCtx->InputConsumed)) {
+                    if (Y_LIKELY(InputConsumed)) {
                         // did smth => waiting for nothing
                         Stats->CurrentWaitInputStartTime = TInstant::Zero();
                     } else {
@@ -1018,6 +1021,7 @@ private:
     TLogFunc LogFunc;
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
     TDqTaskCountersProvider CountersProvider;
+    bool InputConsumed = false;
 
     struct TInputTransformInfo {
         NUdf::TUnboxedValue TransformInput;

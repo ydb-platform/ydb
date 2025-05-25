@@ -651,6 +651,7 @@ void TPortionDataAccessor::FullValidation() const {
         TBlobRange::Validate(PortionInfo->GetMeta().GetBlobIds(), i.GetBlobRange()).Validate();
         blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
     }
+    AFL_VERIFY(GetRecordsVerified().size());
     for (auto&& i : GetIndexesVerified()) {
         if (auto bRange = i.GetBlobRangeOptional()) {
             TBlobRange::Validate(PortionInfo->GetMeta().GetBlobIds(), *bRange).Validate();

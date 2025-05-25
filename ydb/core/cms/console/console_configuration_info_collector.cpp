@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/base/nameservice.h> 
 #include <ydb/core/cms/console/configs_dispatcher.h> 
+#include <ydb/core/cms/console/configs_dispatcher_proxy.h> 
 #include <ydb/core/util/stlog.h>
 
 namespace NKikimr::NConsole {
@@ -45,7 +46,7 @@ void TConfigurationInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev
 
 void TConfigurationInfoCollector::RequestNodeVersions() {
     for (const auto& nodeId : PendingNodes) {
-        Send(MakeConfigsDispatcherID(nodeId),
+        Send(MakeConfigsDispatcherProxyID(nodeId),
              new TEvConsole::TEvGetNodeConfigurationVersionRequest());
     }
 }

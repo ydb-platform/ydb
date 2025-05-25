@@ -236,8 +236,6 @@ public:
             hFuncTraced(TEvConsole::TEvConfigNotificationRequest, Handle);
             hFuncTraced(TEvConsole::TEvGetNodeConfigurationVersionRequest, Handle);
         default:
-            Y_ABORT("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->ToString().data());
             break;
         }
     }

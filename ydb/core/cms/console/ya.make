@@ -9,6 +9,8 @@ SRCS(
     configs_config.h
     configs_dispatcher.cpp
     configs_dispatcher.h
+    configs_dispatcher_proxy.h
+    configs_dispatcher_proxy.cpp
     console.cpp
     console.h
     console_audit.cpp

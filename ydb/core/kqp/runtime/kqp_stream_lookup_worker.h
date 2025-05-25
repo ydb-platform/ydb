@@ -27,6 +27,7 @@ public:
         ui64 ReadBytesCount = 0;
         ui64 ResultRowsCount = 0;
         ui64 ResultBytesCount = 0;
+	bool SizeLimitExceeded = false;
 
         void Add(const TReadResultStats& other) {
             ReadRowsCount += other.ReadRowsCount;

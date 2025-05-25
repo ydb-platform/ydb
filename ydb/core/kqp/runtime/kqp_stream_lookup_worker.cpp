@@ -288,10 +288,9 @@ public:
 
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
         TReadResultStats resultStats;
-        bool sizeLimitExceeded = false;
         batch.clear();
 
-        while (!ReadResults.empty() && !sizeLimitExceeded) {
+        while (!ReadResults.empty() && !resultStats.SizeLimitExceeded) {
             auto& result = ReadResults.front();
             for (; result.UnprocessedResultRow < result.ReadResult->Get()->GetRowsCount(); ++result.UnprocessedResultRow) {
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
@@ -317,10 +316,10 @@ public:
                 }
 
                 if (rowSize + (i64)resultStats.ResultBytesCount > freeSpace) {
-                    sizeLimitExceeded = true;
+                    resultStats.SizeLimitExceeded = true;
                 }
 
-                if (resultStats.ResultRowsCount && sizeLimitExceeded) {
+                if (resultStats.ResultRowsCount && resultStats.SizeLimitExceeded) {
                     row.DeleteUnreferenced();
                     break;
                 }
@@ -730,7 +729,6 @@ public:
 
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
         TReadResultStats resultStats;
-        bool sizeLimitExceeded = false;
         batch.clear();
 
         // we should process left rows that haven't matches on the right
@@ -759,7 +757,7 @@ public:
             return ResultRowsBySeqNo.find(CurrentResultSeqNo);
         };
 
-        while (!sizeLimitExceeded) {
+        while (!resultStats.SizeLimitExceeded) {
             auto resultIt = getNextResult();
             if (resultIt == ResultRowsBySeqNo.end()) {
                 break;
@@ -770,7 +768,7 @@ public:
                 auto& row = result.Rows[result.FirstUnprocessedRow];
 
                 if (resultStats.ResultRowsCount && resultStats.ResultBytesCount + row.Stats.ResultBytesCount > (ui64)freeSpace) {
-                    sizeLimitExceeded = true;
+                    resultStats.SizeLimitExceeded = true;
                     break;
                 }
 

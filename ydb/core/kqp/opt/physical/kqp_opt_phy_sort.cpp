@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -102,56 +103,12 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
 
 using namespace NYql::NDq;
 
-bool CompatibleSort(TOptimizerStatistics::TSortColumns& existingOrder, const TCoLambda& keySelector, const TExprBase& sortDirections, TVector<TString>& sortKeys) {
-    if (auto body = keySelector.Body().Maybe<TCoMember>()) {
-        auto attrRef = body.Cast().Name().StringValue();
-        auto attrName = existingOrder.Columns[0];
-        auto attrNameWithAlias = existingOrder.Aliases[0] + "." + attrName;
-        if (attrName == attrRef || attrNameWithAlias == attrRef){
-            auto sortValue = sortDirections.Cast<TCoDataCtor>().Literal().Value();
-            if (FromString<bool>(sortValue)) {
-                sortKeys.push_back(attrRef);
-                return true;
-            }
-        }
-    }
-    else if (auto body = keySelector.Body().Maybe<TExprList>()) {
-        if (body.Cast().Size() > existingOrder.Columns.size()) {
-            return false;
-        }
-
-        bool allMatched = false;
-        auto dirs = sortDirections.Cast<TExprList>();
-        for (size_t i=0; i < body.Cast().Size(); i++) {
-            allMatched = false;
-            auto item = body.Cast().Item(i);
-            if (auto member = item.Maybe<TCoMember>()) {
-                auto attrRef = member.Cast().Name().StringValue();
-                auto attrName = existingOrder.Columns[i];
-                auto attrNameWithAlias = existingOrder.Aliases[i] + "." + attrName;
-                if (attrName == attrRef || attrNameWithAlias == attrRef){
-                    auto sortValue = dirs.Item(i).Cast<TCoDataCtor>().Literal().Value();
-                    if (FromString<bool>(sortValue)) {
-                        sortKeys.push_back(attrRef);
-                        allMatched = true;
-                    }
-                }
-            }
-            if (!allMatched) {
-                return false;
-            }
-        }
-        return true;
-    }
-    return false;
-}
-
 TExprBase KqpBuildTopStageRemoveSort(
-    TExprBase node, 
-    TExprContext& ctx, 
-    IOptimizationContext& /* optCtx */, 
+    TExprBase node,
+    TExprContext& ctx,
+    IOptimizationContext& /* optCtx */,
     TTypeAnnotationContext& typeCtx,
-    const TParentsMap& parentsMap, 
+    const TParentsMap& parentsMap,
     bool allowStageMultiUsage,
     bool ruleEnabled
 ) {
@@ -186,9 +143,17 @@ TExprBase KqpBuildTopStageRemoveSort(
         return node;
     }
 
+    if (!typeCtx.SortingsFSM) {
+        return node;
+    }
+
     auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());
-    
-    if (!inputStats || !inputStats->SortColumns) {
+    if (!inputStats) {
+        return node;
+    }
+
+    auto topStats = typeCtx.GetStats(top.Raw());
+    if (!topStats) {
         return node;
     }
 
@@ -204,19 +169,33 @@ TExprBase KqpBuildTopStageRemoveSort(
         return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTop::idx_Input, std::move(connToPushableStage)));
     }
 
-    const auto sortKeySelector = top.KeySelectorLambda();
-    const auto sortDirections = top.SortDirections();
-    TVector<TString> sortKeys;
-
-    if (!CompatibleSort(*inputStats->SortColumns, sortKeySelector, sortDirections, sortKeys)) {
+    YQL_CLOG(TRACE, CoreDq) << "Statistics of the input of the top sort: " << inputStats->ToString();
+    YQL_CLOG(TRACE, CoreDq) << "Statistics of the top sort: " << topStats->ToString();
+    if (!inputStats->SortingOrderings.ContainsSorting(topStats->SortingOrderingIdx)) {
         return node;
+    }
+
+    const auto& keySelector = top.KeySelectorLambda();
+    TVector<TString> sortKeys;
+    if (auto body = keySelector.Body().Maybe<TCoMember>()) {
+        sortKeys.push_back(body.Cast().Name().StringValue());
+    } else if (auto body = keySelector.Body().Maybe<TExprList>()) {
+        for (size_t i = 0; i < body.Cast().Size(); ++i) {
+            auto item = body.Cast().Item(i);
+            if (auto member = item.Maybe<TCoMember>()) {
+                sortKeys.push_back(member.Cast().Name().StringValue());
+            }
+        }
     }
 
     auto builder = Build<TDqSortColumnList>(ctx, node.Pos());
     for (auto columnName : sortKeys ) {
-        builder.Add<TDqSortColumn>()
-            .Column<TCoAtom>().Build(columnName)
-            .SortDirection().Build(TTopSortSettings::AscendingSort)
+        builder
+            .Add<TDqSortColumn>()
+                .Column<TCoAtom>()
+            .Build(columnName)
+                .SortDirection()
+                .Build(TTopSortSettings::AscendingSort)
             .Build();
     }
     auto columnList = builder.Build().Value();
@@ -244,7 +223,6 @@ TExprBase KqpBuildTopStageRemoveSort(
                 .Build()
             .Index().Build(0U)
             .Build()
-        //.SortColumns(columnList)
         .Done();
 }
 

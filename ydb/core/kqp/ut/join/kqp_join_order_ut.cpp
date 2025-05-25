@@ -74,7 +74,7 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
 
     CreateTables(session, "schema/lookupbug.sql", useColumnStore);
 
-    CreateTables(session, "schema/general_priorities_bug.sql", useColumnStore);
+    CreateTables(session, "schema/sortings.sql", useColumnStore);
 
     {
         CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
@@ -714,25 +714,37 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         return plan.Contains("Limit") && !plan.Contains("Top");
     }
 
-    Y_UNIT_TEST(GeneralPrioritiesBug1) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug.sql", "stats/general_priorities_bug.json", true, false);
+    Y_UNIT_TEST(Sortings1) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings1.sql", "stats/sortings.json", true, false);
         UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
     }
 
-    Y_UNIT_TEST(GeneralPrioritiesBug2) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug2.sql", "stats/general_priorities_bug.json", true, false);
+    Y_UNIT_TEST(Sortings2) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings2.sql", "stats/sortings.json", true, false);
         UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
     }
 
-    Y_UNIT_TEST(GeneralPrioritiesBug3) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug3.sql", "stats/general_priorities_bug.json", true, false);
+    Y_UNIT_TEST(Sortings3) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings3.sql", "stats/sortings.json", true, false);
         UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
     }
 
-    Y_UNIT_TEST(GeneralPrioritiesBug4) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug4.sql", "stats/general_priorities_bug.json", true, false);
+    Y_UNIT_TEST(Sortings4) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings4.sql", "stats/sortings.json", true, false);
         UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
     }
+
+    // Y_UNIT_TEST(SortingsByConstant) {
+
+    // }
+
+    // Y_UNIT_TEST(SortingsByPrefix) {
+
+    // }
+
+    // Y_UNIT_TEST(SortingsByAttrEquivToPK) {
+
+    // }
 
     Y_UNIT_TEST_TWIN(TPCDS34, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", false, ColumnStore);

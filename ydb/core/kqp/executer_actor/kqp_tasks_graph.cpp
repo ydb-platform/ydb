@@ -164,12 +164,6 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                             meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetTable());
                             meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
                             meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
-
-                            if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE) {
-                                meta.IndexMetas.back().ShardOperations.insert(TKeyDesc::ERowOperation::Erase);
-                            } else {
-                                meta.IndexMetas.back().ShardOperations.insert(TKeyDesc::ERowOperation::Update);
-                            }
                         }
                     }
                 }

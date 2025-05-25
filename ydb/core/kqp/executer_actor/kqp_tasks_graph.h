@@ -91,7 +91,6 @@ struct TStageInfoMeta {
         TString TablePath;
         TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
 
-        THashSet<TKeyDesc::ERowOperation> ShardOperations;
         THolder<TKeyDesc> ShardKey;
     };
 

@@ -394,9 +394,16 @@ private:
                             };
 
                             addRequest(stageInfo.Meta.ShardKey);
-                            for (auto& indexMeta : stageInfo.Meta.IndexMetas) {
-                                indexMeta.ShardKey = ExtractKey(indexMeta.TableId, indexMeta.TableConstInfo->KeyColumnTypes, operation);
-                                addRequest(indexMeta.ShardKey);
+                            switch (operation) {
+                                case TKeyDesc::ERowOperation::Update:
+                                case TKeyDesc::ERowOperation::Erase:
+                                    for (auto& indexMeta : stageInfo.Meta.IndexMetas) {
+                                        indexMeta.ShardKey = ExtractKey(indexMeta.TableId, indexMeta.TableConstInfo->KeyColumnTypes, operation);
+                                        addRequest(indexMeta.ShardKey);
+                                    }
+                                    break;
+                                default:
+                                    break;
                             }
                         }
                     } else if (!ResolvingNamesFinished) {

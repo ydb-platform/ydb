@@ -7,8 +7,7 @@
         "byte_size": 100    },
     "/Root/bank_sub_document": {
         "n_rows": 100,
-        "byte_size": 100,
-        "key_columns" : []
+        "byte_size": 100
     },
     "/Root/bank_sub_document/IX_BANK_SUB_DOCUMENT_DOCUMENT_ID/indexImplTable": {
         "n_rows": 100,

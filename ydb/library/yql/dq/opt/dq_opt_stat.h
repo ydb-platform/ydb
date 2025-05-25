@@ -24,9 +24,19 @@ void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationCont
 void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints = {});
 void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForTopBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 bool InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
-std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats);
-std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input);
+std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats);
+std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input);
+
+struct TOrderingInfo {
+    std::int64_t OrderingIdx;
+    TVector<TJoinColumn> Ordering;
+};
+
+TOrderingInfo GetTopBaseSortingOrderingIdx(const NNodes::TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>&, TTableAliasMap*);
+TOrderingInfo GetAggregationBaseShuffleOrderingIdx(const NNodes::TCoAggregateBase, const TSimpleSharedPtr<TOrderingsStateMachine>&);
 
 class TPredicateSelectivityComputer {
 public:

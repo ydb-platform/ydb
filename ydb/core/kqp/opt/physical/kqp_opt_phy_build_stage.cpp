@@ -683,7 +683,7 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
 
     auto unionAll = idxLookupJoin.Input().Cast<TDqCnUnionAll>();
     auto inputStats = typeCtx.GetStats(unionAll.Output().Raw());
-    if (!inputStats || !inputStats->SortColumns) {
+    if (!inputStats || !inputStats->KeyColumns) {
         return node;
     }
 
@@ -710,8 +710,11 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
 
     auto rightStruct = tupleType.Arg(1).Cast<TCoStructType>();
 
+    TVector<TString> sortColumns;
+    sortColumns.reserve(rightStruct.Ptr()->ChildrenSize());
     for (auto structContent : rightStruct ) {
         auto attrName = structContent.Ptr()->Child(0);
+        sortColumns.push_back(TString(attrName->Content()));
         auto field = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name(attrName)
                 .Value<TCoMember>()
@@ -745,14 +748,13 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
         .Done();
 
     auto builder = Build<TDqSortColumnList>(ctx, node.Pos());
-    for (size_t i = 0; i < inputStats->SortColumns->Columns.size(); i++) {
-        auto columnName = inputStats->SortColumns->Columns[i];
-        if (inputStats->SortColumns->Aliases[i] != "") {
-            columnName = inputStats->SortColumns->Aliases[i] + "." + columnName;
-        }
-        builder.Add<TDqSortColumn>()
-            .Column<TCoAtom>().Build(columnName)
-            .SortDirection().Build(TTopSortSettings::AscendingSort)
+    for (const auto& column: sortColumns) {
+        builder
+            .Add<TDqSortColumn>()
+                    .Column<TCoAtom>()
+                .Build(column)
+                    .SortDirection()
+                .Build(TTopSortSettings::AscendingSort)
             .Build();
     }
 

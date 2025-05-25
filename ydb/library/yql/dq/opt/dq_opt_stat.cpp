@@ -537,12 +537,12 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
             inputStats->Cost,
             inputStats->KeyColumns,
             inputStats->ColumnStatistics,
-            inputStats->StorageType);
+            inputStats->StorageType
+        );
 
-        outputStats.SortColumns = inputStats->SortColumns;
+        outputStats.SortingOrderings = inputStats->SortingOrderings;
         outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
         outputStats.LogicalOrderings = inputStats->LogicalOrderings;
-        outputStats.TableAliases = inputStats->TableAliases;
         outputStats.SourceTableName = inputStats->SourceTableName;
         outputStats.Aliases = inputStats->Aliases;
         outputStats.Labels = inputStats->Labels;
@@ -598,7 +598,7 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
         inputStats->ColumnStatistics,
         inputStats->StorageType
     );
-    outputStats.SortColumns = inputStats->SortColumns;
+    outputStats.SortingOrderings = inputStats->SortingOrderings;
     outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
     outputStats.TableAliases = inputStats->TableAliases;
     outputStats.Aliases = inputStats->Aliases;
@@ -661,7 +661,7 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotati
         return;
     }
 
-    auto aggStats = RemoveOrdering(inputStats);
+    auto aggStats = RemoveSorting(inputStats);
     aggStats = std::make_shared<TOptimizerStatistics>(*aggStats);
 
     aggStats->ShuffledByColumns = nullptr;
@@ -847,33 +847,25 @@ void InferStatisticsForDqMerge(const TExprNode::TPtr& input, TTypeAnnotationCont
         return;
     }
 
-    auto newStats = RemoveOrdering(inputStats);
+    auto newStats = std::make_shared<TOptimizerStatistics>(*inputStats);
 
-    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
-
-    TVector<TString> sortedPrefixCols;
-    TVector<TString> sortedPrefixAliases;
-
-    for ( auto c : merge.SortColumns() ) {
+    TVector<TJoinColumn> sorting;
+    sorting.reserve(merge.SortColumns().Size());
+    for (const auto& c : merge.SortColumns()) {
         auto column = c.Column().StringValue();
         auto sortDir = c.SortDirection().StringValue();
 
         if (sortDir != "Asc") {
+            sorting.clear();
             break;
         }
 
         auto alias = ExtractAlias(column);
         auto columnNoAlias = RemoveAliases(column);
-
-        sortedPrefixCols.push_back(columnNoAlias);
-        sortedPrefixAliases.push_back(alias);
+        sorting.emplace_back(std::move(alias), std::move(columnNoAlias));
     }
 
-    if (sortedPrefixCols.size()) {
-        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
-    }
-
-    newStats->SortColumns = sortedPrefixPtr;
+    YQL_CLOG(TRACE, CoreDq) << "DqCnMerge input stats: " << inputStats->ToString();
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for Merge: " << newStats->ToString();
 
     typeCtx->SetStats(merge.Raw(), newStats);
@@ -891,58 +883,140 @@ void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotat
         return;
     }
 
-    auto sortedPrefix = inputStats->SortColumns;
-    TString aliasName = "";
-    if (auto leftLabel = cross.LeftLabel().Maybe<TCoAtom>()) {
-        aliasName = leftLabel.Cast().StringValue();
-    }
-
-    TVector<TString> sortedPrefixCols;
-    TVector<TString> sortedPrefixAliases;
-
-    if (sortedPrefix) {
-        sortedPrefixCols = sortedPrefix->Columns;
-        sortedPrefixAliases = sortedPrefix->Aliases;
-        if (aliasName != "") {
-            for (size_t i=0; i<sortedPrefix->Aliases.size(); i++) {
-                sortedPrefixAliases[i] = aliasName;
-            }
-        }
-    }
-
-    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
-    if (sortedPrefixCols.size()) {
-        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
-    }
-
-    auto outputStats = RemoveOrdering(inputStats);
-    outputStats->SortColumns = sortedPrefixPtr;
+    auto outputStats = RemoveSorting(inputStats);
     typeCtx->SetStats(cross.Raw(), outputStats);
 }
 
 
 
-std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats) {
-    if (stats->SortColumns) {
+std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats) {
+    if (stats->SortingOrderings.HasState()) {
         auto newStats = *stats;
-        newStats.SortColumns = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+        newStats.SortingOrderings.RemoveState();
         return std::make_shared<TOptimizerStatistics>(std::move(newStats));
     } else {
         return stats;
     }
 }
 
-std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
-    if (TCoTopBase::Match(input.Get()) ||
+std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
+    if (
+        TCoTopBase::Match(input.Get()) ||
         TCoSortBase::Match(input.Get()) ||
         TDqCnHashShuffle::Match(input.Get()) ||
         TDqCnBroadcast::Match(input.Get()) ||
-        TDqCnUnionAll::Match(input.Get())) {
-            return RemoveOrdering(stats);
-        } else {
-            return stats;
-        }
+        TDqCnUnionAll::Match(input.Get())
+    ) {
+        return RemoveSorting(stats);
+    } else {
+        return stats;
+    }
 }
 
+void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto asStruct = inputNode.Cast<TCoAsStruct>();
+
+    TTableAliasMap aliases;
+    std::shared_ptr<TOptimizerStatistics> inputStats;
+    TString structString;
+    for (const auto& field: input->Children()) {
+        if (field->ChildrenSize() != 2) {
+            continue;
+        }
+
+        auto maybeAtom = field->Child(0);
+        if (!maybeAtom->IsAtom()) {
+            continue;
+        }
+
+        auto renameTo = TString(maybeAtom->Content());
+        structString.append(renameTo).append(";");
+        if (renameTo.empty()) {
+            continue;
+        }
+
+        auto maybeMember = field->Child(1);
+        if (!TCoMember::Match(maybeMember)) {
+            continue;
+        }
+        auto member = TExprBase(maybeMember).Cast<TCoMember>();
+
+        auto renameFrom = member.Name().StringValue();
+        if (renameFrom.empty()) {
+            continue;
+        }
+
+        auto memberStats = typeCtx->GetStats(member.Struct().Raw());
+        if (inputStats == nullptr) {
+            inputStats = memberStats;
+        }
+
+        if (memberStats && memberStats->TableAliases) {
+            aliases.Merge(*memberStats->TableAliases);
+        }
+
+        Cout << renameFrom << " " << renameTo << Endl;
+        aliases.AddRename(renameFrom, renameTo);
+    }
+
+    std::shared_ptr<TOptimizerStatistics> stats;
+    if (inputStats == nullptr) {
+        stats = std::make_shared<TOptimizerStatistics>();
+    } else {
+        stats = std::make_shared<TOptimizerStatistics>(*inputStats);
+    }
+
+    stats->TableAliases = MakeIntrusive<TTableAliasMap>(std::move(aliases));
+    YQL_CLOG(TRACE, CoreDq) << "Propogate TableAliases for Struct[" << structString << "]: " << stats->TableAliases->ToString();
+    typeCtx->SetStats(inputNode.Raw(), std::move(stats));
+}
+
+void InferStatisticsForTopBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto topBase = inputNode.Cast<TCoTopBase>();
+
+    auto inputStats = typeCtx->GetStats(topBase.Input().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    auto topStats = std::make_shared<TOptimizerStatistics>(*inputStats);
+    auto orderingInfo = GetTopBaseSortingOrderingIdx(topBase, typeCtx->SortingsFSM, topStats->TableAliases.Get());
+    if (typeCtx->SortingsFSM && !topStats->SortingOrderings.ContainsSorting(orderingInfo.OrderingIdx)) {
+        topStats->SortingOrderings = typeCtx->SortingsFSM->CreateState(orderingInfo.OrderingIdx);
+    }
+    topStats->SortingOrderingIdx = orderingInfo.OrderingIdx;
+
+    YQL_CLOG(TRACE, CoreDq) << "Input of the TopBase: " << inputStats->ToString();
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for TopBase: " << topStats->ToString();
+    typeCtx->SetStats(inputNode.Raw(), std::move(topStats));
+}
+
+TOrderingInfo GetTopBaseSortingOrderingIdx(
+    const NNodes::TCoTopBase& topBase,
+    const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM,
+    TTableAliasMap* tableAlias
+) {
+    const auto& keySelector = topBase.KeySelectorLambda();
+    TVector<TJoinColumn> sorting;
+    if (auto body = keySelector.Body().Maybe<TCoMember>()) {
+        sorting.push_back(TJoinColumn::FromString(body.Cast().Name().StringValue()));
+    } else if (auto body = keySelector.Body().Maybe<TExprList>()) {
+        for (size_t i = 0; i < body.Cast().Size(); ++i) {
+            auto item = body.Cast().Item(i);
+            if (auto member = item.Maybe<TCoMember>()) {
+                sorting.push_back(TJoinColumn::FromString(member.Cast().Name().StringValue()));
+            }
+        }
+    }
+
+    std::int64_t orderingIdx = -1;
+    if (sortingsFSM) {
+        orderingIdx = sortingsFSM->FDStorage.FindInterestingOrderingIdx(sorting, TOrdering::ESorting, tableAlias);
+    }
+
+    return TOrderingInfo{.OrderingIdx = orderingIdx, .Ordering = std::move(sorting)};
+}
 
 } // namespace NYql::NDq {

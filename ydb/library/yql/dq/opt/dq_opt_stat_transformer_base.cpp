@@ -14,6 +14,36 @@ TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(TTypeAnnotationContex
     : TypeCtx(typeCtx), Pctx(ctx), CardinalityHints(hints)
 { }
 
+void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto stats = typeCtx->GetStats(inputNode.Raw());
+
+    if (stats && stats->TableAliases && TCoAsStruct::Match(inputNode.Raw())) {
+        return;
+    }
+
+    TTableAliasMap tableAliases;
+    for (const auto& child: input->Children()) {
+        auto childStats = typeCtx->GetStats(TExprBase(child).Raw());
+        if (childStats && childStats->TableAliases) {
+            tableAliases.Merge(*childStats->TableAliases);
+        }
+    }
+
+    if (tableAliases.Empty()) {
+        return;
+    }
+
+    if (stats == nullptr) {
+        stats = std::make_shared<TOptimizerStatistics>();
+    } else {
+        stats = std::make_shared<TOptimizerStatistics>(*stats);
+    }
+
+    stats->TableAliases = MakeIntrusive<TTableAliasMap>(std::move(tableAliases));
+    typeCtx->SetStats(inputNode.Raw(), std::move(stats));
+}
+
 IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
 
@@ -31,7 +61,11 @@ IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::
             return true;
         },
         [&](const TExprNode::TPtr& input) {
-            return AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx) || true;
+            AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx);
+
+            PropogateTableAliasesFromChildren(input, TypeCtx);
+
+            return true;
         });
 
     return IGraphTransformer::TStatus::Ok;
@@ -97,13 +131,17 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if (TDqSource::Match(input.Get())) {
         InferStatisticsForDqSource(input, TypeCtx);
     }
-
-    // In case of DqCnMerge, update the sorted info with correct sorting
     else if (TDqCnMerge::Match(input.Get())) {
         InferStatisticsForDqMerge(input, TypeCtx);
     }
     else if (auto extendBase = TMaybeNode<TCoExtendBase>(input)) { // == union all
         InferStatisticsForExtendBase(input, TypeCtx);
+    }
+    else if (TCoAsStruct::Match(input.Get())) {
+        InferStatisticsForAsStruct(input, TypeCtx);
+    }
+    else if (auto topBase = TMaybeNode<TCoTopBase>(input)) {
+        InferStatisticsForTopBase(input, TypeCtx);
     }
     else {
         matched = false;
@@ -118,7 +156,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdasUnmatched(const TExprNode::TPtr&
     if (input->ChildrenSize() >= 1) {
         auto stats = TypeCtx->GetStats(input->ChildRef(0).Get());
         if (stats) {
-            TypeCtx->SetStats(input.Get(), RemoveOrdering(stats, input));
+            TypeCtx->SetStats(input.Get(), RemoveSorting(stats, input));
         }
     }
     return true;

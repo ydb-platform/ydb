@@ -261,6 +261,21 @@ public:
     }
 };
 
+class TTrashUnusedInjector : public NYDBTest::ILocalDBModifier {
+public:
+    void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        for (size_t i = 0; i < 100; ++i) {
+            db.Table<Schema::IndexColumns>()
+              .Key(1 + i, 2 + i, 3 + i, 4 + i, 5 + i, 6 + i, 7 + i)
+              .Update();
+        }
+    }
+};
+
 Y_UNIT_TEST_SUITE(Normalizers) {
     template <class TLocalDBModifier>
     void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()) {
@@ -269,6 +284,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        runtime.GetAppData().ColumnShardConfig.SetColumnChunksV0Usage(false);
 
         checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig); 
         checker.CorrectFeatureFlagsOnStart(runtime.GetAppData().FeatureFlags); 
@@ -389,6 +405,20 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         };
         TLocalNormalizerChecker checker;
         TestNormalizerImpl<TEraseMetaFromChunksV0>(checker);
+    }
+
+    Y_UNIT_TEST(CleanUnusedTablesNormalizer) {
+        class TTtlPresetsChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("CleanUnusedTables");
+                repair->SetDescription("Cleaning old table");
+            }
+        };
+
+        TTtlPresetsChecker checker;
+        TestNormalizerImpl<TTrashUnusedInjector>(checker);
     }
 }
 

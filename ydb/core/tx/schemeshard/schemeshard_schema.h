@@ -1591,6 +1591,7 @@ struct Schema : NIceDb::Schema {
         struct DstPathName : Column<3, NScheme::NTypeIds::Utf8> {};
         struct DstPathOwnerId : Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct DstPathLocalId : Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        // Table scheme
         struct Scheme : Column<6, NScheme::NTypeIds::String> {};
         struct CreationQuery : Column<13, NScheme::NTypeIds::Utf8> {};
         // NKikimrSchemeOp::TModifyScheme serialized as string

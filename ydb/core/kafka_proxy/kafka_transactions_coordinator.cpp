@@ -83,11 +83,11 @@ namespace NKafka {
     template<class ErrorResponseType, class EventType>
     void TTransactionsCoordinator::HandleTransactionalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
         EventType* ev = evHandle->Get();
-        KAFKA_LOG_D("Received message for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+        KAFKA_LOG_D("Received message for transactionalId " << *ev->Request->TransactionalId << " and ApiKey " << ev->Request->ApiKey());
         
         // create helper struct to simplify methods interaction
         auto txnRequest = TTransactionalRequest(
-            ev->Request->TransactionalId->c_str(),
+            *ev->Request->TransactionalId,
             TProducerInstanceId(ev->Request->ProducerId, ev->Request->ProducerEpoch),
             ev->CorrelationId,
             ev->ConnectionId
@@ -111,16 +111,16 @@ namespace NKafka {
         EventType* ev = evHandle->Get();
         
         TActorId txnActorId;
-        if (TxnActorByTransactionalId.contains(ev->Request->TransactionalId->c_str())) {
-            txnActorId = TxnActorByTransactionalId[ev->Request->TransactionalId->c_str()];
+        if (TxnActorByTransactionalId.contains(*ev->Request->TransactionalId)) {
+            txnActorId = TxnActorByTransactionalId[*ev->Request->TransactionalId];
         } else {
-            txnActorId = ctx.Register(new TTransactionActor(ev->Request->TransactionalId->c_str(), ev->Request->ProducerId, ev->Request->ProducerEpoch, ev->DatabasePath, NKikimr::NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ctx.SelfID));
-            TxnActorByTransactionalId[ev->Request->TransactionalId->c_str()] = txnActorId;
-            KAFKA_LOG_D("Registered TTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+            txnActorId = ctx.Register(new TTransactionActor(*ev->Request->TransactionalId, ev->Request->ProducerId, ev->Request->ProducerEpoch, ev->DatabasePath));
+            TxnActorByTransactionalId[*ev->Request->TransactionalId] = txnActorId;
+            KAFKA_LOG_D("Registered TTransactionActor with id " << txnActorId << " for transactionalId " << *ev->Request->TransactionalId << " and ApiKey " << ev->Request->ApiKey());
         }
         TAutoPtr<IEventHandle> tmpPtr = evHandle.Release();
         ctx.Forward(tmpPtr, txnActorId);
-        KAFKA_LOG_D("Forwarded message to TTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+        KAFKA_LOG_D("Forwarded message to TTransactionActor with id " << txnActorId << " for transactionalId " << *ev->Request->TransactionalId << " and ApiKey " << ev->Request->ApiKey());
     };
 
     void TTransactionsCoordinator::DeleteTransactionActor(const TString& transactionalId) {

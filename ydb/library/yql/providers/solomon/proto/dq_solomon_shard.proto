@@ -49,7 +49,7 @@ message TDownsampling {
 
 message TDqSolomonSource {
     ESolomonClusterType ClusterType = 1;
-    reserved 2;
+    string Endpoint = 2; // deprecated
     bool UseSsl = 3;
     string ServiceAccount = 4;
     TToken Token = 5;

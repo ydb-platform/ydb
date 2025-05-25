@@ -812,6 +812,8 @@ message TReqCreateQueueProducerSession
     optional bytes queue_path = 2; // RichYPath
     optional string session_id = 3;
     optional bytes user_meta = 4; // YSON
+
+    optional TMutatingOptions mutating_options = 103;
 }
 
 message TRspCreateQueueProducerSession

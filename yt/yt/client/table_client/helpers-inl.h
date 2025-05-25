@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/yson/protobuf_interop.h>
 
+#include <yt/yt/core/ytree/convert.h>
+
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
@@ -130,6 +132,27 @@ struct TRowValueTypesChecker
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+template <NYTree::CYsonStructDerived T>
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    T value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    ToUnversionedValue(unversionedValue, NYson::ConvertToYsonString(value), rowBuffer, id, flags);
+}
+
+template <NYTree::CYsonStructDerived T>
+void FromUnversionedValue(
+    T* value,
+    TUnversionedValue unversionedValue)
+{
+    NYson::TYsonString ysonStringValue;
+    FromUnversionedValue(&ysonStringValue, unversionedValue);
+    *value = ConvertTo<T>(ysonStringValue);
+}
 
 template <class T>
     requires TEnumTraits<T>::IsEnum

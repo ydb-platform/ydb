@@ -920,7 +920,7 @@ TFuture<std::vector<TListQueueConsumerRegistrationsResult>> TClient::ListQueueCo
 TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     const TRichYPath& producerPath,
     const TRichYPath& queuePath,
-    const NQueueClient::TQueueProducerSessionId& sessionId,
+    const TQueueProducerSessionId& sessionId,
     const TCreateQueueProducerSessionOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -934,6 +934,7 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
     if (options.UserMeta) {
         ToProto(req->mutable_user_meta(), ConvertToYsonString(options.UserMeta).ToString());
     }
+    ToProto(req->mutable_mutating_options(), options);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspCreateQueueProducerSessionPtr& rsp) {
         INodePtr userMeta;
@@ -952,7 +953,7 @@ TFuture<TCreateQueueProducerSessionResult> TClient::CreateQueueProducerSession(
 TFuture<void> TClient::RemoveQueueProducerSession(
     const NYPath::TRichYPath& producerPath,
     const NYPath::TRichYPath& queuePath,
-    const NQueueClient::TQueueProducerSessionId& sessionId,
+    const TQueueProducerSessionId& sessionId,
     const TRemoveQueueProducerSessionOptions& options)
 {
     auto proxy = CreateApiServiceProxy();

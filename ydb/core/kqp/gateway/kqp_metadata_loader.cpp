@@ -130,7 +130,7 @@ void CheckWritesAreDisabled(const TIndexProto& indexes, NYql::TKikimrTableMetada
             if (disableReason) {
                 disableReason << ", ";
             }
-            disableReason << "Unique index " << index.GetName() << " is not ready";
+            disableReason << "Unique index " << index.GetName() << " is under construction";
         }
     }
 

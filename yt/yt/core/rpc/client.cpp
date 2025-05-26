@@ -221,6 +221,11 @@ std::string TClientRequest::GetMethod() const
     return FromProto<std::string>(Header_.method());
 }
 
+const std::optional<std::string>& TClientRequest::GetRequestInfo() const
+{
+    return RequestInfo_;
+}
+
 void TClientRequest::DeclareClientFeature(int featureId)
 {
     Header_.add_declared_client_feature_ids(featureId);

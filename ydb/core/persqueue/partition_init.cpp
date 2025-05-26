@@ -675,10 +675,14 @@ void TInitDataRangeStep::FormHeadAndProceed() {
     auto& cz = Partition()->CompactionBlobEncoder; // Compaction zone
     auto& fwz = Partition()->BlobEncoder;   // FastWrite zone
 
+    cz.StartOffset = Max<ui64>();
+    cz.EndOffset = Min<ui64>();
     cz.BodySize = 0;
 
     fwz.Head.Offset = endOffset;
     fwz.Head.PartNo = 0;
+    fwz.StartOffset = Max<ui64>();
+    fwz.EndOffset = Min<ui64>();
     fwz.BodySize = 0;
 
     auto kb = SplitBodyHeadAndFastWrite(keys);
@@ -719,20 +723,20 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         fwz.Head.PartNo = 0;
     }
 
-    if (!cz.DataKeysBody.empty()) {
-        const auto& front = cz.DataKeysBody.front();
-        const auto& back = cz.DataKeysBody.back();
+    if (!cz.HeadKeys.empty()) {
+        const auto& front = cz.HeadKeys.front();
+        const auto& back = cz.HeadKeys.back();
 
         cz.StartOffset = front.Key.GetOffset();
         cz.EndOffset = back.Key.GetOffset() + back.Key.GetCount();
     }
 
-    if (!cz.HeadKeys.empty()) {
-        const auto& front = cz.HeadKeys.front();
-        const auto& back = cz.HeadKeys.back();
+    if (!cz.DataKeysBody.empty()) {
+        const auto& front = cz.DataKeysBody.front();
+        const auto& back = cz.DataKeysBody.back();
 
-        cz.StartOffset = Max<ui64>(cz.StartOffset, front.Key.GetOffset());
-        cz.EndOffset = back.Key.GetOffset() + back.Key.GetCount();
+        cz.StartOffset = Min<ui64>(front.Key.GetOffset(), cz.StartOffset);
+        cz.EndOffset = Max<ui64>(back.Key.GetOffset() + back.Key.GetCount(), cz.EndOffset);
     }
 
     if (!fwz.DataKeysBody.empty()) {
@@ -743,9 +747,21 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         fwz.EndOffset = back.Key.GetOffset() + back.Key.GetCount();
     }
 
+    if (cz.StartOffset > cz.EndOffset) {
+        cz.StartOffset = cz.EndOffset = fwz.StartOffset;
+    }
+
+    if (fwz.StartOffset > fwz.EndOffset) {
+        fwz.StartOffset = fwz.EndOffset = cz.EndOffset;
+    }
+
     if (cz.IsEmpty()) {
         cz.Head.Offset = fwz.StartOffset;
     }
+
+    Y_ABORT_UNLESS((cz.StartOffset <= cz.EndOffset) && (fwz.StartOffset <= fwz.EndOffset) && (cz.EndOffset <= fwz.StartOffset),
+                   "cz.StartOffset=%" PRIu64 ", cz.EndOffset=%" PRIu64 ", fwz.StartOffset=%" PRIu64 ", fwz.EndOffset=%" PRIu64,
+                   cz.StartOffset, cz.EndOffset, fwz.StartOffset, fwz.EndOffset);
 
     Y_ABORT_UNLESS(fwz.HeadKeys.empty() || fwz.Head.Offset == fwz.HeadKeys.front().Key.GetOffset() && fwz.Head.PartNo == fwz.HeadKeys.front().Key.GetPartNo());
     Y_ABORT_UNLESS(fwz.Head.Offset < endOffset || fwz.Head.Offset == endOffset && fwz.HeadKeys.empty());

@@ -137,7 +137,7 @@ FROM `/database/endpoint/my-logs`
 WHERE $__timeFilter(`timeCol` + Interval("PT24H"))
 ```
 
-Macro                                        | Description                                                                                                                      | Output example                                                                                  |
+| Macro                                        | Description                                                                                                                      | Output example                                                                                  |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `$__timeFilter(expr)`                | Replaced by a conditional that filters the data (using the provided column or expression) based on the time range of the panel in microseconds | `foo >= CAST(1636717526371000 AS Timestamp) AND foo <=  CAST(1668253526371000 AS Timestamp)' )` |
 | `$__fromTimestamp`                         | Replaced by the starting time of the range of the panel cast to Timestamp                                                      | `CAST(1636717526371000 AS Timestamp)`                                                           |

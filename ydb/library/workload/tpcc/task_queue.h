@@ -1,5 +1,7 @@
 #pragma once
 
+#include "histogram.h"
+
 #include <library/cpp/threading/future/future.h>
 
 #include <exception>
@@ -209,6 +211,43 @@ struct TTask<void> {
 
 class ITaskQueue {
 public:
+    struct TThreadStats {
+        TThreadStats() = default;
+
+        TThreadStats(const TThreadStats& other) = delete;
+        TThreadStats(TThreadStats&& other) = delete;
+        TThreadStats& operator=(const TThreadStats& other) = delete;
+        TThreadStats& operator=(TThreadStats&& other) = delete;
+
+        void Collect(TThreadStats& dst) {
+            dst.InternalTasksSleeping.fetch_add(InternalTasksSleeping.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.InternalTasksWaitingInflight.fetch_add(InternalTasksWaitingInflight.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.InternalTasksReady.fetch_add(InternalTasksReady.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.ExternalTasksReady.fetch_add(ExternalTasksReady.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.InternalTasksResumed.fetch_add(InternalTasksResumed.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.ExternalTasksResumed.fetch_add(ExternalTasksResumed.load(std::memory_order_relaxed), std::memory_order_relaxed);
+
+            TGuard guard(HistLock);
+            dst.InternalInflightWaitTimeMs.Add(InternalInflightWaitTimeMs);
+            dst.InternalQueueTimeMs.Add(InternalQueueTimeMs);
+            dst.ExternalQueueTimeMs.Add(ExternalQueueTimeMs);
+        }
+
+        std::atomic<ui64> InternalTasksSleeping{0};
+        std::atomic<ui64> InternalTasksWaitingInflight{0};
+
+        std::atomic<ui64> InternalTasksReady{0};
+        std::atomic<ui64> ExternalTasksReady{0};
+
+        std::atomic<ui64> InternalTasksResumed{0};
+        std::atomic<ui64> ExternalTasksResumed{0};
+
+        TSpinLock HistLock;
+        THistogram InternalInflightWaitTimeMs{128, 512};
+        THistogram InternalQueueTimeMs{128, 512};
+        THistogram ExternalQueueTimeMs{128, 512};
+    };
+
     ITaskQueue() = default;
     virtual ~ITaskQueue() = default;
 
@@ -236,6 +275,8 @@ public:
 
     // Check if current thread is one of the task queue threads
     virtual bool CheckCurrentThread() const = 0;
+
+    virtual void CollectStats(size_t threadIndex, TThreadStats& dst) = 0;
 };
 
 std::unique_ptr<ITaskQueue> CreateTaskQueue(

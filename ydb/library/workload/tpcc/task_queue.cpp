@@ -4,6 +4,7 @@
 #include "timer_queue.h"
 #include "log.h"
 
+#include <util/system/hp_timer.h>
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
 
@@ -16,25 +17,35 @@ namespace {
 
 //-----------------------------------------------------------------------------
 
-constexpr auto SleepUsecIfNoProgress = std::chrono::microseconds(100);
-
 // Initialize thread-local variable
 thread_local int TaskQueueThreadId = -1;
 
 //-----------------------------------------------------------------------------
 
+struct THandleWithTs {
+    std::coroutine_handle<> Handle;
+    THPTimer Timer;
+};
+
 struct alignas(64) TPerThreadContext {
     TPerThreadContext() = default;
 
-    // thread-safe because accessed by this thread only
+    TPerThreadContext(const TPerThreadContext&) = delete;
+    TPerThreadContext& operator=(const TPerThreadContext&) = delete;
+    TPerThreadContext(TPerThreadContext&&) = delete;
+    TPerThreadContext& operator=(TPerThreadContext&&) = delete;
+
+    // thread-safe because accessed by task queue thread only
 
     TBinnedTimerQueue<std::coroutine_handle<>> SleepingTasks;
-    TCircularQueue<std::coroutine_handle<>> ReadyTasksInternal;
-    TCircularQueue<std::coroutine_handle<>> InflightWaitingTasksInternal;
+    TCircularQueue<THandleWithTs> ReadyTasksInternal;
+    TCircularQueue<THandleWithTs> InflightWaitingTasksInternal;
 
     // accessed by other threads to add ready coroutine
     TSpinLock ReadyTasksLock;
-    TCircularQueue<std::coroutine_handle<>> ReadyTasksExternal;
+    TCircularQueue<THandleWithTs> ReadyTasksExternal;
+
+    ITaskQueue::TThreadStats Stats;
 };
 
 //-----------------------------------------------------------------------------
@@ -65,6 +76,8 @@ public:
 
     bool CheckCurrentThread() const override;
 
+    void CollectStats(size_t threadIndex, TThreadStats& dst) override;
+
 private:
     void RunThread(size_t threadId);
     void HandleQueueFull(const char* queueType);
@@ -80,7 +93,7 @@ private:
 
     std::stop_source ThreadsStopSource;
     std::vector<std::thread> Threads;
-    std::vector<TPerThreadContext> PerThreadContext;
+    std::vector<std::unique_ptr<TPerThreadContext>> PerThreadContext;
 };
 
 TTaskQueue::TTaskQueue(size_t threadCount,
@@ -106,11 +119,12 @@ TTaskQueue::TTaskQueue(size_t threadCount,
     const size_t timerBucketCount = (maxSleepingInternal + timerBucketSize - 1) / timerBucketSize;
 
     PerThreadContext.resize(ThreadCount);
-    for (auto& context: PerThreadContext) {
-        context.SleepingTasks.Resize(timerBucketCount, timerBucketSize);
-        context.ReadyTasksInternal.Resize(MaxReadyInternal);
-        context.InflightWaitingTasksInternal.Resize(MaxReadyInternal);
-        context.ReadyTasksExternal.Resize(MaxReadyExternal);
+    for (auto& context : PerThreadContext) {
+        context = std::make_unique<TPerThreadContext>();
+        context->SleepingTasks.Resize(timerBucketCount, timerBucketSize);
+        context->ReadyTasksInternal.Resize(MaxReadyInternal);
+        context->InflightWaitingTasksInternal.Resize(MaxReadyInternal);
+        context->ReadyTasksExternal.Resize(MaxReadyExternal);
     }
 }
 
@@ -143,17 +157,17 @@ void TTaskQueue::HandleQueueFull(const char* queueType) {
 }
 
 void TTaskQueue::TaskReady(std::coroutine_handle<> handle, size_t threadHint) {
-    auto index = threadHint % PerThreadContext.size();
-    auto& context = PerThreadContext[index];
+    auto contextIndex = threadHint % PerThreadContext.size();
+    auto& context = *PerThreadContext[contextIndex];
 
-    if (!context.ReadyTasksInternal.TryPush(std::move(handle))) {
+    if (!context.ReadyTasksInternal.TryPush({std::move(handle), THPTimer()})) {
         HandleQueueFull("internal");
     }
 }
 
 void TTaskQueue::AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::milliseconds delay) {
-    auto index = threadHint % PerThreadContext.size();
-    auto& context = PerThreadContext[index];
+    auto contextIndex = threadHint % PerThreadContext.size();
+    auto& context = *PerThreadContext[contextIndex];
     context.SleepingTasks.Add(delay, std::move(handle));
 }
 
@@ -170,8 +184,8 @@ bool TTaskQueue::IncInflight(std::coroutine_handle<> handle, size_t threadHint) 
     RunningInternalCount.fetch_sub(1, std::memory_order_relaxed);
 
     auto index = threadHint % PerThreadContext.size();
-    auto& context = PerThreadContext[index];
-    if (!context.InflightWaitingTasksInternal.TryPush(std::move(handle))) {
+    auto& context = *PerThreadContext[index];
+    if (!context.InflightWaitingTasksInternal.TryPush({std::move(handle), THPTimer()})) {
         HandleQueueFull("inflight-waiting");
     }
 
@@ -187,10 +201,10 @@ void TTaskQueue::DecInflight() {
 
 void TTaskQueue::TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t threadHint) {
     auto index = threadHint % PerThreadContext.size();
-    auto& context = PerThreadContext[index];
+    auto& context = *PerThreadContext[index];
 
     TGuard guard(context.ReadyTasksLock);
-    if (!context.ReadyTasksExternal.TryPush(std::move(handle))) {
+    if (!context.ReadyTasksExternal.TryPush({std::move(handle), THPTimer()})) {
         HandleQueueFull("external");
     }
 }
@@ -201,12 +215,20 @@ void TTaskQueue::RunThread(size_t threadId) {
 
     // TODO: just set seed? Or use random generator per internal task?
 
-    auto& context = PerThreadContext[threadId];
+    auto& context = *PerThreadContext[threadId];
+    auto& stats = context.Stats;
+
+    std::optional<ui64> internalInflightWaitTimeMs;
+    std::optional<ui64> internalQueueTimeMs;
+    std::optional<ui64> externalQueueTimeMs;
 
     while (!ThreadsStopSource.stop_requested()) {
         auto now = Clock::now();
 
-        bool hasProgress = false;
+        stats.InternalTasksSleeping.store(context.SleepingTasks.Size(), std::memory_order_relaxed);
+        stats.InternalTasksWaitingInflight.store(context.InflightWaitingTasksInternal.Size(), std::memory_order_relaxed);
+        stats.InternalTasksReady.store(context.ReadyTasksInternal.Size(), std::memory_order_relaxed);
+
         if (MaxRunningInternal != 0) {
             while (!context.InflightWaitingTasksInternal.Empty()
                     && RunningInternalCount.load(std::memory_order_relaxed) < MaxRunningInternal) {
@@ -216,12 +238,13 @@ void TTaskQueue::RunThread(size_t threadId) {
                     break;
                 }
 
-                std::coroutine_handle<> handleInternal;
-                if (context.InflightWaitingTasksInternal.TryPop(handleInternal)) {
-                    hasProgress = true;
-                    if (handleInternal && !handleInternal.done()) {
+                THandleWithTs internalTask;
+                if (context.InflightWaitingTasksInternal.TryPop(internalTask)) {
+                    if (internalTask.Handle && !internalTask.Handle.done()) {
                         LOG_D("Thread " << threadId << " resumed task waited for inflight (internal)");
-                        handleInternal.resume();
+                        internalInflightWaitTimeMs = int(internalTask.Timer.Passed() * 1000);
+                        stats.InternalTasksResumed.fetch_add(1, std::memory_order_relaxed);
+                        internalTask.Handle.resume();
                     }
                 }
             }
@@ -229,43 +252,65 @@ void TTaskQueue::RunThread(size_t threadId) {
 
         while (!context.SleepingTasks.Empty() && context.SleepingTasks.GetNextDeadline() <= now) {
             auto handle = context.SleepingTasks.PopFront().Value;
-            if (!context.ReadyTasksInternal.TryPush(std::move(handle))) {
+            if (!context.ReadyTasksInternal.TryPush({std::move(handle), THPTimer()})) {
                 HandleQueueFull("internal (awakened)");
             }
         }
 
-        std::optional<std::coroutine_handle<>> handleExternal;
+        std::optional<THandleWithTs> externalTask;
         {
             TGuard guard(context.ReadyTasksLock);
-            std::coroutine_handle<> h;
-            if (context.ReadyTasksExternal.TryPop(h)) {
-                handleExternal = std::move(h);
+            stats.ExternalTasksReady.store(context.ReadyTasksExternal.Size(), std::memory_order_relaxed);
+            THandleWithTs task;
+            if (context.ReadyTasksExternal.TryPop(task)) {
+                externalTask = std::move(task);
             }
         }
 
-        if (handleExternal && *handleExternal && !handleExternal->done()) {
-            hasProgress = true;
+        if (externalTask && externalTask->Handle && !externalTask->Handle.done()) {
             LOG_T("Thread " << threadId << " resumed task (external)");
-            handleExternal->resume();
+            stats.ExternalTasksResumed.fetch_add(1, std::memory_order_relaxed);
+            externalQueueTimeMs = int(externalTask->Timer.Passed() * 1000);
+            externalTask->Handle.resume();
         }
 
-        std::coroutine_handle<> handleInternal;
-        if (context.ReadyTasksInternal.TryPop(handleInternal)) {
-            hasProgress = true;
-            if (handleInternal && !handleInternal.done()) {
+        THandleWithTs internalTask;
+        if (context.ReadyTasksInternal.TryPop(internalTask)) {
+            if (internalTask.Handle && !internalTask.Handle.done()) {
                 LOG_D("Thread " << threadId << " resumed task (internal)");
-                handleInternal.resume();
+                stats.InternalTasksResumed.fetch_add(1, std::memory_order_relaxed);
+                internalQueueTimeMs = int(internalTask.Timer.Passed() * 1000);
+                internalTask.Handle.resume();
             }
         }
 
-        if (!hasProgress) {
-            std::this_thread::sleep_for(SleepUsecIfNoProgress);
+        {
+            TGuard guard(stats.HistLock);
+            if (internalInflightWaitTimeMs) {
+                stats.InternalInflightWaitTimeMs.RecordValue(*internalInflightWaitTimeMs);
+            }
+            if (internalQueueTimeMs) {
+                stats.InternalQueueTimeMs.RecordValue(*internalQueueTimeMs);
+            }
+            if (externalQueueTimeMs) {
+                stats.ExternalQueueTimeMs.RecordValue(*externalQueueTimeMs);
+            }
         }
     }
 }
 
 bool TTaskQueue::CheckCurrentThread() const {
     return TaskQueueThreadId >= 0;
+}
+
+void TTaskQueue::CollectStats(size_t threadIndex, TThreadStats& dst) {
+    if (threadIndex >= PerThreadContext.size()) {
+        throw std::runtime_error("Invalid thread index in stats collection");
+    }
+
+    auto& context = *PerThreadContext[threadIndex];
+    auto& srcStats = context.Stats;
+    srcStats.Collect(dst);
 }
 
 } // anonymous

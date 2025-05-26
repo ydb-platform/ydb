@@ -60,8 +60,9 @@ struct TRunnerOptions {
     std::unordered_set<ui64> TraceOptIds;
 
     IOutputStream* ResultOutput = nullptr;
-    std::vector<IOutputStream*> AstOutputs;
-    std::vector<IOutputStream*> PlanOutputs;
+    std::vector<TString> AstOutputs;
+    std::vector<TString> PlanOutputs;
+    std::vector<TString> StatsOutputs;
 
     bool CanonicalOutput = false;
     NKikimrRun::EResultOutputFormat ResultOutputFormat = NKikimrRun::EResultOutputFormat::RowsJson;

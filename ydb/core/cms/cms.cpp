@@ -714,7 +714,8 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         return true;
     }
 
-    const ui32 nToSelect = ClusterInfo->StateStorageInfo->NToSelect;
+    Y_ABORT_UNLESS(ClusterInfo->StateStorageInfo->RingGroups.size() > 0);
+    const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[0].NToSelect;
     const ui32 currentRing = ClusterInfo->GetRingId(node.NodeId);
     ui8 currentRingState = TStateStorageRingInfo::Unknown;
     ui32 restartRings = 0;

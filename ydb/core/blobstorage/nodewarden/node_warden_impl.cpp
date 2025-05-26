@@ -1559,11 +1559,9 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    char toPrefix[TActorId::MaxServiceIDLength] = {0};
-                    char fromPrefix[TActorId::MaxServiceIDLength] = {0};
-                    auto toInfo = BuildStateStorageInfo(toPrefix, *to);
-                    auto fromInfo = BuildStateStorageInfo(fromPrefix, from);
-                    if (toInfo->NToSelect != fromInfo->NToSelect || toInfo->SelectAllReplicas() != fromInfo->SelectAllReplicas()) {
+                    auto toInfo = BuildStateStorageInfo(*to);
+                    auto fromInfo = BuildStateStorageInfo(from);
+                    if (toInfo->RingGroups != fromInfo->RingGroups) {
                         *errorReason = TStringBuilder() << entity << " NToSelect/rings differs"
                             << " from# " << SingleLineProto(from)
                             << " to# " << SingleLineProto(*to);

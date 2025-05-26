@@ -19,7 +19,7 @@ class WorkloadVectorIndex(WorkloadBase):
         super().__init__(client, prefix, "vector_index", stop)
         self.table_name = "table"
         self.index_name = "vector_idx"
-        self.rows_count = 100
+        self.rows_count = 10
         self.limit = 10
         self.to_binary_string_converters = {
             "float": BinaryStringConverter(
@@ -51,6 +51,7 @@ class WorkloadVectorIndex(WorkloadBase):
         }
 
     def _get_random_vector(self, type, size):
+        logger.info(type)
         if type == "float":
             values = [round(random.uniform(-100, 100), 2) for _ in range(size)]
             return ",".join(f'{val}f' for val in values)
@@ -130,9 +131,9 @@ class WorkloadVectorIndex(WorkloadBase):
         for key in range(self.rows_count):
             vector = self._get_random_vector(vector_type, vector_dimension)
             name = converter.name
-            vector_type = converter.vector_type
+            vector_types = converter.vector_type
             values.append(
-                f'({key}, Untag({name}([{vector}]), "{vector_type}"))'
+                f'({key}, Untag({name}([{vector}]), "{vector_types}"))'
             )
 
         upsert_sql = f"""
@@ -178,7 +179,7 @@ class WorkloadVectorIndex(WorkloadBase):
         rows = result_set[0].rows
         logger.info(f"Rows count {len(rows)}")
 
-        prev = 0.0 if distance is not None else 1.0
+        prev = rows[0]['target']
         for row in rows:
             cur = row['target']
             condition = prev <= cur if distance is not None else prev >= cur
@@ -238,52 +239,63 @@ class WorkloadVectorIndex(WorkloadBase):
         logger.info('check was completed successfully')
 
     def _loop(self):
+        print("run")
         table_path = self.get_table_path(self.table_name)
-        distance_data = ["cosine"]  # "cosine", "manhattan", "euclidean"
-        similarity_data = ["cosine"]  # "inner_product", "cosine"
-        vector_type_data = ["float", "int8"]
+        distance_data = ["cosine", "manhattan", "euclidean"]  # "cosine", "manhattan", "euclidean"
+        similarity_data = ["cosine", "inner_product"]  # "inner_product", "cosine"
+        vector_type_data = ["float", "int8", "uint8"]
         levels_data = [1, 3]
         clusters_data = [1, 17]
         vector_dimension_data = [5]
-
-        try:
-            for vector_type in vector_type_data:
-                for vector_dimension in vector_dimension_data:
-                    self._create_table(table_path)
-
-                    self._upsert_values(
+        while not self.is_stop_requested():
+            self._create_table(table_path)
+            random_vector_type = random.choice(vector_type_data)
+            random_vector_dimension = random.choice(vector_dimension_data)
+            self._upsert_values(
                         table_path=table_path,
-                        vector_type=vector_type,
-                        vector_dimension=vector_dimension
+                        vector_type=random_vector_type,
+                        vector_dimension=random_vector_dimension
                     )
-
-                    for levels in levels_data:
-                        for clusters in clusters_data:
-                            for distance in distance_data:
-                                self._check_loop(
+            random_levels = random.choice(levels_data)
+            random_clusters = random.choice(clusters_data)
+            random_distance = random.choice(distance_data)
+            random_similarity = random.choice(similarity_data)
+            logger.info(f"""vector_type: {random_vector_type}
+                            vector_dimension: {random_vector_dimension}
+                            levels: {random_levels}
+                            clusters: {random_clusters}
+                            distance: {random_distance}
+                            similarity: {random_similarity}
+                        """)
+            print(f"""vector_type: {random_vector_type}
+                            vector_dimension: {random_vector_dimension}
+                            levels: {random_levels}
+                            clusters: {random_clusters}
+                            distance: {random_distance}
+                            similarity: {random_similarity}
+                        """)
+            try:
+                self._check_loop(
+                                        table_path=table_path,
+                                        vector_type=random_vector_type,
+                                        vector_dimension=random_vector_dimension,
+                                        levels=random_levels,
+                                        clusters=random_clusters,
+                                        distance=random_distance
+                                    )
+                self._check_loop(
                                     table_path=table_path,
-                                    vector_type=vector_type,
-                                    vector_dimension=vector_dimension,
-                                    levels=levels,
-                                    clusters=clusters,
-                                    distance=distance
+                                    vector_type=random_vector_type,
+                                    vector_dimension=random_vector_dimension,
+                                    levels=random_levels,
+                                    clusters=random_clusters,
+                                    similarity=random_similarity
                                 )
-
-                    for levels in levels_data:
-                        for clusters in clusters_data:
-                            for similarity in similarity_data:
-                                self._check_loop(
-                                    table_path=table_path,
-                                    vector_type=vector_type,
-                                    vector_dimension=vector_dimension,
-                                    levels=levels,
-                                    clusters=clusters,
-                                    similarity=similarity
-                                )
-
-                    self._drop_table(table_path)
-        except Exception as ex:
-            logger.info(f"ERRROR {ex}")
+            except Exception as ex:
+                logger.info(f"ERRROR {ex}")
+                raise str(ex)
+                
+            self._drop_table(table_path)
 
     def get_stat(self):
         return ""

@@ -79,15 +79,14 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     AFL_VERIFY(PortionsToRemove.GetSize() + PortionsToMove.GetSize() + AppendedPortions.size() || NoAppendIsCorrect);
     for (auto&& i : AppendedPortions) {
-        i.GetPortionConstructor().MutablePortionConstructor().SetPortionId(context.NextPortionId());
-        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(PortionsToMove.GetTargetCompactionLevel().value_or(0));
+        auto& constructor = i.GetPortionConstructor().MutablePortionConstructor();
+        constructor.SetPortionId(context.NextPortionId());
+        constructor.MutableMeta().SetCompactionLevel(GetPortionsToMove().GetTargetCompactionLevel().value_or(0));
     }
 }
 
 void TChangesWithAppend::DoOnAfterCompile() {
     for (auto&& i : AppendedPortions) {
-        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(
-            PortionsToMove.GetTargetCompactionLevel().value_or(0));
         i.FinalizePortionConstructor();
     }
 }

@@ -9,6 +9,13 @@ namespace NKikimr::NKqp::NOpt {
 using namespace NYql;
 using namespace NYql::NNodes;
 
+THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions = {
+    {"EqualsIgnoreCase", "String.AsciiEqualsIgnoreCase"},
+    {"StartsWithIgnoreCase", "String.AsciiStartsWithIgnoreCase"},
+    {"EndsWithIgnoreCase", "String.AsciiEndsWithIgnoreCase"},
+    {"StringContainsIgnoreCase", "String.AsciiContainsIgnoreCase"}
+};
+
 namespace {
 
 bool IsSupportedPredicate(const TCoCompare& predicate) {
@@ -104,6 +111,9 @@ bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type, bool allow
 
 bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    if (features & NUdf::EDataTypeFeatures::DecimalType) {
+        return false;
+    }
     return (NUdf::EDataTypeFeatures::CanCompare  & features)
         && (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & features) ||
             (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
@@ -225,7 +235,7 @@ bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTy
     const auto& rawOne = RemoveOptionality(typeOne);
     const auto& rawTwo = RemoveOptionality(typeTwo);
     if (IsSameAnnotation(rawOne, rawTwo))
-        return true;
+        return IsGoodTypeForComparsionPushdown(rawOne, options.AllowOlapApply);
 
     const auto kindOne = rawOne.GetKind();
     const auto kindTwo = rawTwo.GetKind();
@@ -292,6 +302,18 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
     for (size_t i = 0; i < leftList.size(); ++i) {
         if (!CheckExpressionNodeForPushdown(leftList[i], lambdaArg, options) || !CheckExpressionNodeForPushdown(rightList[i], lambdaArg, options)) {
             return false;
+        }
+    }
+
+    if (options.PushdownSubstring) { //EnableSimpleIlikePushdown FF
+        if (IgnoreCaseSubstringMatchFunctions.contains(compare.CallableName())) {
+            const auto& right = compare.Right().Ref();
+            YQL_ENSURE(right.IsCallable("String") || right.IsCallable("Utf8"));
+            const auto pattern = right.Child(0);
+            YQL_ENSURE(pattern->IsAtom());
+            if (UTF8Detect(pattern->Content()) != ASCII) {
+                return false;
+            }
         }
     }
 
@@ -411,7 +433,7 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
         predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
         predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
-        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
+        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
     } else if (const auto maybeExists = predicate.Maybe<TCoExists>()) {
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
         predicateTree.CanBePushedApply = predicateTree.CanBePushed;

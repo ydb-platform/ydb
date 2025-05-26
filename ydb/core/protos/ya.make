@@ -29,6 +29,7 @@ SRCS(
     blockstore_config.proto
     bootstrap.proto
     bootstrapper.proto
+    bridge.proto
     change_exchange.proto
     channel_purpose.proto
     cms.proto

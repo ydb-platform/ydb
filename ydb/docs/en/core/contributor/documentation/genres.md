@@ -1,8 +1,8 @@
-## {{ ydb-short-name }} documentation genres
+# {{ ydb-short-name }} documentation genres
 
 This article complements [{#T}](style-guide.md) by describing the main genres used in {{ ydb-short-name }} documentation. Understanding these genres helps contributors place new content in the appropriate section and maintain a consistent structure.
 
-### Theory {#theory}
+## Theory {#theory}
 
 **Primary goal for the reader:** build a solid knowledge foundation by understanding the fundamental concepts, architecture, and principles behind {{ ydb-short-name }}.
 
@@ -15,7 +15,7 @@ This article complements [{#T}](style-guide.md) by describing the main genres us
 
 Theory documentation is primarily found in the ["Concepts"](../../concepts/index.md) section but also appears in role-specific folders when the theoretical information is relevant only to a particular audience.
 
-### Guide {#guide}
+## Guide {#guide}
 
 **Primary goal for the reader:** accomplish a specific practical task or implement a particular solution with {{ ydb-short-name }} by following instructions.
 
@@ -29,7 +29,7 @@ Guides are practical, step-by-step instructions that help users accomplish a spe
 
 Guides are primarily found in role-specific folders like ["For DevOps"](../../devops/index.md), ["For Developers"](../../dev/index.md), and ["For Security Engineers"](../../security/index.md), as well as in the ["Troubleshooting"](../../troubleshooting/index.md) section.
 
-### Reference {#reference}
+## Reference {#reference}
 
 **Primary goal for the reader:** find additional information about a specific niche topic related to {{ ydb-short-name }}.
 
@@ -43,7 +43,7 @@ Reference documentation provides comprehensive, detailed information about {{ yd
 
 Reference documentation is designed to be found as needed and is the most detailed level of documentation. It's particularly useful when users need specific information about functions, settings, or keywords. This content is primarily found in the ["Reference"](../../reference/index.md) section.
 
-### FAQ {#faq}
+## FAQ {#faq}
 
 **Primary goal for the reader:** quickly find answers to common questions encountered when working with {{ ydb-short-name }}.
 
@@ -57,7 +57,7 @@ Frequently Asked Questions (FAQ) documentation answers common questions about {{
 
 FAQ content is primarily found in the ["Questions and answers"](../../faq/index.md) section and is designed to help users who are searching for specific solutions to common situations.
 
-### Recipe {#recipe}
+## Recipe {#recipe}
 
 **Primary goal for the reader:** implement a specific, focused solution to a common issue or use case with {{ ydb-short-name }}.
 
@@ -71,7 +71,7 @@ Recipes are short, focused mini-guides that demonstrate how to accomplish specif
 
 Recipes are primarily found in the ["Recipes"](../../recipes/index.md) section, though similar content may also appear in role-specific folders.
 
-### Release notes {#release-notes}
+## Release notes {#release-notes}
 
 **Primary goal for the reader:** stay informed about new features, improvements, bug fixes, and breaking changes in {{ ydb-short-name }} releases.
 
@@ -85,7 +85,7 @@ Release notes document changes, improvements, and fixes in each new version of {
 
 Release notes are found in the ["Changelog"](../../changelog-server.md) section and help users understand what has changed between versions and decide whether to upgrade.
 
-### Collection of links {#links}
+## Collection of links {#links}
 
 **Primary goal for the reader:** discover additional resources, learning materials, and external content related to {{ ydb-short-name }}.
 

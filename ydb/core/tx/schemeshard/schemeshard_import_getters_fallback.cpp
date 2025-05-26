@@ -11,7 +11,7 @@ class TSchemeGetterFallback: public TActorBootstrapped<TSchemeGetterFallback> {
 public:
     explicit TSchemeGetterFallback(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
         : ReplyTo(replyTo)
-        , ImportInfo(importInfo)
+        , ImportInfo(std::move(importInfo))
         , ItemIdx(itemIdx)
     {
     }
@@ -31,7 +31,7 @@ class TSchemaMappingGetterFallback: public TActorBootstrapped<TSchemaMappingGett
 public:
     explicit TSchemaMappingGetterFallback(const TActorId& replyTo, TImportInfo::TPtr importInfo)
         : ReplyTo(replyTo)
-        , ImportInfo(importInfo)
+        , ImportInfo(std::move(importInfo))
     {
     }
 

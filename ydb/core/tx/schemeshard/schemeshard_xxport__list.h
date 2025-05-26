@@ -67,7 +67,7 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
         while (it != container.begin() && size < pageSize) {
             --it;
             if (IsSameDomain(it->second, domainPathId) && it->second->Kind == kind) {
-                Self->FromXxportInfo(*resp.MutableEntries()->Add(), it->second);
+                Self->FromXxportInfo(*resp.MutableEntries()->Add(), *it->second);
                 ++size;
             }
         }

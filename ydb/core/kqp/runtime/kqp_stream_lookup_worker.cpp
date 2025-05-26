@@ -19,10 +19,26 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
 
     YQL_ENSURE(partitionInfo);
 
+    // Binary search of the index to start with.
+    size_t idxStart = 0;
+    size_t idxFinish = partitionInfo->size();
+    while ((idxFinish - idxStart) > 1) {
+        size_t idxCur = (idxFinish + idxStart) / 2;
+        const auto& partCur = (*partitionInfo)[idxCur].Range->EndKeyPrefix.GetCells();
+        YQL_ENSURE(partCur.size() <= keyColumnTypes.size());
+        int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), keyColumnTypes.data(),
+                                          std::min(partCur.size(), range.From.size()));
+        if (cmp < 0) {
+            idxStart = idxCur;
+        } else {
+            idxFinish = idxCur;
+        }
+    }
+
     std::vector<TCell> minusInf(keyColumnTypes.size());
 
     std::vector<std::pair<ui64, TOwnedTableRange>> rangePartition;
-    for (size_t idx = 0; idx < partitionInfo->size(); ++idx) {
+    for (size_t idx = idxStart; idx < partitionInfo->size(); ++idx) {
         TTableRange partitionRange{
             idx == 0 ? minusInf : (*partitionInfo)[idx - 1].Range->EndKeyPrefix.GetCells(),
             idx == 0 ? true : !(*partitionInfo)[idx - 1].Range->IsInclusive,
@@ -110,6 +126,12 @@ TKqpStreamLookupWorker::TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSetti
             column.GetTypeInfo().GetPgTypeMod()
         });
     }
+
+    KeyColumnTypes.resize(KeyColumns.size());
+    for (const auto& [_, columnInfo] : KeyColumns) {
+        YQL_ENSURE(columnInfo.KeyOrder < static_cast<i64>(KeyColumnTypes.size()));
+        KeyColumnTypes[columnInfo.KeyOrder] = columnInfo.PType;
+    }
 }
 
 TKqpStreamLookupWorker::~TKqpStreamLookupWorker() {
@@ -121,16 +143,6 @@ std::string TKqpStreamLookupWorker::GetTablePath() const {
 
 TTableId TKqpStreamLookupWorker::GetTableId() const {
     return TableId;
-}
-
-std::vector<NScheme::TTypeInfo> TKqpStreamLookupWorker::GetKeyColumnTypes() const {
-    std::vector<NScheme::TTypeInfo> keyColumnTypes(KeyColumns.size());
-    for (const auto& [_, columnInfo] : KeyColumns) {
-        YQL_ENSURE(columnInfo.KeyOrder < static_cast<i64>(keyColumnTypes.size()));
-        keyColumnTypes[columnInfo.KeyOrder] = columnInfo.PType;
-    }
-
-    return keyColumnTypes;
 }
 
 class TKqpLookupRows : public TKqpStreamLookupWorker {
@@ -868,7 +880,11 @@ private:
         return range.From.subspan(0, LookupKeyColumns.size());
     }
 
-    NMiniKQL::TStructType* GetLeftRowType() const {
+    NMiniKQL::TStructType* GetLeftRowType() {
+        if (LeftRowType) {
+            // KIKIMR-23296: avoid allocating separate type structure for each lookup
+            return LeftRowType;
+        }
         YQL_ENSURE(InputDesc.HasTransform());
 
         auto outputTypeNode = NMiniKQL::DeserializeNode(TStringBuf{InputDesc.GetTransform().GetOutputType()}, TypeEnv);
@@ -883,7 +899,8 @@ private:
         const auto outputLeftRowType = outputTupleType->GetElementType(0);
         YQL_ENSURE(outputLeftRowType->GetKind() == NMiniKQL::TType::EKind::Struct);
 
-        return AS_TYPE(NMiniKQL::TStructType, outputLeftRowType);
+        LeftRowType = AS_TYPE(NMiniKQL::TStructType, outputLeftRowType);
+        return LeftRowType;
     }
 
     NUdf::TUnboxedValue TryBuildResultRow(TLeftRowInfo& leftRowInfo, TConstArrayRef<TCell> rightRow,
@@ -950,6 +967,7 @@ private:
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
     ui64 InputRowSeqNo = 0;
     ui64 CurrentResultSeqNo = 0;
+    NMiniKQL::TStructType* LeftRowType = nullptr;
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,

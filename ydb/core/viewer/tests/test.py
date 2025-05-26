@@ -40,9 +40,9 @@ def call_viewer_api_get(url):
     return requests.get("http://localhost:%s%s" % (port, url))
 
 
-def call_viewer_api_post(url):
+def call_viewer_api_post(url, body=None):
     port = cluster.nodes[1].mon_port
-    return requests.post("http://localhost:%s%s" % (port, url))
+    return requests.post("http://localhost:%s%s" % (port, url), json=body)
 
 
 def call_viewer_api_delete(url):
@@ -62,10 +62,10 @@ def call_viewer(url, params=None):
     return get_result(call_viewer_api_get(url + '?' + urlencode(params)))
 
 
-def call_viewer_post(url, params=None):
+def call_viewer_post(url, params=None, body=None):
     if params is None:
         params = {}
-    return get_result(call_viewer_api_post(url + '?' + urlencode(params)))
+    return get_result(call_viewer_api_post(url + '?' + urlencode(params), body))
 
 
 def call_viewer_delete(url, params=None):
@@ -96,10 +96,10 @@ def get_viewer(url, params=None):
     return call_viewer(url, params)
 
 
-def post_viewer(url, params=None):
+def post_viewer(url, params=None, body=None):
     if params is None:
         params = {}
-    return call_viewer_post(url, params)
+    return call_viewer_post(url, params, body)
 
 
 def delete_viewer(url, params=None):
@@ -553,6 +553,48 @@ def test_viewer_healthcheck():
 def test_viewer_acl():
     db = cluster.domain_name
     return get_viewer_db("/viewer/acl", {'path': db})
+
+
+def test_viewer_acl_write():
+    return [
+        post_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        }, {
+            'AddAccess': [{
+                'Subject': 'user1',
+                'AccessRights': ['Read']
+            }]
+        }),
+        get_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        }),
+        post_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        }, {
+            'RemoveAccess': [{
+                'Subject': 'user1',
+                'AccessRights': ['Read']
+            }]
+        }),
+        get_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        }),
+        post_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        }, {
+            'ChangeOwnership': {
+                'Subject': 'user1',
+            }
+        }),
+        get_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        })]
 
 
 def test_viewer_autocomplete():

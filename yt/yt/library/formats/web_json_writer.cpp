@@ -157,6 +157,18 @@ TStringBuf GetSimpleYqlTypeName(ESimpleLogicalValueType type)
             return TStringBuf("Timestamp64");
         case ESimpleLogicalValueType::Interval64:
             return TStringBuf("Interval64");
+        case ESimpleLogicalValueType::TzDate:
+            return TStringBuf("TzDate");
+        case ESimpleLogicalValueType::TzDatetime:
+            return TStringBuf("TzDatetime");
+        case ESimpleLogicalValueType::TzTimestamp:
+            return TStringBuf("TzTimestamp");
+        case ESimpleLogicalValueType::TzDate32:
+            return TStringBuf("TzDate32");
+        case ESimpleLogicalValueType::TzDatetime64:
+            return TStringBuf("TzDatetime64");
+        case ESimpleLogicalValueType::TzTimestamp64:
+            return TStringBuf("TzTimestamp64");
         case ESimpleLogicalValueType::Null:
         case ESimpleLogicalValueType::Void:
             // This case must have been processed earlier.

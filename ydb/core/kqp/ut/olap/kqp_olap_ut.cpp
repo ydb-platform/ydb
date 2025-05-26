@@ -3220,7 +3220,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto rows = ExecuteScanQuery(tableClient, R"(
                 SELECT level, SUM(records_count) as sum_records_count FROM (
                 --!syntax_v1
-                SELECT JSON_VALUE(CAST(`Details` AS JsonDocument), '$.level') as level, CAST(JSON_VALUE(CAST(`Details` AS JsonDocument), '$.portions.records_count') AS Uint64) as records_count, Details
+                SELECT JSON_VALUE(CAST(`Details` AS JsonDocument), '$.level') as level, CAST(JSON_VALUE(CAST(`Details` AS JsonDocument), '$.selectivity.default.records_count') AS Uint64) as records_count, Details
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_optimizer_stats`
                 )
                 GROUP BY level

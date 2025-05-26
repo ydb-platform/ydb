@@ -60,6 +60,10 @@ public:
 
         SendRequest(ctx);
         TBase::Become(&TConsoleRequestActor::MainState);
+
+        if (const auto timeout = TDuration::MilliSeconds(Request.GetTimeoutMs())) {
+            ctx.Schedule(timeout, new TEvents::TEvWakeup());
+        }
     }
 
     void SendRequest(const TActorContext &ctx)
@@ -328,6 +332,10 @@ public:
         SendReplyAndDie(ctx);
     }
 
+    void HandleTimeout(const TActorContext &ctx) {
+        ReplyWithErrorAndDie(Ydb::StatusIds::TIMEOUT, "Console request timed out", ctx);
+    }
+
     STFUNC(MainState) {
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TEvUndelivered::EventType, Undelivered);
@@ -347,6 +355,7 @@ public:
             HFunc(TEvConsole::TEvToggleConfigValidatorResponse, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            SFunc(TEvents::TEvWakeup, HandleTimeout);
         default:
             Y_ABORT("TConsoleRequestActor::MainState unexpected event type: %" PRIx32 " event: %s",
                    ev->GetTypeRewrite(),

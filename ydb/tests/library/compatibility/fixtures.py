@@ -145,14 +145,13 @@ all_binary_combinations_ids_rolling = [
 
 
 class RollingUpgradeAndDowngradeFixture:
-    recreate_driver = True  # TODO: we don't want to recreate driver, but not working now
+    recreate_driver = True  # TODO: temporary workaround. We don't want to recreate driver, but not working now
 
     @pytest.fixture(autouse=True, params=all_binary_combinations_rolling, ids=all_binary_combinations_ids_rolling)
     def base_setup(self, request):
         self.all_binary_paths = request.param
 
     def _wait_for_readiness(self):
-        # TODO: use more correct way to prevent "Failed to resolve tablet: 72075186224037909 after several retries"
         if self.recreate_driver:
             self.driver = ydb.Driver(
                 ydb.DriverConfig(
@@ -169,6 +168,7 @@ class RollingUpgradeAndDowngradeFixture:
         ) """
         timeout = 120  # seconds
         interval = 2  # seconds
+
         start_time = time.time()
         last_exception = None
         while time.time() - start_time < timeout:

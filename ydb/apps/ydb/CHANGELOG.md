@@ -1,4 +1,6 @@
 * Switched highlighting engine
+* Added object names completion in interactive mode
+* Added `--threads` option to `ydb workload clickbench run`, `ydb workload tpch run` and `ydb workload tpcds run`. It allows to send workload queries by multiple threads.
 
 ## 2.21.0 ##
 

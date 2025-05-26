@@ -172,10 +172,10 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         {
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
                 const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(i.GetPathId());
-                const auto internalPathId = owner.PathIdTranslator.GetInternalPathId(schemeShardLocalPathId);
-                AFL_VERIFY(internalPathId);
-                if (owner.TablesManager.HasTable(*internalPathId, true) && !owner.TablesManager.HasTable(*internalPathId)) {
-                    WaitPathIdsToErase.emplace(*internalPathId);
+                if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId)) {
+                    if (owner.TablesManager.HasTable(*internalPathId, true)) {
+                        WaitPathIdsToErase.emplace(*internalPathId);
+                    }
                 }
             }
         }

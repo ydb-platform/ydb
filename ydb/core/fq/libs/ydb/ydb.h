@@ -80,6 +80,8 @@ struct TGenerationContext : public TThrRefBase {
     // result of Select
     ui64 GenerationRead = 0;
 
+    NYdb::NTable::TExecDataQuerySettings ExecDataQuerySettings;
+
     TGenerationContext(NYdb::NTable::TSession session,
                        bool commitTx,
                        const TString& tablePathPrefix,
@@ -87,7 +89,8 @@ struct TGenerationContext : public TThrRefBase {
                        const TString& primaryKeyColumn,
                        const TString& generationColumn,
                        const TString& primaryKey,
-                       ui64 generation)
+                       ui64 generation,
+                       const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
         : Session(session)
         , CommitTx(commitTx)
         , TablePathPrefix(tablePathPrefix)
@@ -96,6 +99,7 @@ struct TGenerationContext : public TThrRefBase {
         , GenerationColumn(generationColumn)
         , PrimaryKey(primaryKey)
         , Generation(generation)
+        , ExecDataQuerySettings(execDataQuerySettings)
     {
     }
 };

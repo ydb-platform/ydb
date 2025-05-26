@@ -1409,6 +1409,7 @@ Y_UNIT_TEST(TestSourceIdDropByUserWrites) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         PQTabletPrepare({}, {}, tc); //no important client, lifetimeseconds=0 - delete right now
 
@@ -1446,6 +1447,7 @@ Y_UNIT_TEST(TestSourceIdDropBySourceIdCount) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         PQTabletPrepare({.sidMaxCount=3}, {}, tc); //no important client, lifetimeseconds=0 - delete right now
 

@@ -17,7 +17,7 @@ class TestDatetime2(MixedClusterFixture):
 
     def generate_insert(self):
         header = (
-            "INSERT INTO datetime_test "
+            f"UPSERT INTO {self.table_name} "
             "(id, d, dt, ts, val, rfc822_str, iso8601_str, http_str, x509_str) VALUES\n"
         )
 
@@ -74,26 +74,28 @@ class TestDatetime2(MixedClusterFixture):
     def q_split(self):
         return f"""
         SELECT
-            DateTime::Split(d),
-            DateTime::Split(dt),
-            DateTime::Split(ts),
-            DateTime::Split(AddTimezone(d, "Europe/Moscow")),
-            DateTime::Split(AddTimezone(dt, "Europe/Moscow")),
-            DateTime::Split(AddTimezone(ts, "Europe/Moscow"))
+            DateTime::MakeDate(DateTime::Split(d)),
+            DateTime::MakeDate(DateTime::Split(dt)),
+            DateTime::MakeDate(DateTime::Split(ts)),
+            DateTime::MakeDate(DateTime::Split(AddTimezone(d, "Europe/Moscow"))),
+            DateTime::MakeDate(DateTime::Split(AddTimezone(dt, "Europe/Moscow"))),
+            DateTime::MakeDate(DateTime::Split(AddTimezone(ts, "Europe/Moscow")))
         FROM {self.table_name};
         """
 
     def q_make(self):
+        table_name = 'datetime_test'
         return f"""
         SELECT
             DateTime::MakeDate(DateTime::Split(d)),
             DateTime::MakeDatetime(DateTime::Split(d)),
             DateTime::MakeTimestamp(DateTime::Split(d)),
-
-            DateTime::MakeTzDate(DateTime::Split(d)),
-            DateTime::MakeTzDatetime(DateTime::Split(d)),
-            DateTime::MakeTzTimestamp(DateTime::Split(d))
-        FROM {self.table_name};
+            
+            -- added DateTime::MakeDate(DateTime::Split( because python sdk doesn't support Tz
+            DateTime::MakeDate(DateTime::Split(DateTime::MakeTzDate(DateTime::Split(d)))),
+            DateTime::MakeDate(DateTime::Split(DateTime::MakeTzDatetime(DateTime::Split(d)))),
+            DateTime::MakeDate(DateTime::Split(DateTime::MakeTzTimestamp(DateTime::Split(d))))
+        FROM `{table_name}`;
         """
 
     def q_get(self):
@@ -121,7 +123,7 @@ class TestDatetime2(MixedClusterFixture):
     def q_update(self):
         return f"""
         SELECT
-            DateTime::Update(DateTime::Split(d), 2005)
+            DateTime::MakeDate(DateTime::Update(DateTime::Split(d), 2005))
         FROM {self.table_name};
         """
 
@@ -173,27 +175,27 @@ class TestDatetime2(MixedClusterFixture):
     def q_start_end(self):
         return f"""
         SELECT
-            DateTime::StartOfYear(DateTime::Split(d)),
-            DateTime::EndOfYear(DateTime::Split(d)),
-            DateTime::StartOfQuarter(DateTime::Split(d)),
-            DateTime::EndOfQuarter(DateTime::Split(d)),
-            DateTime::StartOfMonth(DateTime::Split(d)),
-            DateTime::EndOfMonth(DateTime::Split(d)),
-            DateTime::StartOfWeek(DateTime::Split(d)),
-            DateTime::EndOfWeek(DateTime::Split(d)),
-            DateTime::StartOfDay(DateTime::Split(d)),
-            DateTime::EndOfDay(DateTime::Split(d)),
-            DateTime::StartOf(DateTime::Split(d), DateTime::IntervalFromDays(val)),
-            DateTime::EndOf(DateTime::Split(d), DateTime::IntervalFromDays(val))
+            DateTime::MakeDate(DateTime::StartOfYear(DateTime::Split(d))),
+            DateTime::MakeDate(DateTime::EndOfYear(DateTime::Split(d))),
+            DateTime::MakeDate(DateTime::StartOfQuarter(DateTime::Split(d))),
+            DateTime::MakeDate(DateTime::EndOfQuarter(DateTime::Split(d))),
+            DateTime::MakeDate(DateTime::StartOfMonth(DateTime::Split(d))),
+            DateTime::MakeDate(DateTime::EndOfMonth(DateTime::Split(d))),
+            DateTime::MakeDate(DateTime::StartOfWeek(DateTime::Split(d))),
+            DateTime::MakeDate(DateTime::EndOfWeek(DateTime::Split(d))),
+            DateTime::MakeDate(DateTime::StartOfDay(DateTime::Split(d))),
+            DateTime::MakeDate(DateTime::EndOfDay(DateTime::Split(d))),
+            DateTime::MakeDate(DateTime::StartOf(DateTime::Split(d), DateTime::IntervalFromDays(val))),
+            DateTime::MakeDate(DateTime::EndOf(DateTime::Split(d), DateTime::IntervalFromDays(val)))
         FROM {self.table_name};
         """
 
     def q_shift(self):
         return f"""
         SELECT
-            DateTime::ShiftYears(DateTime::Split(d), 1),
-            DateTime::ShiftQuarters(DateTime::Split(d), 1),
-            DateTime::ShiftMonths(DateTime::Split(d), 1)
+            DateTime::MakeDate(DateTime::ShiftYears(DateTime::Split(d), 1)),
+            DateTime::MakeDate(DateTime::ShiftQuarters(DateTime::Split(d), 1)),
+            DateTime::MakeDate(DateTime::ShiftMonths(DateTime::Split(d), 1))
         FROM {self.table_name};
         """
 
@@ -207,11 +209,11 @@ class TestDatetime2(MixedClusterFixture):
     def q_parse(self):
         return f"""
         SELECT
-            DateTime::ParseRfc822(rfc822_str),
-            DateTime::ParseIso8601(iso8601_str),
-            DateTime::ParseHttp(http_str),
-            DateTime::ParseX509(x509_str),
-            DateTime::Parse(iso8601_str, "%Y-%m-%dT%H:%M:%S")
+            DateTime::MakeDate(DateTime::ParseRfc822(rfc822_str)),
+            DateTime::MakeDate(DateTime::ParseIso8601(iso8601_str)),
+            DateTime::MakeDate(DateTime::ParseHttp(http_str)),
+            DateTime::MakeDate(DateTime::ParseX509(x509_str)),
+            DateTime::MakeDate(DateTime::Parse(iso8601_str, "%Y-%m-%dT%H:%M:%S"))
         FROM {self.table_name};
         """
 
@@ -241,5 +243,6 @@ class TestDatetime2(MixedClusterFixture):
             ]
 
             for query in queries:
-                result = self.session_pool.execute_with_retries(query)
+                result = session_pool.execute_with_retries(query)
                 assert len(result[0].rows) > 0
+

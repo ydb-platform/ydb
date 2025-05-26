@@ -1326,13 +1326,13 @@ private:
         return EScan::Reset;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) final {
+    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) final {
         if (!Aborted) {
-            switch (abort) {
-                case EAbort::None:
+            switch (status) {
+                case EStatus::Done:
                     SendResult({}, /* last */ true);
                     break;
-                case EAbort::Host: {
+                case EStatus::Error: {
                     TStringBuilder errorMessage;
                     errorMessage << "Shard " << TabletId << " failed during a table scan";
                     if (exc) {
@@ -1341,16 +1341,16 @@ private:
                     SendError(Ydb::StatusIds::UNAVAILABLE, errorMessage);
                     break;
                 }
-                case EAbort::Term:
+                case EStatus::Term:
                     // scan was cancelled, either reply not needed or was sent already
                     break;
-                case EAbort::Lost:
+                case EStatus::Lost:
                     // tablet terminated, no reply necessary
                     break;
             }
         }
 
-        if (abort != EAbort::Lost) {
+        if (status != EStatus::Lost) {
             Send(OwnerId, new TEvDataShard::TEvReadScanFinished(LocalReadId));
         }
 

@@ -252,7 +252,7 @@ struct TDummyResult: public IDestructable {
 
 class TDummyScan : public TActor<TDummyScan>, public NTable::IScan {
 public:
-    TDummyScan(TActorId tablet, bool postponed, EAbort abort, ui32 rows)
+    TDummyScan(TActorId tablet, bool postponed, EStatus abort, ui32 rows)
         : TActor(&TThis::StateWork)
         , Tablet(tablet)
         , ExpectedRows(rows)
@@ -298,7 +298,7 @@ private:
 
     EScan Seek(TLead &lead, ui64 seq) override
     {
-        if (seq && Abort == EAbort::None)
+        if (seq && Abort == EStatus::Done)
             return EScan::Final;
 
         lead.To(Scheme->Tags(), LeadKey, NTable::ESeek::Lower);
@@ -321,13 +321,13 @@ private:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override
+    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) override
     {
         Y_ENSURE(!exc, exc->what());
-        Y_ENSURE((int)Abort == (int)abort);
+        Y_ENSURE((int)Abort == (int)status);
 
         auto ctx = ActorContext();
-        if (abort == EAbort::None) {
+        if (status == EStatus::Done) {
             if (ExpectedRows != StoredRows) {
                 Cerr << "Expected " << ExpectedRows << " rows but got " << StoredRows << Endl;
             }
@@ -356,7 +356,7 @@ private:
     ui64 ExpectedRowId = 1;
     ui64 ExpectedRows = 0;
     bool Postponed = false;
-    EAbort Abort;
+    EStatus Abort;
 };
 
 struct TEvTestFlatTablet {
@@ -373,7 +373,7 @@ struct TEvTestFlatTablet {
 
     struct TEvScanFinished : public TEventLocal<TEvScanFinished, EvScanFinished> {};
     struct TEvQueueScan : public TEventLocal<TEvQueueScan, EvQueueScan> {
-        TEvQueueScan(ui32 rows, bool postponed = false, bool snap = false, NTable::EAbort abort = NTable::EAbort::None)
+        TEvQueueScan(ui32 rows, bool postponed = false, bool snap = false, NTable::EStatus abort = NTable::EStatus::Done)
             : Postponed(postponed)
             , UseSnapshot(snap)
             , Abort(abort)
@@ -381,7 +381,7 @@ struct TEvTestFlatTablet {
             , ExpectRows(rows)
         {}
 
-        TEvQueueScan(ui32 rows, TRowVersion snapshot, bool postponed = false, NTable::EAbort abort = NTable::EAbort::None)
+        TEvQueueScan(ui32 rows, TRowVersion snapshot, bool postponed = false, NTable::EStatus abort = NTable::EStatus::Done)
             : Postponed(postponed)
             , UseSnapshot(false)
             , Abort(abort)
@@ -391,7 +391,7 @@ struct TEvTestFlatTablet {
 
         bool Postponed;
         bool UseSnapshot;
-        NTable::EAbort Abort;
+        NTable::EStatus Abort;
         const TRowVersion ReadVersion;
         const ui32 ExpectRows = 0;
         ui64 ExpectedPageFaults = Max<ui64>();
@@ -452,7 +452,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         Send(Sender, new NFake::TEvDataCleaned(dataCleanupComplete));
     }
 
-    void ScanComplete(NTable::EAbort, TAutoPtr<IDestructable>, ui64 cookie, const TActorContext&) override
+    void ScanComplete(NTable::EStatus, TAutoPtr<IDestructable>, ui64 cookie, const TActorContext&) override
     {
         if (cookie == 12345) {
             // TEmptyScan in follower tests
@@ -477,7 +477,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
         bool postpone = ev->Get()->Postponed;
         ui64 snap = ev->Get()->UseSnapshot ? SnapshotId : 0;
         auto abort = ev->Get()->Abort;
-        auto rows = abort != NTable::EAbort::None ? 0 : ev->Get()->ExpectRows;
+        auto rows = abort != NTable::EStatus::Done ? 0 : ev->Get()->ExpectRows;
         Scan = new TDummyScan(SelfId(), postpone, abort, rows);
         Scan->LeadKey = ev->Get()->LeadKey;
         Scan->ExpectedPageFaults = ev->Get()->ExpectedPageFaults;
@@ -1082,7 +1082,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
 
         env.SendSync(env.Rows.MakeRows(111));
         env.SendSync(new TEvTestFlatTablet::TEvMakeScanSnapshot);
-        env.SendSync(new TEvTestFlatTablet::TEvQueueScan(111, true, true, NTable::EAbort::Term));
+        env.SendSync(new TEvTestFlatTablet::TEvQueueScan(111, true, true, NTable::EStatus::Term));
         env.SendSync(new TEvTestFlatTablet::TEvCancelScan);
 //        env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
     }
@@ -3629,7 +3629,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
             Y_TABLET_ERROR("unreachable");
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort) override {
+        TAutoPtr<IDestructable> Finish(EStatus) override {
             delete this;
             return nullptr;
         }

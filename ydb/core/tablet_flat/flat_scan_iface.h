@@ -60,24 +60,24 @@ namespace NTable {
      */
 
     enum class EScan {
-        Feed    = 0,    /* Feed rows from current iterator state    */
-        Sleep   = 1,    /* Suspend execution until explicit resume  */
-        Reset   = 3,    /* Reconfigure iterator with new settings   */
-        Final   = 8,    /* Impl. isn't needed in more rows or seeks */
+        Feed    = 0, // Feed rows from current iterator state
+        Sleep   = 1, // Suspend execution until explicit resume
+        Reset   = 3, // Reconfigure iterator with new settings
+        Final   = 8, // Impl. isn't needed in more rows or seeks
     };
 
-    enum class EAbort {
-        None    = 0,    /* Regular process termination              */
-        Lost    = 1,    /* Owner entity is lost, no way for product */
-        Term    = 2,    /* Explicit process termination by owner    */
-        Host    = 3,    /* Terminated due to execution env. error   */
+    enum class EStatus {
+        Done    = 0, // Regular process termination
+        Lost    = 1, // Owner entity is lost, no way for product
+        Term    = 2, // Explicit process termination by owner
+        Error   = 3, // Terminated due to execution env. error
     };
 
     class IDriver {
     public:
         virtual void Touch(EScan) = 0;
 
-        // Stops scan and calls IScan::Finish(EAbort::Host, exc)
+        // Stops scan and calls IScan::Finish(EStatus::Failed, exc)
         virtual void Fail(const std::exception& exc) = 0;
     };
 
@@ -90,7 +90,7 @@ namespace NTable {
         using TLead = NTable::TLead;
         using TSpent = NTable::TSpent;
         using EScan = NTable::EScan;
-        using EAbort = NTable::EAbort;
+        using EStatus = NTable::EStatus;
 
         struct TConf {
             TConf() = default;
@@ -119,7 +119,7 @@ namespace NTable {
         virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) = 0;
         virtual EScan Seek(TLead&, ui64 seq) = 0;
         virtual EScan Feed(TArrayRef<const TCell>, const TRow&) = 0;
-        virtual TAutoPtr<IDestructable> Finish(EAbort, const std::exception* exc) = 0;
+        virtual TAutoPtr<IDestructable> Finish(EStatus, const std::exception* exc) = 0;
         virtual void Describe(IOutputStream&) const = 0;
 
         /**

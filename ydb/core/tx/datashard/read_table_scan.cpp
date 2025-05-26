@@ -695,14 +695,14 @@ private:
         return cmp <= 0;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override
+    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) override
     {
         auto ctx = ActorContext();
 
         if (!SchemaChanged) {
-            if (abort != EAbort::None) {
+            if (status != EStatus::Done) {
                 TStringBuilder error;
-                error << "Aborted by scan host env";
+                error << "Scan finished with status " << status;
                 if (exc) {
                     error << " " << exc->what();
                 }

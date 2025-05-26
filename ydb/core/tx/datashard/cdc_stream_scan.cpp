@@ -511,8 +511,9 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override {
-        if (abort != EAbort::None) {
+    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception*) override {
+        // TODO: https://github.com/ydb-platform/ydb/issues/18806
+        if (status != EStatus::Done) {
             Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED);
         } else {
             Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE);

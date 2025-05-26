@@ -325,9 +325,9 @@ namespace NTabletFlatExecutor {
             TxStatus.emplace_back(new NTable::TTxStatusPartStore(dataId, Conf->Epoch, data));
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override
+        TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) override
         {
-            const auto fail = Failed || !Finished || abort != EAbort::None;
+            const auto fail = Failed || !Finished || status != EStatus::Done;
 
             auto *prod = new TProdCompact(!fail, Mask.Step(), std::move(Conf->Params),
                     std::move(YellowMoveChannels), std::move(YellowStopChannels));
@@ -392,7 +392,7 @@ namespace NTabletFlatExecutor {
                 auto raito = WriteStats.Bytes ? (WriteStats.Coded + 0.) / WriteStats.Bytes : 0.;
 
                 logl
-                    << NFmt::Do(*this) << " end=" << ui32(abort) << (exc ? exc->what() : "")
+                    << NFmt::Do(*this) << " end=" << ui32(status) << (exc ? exc->what() : "")
                     << ", " << Blobs << " blobs " << WriteStats.Rows << "r"
                     << " (max " << Conf->Layout.MaxRows << ")"
                     << ", put " << NFmt::If(Spent.Get());

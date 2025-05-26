@@ -187,11 +187,11 @@ public:
         return Progress();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override {
-        LOG_D("Finish " << static_cast<ui64>(abort)
+    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) override {
+        LOG_D("Finish " << status
             << ", exc: " << (exc ? exc->what() : TString("<none>")));
 
-        if (abort != EAbort::None) {
+        if (status != EStatus::Done) {
             // TODO: https://github.com/ydb-platform/ydb/issues/18797
         }
 

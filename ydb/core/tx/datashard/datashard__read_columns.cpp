@@ -127,10 +127,10 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override {
+    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) override {
         Result = new TEvDataShard::TEvReadColumnsResponse(TabletId);
 
-        if (abort == EAbort::None) {
+        if (status == EStatus::Done) {
             TString buffer = BlockBuilder->Finish();
             buffer.resize(BlockBuilder->Bytes());
             BlockBuilder.reset();
@@ -152,6 +152,8 @@ public:
             Result->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
             if (exc) {
                 Result->Record.SetErrorDescription(TStringBuilder() << "Scan failed " << exc->what());
+            } else if (status == NTable::EStatus::Error) {
+                Result->Record.SetErrorDescription("Scan failed");
             } else {
                 Result->Record.SetErrorDescription("Scan aborted");
             }

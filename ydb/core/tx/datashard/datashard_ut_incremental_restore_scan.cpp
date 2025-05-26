@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(IncrementalRestoreScan) {
 
         actorExec.Execute([&]() {
             UNIT_ASSERT(driver.LastScan && *driver.LastScan == NTable::EScan::Final);
-            scan->Finish(NTable::EAbort::None);
+            scan->Finish(NTable::EStatus::Done);
         });
 
         runtime.GrabEdgeEventRethrow<TEvIncrementalRestoreScan::TEvFinished>(sender);

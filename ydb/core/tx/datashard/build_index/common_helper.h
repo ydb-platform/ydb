@@ -128,7 +128,7 @@ public:
     }
 
     template<typename TResponse> 
-    void Finish(TResponse& response, NTable::EAbort abort, const std::exception* exc) {
+    void Finish(TResponse& response, NTable::EStatus status, const std::exception* exc) {
         if (UploaderId) {
             TlsActivationContext->Send(new IEventHandle(UploaderId, TActorId(), new TEvents::TEvPoison));
             UploaderId = {};
@@ -136,14 +136,14 @@ public:
 
         response.SetUploadRows(UploadRows);
         response.SetUploadBytes(UploadBytes);
-        if (abort == NTable::EAbort::Host) {
+        if (status == NTable::EStatus::Error) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env error"));
+            UploadStatus.Issues.AddIssue(NYql::TIssue("Scan failed"));
             if (exc) {
                 UploadStatus.Issues.AddIssue(NYql::TIssue(exc->what()));
             }
             NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
-        } else if (abort != NTable::EAbort::None) {
+        } else if (status != NTable::EStatus::Done) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else if (UploadStatus.IsNone() || UploadStatus.IsSuccess()) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);

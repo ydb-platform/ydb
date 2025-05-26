@@ -174,14 +174,14 @@ class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, publ
         SerializedKeys.Clear();
     }
 
-    void Reply(bool aborted = false) {
+    void Reply(EStatus status = EStatus::Done) {
         auto response = MakeHolder<TEvDataShard::TEvConditionalEraseRowsResponse>();
         response->Record.SetTabletID(DataShard.TabletId);
 
-        if (aborted) {
-            response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
-        } else if (!Success) {
+        if (!Success || status == EStatus::Error) {
             response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ERASE_ERROR);
+        } else if (status != EStatus::Done) {
+            response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
         } else if (!NoMoreData) {
             response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::PARTIAL);
         } else {
@@ -305,8 +305,8 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override {
-        Reply(abort != EAbort::None);
+    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception*) override {
+        Reply(status);
         PassAway();
 
         return nullptr;

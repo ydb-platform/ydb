@@ -144,20 +144,20 @@ public:
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) final {
+    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) final {
         auto& record = Response->Record;
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
 
-        if (abort == EAbort::Host) {
+        if (status == EStatus::Error) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
             NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue("Aborted by scan host env error"));
+            issues.AddIssue(NYql::TIssue("Scan failed"));
             if (exc) {
                 issues.AddIssue(NYql::TIssue(exc->what()));
             }
             NYql::IssuesToMessage(issues, record.MutableIssues());
-        } else if (abort != NTable::EAbort::None) {
+        } else if (status != NTable::EStatus::Done) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);

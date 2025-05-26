@@ -332,15 +332,15 @@ private:
     }
 
 private:
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) final {
-        auto prio = abort == EAbort::None ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
+    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) final {
+        auto prio = status == EStatus::Done ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan"
             << ", at: " << ScanActorId << ", scanId: " << ScanId
-            << ", table: " << TablePath << ", reason: " << (int) abort
+            << ", table: " << TablePath << ", reason: " << status
             << ", abortEvent: " << (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>"))
             << ", exc: " << (exc ? exc->what() : TString("<none>")));
 
-        if (abort != EAbort::None || AbortEvent) {
+        if (status != EStatus::Done || AbortEvent) {
             auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation, TabletId);
 
             if (AbortEvent) {
@@ -352,13 +352,16 @@ private:
                 }
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             } else {
-                ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
+                ev->Record.SetStatus(status == NTable::EStatus::Error
+                    ? Ydb::StatusIds::INTERNAL_ERROR
+                    : Ydb::StatusIds::ABORTED);
                 TStringBuilder error;
-                error << "Table " << TablePath << " scan failed, reason: " << ToString((int) abort);
+                error << "Table " << TablePath << " scan failed, reason: " << ToString((int) status);
                 if (exc) {
                     error << " " << exc->what();
                 }
-                auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED, error);
+                auto issueId = status == NTable::EStatus::Error ? NYql::TIssuesIds::DEFAULT_ERROR : NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED;
+                auto issue = NYql::YqlIssue({}, issueId, error);
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             }
 

@@ -19,7 +19,7 @@ namespace NTabletFlatExecutor {
     class TScans { /* NOps state tracker */
 
         using IScan = NTable::IScan;
-        using EAbort = NTable::EAbort;
+        using EAbort = NTable::EStatus;
         using IOps = NActors::IActorOps;
         using ITablet = NFlatExecutorSetup::ITablet;
         using TEvResourceBroker = NResourceBroker::TEvResourceBroker;

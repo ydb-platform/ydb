@@ -2257,7 +2257,7 @@ Y_UNIT_TEST(TestWriteTimeLag) {
 
     tc.Runtime->SetScheduledLimit(150);
     tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
-    tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
     PQTabletPrepare({.maxSizeInPartition=1_TB}, {{"aaa", false}}, tc);
 
@@ -2281,9 +2281,9 @@ Y_UNIT_TEST(TestWriteTimeLag) {
     PQTabletPrepare({.maxSizeInPartition=1_TB},
                     {{"aaa", false}, {"another1", true}, {"important", true}, {"another", false}}, tc);
 
-    CmdGetOffset(0, "important", 16, tc, -1, 0);
+    CmdGetOffset(0, "important", 12, tc, -1, 0);
 
-    CmdGetOffset(0, "another1", 16, tc, -1, 0);
+    CmdGetOffset(0, "another1", 12, tc, -1, 0);
     CmdGetOffset(0, "another", 0, tc, -1, 0);
     CmdGetOffset(0, "aaa", 0, tc, -1, 0);
 }

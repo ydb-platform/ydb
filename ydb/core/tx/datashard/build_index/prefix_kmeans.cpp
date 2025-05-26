@@ -433,10 +433,10 @@ private:
                 FeedKMeans(row);
                 break;
             case EState::UPLOAD_BUILD_TO_BUILD:
-                FeedBuild2Build(key, row);
+                FeedBuildToBuild(key, row);
                 break;
             case EState::UPLOAD_BUILD_TO_POSTING:
-                FeedBuild2Posting(key, row);
+                FeedBuildToPosting(key, row);
                 break;
             default:
                 Y_ASSERT(false);
@@ -462,14 +462,14 @@ private:
         }
     }
 
-    void FeedBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
             AddRowBuildToBuild(*OutputBuf, Child + *pos, key, row, PrefixColumns);
         }
     }
 
-    void FeedBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
             AddRowBuildToPosting(*OutputBuf, Child + *pos, key, row, DataPos, PrefixColumns);

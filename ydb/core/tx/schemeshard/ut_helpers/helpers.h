@@ -656,7 +656,7 @@ namespace NSchemeShardUT_Private {
         Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
     NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
-        const TString& table, const TVector<TString>& pk, const TVector<TString>& columns);
+        const TString& table, const TVector<TString>& pk, const TVector<TString>& columns, const TString& rangeFlags = "");
 
 
 } //NSchemeShardUT_Private

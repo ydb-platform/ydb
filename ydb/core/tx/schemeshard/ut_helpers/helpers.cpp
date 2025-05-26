@@ -2665,7 +2665,8 @@ namespace NSchemeShardUT_Private {
     }
 
     NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
-            const TString& table, const TVector<TString>& pk, const TVector<TString>& columns)
+            const TString& table, const TVector<TString>& pk, const TVector<TString>& columns,
+            const TString& rangeFlags)
     {
         TStringBuilder keyFmt;
         for (const auto& k : pk) {
@@ -2676,12 +2677,13 @@ namespace NSchemeShardUT_Private {
         NKikimrMiniKQL::TResult result;
         TString error;
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"((
-            (let range '(%s))
+            (let range '(%s%s))
             (let columns '(%s))
             (let result (SelectRange '__user__%s range columns '()))
             (return (AsList (SetResult 'Result result) ))
-        ))", keyFmt.data(), columnsFmt.data(), table.data()), result, error);
+        ))", rangeFlags.data(), keyFmt.data(), columnsFmt.data(), table.data()), result, error);
         UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         return result;
     }

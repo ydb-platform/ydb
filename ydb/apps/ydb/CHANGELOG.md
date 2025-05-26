@@ -1,3 +1,4 @@
+* Added object names completion in interactive mode
 
 ## 2.21.0 ##
 

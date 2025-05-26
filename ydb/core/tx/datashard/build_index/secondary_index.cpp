@@ -238,10 +238,12 @@ public:
 
         if (status == EStatus::Error) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            UploadStatus.Issues.AddIssue(NYql::TIssue("Scan failed"));
+            TStringBuilder error;
+            error << "Scan failed";
             if (exc) {
-                UploadStatus.Issues.AddIssue(NYql::TIssue(exc->what()));
+                error << " " << exc->what();
             }
+            UploadStatus.Issues.AddIssue(NYql::TIssue(error));
         } else if (status != EStatus::Done) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else if (!UploadStatus.IsSuccess()) {

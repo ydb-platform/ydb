@@ -396,7 +396,7 @@ namespace NTabletFlatExecutor {
                 auto raito = WriteStats.Bytes ? (WriteStats.Coded + 0.) / WriteStats.Bytes : 0.;
 
                 logl
-                    << NFmt::Do(*this) << " end=" << ui32(status) << (exc ? exc->what() : "")
+                    << NFmt::Do(*this) << " end=" << status << (exc ? " " : "") << (exc ? exc->what() : "")
                     << ", " << Blobs << " blobs " << WriteStats.Rows << "r"
                     << " (max " << Conf->Layout.MaxRows << ")"
                     << ", put " << NFmt::If(Spent.Get());

@@ -151,11 +151,13 @@ public:
 
         if (status == EStatus::Error) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue("Scan failed"));
+            TStringBuilder error;
+            error << "Scan failed";
             if (exc) {
-                issues.AddIssue(NYql::TIssue(exc->what()));
+                error << " " << exc->what();
             }
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue(error));
             NYql::IssuesToMessage(issues, record.MutableIssues());
         } else if (status != NTable::EStatus::Done) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);

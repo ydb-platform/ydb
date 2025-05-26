@@ -77,7 +77,7 @@ namespace NTable {
     public:
         virtual void Touch(EScan) = 0;
 
-        // Stops scan and calls IScan::Finish(EStatus::Failed, exc)
+        // Stops scan and calls IScan::Finish(EStatus::Error, exc)
         virtual void Fail(const std::exception& exc) = 0;
     };
 

@@ -138,10 +138,12 @@ public:
         response.SetUploadBytes(UploadBytes);
         if (status == NTable::EStatus::Error) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            UploadStatus.Issues.AddIssue(NYql::TIssue("Scan failed"));
+            TStringBuilder error;
+            error << "Scan failed";
             if (exc) {
-                UploadStatus.Issues.AddIssue(NYql::TIssue(exc->what()));
+                error << " " << exc->what();
             }
+            UploadStatus.Issues.AddIssue(NYql::TIssue(error));
             NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
         } else if (status != NTable::EStatus::Done) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
@@ -200,10 +202,10 @@ private:
     void StartUploadRowsInternal() {
         LOG_D("TBatchRowsUploader StartUploadRowsInternal " << Debug());
 
-        Y_ASSERT(Uploading);
-        Y_ASSERT(!Uploading.Buffer.IsEmpty());
-        Y_ASSERT(!UploaderId);
-        Y_ASSERT(Owner);
+        Y_ENSURE(Uploading);
+        Y_ENSURE(!Uploading.Buffer.IsEmpty());
+        Y_ENSURE(!UploaderId);
+        Y_ENSURE(Owner);
         auto actor = NTxProxy::CreateUploadRowsInternal(
             Owner, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
             NTxProxy::EUploadRowsMode::WriteToTableShadow,

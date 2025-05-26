@@ -187,7 +187,7 @@ namespace NTest {
             return Failed = 0, EScan::Feed;
         }
 
-        TAutoPtr<IDestructable> Finish(EStatus) override
+        TAutoPtr<IDestructable> Finish(EStatus, const std::exception*) override
         {
             Y_TABLET_ERROR("IScan::Finish(...) shouldn't be called in test env");
         }

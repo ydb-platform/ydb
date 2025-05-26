@@ -3629,7 +3629,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
             Y_TABLET_ERROR("unreachable");
         }
 
-        TAutoPtr<IDestructable> Finish(EStatus) override {
+        TAutoPtr<IDestructable> Finish(EStatus, const std::exception*) override {
             delete this;
             return nullptr;
         }

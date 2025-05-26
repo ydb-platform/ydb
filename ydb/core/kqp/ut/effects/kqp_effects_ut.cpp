@@ -623,7 +623,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
             UPSERT INTO `TestTable` (Key, Value1) VALUES
                 (1u, "First"),
                 (2u, "Second");
-            SELECT * FROM `TestTable`;
+            SELECT * FROM `TestTable` WHERE Key = 1u;
         )", txControl).ExtractValueSync();
         UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
         auto tx1 = upsertResult.GetTransaction();
@@ -667,7 +667,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
             UPSERT INTO `TestTable` (Key, Value1) VALUES
                 (1u, "First"),
                 (2u, "Second");
-            SELECT * FROM `TestTable`;
+            SELECT * FROM `TestTable` WHERE Key = 1u;
         )", txControl).ExtractValueSync();
         UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
         auto tx1 = upsertResult.GetTransaction();
@@ -682,7 +682,7 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
             UPSERT INTO `TestTable` (Key, Value1) VALUES
                 (1u, "First"),
                 (2u, "Second");
-            SELECT * FROM `TestTable`;
+            SELECT * FROM `TestTable` WHERE Key = 1u;
         )", TTxControl::Tx(*tx1)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(upsertResult2.GetStatus(), EStatus::ABORTED, upsertResult2.GetIssues().ToString());
     }

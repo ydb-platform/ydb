@@ -27,18 +27,14 @@ namespace NYdb::NConsoleClient {
             const TVector<std::ptrdiff_t> symbolIndexByByte = BuildSymbolByByteIndex(query);
 
             Highlighter->Tokenize(query, [&](NSQLHighlight::TToken&& token) {
+                if (token.Kind == NSQLHighlight::EUnitKind::Error) {
+                    return;
+                }
+
                 TStringBuf content = query.SubString(token.Begin, token.Length);
 
                 const std::ptrdiff_t start = symbolIndexByByte[token.Begin];
-                if (start == InvalidPosition) {
-                    return;
-                }
-
-                size_t length;
-                if (!GetNumberOfUTF8Chars(content.data(), content.size(), length)) {
-                    return;
-                }
-
+                const size_t length = GetNumberOfUTF8Chars(content);
                 const std::ptrdiff_t stop = start + length;
 
                 std::fill(std::next(std::begin(colors), start),

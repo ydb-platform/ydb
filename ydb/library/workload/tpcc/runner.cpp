@@ -196,7 +196,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
 
     Terminals.reserve(terminalsCount);
     for (size_t i = 0; i < terminalsCount; ++i) {
-        size_t warehouseID = i % TERMINALS_PER_WAREHOUSE + 1;
+        size_t warehouseID = i / TERMINALS_PER_WAREHOUSE + 1;
         auto terminalPtr = std::make_unique<TTerminal>(
             i,
             warehouseID,

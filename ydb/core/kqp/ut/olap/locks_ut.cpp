@@ -153,7 +153,17 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
             UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
             const auto resultSet = resultSets[0];
             if (shardCount > 1 && reboot) {
-                UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1); // locks broken
+                const auto deleteUnavailiable = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNAVAILABLE;
+                const auto deleteUndetermined = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNDETERMINED;
+                UNIT_ASSERT(
+                    // If UNAVAILABLE: row should still exist in DB
+                    (deleteUnavailiable && resultSet.RowsCount() == 1) ||
+
+                    // If UNDETERMINED: operation might have succeeded or failed
+                    deleteUndetermined
+
+                    // Any other status is unexpected and will fail this assertion
+                );
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0); // not need locks
             }

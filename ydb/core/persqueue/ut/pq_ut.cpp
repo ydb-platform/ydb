@@ -2563,6 +2563,8 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
 
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
     bool needDropCmdDeleteFirstMessage = true;
     bool foundCmdDeleteFirstMessage = false;
 
@@ -2649,6 +2651,8 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     TFinalizer finalizer(tc);
     tc.EnableDetailedPQLog = true;
     tc.Prepare();
+
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
     const TString sessionId = "session1";
     const TString user = "user1";

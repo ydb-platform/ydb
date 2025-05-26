@@ -118,13 +118,18 @@ int TProxy::Run() {
 }
 
 int TProxy::InitDatabase() {
-    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(Stuff->TablePrefix), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
-        std::cout << "Database " << Database << " on " << Endpoint << " was initialized." << std::endl;
-        return 0;
-    } else {
+    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetCreateTablesSQL(Stuff->TablePrefix), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
+    if (ImportPrefix_.empty()) {
+        if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetInitializeTablesSQL(Stuff->TablePrefix), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); !res.IsSuccess()) {
+            std::cout << res.GetIssues().ToString() << std::endl;
+            return 1;
+        }
+    }
+    std::cout << "Database " << Database << " on " << Endpoint << " was initialized." << std::endl;
+    return 0;
 }
 
 int TProxy::ImportDatabase() {

@@ -22,7 +22,29 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
-// TODO
+/*
+ * TReshuffleKMeansScan performs a post-processing step in a distributed K-means pipeline.
+ * It reassigns data points to given clusters and uploads the reshuffled results.
+ * It scans either a MAIN or BUILD table shard, while the output rows go to the BUILD or POSTING table.
+ *
+ * Request:
+ * - The client sends TEvReshuffleKMeansRequest with:
+ *   - Parent: ID of the scanned cluster
+ *     - If Parent=0, the entire table shard is scanned
+ *   - Child, serving as the base ID for the new cluster IDs computed in this local stage
+ *   - Clusters: list of centroids to which input rows will be reassigned
+ *   - Upload mode (MAIN_TO_BUILD, MAIN_TO_POSTING, BUILD_TO_BUILD or BUILD_TO_POSTING)
+ *     determining input and output layouts
+ *   - The embedding column name and additional data columns to be used for K-means
+ *   - Name of the target table for row results ("posting" or "build")
+ *
+ * Execution Flow:
+ * - TReshuffleKMeansScan scans the relevant input shard range
+ * - For each input row:
+ *   - The closest cluster (from the provided centroids) is determined
+ *   - The row is annotated with a new Child+cluster index ID
+ *   - The row and any specified data columns are written to the output table
+ */
 
 class TReshuffleKMeansScanBase: public TActor<TReshuffleKMeansScanBase>, public NTable::IScan {
 protected:

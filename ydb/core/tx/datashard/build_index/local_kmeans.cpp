@@ -33,7 +33,6 @@ using namespace NKMeans;
  *   - Child, serving as the base ID for the new cluster IDs computed in this local stage
  *   - The embedding column name and additional data columns to be used for K-means
  *   - K (number of clusters), initial random seed, and the vector dimensionality
- *   - The names of "level" and output tables for writing out cluster centroids and row data
  *   - Upload mode (MAIN_TO_BUILD, MAIN_TO_POSTING, BUILD_TO_BUILD or BUILD_TO_POSTING)
  *     determining input and output layouts
  *   - Names of target tables for centroids ("level") and row results ("posting" or "build")

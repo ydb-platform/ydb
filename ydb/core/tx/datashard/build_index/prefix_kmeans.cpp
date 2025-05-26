@@ -38,7 +38,8 @@ using namespace NKMeans;
  *   - The embedding column name and optional data columns used during clustering
  *   - K (number of clusters per prefix group), random seed, and vector dimensionality
  *   - Upload mode (BUILD_TO_BUILD or BUILD_TO_POSTING), determining output layout
- *   - Names of target tables for centroids ("level"), row results ("posting" or "build"), and the prefix mapping ("prefix")
+ *   - Names of target tables for centroids ("level"), row results ("posting" or "build"),
+ *     and the prefix mapping ("prefix")
  *
  * Execution Flow:
  * - TPrefixKMeansScan iterates over the table shard in key order, processing one prefix group at a time:
@@ -49,7 +50,6 @@ using namespace NKMeans;
  *     - Output: rows annotated with cluster IDs and optional data columns
  *     - Prefix: records the (prefix key, parent cluster ID) mapping
  */
-
 
 class TPrefixKMeansScanBase: public TActor<TPrefixKMeansScanBase>, public NTable::IScan {
 protected:

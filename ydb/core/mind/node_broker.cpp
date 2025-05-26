@@ -459,7 +459,7 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
 
 void TNodeBroker::ScheduleProcessSubscribersQueue(const TActorContext &ctx)
 {
-    ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessSubscribersQueue);
+    ctx.Schedule(TDuration::MilliSeconds(1), new TEvPrivate::TEvProcessSubscribersQueue);
 }
 
 void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
@@ -1687,18 +1687,12 @@ void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
 
 void TNodeBroker::Handle(TEvPrivate::TEvProcessSubscribersQueue::TPtr &, const TActorContext &ctx)
 {
-    constexpr size_t MAX_BATCH_SIZE = 1000;
-
-    size_t batchSize = 0;
-    while (batchSize < SubscribersQueue.Size() && batchSize < MAX_BATCH_SIZE) {
+    if (!SubscribersQueue.Empty()) {
         auto& subscriber = *SubscribersQueue.Front();
-        if (subscriber.SentVersion >= Committed.Epoch.Version) {
-            break;
+        if (subscriber.SentVersion < Committed.Epoch.Version) {
+            SendUpdateNodes(subscriber, ctx);
         }
-        SendUpdateNodes(subscriber, ctx);
-        ++batchSize;
     }
-
     ScheduleProcessSubscribersQueue(ctx);
 }
 

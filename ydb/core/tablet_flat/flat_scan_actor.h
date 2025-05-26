@@ -687,6 +687,8 @@ namespace NOps {
                     << TBackTrace::FromCurrentException().PrintToString();
             }
 
+            GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
+
             Terminate(NTable::EAbort::Host, &exc);
 
             return true;

@@ -321,8 +321,9 @@ private:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override
     {
+        Y_ENSURE(!exc, exc->what());
         Y_ENSURE((int)Abort == (int)abort);
 
         auto ctx = ActorContext();

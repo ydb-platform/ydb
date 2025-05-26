@@ -144,13 +144,18 @@ public:
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) final {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) final {
         auto& record = Response->Record;
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
 
         if (abort != NTable::EAbort::None) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+            if (exc) {
+                NYql::TIssues issues;
+                issues.AddIssue(NYql::TIssue(exc->what()));
+                NYql::IssuesToMessage(issues, record.MutableIssues());
+            }
         } else {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
             FillResponse();

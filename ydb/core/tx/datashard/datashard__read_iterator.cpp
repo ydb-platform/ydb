@@ -1325,16 +1325,21 @@ private:
         return EScan::Reset;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) final {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) final {
         if (!Aborted) {
             switch (abort) {
                 case EAbort::None:
                     SendResult({}, /* last */ true);
                     break;
-                case EAbort::Host:
-                    SendError(Ydb::StatusIds::UNAVAILABLE,
-                        TStringBuilder() << "Shard " << TabletId << " failed during a table scan");
+                case EAbort::Host: {
+                    TStringBuilder errorMessage;
+                    errorMessage << "Shard " << TabletId << " failed during a table scan";
+                    if (exc) {
+                        errorMessage << " " << exc->what();
+                    }
+                    SendError(Ydb::StatusIds::UNAVAILABLE, errorMessage);
                     break;
+                }
                 case EAbort::Term:
                     // scan was cancelled, either reply not needed or was sent already
                     break;

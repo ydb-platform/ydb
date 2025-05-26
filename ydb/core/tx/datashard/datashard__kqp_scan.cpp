@@ -332,12 +332,13 @@ private:
     }
 
 private:
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) final {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) final {
         auto prio = abort == EAbort::None ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan"
             << ", at: " << ScanActorId << ", scanId: " << ScanId
             << ", table: " << TablePath << ", reason: " << (int) abort
-            << ", abortEvent: " << (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>")));
+            << ", abortEvent: " << (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>"))
+            << ", exc: " << (exc ? exc->what() : TString("<none>")));
 
         if (abort != EAbort::None || AbortEvent) {
             auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation, TabletId);
@@ -352,8 +353,12 @@ private:
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             } else {
                 ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
-                auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED, TStringBuilder()
-                    << "Table " << TablePath << " scan failed, reason: " << ToString((int) abort));
+                TStringBuilder error;
+                error << "Table " << TablePath << " scan failed, reason: " << ToString((int) abort);
+                if (exc) {
+                    error << " " << exc->what();
+                }
+                auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED, error);
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             }
 

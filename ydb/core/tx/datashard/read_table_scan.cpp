@@ -695,13 +695,19 @@ private:
         return cmp <= 0;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override
     {
         auto ctx = ActorContext();
 
         if (!SchemaChanged) {
-            if (abort != EAbort::None)
-                Error = "Aborted by scan host env";
+            if (abort != EAbort::None) {
+                TStringBuilder error;
+                error << "Aborted by scan host env";
+                if (exc) {
+                    error << " " << exc->what();
+                }
+                Error = error;
+            }
 
             TAutoPtr<TEvTxProcessing::TEvStreamQuotaRelease> request
                 = new TEvTxProcessing::TEvStreamQuotaRelease;

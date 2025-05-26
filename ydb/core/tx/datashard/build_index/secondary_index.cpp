@@ -224,7 +224,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override {
         if (Uploader) {
             this->Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
@@ -239,7 +239,9 @@ public:
         if (abort != EAbort::None) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
             UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env"));
-
+            if (exc) {
+                UploadStatus.Issues.AddIssue(NYql::TIssue(exc->what()));
+            }
             LOG_W(Debug());
         } else if (!UploadStatus.IsSuccess()) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);

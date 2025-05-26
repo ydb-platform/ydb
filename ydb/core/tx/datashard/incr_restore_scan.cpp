@@ -186,11 +186,12 @@ public:
         return Progress();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override {
-        LOG_D("Finish " << static_cast<ui64>(abort));
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override {
+        LOG_D("Finish " << static_cast<ui64>(abort)
+            << ", exc: " << (exc ? exc->what() : TString("<none>")));
 
         if (abort != EAbort::None) {
-            // FIXME
+            // TODO: https://github.com/ydb-platform/ydb/issues/18797
         }
 
         Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId));

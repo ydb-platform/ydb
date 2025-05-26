@@ -180,6 +180,9 @@ public:
 
     bool OnUnhandledException(const std::exception& exc) override
     {
+        if (!Driver) {
+            return false;
+        }
         Driver->Fail(exc);
         return true;
     }

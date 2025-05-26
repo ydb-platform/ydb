@@ -56,7 +56,7 @@ namespace NTabletFlatExecutor {
         TVector<ui32> YellowStopChannels;
     };
 
-    class TOpsCompact: private ::NActors::IActorCallback, public NTable::IVersionScan {
+    class TOpsCompact: private ::NActors::IActorCallback, public IActorExceptionHandler, public NTable::IVersionScan {
         using TEvPut = TEvBlobStorage::TEvPut;
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
         using TScheme = NTable::TRowScheme;
@@ -325,7 +325,7 @@ namespace NTabletFlatExecutor {
             TxStatus.emplace_back(new NTable::TTxStatusPartStore(dataId, Conf->Epoch, data));
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override
+        TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override
         {
             const auto fail = Failed || !Finished || abort != EAbort::None;
 
@@ -392,7 +392,7 @@ namespace NTabletFlatExecutor {
                 auto raito = WriteStats.Bytes ? (WriteStats.Coded + 0.) / WriteStats.Bytes : 0.;
 
                 logl
-                    << NFmt::Do(*this) << " end=" << ui32(abort)
+                    << NFmt::Do(*this) << " end=" << ui32(abort) << (exc ? exc->what() : "")
                     << ", " << Blobs << " blobs " << WriteStats.Rows << "r"
                     << " (max " << Conf->Layout.MaxRows << ")"
                     << ", put " << NFmt::If(Spent.Get());
@@ -435,6 +435,15 @@ namespace NTabletFlatExecutor {
             PassAway();
 
             return prod;
+        }
+
+        bool OnUnhandledException(const std::exception& exc) override
+        {
+            if (!Driver) {
+                return false;
+            }
+            Driver->Fail(exc);
+            return true;
         }
 
         EScan Flush(bool last)

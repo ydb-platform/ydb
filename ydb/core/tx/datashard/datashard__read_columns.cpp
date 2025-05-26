@@ -127,7 +127,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception*) override {
+    TAutoPtr<IDestructable> Finish(EAbort abort, const std::exception* exc) override {
         Result = new TEvDataShard::TEvReadColumnsResponse(TabletId);
 
         if (abort == EAbort::None) {
@@ -146,10 +146,15 @@ public:
                         << Result->Record.GetBlocks().size() << ") shardFinished: " << ShardFinished);
         } else {
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, TabletId
-                        << " Read columns scan failed for table [" << TableName << "]");
+                        << " Read columns scan failed for table [" << TableName << "]"
+                        << ", exc: " << (exc ? exc->what() : TString("<none>")));
 
             Result->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
-            Result->Record.SetErrorDescription("Scan aborted");
+            if (exc) {
+                Result->Record.SetErrorDescription(TStringBuilder() << "Scan failed " << exc->what());
+            } else {
+                Result->Record.SetErrorDescription("Scan aborted");
+            }
         }
 
         TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), Result.Release()));

@@ -459,7 +459,10 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
 
 void TNodeBroker::ScheduleProcessSubscribersQueue(const TActorContext &ctx)
 {
-    ctx.Schedule(TDuration::MilliSeconds(1), new TEvPrivate::TEvProcessSubscribersQueue);
+    if (!ScheduledProcessSubscribersQueue && !SubscribersQueue.Empty()) {
+        ctx.Schedule(TDuration::MilliSeconds(1), new TEvPrivate::TEvProcessSubscribersQueue);
+        ScheduledProcessSubscribersQueue = true;
+    }
 }
 
 void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
@@ -1687,13 +1690,14 @@ void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
 
 void TNodeBroker::Handle(TEvPrivate::TEvProcessSubscribersQueue::TPtr &, const TActorContext &ctx)
 {
+    ScheduledProcessSubscribersQueue = false;
     if (!SubscribersQueue.Empty()) {
         auto& subscriber = *SubscribersQueue.Front();
         if (subscriber.SentVersion < Committed.Epoch.Version) {
             SendUpdateNodes(subscriber, ctx);
+            ScheduleProcessSubscribersQueue(ctx);
         }
     }
-    ScheduleProcessSubscribersQueue(ctx);
 }
 
 TNodeBroker::TState::TState(TNodeBroker* self)

@@ -1520,7 +1520,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     // Unit tests for datetime pushdowns in query service
     Y_UNIT_TEST(PredicatePushdown_Datetime_QS) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -1635,7 +1639,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     // Unit tests for datetime pushdowns in scan query
     Y_UNIT_TEST(PredicatePushdown_Datetime_SQ) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 

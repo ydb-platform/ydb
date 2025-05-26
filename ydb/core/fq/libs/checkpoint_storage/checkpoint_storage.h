@@ -25,7 +25,7 @@ public:
     virtual NThreading::TFuture<NYql::TIssues> RegisterGraphCoordinator(
         const TCoordinatorId& coordinator) = 0;
 
-    virtual NThreading::TFuture<TGetCoordinatorsResult> GetCoordinators() = 0;
+    //virtual NThreading::TFuture<TGetCoordinatorsResult> GetCoordinators() = 0;
 
     virtual NThreading::TFuture<TCreateCheckpointResult> CreateCheckpoint(
         const TCoordinatorId& coordinator,

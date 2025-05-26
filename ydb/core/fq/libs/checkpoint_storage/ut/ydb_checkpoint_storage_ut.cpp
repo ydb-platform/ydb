@@ -105,30 +105,30 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
         UNIT_ASSERT(issues.Empty());
     }
 
-    Y_UNIT_TEST(ShouldGetCoordinators)
-    {
-        auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldRegisterGraph");
+    // Y_UNIT_TEST(ShouldGetCoordinators)
+    // {
+    //     auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldRegisterGraph");
 
-        TCoordinatorId coordinator1("graph1", 11);
-        auto issues = storage->RegisterGraphCoordinator(coordinator1).GetValueSync();
+    //     TCoordinatorId coordinator1("graph1", 11);
+    //     auto issues = storage->RegisterGraphCoordinator(coordinator1).GetValueSync();
 
-        TCoordinatorId coordinator2("graph2", 17);
-        issues = storage->RegisterGraphCoordinator(coordinator2).GetValueSync();
+    //     TCoordinatorId coordinator2("graph2", 17);
+    //     issues = storage->RegisterGraphCoordinator(coordinator2).GetValueSync();
 
-        auto getResult = storage->GetCoordinators().GetValueSync();
-        UNIT_ASSERT(getResult.second.Empty());
-        UNIT_ASSERT_VALUES_EQUAL(getResult.first.size(), 2UL);
+    //     auto getResult = storage->GetCoordinators().GetValueSync();
+    //     UNIT_ASSERT(getResult.second.Empty());
+    //     UNIT_ASSERT_VALUES_EQUAL(getResult.first.size(), 2UL);
 
-        for (const auto& coordinator: getResult.first) {
-            if (coordinator.GraphId == "graph1") {
-                UNIT_ASSERT_VALUES_EQUAL(coordinator.Generation, 11);
-            } else if (coordinator.GraphId == "graph2") {
-                UNIT_ASSERT_VALUES_EQUAL(coordinator.Generation, 17);
-            } else {
-                UNIT_ASSERT(false);
-            }
-        }
-    }
+    //     for (const auto& coordinator: getResult.first) {
+    //         if (coordinator.GraphId == "graph1") {
+    //             UNIT_ASSERT_VALUES_EQUAL(coordinator.Generation, 11);
+    //         } else if (coordinator.GraphId == "graph2") {
+    //             UNIT_ASSERT_VALUES_EQUAL(coordinator.Generation, 17);
+    //         } else {
+    //             UNIT_ASSERT(false);
+    //         }
+    //     }
+    // }
 
     // TODO: add various tests on graph registration
 

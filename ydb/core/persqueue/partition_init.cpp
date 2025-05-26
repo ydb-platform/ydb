@@ -723,28 +723,35 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         fwz.Head.PartNo = 0;
     }
 
+    auto getStartOffset = [](const TKey& k) {
+        return k.GetOffset() + (k.GetPartNo() ? 1 : 0);
+    };
+    auto getEndOffset = [](const TKey& k) {
+        return k.GetOffset() + k.GetCount();
+    };
+
     if (!cz.HeadKeys.empty()) {
         const auto& front = cz.HeadKeys.front();
         const auto& back = cz.HeadKeys.back();
 
-        cz.StartOffset = front.Key.GetOffset();
-        cz.EndOffset = back.Key.GetOffset() + back.Key.GetCount();
+        cz.StartOffset = getStartOffset(front.Key);
+        cz.EndOffset = getEndOffset(back.Key);
     }
 
     if (!cz.DataKeysBody.empty()) {
         const auto& front = cz.DataKeysBody.front();
         const auto& back = cz.DataKeysBody.back();
 
-        cz.StartOffset = Min<ui64>(front.Key.GetOffset(), cz.StartOffset);
-        cz.EndOffset = Max<ui64>(back.Key.GetOffset() + back.Key.GetCount(), cz.EndOffset);
+        cz.StartOffset = Min<ui64>(getStartOffset(front.Key), cz.StartOffset);
+        cz.EndOffset = Max<ui64>(getEndOffset(back.Key), cz.EndOffset);
     }
 
     if (!fwz.DataKeysBody.empty()) {
         const auto& front = fwz.DataKeysBody.front();
         const auto& back = fwz.DataKeysBody.back();
 
-        fwz.StartOffset = front.Key.GetOffset();
-        fwz.EndOffset = back.Key.GetOffset() + back.Key.GetCount();
+        fwz.StartOffset = getStartOffset(front.Key);
+        fwz.EndOffset = getEndOffset(back.Key);
     }
 
     if (cz.StartOffset > cz.EndOffset) {

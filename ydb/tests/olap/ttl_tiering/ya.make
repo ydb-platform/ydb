@@ -15,6 +15,10 @@ TEST_SRCS(
     tier_delete.py
 )
 
+IF(SANITIZER_TYPE)
+    REQUIREMENTS(ram:16)
+ENDIF()
+
 SIZE(MEDIUM)
 
 PEERDIR(

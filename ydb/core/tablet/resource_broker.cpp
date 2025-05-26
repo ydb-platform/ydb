@@ -1302,7 +1302,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
 
     const ui64 DefaultQueueCPU = 2;
     const ui64 KqpRmQueueCPU = 4;
-    const ui64 TotalCPU = 20;
+    const ui64 TotalCPU = 256; // means unlimited
 
     // Note: these memory limits will be overwritten by MemoryController
     const ui64 KqpRmQueueMemory = 10_GB;

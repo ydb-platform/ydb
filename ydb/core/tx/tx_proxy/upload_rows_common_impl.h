@@ -582,6 +582,9 @@ private:
     }
 
     bool IsTimestampColumnsArePositive(const std::shared_ptr<arrow::RecordBatch>& batch, TString& error) {
+        if (!batch) {
+            return true;
+        }
         for (int i = 0; i < batch->num_columns(); ++i) {
             std::shared_ptr<arrow::Array> column = batch->column(i);
             std::shared_ptr<arrow::DataType> type = column->type();

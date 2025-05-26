@@ -13,7 +13,6 @@
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
 
-
 namespace NKikimr::NPQ {
 
 const static TString TOPIC_NAME = "rt3.dc1--topic";
@@ -1687,6 +1686,7 @@ Y_UNIT_TEST(TestPQRead) {
         tc.Prepare(dispatchName, setup, activeZone);
 
         tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete
 

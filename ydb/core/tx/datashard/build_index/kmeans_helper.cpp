@@ -97,19 +97,19 @@ TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
     ui32& dataPos, NTable::TTag& embeddingTag)
 {
     auto tags = GetAllTags(table);
-    TTags uploadTags;
-    uploadTags.reserve(1 + data.size());
+    TTags result;
+    result.reserve(1 + data.size());
     embeddingTag = tags.at(embedding);
     if (auto it = std::find(data.begin(), data.end(), embedding); it != data.end()) {
         embeddingPos = it - data.begin();
         dataPos = 0;
     } else {
-        uploadTags.push_back(embeddingTag);
+        result.push_back(embeddingTag);
     }
     for (const auto& column : data) {
-        uploadTags.push_back(tags.at(column));
+        result.push_back(tags.at(column));
     }
-    return uploadTags;
+    return result;
 }
 
 std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
@@ -118,18 +118,18 @@ std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table,
 {
     auto types = GetAllTypes(table);
 
-    auto outputTypes = std::make_shared<NTxProxy::TUploadTypes>();
-    outputTypes->reserve(1 + 1 + std::min((table.KeyColumnTypes.size() - prefixColumns) + data.size(), types.size()));
+    auto result = std::make_shared<NTxProxy::TUploadTypes>();
+    result->reserve(1 + 1 + std::min((table.KeyColumnTypes.size() - prefixColumns) + data.size(), types.size()));
 
     Ydb::Type type;
     type.set_type_id(NTableIndex::ClusterIdType);
-    outputTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
+    result->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
 
     auto addType = [&](const auto& column) {
         auto it = types.find(column);
         if (it != types.end()) {
             NScheme::ProtoFromTypeInfo(it->second, type);
-            outputTypes->emplace_back(it->first, type);
+            result->emplace_back(it->first, type);
             types.erase(it);
         }
     };
@@ -154,7 +154,7 @@ std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table,
             Y_ASSERT(false);
 
     }
-    return outputTypes;
+    return result;
 }
 
 }

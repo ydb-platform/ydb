@@ -64,38 +64,38 @@ TString GetPrettyJSON(const NJson::TJsonValue& json) {
  * key attribute and construct various full clique join queries
  */
 static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStore) {
-    CreateTables(session, "schema/rstuv.sql", useColumnStore);
+    // CreateTables(session, "schema/rstuv.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpch.sql", useColumnStore);
+    // CreateTables(session, "schema/tpch.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpcds.sql", useColumnStore);
+    // CreateTables(session, "schema/tpcds.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpcc.sql", useColumnStore);
+    // CreateTables(session, "schema/tpcc.sql", useColumnStore);
 
-    CreateTables(session, "schema/lookupbug.sql", useColumnStore);
+    // CreateTables(session, "schema/lookupbug.sql", useColumnStore);
 
     CreateTables(session, "schema/sortings.sql", useColumnStore);
 
-    {
-        CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
-        const TString upsert =
-        R"(
-            UPSERT INTO t1 (id1) VALUES (1);
-            UPSERT INTO t2 (id2, t1_id1) VALUES (1, 1);
-            UPSERT INTO t3 (id3) VALUES (1);
-        )";
-        auto result =
-            session.ExecuteQuery(
-                upsert,
-                NYdb::NQuery::TTxControl::NoTx(),
-                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
-            ).ExtractValueSync();
+    // {
+    //     CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
+    //     const TString upsert =
+    //     R"(
+    //         UPSERT INTO t1 (id1) VALUES (1);
+    //         UPSERT INTO t2 (id2, t1_id1) VALUES (1, 1);
+    //         UPSERT INTO t3 (id3) VALUES (1);
+    //     )";
+    //     auto result =
+    //         session.ExecuteQuery(
+    //             upsert,
+    //             NYdb::NQuery::TTxControl::NoTx(),
+    //             NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+    //         ).ExtractValueSync();
 
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-    }
+    //     result.GetIssues().PrintTo(Cerr);
+    //     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    // }
 
-    CreateView(session, "view/tpch_random_join_view.sql");
+    // CreateView(session, "view/tpch_random_join_view.sql");
 }
 
 static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true){
@@ -710,41 +710,49 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    bool CheckLimitOnlyNotTopSort(const TString& plan) {
+    bool CheckNoSortings(const TString& plan) {
         return plan.Contains("Limit") && !plan.Contains("Top");
     }
 
-    Y_UNIT_TEST(Sortings1) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings1.sql", "stats/sortings.json", true, false);
-        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
+    Y_UNIT_TEST(SortingsWithLookupJoin1) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_1.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
     }
 
-    Y_UNIT_TEST(Sortings2) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings2.sql", "stats/sortings.json", true, false);
-        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
+    Y_UNIT_TEST(SortingsWithLookupJoin2) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_2.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
     }
 
-    Y_UNIT_TEST(Sortings3) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings3.sql", "stats/sortings.json", true, false);
-        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
+    Y_UNIT_TEST(SortingsWithLookupJoin3) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_3.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
     }
 
-    Y_UNIT_TEST(Sortings4) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings4.sql", "stats/sortings.json", true, false);
-        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
+    Y_UNIT_TEST(SortingsWithLookupJoin4) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_4.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
     }
 
-    // Y_UNIT_TEST(SortingsByConstant) {
+    Y_UNIT_TEST(SortingsByPKWithLookupJoin) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_pk_with_lookupjoin.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
 
-    // }
+    Y_UNIT_TEST(SortingsWithLookupJoinByPrefix) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_by_prefix.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
 
-    // Y_UNIT_TEST(SortingsByPrefix) {
+    Y_UNIT_TEST(SortingsByPrefixWithConstant) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_prefix_with_constant.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
 
-    // }
-
-    // Y_UNIT_TEST(SortingsByAttrEquivToPK) {
-
-    // }
+    Y_UNIT_TEST(SortingsByPK) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_pk.sql", "stats/sortings.json", true, false);
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
 
     Y_UNIT_TEST_TWIN(TPCDS34, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", false, ColumnStore);

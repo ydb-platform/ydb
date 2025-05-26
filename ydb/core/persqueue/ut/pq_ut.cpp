@@ -2175,6 +2175,7 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
         tc.Prepare(dispatchName, setup, activeZone);
 
         tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         PQTabletPrepare({}, {{"aaa", true}}, tc);
         activeZone = false;

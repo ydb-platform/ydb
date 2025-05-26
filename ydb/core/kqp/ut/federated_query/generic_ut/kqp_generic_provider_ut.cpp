@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
@@ -10,6 +11,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/query.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -620,6 +624,74 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(IcebergHadoopTokenFilterPushdown) {
             TestFilterPushdown(EProviderType::IcebergHadoopToken);
+        }
+
+        void TestFailsOnIncorrectScriptExecutionOperation(const TString& operationId, const TString& fetchToken) {
+            auto clientMock = std::make_shared<TConnectorClientMock>();
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(EProviderType::Ydb);
+            auto appConfig = CreateDefaultAppConfig();
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory, DEFAULT_DOMAIN_ROOT,
+                NTestUtils::CreateCredentialProvider());
+
+            // Create trash query
+            NYdbGrpc::TGRpcClientLow clientLow;
+            const auto channel = grpc::CreateChannel("localhost:" + ToString(kikimr->GetTestServer().GetGRpcServer().GetPort()), grpc::InsecureChannelCredentials());
+            const auto queryServiceStub = Ydb::Query::V1::QueryService::NewStub(channel);
+            const auto operationServiceStub = Ydb::Operation::V1::OperationService::NewStub(channel);
+
+            {
+                grpc::ClientContext context;
+                Ydb::Query::FetchScriptResultsRequest request;
+                request.set_operation_id(operationId);
+                request.set_fetch_token(fetchToken);
+                Ydb::Query::FetchScriptResultsResponse response;
+                grpc::Status st = queryServiceStub->FetchScriptResults(&context, request, &response);
+                UNIT_ASSERT(st.ok());
+                UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::BAD_REQUEST, response);
+            }
+
+            {
+                grpc::ClientContext context;
+                Ydb::Operations::ForgetOperationRequest request;
+                request.set_id(operationId);
+                Ydb::Operations::ForgetOperationResponse response;
+                grpc::Status st = operationServiceStub->ForgetOperation(&context, request, &response);
+                UNIT_ASSERT(st.ok());
+                UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::BAD_REQUEST, response);
+            }
+
+            {
+                grpc::ClientContext context;
+                Ydb::Operations::GetOperationRequest request;
+                request.set_id(operationId);
+                Ydb::Operations::GetOperationResponse response;
+                grpc::Status st = operationServiceStub->GetOperation(&context, request, &response);
+                UNIT_ASSERT(st.ok());
+                UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::BAD_REQUEST, response);
+            }
+
+            {
+                grpc::ClientContext context;
+                Ydb::Operations::CancelOperationRequest request;
+                request.set_id(operationId);
+                Ydb::Operations::CancelOperationResponse response;
+                grpc::Status st = operationServiceStub->CancelOperation(&context, request, &response);
+                UNIT_ASSERT(st.ok());
+                UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::BAD_REQUEST, response);
+            }
+        }
+
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionOperationId1) {
+            TestFailsOnIncorrectScriptExecutionOperation("trash", "");
+        }
+
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionOperationId2) {
+            TestFailsOnIncorrectScriptExecutionOperation("ydb://scriptexec/9?fd=b214872a-d040e60d-62a1b34-a9be3c3d", "trash");
+        }
+
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionFetchToken) {
+            TestFailsOnIncorrectScriptExecutionOperation("", "trash");
         }
     }
 }

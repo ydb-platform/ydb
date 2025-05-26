@@ -30,22 +30,20 @@ private:
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) override;
-    virtual void DoAbort() override {
-        if (DuplicatesManager) {
-            NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
-            DuplicatesManager = TActorId();
-        }
-    }
 
 public:
     virtual TString ProfileDebugString() const override;
+
+    void RegisterActors();
 
     const TActorId& GetDuplicatesManagerVerified() const {
         AFL_VERIFY(DuplicatesManager);
         return DuplicatesManager;
     }
 
-    TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext);
+    TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
+        : TBase(commonContext) {
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

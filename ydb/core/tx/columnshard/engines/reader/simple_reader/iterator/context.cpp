@@ -104,10 +104,11 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     return std::move(acc).Build();
 }
 
-TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : TBase(commonContext) {
+void TSpecialReadContext::RegisterActors() {
+    AFL_VERIFY(!DuplicatesManager);
     if (GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES) {
-        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this));
+        DuplicatesManager =
+            NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this), GetCommonContext()->GetScanActorId());
     }
 }
 

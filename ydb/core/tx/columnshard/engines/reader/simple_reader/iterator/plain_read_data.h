@@ -19,6 +19,7 @@ private:
 
 protected:
     virtual TConclusionStatus DoStart() override {
+        SpecialReadContext->RegisterActors();
         return Scanner->Start();
     }
 

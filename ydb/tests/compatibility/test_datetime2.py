@@ -213,7 +213,7 @@ class TestDatetime2(MixedClusterFixture):
             DateTime::MakeDate(DateTime::ParseIso8601(iso8601_str)),
             DateTime::MakeDate(DateTime::ParseHttp(http_str)),
             DateTime::MakeDate(DateTime::ParseX509(x509_str)),
-            DateTime::MakeDate(DateTime::Parse(iso8601_str, "%Y-%m-%dT%H:%M:%S"))
+            DateTime::MakeDate(DateTime::Parse( "%Y-%m-%dT%H:%M:%S")(iso8601_str))
         FROM {self.table_name};
         """
 

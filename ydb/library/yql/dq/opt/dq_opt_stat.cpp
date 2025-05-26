@@ -956,7 +956,6 @@ void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TTypeAnnotationCon
             aliases.Merge(*memberStats->TableAliases);
         }
 
-        Cout << renameFrom << " " << renameTo << Endl;
         aliases.AddRename(renameFrom, renameTo);
     }
 
@@ -991,6 +990,60 @@ void InferStatisticsForTopBase(const TExprNode::TPtr& input, TTypeAnnotationCont
     YQL_CLOG(TRACE, CoreDq) << "Input of the TopBase: " << inputStats->ToString();
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for TopBase: " << topStats->ToString();
     typeCtx->SetStats(inputNode.Raw(), std::move(topStats));
+}
+
+void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();
+
+    TTableAliasMap tableAliases;
+    for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
+        auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+
+        auto scope = input.Scope();
+        if (!scope.Maybe<TCoAtom>()){
+            continue;
+        }
+
+        TString label = scope.Cast<TCoAtom>().StringValue();
+        auto joinArg = input.List();
+        auto inputStats = typeCtx->GetStats(joinArg.Raw());
+        if (inputStats == nullptr) {
+            continue;
+        }
+
+        if (inputStats->Aliases) {
+            inputStats->Aliases->insert(std::move(label));
+        }
+        if (inputStats->TableAliases) {
+            tableAliases.Merge(*inputStats->TableAliases);
+        }
+    }
+
+    auto joinSettings = equiJoin.Arg(equiJoin.ArgCount() - 1);
+    for (const auto& option : joinSettings.Ref().Children()) {
+        if (option->Head().IsAtom("rename")) {
+            TCoAtom fromName{option->Child(1)};
+            YQL_ENSURE(!fromName.Value().empty());
+            TCoAtom toName{option->Child(2)};
+            if (!toName.Value().empty()) {
+                tableAliases.AddRename(fromName.StringValue(), toName.StringValue());
+            }
+        }
+    }
+
+    if (tableAliases.Empty()) {
+        return;
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "Propogate TableAliases for EquiJoin: " << tableAliases.ToString();
+
+    if (auto equiJoinStats = typeCtx->GetStats(equiJoin.Raw())) {
+        equiJoinStats->TableAliases = MakeIntrusive<TTableAliasMap>(std::move(tableAliases));
+    } else {
+        equiJoinStats = std::make_shared<TOptimizerStatistics>();
+        equiJoinStats->TableAliases = MakeIntrusive<TTableAliasMap>(std::move(tableAliases));
+        typeCtx->SetStats(equiJoin.Raw(), std::move(equiJoinStats));
+    }
 }
 
 TOrderingInfo GetTopBaseSortingOrderingIdx(

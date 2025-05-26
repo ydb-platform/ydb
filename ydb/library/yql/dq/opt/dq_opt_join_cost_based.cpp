@@ -608,7 +608,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     YQL_ENSURE(equiJoin.ArgCount() >= 4);
 
     auto stats = typesCtx.GetStats(equiJoin.Raw());
-    if (stats) {
+    if (stats && stats->CBOFired) {
         return node;
     }
 
@@ -676,6 +676,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     // rewrite the join tree and record the output statistics
     TExprBase res = RearrangeEquiJoinTree(ctx, equiJoin, joinTree);
+    joinTree->Stats.CBOFired = true;
     typesCtx.SetStats(res.Raw(), std::make_shared<TOptimizerStatistics>(joinTree->Stats));
     return res;
 

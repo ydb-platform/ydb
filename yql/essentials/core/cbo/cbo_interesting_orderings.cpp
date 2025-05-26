@@ -279,6 +279,56 @@ std::size_t TFDStorage::AddEquivalence(
     return FDs.size() - 1;
 }
 
+std::size_t TFDStorage::AddConstant(
+    const TJoinColumn& constantColumn,
+    bool alwaysActive,
+    TTableAliasMap* tableAliases
+) {
+    auto fd = TFunctionalDependency{
+        .AntecedentItems = {},
+        .ConsequentItem = static_cast<std::size_t>(GetIdxByColumn(constantColumn, true, tableAliases)),
+        .Type = TFunctionalDependency::EImplication,
+        .AlwaysActive = alwaysActive
+    };
+
+    FDs.push_back(std::move(fd));
+    return FDs.size() - 1;
+}
+
+std::size_t TFDStorage::AddImplication(
+    const TVector<TJoinColumn>& antecedentColumns,
+    const TJoinColumn& consequentColumn,
+    bool alwaysActive,
+    TTableAliasMap* tableAliases
+) {
+    auto fd = TFunctionalDependency{
+        .AntecedentItems = ConvertColumnIntoIndexes(antecedentColumns, true, tableAliases),
+        .ConsequentItem = static_cast<std::size_t>(GetIdxByColumn(consequentColumn, true, tableAliases)),
+        .Type = TFunctionalDependency::EImplication,
+        .AlwaysActive = alwaysActive
+    };
+
+    FDs.push_back(std::move(fd));
+    return FDs.size() - 1;
+}
+
+std::size_t TFDStorage::AddEquivalence(
+    const TJoinColumn& lhs,
+    const TJoinColumn& rhs,
+    bool alwaysActive,
+    TTableAliasMap* tableAliases
+) {
+    auto fd = TFunctionalDependency{
+        .AntecedentItems = {static_cast<std::size_t>(GetIdxByColumn(lhs, true, tableAliases))},
+        .ConsequentItem = static_cast<std::size_t>(GetIdxByColumn(rhs, true, tableAliases)),
+        .Type = TFunctionalDependency::EEquivalence,
+        .AlwaysActive = alwaysActive
+    };
+
+    FDs.push_back(std::move(fd));
+    return FDs.size() - 1;
+}
+
 i64 TFDStorage::FindInterestingOrderingIdx(
     const std::vector<TJoinColumn>& interestingOrdering,
     TOrdering::EType type,

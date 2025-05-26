@@ -128,6 +128,9 @@ struct TOptimizerStatistics {
     std::optional<std::size_t> ShuffleOrderingIdx;
     std::int64_t SortingOrderingIdx = -1;
 
+    // special flag for equijoin
+    bool CBOFired = false;
+
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics& operator=(TOptimizerStatistics&&) = default;
     TOptimizerStatistics(const TOptimizerStatistics&) = default;

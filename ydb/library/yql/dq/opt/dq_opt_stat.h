@@ -27,6 +27,7 @@ void InferStatisticsForAsList(const TExprNode::TPtr& input, TTypeAnnotationConte
 void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForTopBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 bool InferStatisticsForListParam(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats);
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input);
 
@@ -73,13 +74,15 @@ public:
 
 public:
     TPredicateSelectivityComputer(
-        const std::shared_ptr<TOptimizerStatistics>& stats,
+        std::shared_ptr<TOptimizerStatistics> stats,
         bool collectColumnsStatUsedMembers = false,
-        bool collectMemberEqualities = false
+        bool collectMemberEqualities = false,
+        bool collectConstantMembers = false
     )
-        : Stats(stats)
+        : Stats(std::move(stats))
         , CollectColumnsStatUsedMembers(collectColumnsStatUsedMembers)
         , CollectMemberEqualities(collectMemberEqualities)
+        , CollectConstantMembers(collectConstantMembers)
     {}
 
     double Compute(const NNodes::TExprBase& input);
@@ -93,20 +96,45 @@ public:
         return MemberEqualities;
     }
 
-protected:
-    double ComputeEqualitySelectivity(const NYql::NNodes::TExprBase& left, const NYql::NNodes::TExprBase& right);
-    double ComputeInequalitySelectivity(const NYql::NNodes::TExprBase& left, const NYql::NNodes::TExprBase& right,
-                                        EInequalityPredicateType predicate);
+    TVector<NNodes::TCoMember> GetConstantMembers() {
+        return ConstantMembers;
+    }
 
-    double ComputeComparisonSelectivity(const NYql::NNodes::TExprBase& left, const NYql::NNodes::TExprBase& right);
+protected:
+    double ComputeImpl(
+        const NNodes::TExprBase& input,
+        bool underNot,
+        bool collectConstantMembers
+    );
+
+    double ComputeEqualitySelectivity(
+        const NYql::NNodes::TExprBase& left,
+        const NYql::NNodes::TExprBase& right,
+        bool collectConstantMembers
+    );
+
+    double ComputeInequalitySelectivity(
+        const NYql::NNodes::TExprBase& left,
+        const NYql::NNodes::TExprBase& right,
+        EInequalityPredicateType predicate
+    );
+
+    double ComputeComparisonSelectivity(
+        const NYql::NNodes::TExprBase& left,
+        const NYql::NNodes::TExprBase& right
+    );
 
 private:
-    const std::shared_ptr<TOptimizerStatistics>& Stats;
-    TColumnStatisticsUsedMembers ColumnStatsUsedMembers{};
-    TMemberEqualities MemberEqualities{};
+    std::shared_ptr<TOptimizerStatistics> Stats;
 
     bool CollectColumnsStatUsedMembers = false;
+    TColumnStatisticsUsedMembers ColumnStatsUsedMembers{};
+
     bool CollectMemberEqualities = false;
+    TMemberEqualities MemberEqualities{};
+
+    bool CollectConstantMembers = false;
+    TVector<NNodes::TCoMember> ConstantMembers{};
 };
 
 bool NeedCalc(NNodes::TExprBase node);

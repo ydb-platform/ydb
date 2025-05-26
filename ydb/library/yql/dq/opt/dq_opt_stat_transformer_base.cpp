@@ -18,7 +18,13 @@ void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnota
     auto inputNode = TExprBase(input);
     auto stats = typeCtx->GetStats(inputNode.Raw());
 
-    if (stats && stats->TableAliases && TCoAsStruct::Match(inputNode.Raw())) {
+    if (
+        stats && stats->TableAliases &&
+        (
+            TCoAsStruct::Match(inputNode.Raw()) ||
+            TCoEquiJoin::Match(inputNode.Raw())
+        )
+    ) {
         return;
     }
 
@@ -110,23 +116,8 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
 
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
     else if(TCoEquiJoin::Match(input.Get())){
-        auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();
-        for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
-            auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
-
-            auto scope = input.Scope();
-            if (!scope.Maybe<TCoAtom>()){
-                continue;
-            }
-
-            TString label = scope.Cast<TCoAtom>().StringValue();
-            auto joinArg = input.List();
-            if (auto stats = TypeCtx->GetStats(joinArg.Raw()); stats && stats->Aliases) {
-                stats->Aliases->insert(std::move(label));
-            }
-        }
+        InferStatisticsForEquiJoin(input, TypeCtx);
     }
-
     // In case of DqSource, propagate the statistics from the correct argument
     else if (TDqSource::Match(input.Get())) {
         InferStatisticsForDqSource(input, TypeCtx);

@@ -283,9 +283,13 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(co
     return 1.0;
 }
 
-double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(const TExprBase& left, const TExprBase& right) {
+double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(
+    const TExprBase& left,
+    const TExprBase& right,
+    bool collectConstantMembers
+) {
     if (IsAttribute(right) && IsConstantExprWithParams(left.Ptr())) {
-        return ComputeEqualitySelectivity(right, left);
+        return ComputeEqualitySelectivity(right, left, collectConstantMembers);
     }
 
     if (auto attribute = IsAttribute(left)) {
@@ -307,6 +311,10 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(cons
             TString attributeName = attribute.value();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultSelectivity(Stats, attributeName);
+            }
+
+            if (collectConstantMembers) {
+                ConstantMembers.push_back(*maybeMember.Get());
             }
 
             if (Stats == nullptr || Stats->ColumnStatistics == nullptr) {
@@ -354,22 +362,28 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeComparisonSelectivity(co
     return 1.0;
 }
 
+double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
+    return ComputeImpl(input, false, CollectConstantMembers);
+}
+
 /**
- * Compute the selectivity of a predicate given statistics about the input it operates on
+ * ComputeImpl the selectivity of a predicate given statistics about the input it operates on
  */
-double TPredicateSelectivityComputer::Compute(
-    const TExprBase& input
+double TPredicateSelectivityComputer::ComputeImpl(
+    const TExprBase& input,
+    bool underNot,
+    bool collectConstantMembers
 ) {
     std::optional<double> resSelectivity;
 
     // Process OptionalIf, just return the predicate statistics
     if (auto optIf = input.Maybe<TCoOptionalIf>()) {
-        resSelectivity = Compute(optIf.Cast().Predicate());
+        resSelectivity = ComputeImpl(optIf.Cast().Predicate(), underNot, collectConstantMembers);
     }
 
     // Same with Coalesce
     else if (auto coalesce = input.Maybe<TCoCoalesce>()) {
-        resSelectivity = Compute(coalesce.Cast().Predicate());
+        resSelectivity = ComputeImpl(coalesce.Cast().Predicate(), underNot, collectConstantMembers);
     }
 
     else if (
@@ -380,7 +394,7 @@ double TPredicateSelectivityComputer::Compute(
         input.Ptr()->IsCallable("Udf")
     ) {
         auto child = TExprBase(input.Ptr()->ChildRef(0));
-        resSelectivity = Compute(child);
+        resSelectivity = ComputeImpl(child, underNot, collectConstantMembers);
     }
 
     else if(input.Ptr()->IsCallable("Find") || input.Ptr()->IsCallable("StringContains")) {
@@ -400,17 +414,17 @@ double TPredicateSelectivityComputer::Compute(
     else if (auto andNode = input.Maybe<TCoAnd>()) {
         double tmpSelectivity = 1.0;
         for (size_t i = 0; i < andNode.Cast().ArgCount(); i++) {
-            tmpSelectivity *= Compute(andNode.Cast().Arg(i));
+            tmpSelectivity *= ComputeImpl(andNode.Cast().Arg(i), underNot, !underNot && collectConstantMembers);
         }
         resSelectivity = tmpSelectivity;
     } else if (auto orNode = input.Maybe<TCoOr>()) {
         double tmpSelectivity = 0.0;
         for (size_t i = 0; i < orNode.Cast().ArgCount(); i++) {
-            tmpSelectivity += Compute(orNode.Cast().Arg(i));
+            tmpSelectivity += ComputeImpl(orNode.Cast().Arg(i), underNot, underNot && collectConstantMembers);
         }
         resSelectivity = tmpSelectivity;
     } else if (auto notNode = input.Maybe<TCoNot>()) {
-        double argSel = Compute(notNode.Cast().Value());
+        double argSel = ComputeImpl(notNode.Cast().Value(), !underNot, collectConstantMembers);
         resSelectivity = 1.0 - (argSel == 1.0 ? 0.95 : argSel);
     }
 
@@ -419,7 +433,7 @@ double TPredicateSelectivityComputer::Compute(
         auto left = equality.Cast().Left();
         auto right = equality.Cast().Right();
 
-        resSelectivity = ComputeEqualitySelectivity(left, right);
+        resSelectivity = ComputeEqualitySelectivity(left, right, !underNot && collectConstantMembers);
     }
 
     else if (auto less = input.Maybe<TCoCmpLess>()) {
@@ -454,7 +468,7 @@ double TPredicateSelectivityComputer::Compute(
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
 
-        resSelectivity = ComputeEqualitySelectivity(left, right);
+        resSelectivity = ComputeEqualitySelectivity(left, right, !underNot && collectConstantMembers);
     }
 
     // Process the not equal predicate
@@ -462,7 +476,7 @@ double TPredicateSelectivityComputer::Compute(
         auto left = equality.Cast().Left();
         auto right = equality.Cast().Right();
 
-        double eqSel = ComputeEqualitySelectivity(left, right);
+        double eqSel = ComputeEqualitySelectivity(left, right, underNot && collectConstantMembers);
         resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
     }
 
@@ -470,7 +484,7 @@ double TPredicateSelectivityComputer::Compute(
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
 
-        double eqSel = ComputeEqualitySelectivity(left, right);
+        double eqSel = ComputeEqualitySelectivity(left, right, underNot && collectConstantMembers);
         resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
     }
 
@@ -497,7 +511,7 @@ double TPredicateSelectivityComputer::Compute(
         auto lhs = TExprBase(input.Ptr()->ChildPtr(1));
         for (const auto& child : list->Children()) {
             TExprBase rhs = TExprBase(child);
-            tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs);
+            tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs, false);
         }
         resSelectivity = tmpSelectivity;
     }
@@ -522,7 +536,7 @@ double TPredicateSelectivityComputer::Compute(
                 TExprBase lhs = ifExpr.Predicate();
                 for (const auto& child: list->Children()) {
                     TExprBase rhs = TExprBase(child);
-                    tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs);
+                    tmpSelectivity += ComputeEqualitySelectivity(lhs, rhs, false);
                 }
 
                 resSelectivity = tmpSelectivity;

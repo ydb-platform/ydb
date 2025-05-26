@@ -652,41 +652,77 @@ namespace {
             Run(Runtime(), Env(), tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
         }
 
-        void TestTopic(bool enablePermissions = false) {
+        void TestTopic(bool enablePermissions = false, ui64 topicsCount = 1, ui64 consumersCount = 0) {
           EnvOptions().EnablePermissionsExport(enablePermissions);
           Env();
           ui64 txId = 100;
 
-          TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", R"(
-              Name: "Topic"
+          const char* topicScheme = R"(
+              Name: "Topic_%d"
               TotalGroupCount: 2
               PartitionPerTablet: 1
               PQTabletConfig {
-                  PartitionConfig {
-                      LifetimeSeconds: 10
-                  }
+                PartitionConfig {
+                    LifetimeSeconds: 10
+                }
+                %s
               }
-          )");
-          Env().TestWaitNotification(Runtime(), txId);
+          )";
 
+          const char* consumerScheme = R"(
+              Consumers {
+                Name: "Consumer_%d"
+                Important: %s
+              }
+          )";
+
+          const char* requestItem = R"(
+              items {
+                source_path: "/MyRoot/Topic_%d"
+                destination_prefix: "/Topic_%d"
+              }
+          )";
+
+          TString requestItems = Sprintf(requestItem, 0, 0) + "\n";
+
+          {
+            auto topic = Sprintf(topicScheme, topicsCount == 1 ? consumersCount : 0, "");
+            Cerr << topic << Endl;
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic);
+            Env().TestWaitNotification(Runtime(), txId);
+            Cerr << "TOPIC_0 is created" << Endl;
+          }
+          
+          for (ui64 i = 1; i < topicsCount; ++i) {
+            TString consumers = "";
+            
+            for (ui64 j = 0; j < consumersCount; ++j) {
+              auto consumer = Sprintf(consumerScheme, j, j % 2 == 0 ? "true" : "false");
+              consumers += consumer + "\n";
+            }
+
+            auto topic = Sprintf(topicScheme, i,  consumers.c_str());
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            requestItems += Sprintf(requestItem, i, i) + "\n";
+          }
+    
           auto request = Sprintf(R"(
               ExportToS3Settings {
                 endpoint: "localhost:%d"
                 scheme: HTTP
-                items {
-                  source_path: "/MyRoot/Topic"
-                  destination_prefix: ""
-                }
+                %s
               }
-          )", S3Port());
-
+          )", S3Port(), requestItems.c_str());
+    
           auto schemeshardId = TTestTxConfig::SchemeShard;
           TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::SUCCESS);
           Env().TestWaitNotification(Runtime(), txId, schemeshardId);
 
           TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-          UNIT_ASSERT(HasS3File("/create_topic.pb"));
-          UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/create_topic.pb"), R"(partitioning_settings {
+          
+          const char* topicYdb = R"(partitioning_settings {
   min_active_partitions: 2
   max_active_partitions: 1
   auto_partitioning_settings {
@@ -707,16 +743,44 @@ supported_codecs {
 }
 partition_write_speed_bytes_per_second: 50000000
 partition_write_burst_bytes: 50000000
-)");
+%s)";
 
-          if (enablePermissions) {
-            UNIT_ASSERT(HasS3File("/permissions.pb"));
-            UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/permissions.pb"), R"(actions {
+          const char* consumerYdb = R"(consumers {
+  name: "Consumer_%d"%s
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
+})";
+
+          for (ui64 i = 0; i < topicsCount; ++i) {
+            TString dir = Sprintf("/Topic_%d", i);
+            auto file = dir + "/create_topic.pb";
+            UNIT_ASSERT(HasS3File(file));
+
+            TString consumers;
+            if (i == 0) {
+              consumers = "";
+            } else {
+              for (ui64 j = 0; j < consumersCount; ++j) {
+                auto consumer = Sprintf(consumerYdb, j, j % 2 == 0 ? "\n  important: true" : "");
+                consumers += consumer + "\n";
+              }
+            }
+            auto contnent = Sprintf(topicYdb, consumers.c_str());
+            UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent(file), contnent);
+
+            if (enablePermissions) {
+              auto permissions = dir + "/permissions.pb";
+              UNIT_ASSERT(HasS3File(permissions));
+              UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent(permissions), R"(actions {
   change_owner: "root@builtin"
 }
 )");
+            }
           }
-
         };
 
     protected:
@@ -2916,12 +2980,20 @@ attributes {
         }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
     }
 
-    Y_UNIT_TEST(Topics) {
+    Y_UNIT_TEST(TopicExport) {
       TestTopic();
     }
 
-    Y_UNIT_TEST(TopicsWithPermissions) {
+    Y_UNIT_TEST(TopicWithPermissionsExport) {
       TestTopic(true);
+    }
+
+    Y_UNIT_TEST(TopicsExport) {
+      TestTopic(false, 5, 4);
+    }
+
+    Y_UNIT_TEST(TopicsWithPermissionsExport) {
+      TestTopic(true, 5, 4);
     }
 
     Y_UNIT_TEST(ExportTableWithUniqueIndex) {
@@ -2960,5 +3032,5 @@ attributes {
              NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
              NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
              NLs::IndexKeys({"value"})});
-  }
+    }
 }

@@ -32,7 +32,7 @@ TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqPro
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(Meta.Get()), "Invalid task meta: " << GetTask().GetMeta().DebugString());
         YQL_ENSURE(Meta->GetReads().size() == 1);
         YQL_ENSURE(!Meta->GetReads()[0].GetKeyRanges().empty());
-        YQL_ENSURE(!Meta->GetTable().GetSysViewInfo().empty());
+        YQL_ENSURE(!Meta->GetTable().GetSysViewInfo().empty() || Meta->GetTable().HasSysViewType());
     }
 }
 
@@ -121,7 +121,12 @@ void TKqpComputeActor::DoBootstrap() {
         ScanData->TaskId = GetTask().GetId();
         ScanData->TableReader = CreateKqpTableReader(*ScanData);
 
-        auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, ranges, columns, UserToken, Database, reverse);
+        TMaybe<NKikimrSysView::ESysViewType> sysViewType;
+        if (Meta->GetTable().HasSysViewType()) {
+            sysViewType = Meta->GetTable().GetSysViewType();
+        }
+        auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, sysViewType,
+                                                        ranges, columns, UserToken, Database, reverse);
 
         if (!scanActor) {
             ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, TStringBuilder()

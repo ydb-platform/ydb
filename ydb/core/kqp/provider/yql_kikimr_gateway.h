@@ -487,6 +487,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
     ETableType TableType = ETableType::Table;
     EStoreType StoreType = EStoreType::Row;
+    TMaybe<NKikimrSysView::ESysViewType> SysViewType;
     bool IsIndexImplTable = false;
 
     ui64 RecordsCount = 0;

@@ -23,31 +23,20 @@ class WorkloadVectorIndex(WorkloadBase):
         self.limit = 10
         self.to_binary_string_converters = {
             "float": BinaryStringConverter(
-                name="Knn::ToBinaryStringFloat",
-                data_type="Float",
-                vector_type="FloatVector"
+                name="Knn::ToBinaryStringFloat", data_type="Float", vector_type="FloatVector"
             ),
             "uint8": BinaryStringConverter(
-                name="Knn::ToBinaryStringUint8",
-                data_type="Uint8",
-                vector_type="Uint8Vector"
+                name="Knn::ToBinaryStringUint8", data_type="Uint8", vector_type="Uint8Vector"
             ),
-            "int8": BinaryStringConverter(
-                name="Knn::ToBinaryStringInt8",
-                data_type="Int8",
-                vector_type="Int8Vector"
-            ),
+            "int8": BinaryStringConverter(name="Knn::ToBinaryStringInt8", data_type="Int8", vector_type="Int8Vector"),
         }
         self.targets = {
-            "similarity": {
-                "inner_product": "Knn::InnerProductSimilarity",
-                "cosine": "Knn::CosineSimilarity"
-            },
+            "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
             "distance": {
                 "cosine": "Knn::CosineDistance",
                 "manhattan": "Knn::ManhattanDistance",
-                "euclidean": "Knn::EuclideanDistance"
-            }
+                "euclidean": "Knn::EuclideanDistance",
+            },
         }
 
     def _get_random_vector(self, type, size):
@@ -88,14 +77,16 @@ class WorkloadVectorIndex(WorkloadBase):
         """
         self.client.query(drop_index_sql, True)
 
-    def _create_index(self, table_path, vector_type,
-                      vector_dimension, levels, clusters,
-                      distance=None, similarity=None):
-        logger.info(f"""Create index vector_type={vector_type},
+    def _create_index(
+        self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None
+    ):
+        logger.info(
+            f"""Create index vector_type={vector_type},
                         vector_dimension={vector_dimension},
                         levels={levels}, clusters={clusters},
                         distance={distance},
-                        similarity={similarity}""")
+                        similarity={similarity}"""
+        )
         if distance is not None:
             create_index_sql = f"""
                 ALTER TABLE `{table_path}`
@@ -132,9 +123,7 @@ class WorkloadVectorIndex(WorkloadBase):
             vector = self._get_random_vector(vector_type, vector_dimension)
             name = converter.name
             vector_types = converter.vector_type
-            values.append(
-                f'({key}, Untag({name}([{vector}]), "{vector_types}"))'
-            )
+            values.append(f'({key}, Untag({name}([{vector}]), "{vector_types}"))')
 
         upsert_sql = f"""
             UPSERT INTO `{table_path}` (pk, embedding)
@@ -142,8 +131,7 @@ class WorkloadVectorIndex(WorkloadBase):
         """
         self.client.query(upsert_sql, False)
 
-    def _select(self, table_path, vector_type,
-                vector_dimension, distance, similarity):
+    def _select(self, table_path, vector_type, vector_dimension, distance, similarity):
         if distance is not None:
             target = self.targets["distance"][distance]
         else:
@@ -163,15 +151,14 @@ class WorkloadVectorIndex(WorkloadBase):
         """
         return self.client.query(select_sql, False)
 
-    def _select_top(self, table_path, vector_type,
-                    vector_dimension, distance, similarity):
+    def _select_top(self, table_path, vector_type, vector_dimension, distance, similarity):
         logger.info("Select values from table")
         result_set = self._select(
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
             distance=distance,
-            similarity=similarity
+            similarity=similarity,
         )
         if len(result_set) == 0:
             raise Exception("Query returned an empty set")
@@ -184,12 +171,13 @@ class WorkloadVectorIndex(WorkloadBase):
             cur = row['target']
             condition = prev <= cur if distance is not None else prev >= cur
             if not condition:
-                raise Exception(f"""The set of rows does not satisfy the
-                                    condition, prev: {prev}, cur: {cur}""")
+                raise Exception(
+                    f"""The set of rows does not satisfy the
+                                    condition, prev: {prev}, cur: {cur}"""
+                )
             prev = cur
 
-    def _wait_inddex_ready(self, table_path, vector_type,
-                           vector_dimension, distance, similarity):
+    def _wait_inddex_ready(self, table_path, vector_type, vector_dimension, distance, similarity):
         for i in range(10):
             time.sleep(7)
 
@@ -199,7 +187,7 @@ class WorkloadVectorIndex(WorkloadBase):
                     vector_type=vector_type,
                     vector_dimension=vector_dimension,
                     distance=distance,
-                    similarity=similarity
+                    similarity=similarity,
                 )
             except Exception as ex:
                 if "No global indexes for table" in str(ex):
@@ -209,9 +197,7 @@ class WorkloadVectorIndex(WorkloadBase):
             return
         raise Exception("Error getting index status")
 
-    def _check_loop(self, table_path, vector_type,
-                    vector_dimension, levels, clusters,
-                    distance=None, similarity=None):
+    def _check_loop(self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None):
         self._create_index(
             table_path=table_path,
             vector_type=vector_type,
@@ -219,21 +205,21 @@ class WorkloadVectorIndex(WorkloadBase):
             levels=levels,
             clusters=clusters,
             distance=distance,
-            similarity=similarity
+            similarity=similarity,
         )
         self._wait_inddex_ready(
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
             distance=distance,
-            similarity=similarity
+            similarity=similarity,
         )
         self._select_top(
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
             distance=distance,
-            similarity=similarity
+            similarity=similarity,
         )
         self._drop_index(table_path)
         logger.info('check was completed successfully')
@@ -252,49 +238,51 @@ class WorkloadVectorIndex(WorkloadBase):
             random_vector_type = random.choice(vector_type_data)
             random_vector_dimension = random.choice(vector_dimension_data)
             self._upsert_values(
-                        table_path=table_path,
-                        vector_type=random_vector_type,
-                        vector_dimension=random_vector_dimension
-                    )
+                table_path=table_path, vector_type=random_vector_type, vector_dimension=random_vector_dimension
+            )
             random_levels = random.choice(levels_data)
             random_clusters = random.choice(clusters_data)
             random_distance = random.choice(distance_data)
             random_similarity = random.choice(similarity_data)
-            logger.info(f"""vector_type: {random_vector_type}
+            logger.info(
+                f"""vector_type: {random_vector_type}
                             vector_dimension: {random_vector_dimension}
                             levels: {random_levels}
                             clusters: {random_clusters}
                             distance: {random_distance}
                             similarity: {random_similarity}
-                        """)
-            print(f"""vector_type: {random_vector_type}
+                        """
+            )
+            print(
+                f"""vector_type: {random_vector_type}
                             vector_dimension: {random_vector_dimension}
                             levels: {random_levels}
                             clusters: {random_clusters}
                             distance: {random_distance}
                             similarity: {random_similarity}
-                        """)
+                        """
+            )
             try:
                 self._check_loop(
-                                        table_path=table_path,
-                                        vector_type=random_vector_type,
-                                        vector_dimension=random_vector_dimension,
-                                        levels=random_levels,
-                                        clusters=random_clusters,
-                                        distance=random_distance
-                                    )
+                    table_path=table_path,
+                    vector_type=random_vector_type,
+                    vector_dimension=random_vector_dimension,
+                    levels=random_levels,
+                    clusters=random_clusters,
+                    distance=random_distance,
+                )
                 self._check_loop(
-                                    table_path=table_path,
-                                    vector_type=random_vector_type,
-                                    vector_dimension=random_vector_dimension,
-                                    levels=random_levels,
-                                    clusters=random_clusters,
-                                    similarity=random_similarity
-                                )
+                    table_path=table_path,
+                    vector_type=random_vector_type,
+                    vector_dimension=random_vector_dimension,
+                    levels=random_levels,
+                    clusters=random_clusters,
+                    similarity=random_similarity,
+                )
             except Exception as ex:
                 logger.info(f"ERRROR {ex}")
                 raise str(ex)
-                
+
             self._drop_table(table_path)
 
     def get_stat(self):

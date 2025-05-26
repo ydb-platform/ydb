@@ -2682,10 +2682,14 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     readSettings.Pipe = CmdCreateSession(sessionSettings, tc);
 
     // The messages are large and will be cached. We intercept the response from the
-    // cache and hold it. The reading will not end until the response from the cache arrives
+    // cache and hold it. The reading will not end until the response from the cache arrives.
+    // Except for the answers for the compaction.
     TAutoPtr<IEventHandle> blobResponseEvent;
     auto observe = [&](TAutoPtr<IEventHandle>& ev) {
         if (auto* event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>()) {
+            if (event->GetCookie() == 0) { // ERequestCookie::ReadBlobsForCompaction
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
             blobResponseEvent = ev;
             return TTestActorRuntimeBase::EEventAction::DROP;
         }

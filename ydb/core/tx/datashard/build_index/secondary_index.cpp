@@ -236,13 +236,15 @@ public:
         progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
         progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
-        if (abort != EAbort::None) {
-            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-            UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env"));
+        if (abort == EAbort::Host) {
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+            UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env error"));
             if (exc) {
                 UploadStatus.Issues.AddIssue(NYql::TIssue(exc->what()));
             }
-            LOG_W(Debug());
+        } else if (abort != EAbort::None) {
+            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+            UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env"));
         } else if (!UploadStatus.IsSuccess()) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         } else {

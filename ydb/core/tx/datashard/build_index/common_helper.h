@@ -136,9 +136,12 @@ public:
 
         response.SetUploadRows(UploadRows);
         response.SetUploadBytes(UploadBytes);
-        if (exc) {
+        if (abort == NTable::EAbort::Host) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            UploadStatus.Issues.AddIssue(NYql::TIssue(exc->what()));
+            UploadStatus.Issues.AddIssue(NYql::TIssue("Aborted by scan host env error"));
+            if (exc) {
+                UploadStatus.Issues.AddIssue(NYql::TIssue(exc->what()));
+            }
             NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
         } else if (abort != NTable::EAbort::None) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);

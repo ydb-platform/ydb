@@ -149,13 +149,16 @@ public:
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
 
-        if (abort != NTable::EAbort::None) {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+        if (abort == EAbort::Host) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue("Aborted by scan host env error"));
             if (exc) {
-                NYql::TIssues issues;
                 issues.AddIssue(NYql::TIssue(exc->what()));
-                NYql::IssuesToMessage(issues, record.MutableIssues());
             }
+            NYql::IssuesToMessage(issues, record.MutableIssues());
+        } else if (abort != NTable::EAbort::None) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
             FillResponse();

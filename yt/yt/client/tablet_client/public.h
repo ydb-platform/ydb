@@ -142,10 +142,10 @@ DEFINE_BIT_ENUM(EReplicationLogDataFlags,
 
 struct TReplicationLogTable
 {
-    static const TString ChangeTypeColumnName;
-    static const TString KeyColumnNamePrefix;
-    static const TString ValueColumnNamePrefix;
-    static const TString FlagsColumnNamePrefix;
+    static const std::string ChangeTypeColumnName;
+    static const std::string KeyColumnNamePrefix;
+    static const std::string ValueColumnNamePrefix;
+    static const std::string FlagsColumnNamePrefix;
 };
 
 DEFINE_BIT_ENUM(EUnversionedUpdateDataFlags,
@@ -160,9 +160,9 @@ constexpr EUnversionedUpdateDataFlags MaxValidUnversionedUpdateDataFlags =
 
 struct TUnversionedUpdateSchema
 {
-    static const TString ChangeTypeColumnName;
-    static const TString ValueColumnNamePrefix;
-    static const TString FlagsColumnNamePrefix;
+    static const std::string ChangeTypeColumnName;
+    static const std::string ValueColumnNamePrefix;
+    static const std::string FlagsColumnNamePrefix;
 };
 
 DEFINE_ENUM(ETabletCellHealth,
@@ -227,7 +227,7 @@ DEFINE_ENUM(ERowMergerType,
     ((New)                  (2))
 );
 
-extern const TString CustomRuntimeDataWatermarkKey;
+extern const std::string CustomRuntimeDataWatermarkKey;
 struct TWatermarkRuntimeDataConfig;
 struct TWatermarkRuntimeData;
 

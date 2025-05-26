@@ -447,7 +447,7 @@ void FromUnversionedValue(
 
 void MapToUnversionedValueImpl(
     TUnversionedValue* unversionedValue,
-    const std::function<bool(TString*, TUnversionedValue*)> producer,
+    const std::function<bool(std::string*, TUnversionedValue*)> producer,
     const TRowBufferPtr& rowBuffer,
     int id,
     EValueFlags flags);
@@ -463,7 +463,7 @@ void ToUnversionedValue(
     auto it = map.begin();
     MapToUnversionedValueImpl(
         unversionedValue,
-        [&] (TString* itemKey, TUnversionedValue* itemValue) mutable -> bool {
+        [&] (std::string* itemKey, TUnversionedValue* itemValue) mutable -> bool {
             if (it == map.end()) {
                 return false;
             }
@@ -490,7 +490,7 @@ void FromUnversionedValue(
 {
     map->clear();
     UnversionedValueToMapImpl(
-        [&] (TString key) {
+        [&] (std::string key) {
             auto pair = map->emplace(FromString<TKey>(std::move(key)), TValue());
             return &pair.first->second;
         },

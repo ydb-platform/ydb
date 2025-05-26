@@ -1079,12 +1079,10 @@ struct TEvPQ {
         TEvGetWriteInfoResponse() = default;
         TEvGetWriteInfoResponse(ui32 cookie,
                                 NPQ::TSourceIdMap&& srcIdInfo,
-                                std::deque<NPQ::TDataKey>&& bodyKeys,
-                                TVector<NPQ::TClientBlob>&& blobsFromHead) :
+                                std::deque<NPQ::TDataKey>&& bodyKeys) :
             Cookie(cookie),
             SrcIdInfo(std::move(srcIdInfo)),
-            BodyKeys(std::move(bodyKeys)),
-            BlobsFromHead(std::move(blobsFromHead))
+            BodyKeys(std::move(bodyKeys))
         {
         }
 
@@ -1093,7 +1091,6 @@ struct TEvPQ {
 
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
-        TVector<NPQ::TClientBlob> BlobsFromHead;
 
         ui64 BytesWrittenTotal;
         ui64 BytesWrittenGrpc;

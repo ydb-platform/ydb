@@ -301,7 +301,7 @@ def read_tests_from_file(file_path):
     return result
 
 
-def create_mute_issues(all_tests, file_path, close_issues=False):
+def create_mute_issues(all_tests, file_path, close_issues=True):
     base_date = datetime.datetime(1970, 1, 1)
     tests_from_file = read_tests_from_file(file_path)
     muted_tests_in_issues = get_muted_tests_from_issues()
@@ -471,7 +471,7 @@ if __name__ == "__main__":
         '--file_path', default=f'{repo_path}/mute_update/flaky.txt', required=False, help='file path'
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
-    create_issues_parser.add_argument('--close_issues', action='store_true', help='Close issues for unmuted tests')
+    create_issues_parser.add_argument('--close_issues', action='store_true', default=True, help='Close issues when all tests are unmuted (default: True)')
 
     args = parser.parse_args()
 

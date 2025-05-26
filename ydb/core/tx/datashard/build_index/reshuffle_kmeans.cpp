@@ -274,44 +274,44 @@ private:
     {
         switch (UploadState) {
             case EState::UPLOAD_MAIN_TO_BUILD:
-                FeedUploadMain2Build(key, row);
+                FeedMainToBuild(key, row);
                 break;
             case EState::UPLOAD_MAIN_TO_POSTING:
-                FeedUploadMain2Posting(key, row);
+                FeedMainToPosting(key, row);
                 break;
             case EState::UPLOAD_BUILD_TO_BUILD:
-                FeedUploadBuild2Build(key, row);
+                FeedBuildToBuild(key, row);
                 break;
             case EState::UPLOAD_BUILD_TO_POSTING:
-                FeedUploadBuild2Posting(key, row);
+                FeedBuildToPosting(key, row);
                 break;
             default:
                 Y_ASSERT(false);
         }
     }
 
-    void FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedMainToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
             AddRowMainToBuild(*OutputBuf, Child + *pos, key, row);
         }
     }
 
-    void FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedMainToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
             AddRowMainToPosting(*OutputBuf, Child + *pos, key, row, DataPos);
         }
     }
 
-    void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
             AddRowBuildToBuild(*OutputBuf, Child + *pos, key, row);
         }
     }
 
-    void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
             AddRowBuildToPosting(*OutputBuf, Child + *pos, key, row, DataPos);

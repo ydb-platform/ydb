@@ -346,8 +346,12 @@ public:
         while (auto args = argumentsReader.ReadNext()) {
             try {
                 for (auto& arg: *args) {
-                    if (arg.descr().type->id() == arrow::Type::TIMESTAMP) {
-                        arrow::util::get<std::shared_ptr<arrow::ArrayData>>(arg.value)->type = arrow::uint64();
+                    if (arg.kind() == arrow::Datum::ARRAY && arg.descr().type->id() == arrow::Type::TIMESTAMP) {
+                        auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(arg.descr().type);
+                        arrow::TimeUnit::type unit = timestamp_type->unit();
+                        if (unit == arrow::TimeUnit::MICRO) {
+                            arrow::util::get<std::shared_ptr<arrow::ArrayData>>(arg.value)->type = arrow::uint64();
+                        }
                     }
                 }
                 auto result = Function->Execute(*args, FunctionOptions.get(), GetContext());

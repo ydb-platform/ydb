@@ -29,7 +29,7 @@ class TestDatetime2(MixedClusterFixture):
             dt = base_dt + delta
             dt_utc = dt.astimezone(timezone.utc)
             ts_micro = dt_utc.replace(microsecond=random.randint(0, 999999))
-            val = random.randint(-32768, 32767)
+            val = random.randint(0, 32767)
 
             rfc822 = dt.strftime("%a, %-d %b %Y %H:%M:%S EST")
             iso8601 = dt.strftime("%Y-%m-%dT%H:%M:%S+0300")

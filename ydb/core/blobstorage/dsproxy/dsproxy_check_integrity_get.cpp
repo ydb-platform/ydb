@@ -183,7 +183,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
 
         TStringStream str;
         str << "Disks:" << Endl;
-        for (ui32 diskIdx = 0; diskIdx < Info->GetTopology().GetTotalVDisksNum(); ++diskIdx) {
+        for (ui32 diskIdx = 0; diskIdx < Info->Type.BlobSubgroupSize(); ++diskIdx) {
             auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(diskIdx, Id.Hash());
             str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort) << Endl;
         }

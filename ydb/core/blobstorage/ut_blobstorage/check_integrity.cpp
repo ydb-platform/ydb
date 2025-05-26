@@ -37,7 +37,7 @@ struct TCheckIntegrityEnvBase {
             ErrorData[i] = RandomNumber<ui8>();
         }
 
-        for (ui32 i = 0; i < Info->GetTopology().GetTotalVDisksNum(); ++i) {
+        for (ui32 i = 0; i < Info->Type.BlobSubgroupSize(); ++i) {
             auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(i, Id.Hash());
             VDisks.push_back(Info->CreateVDiskID(vDiskIdShort));
         }

@@ -252,12 +252,12 @@ struct TDummyResult: public IDestructable {
 
 class TDummyScan : public TActor<TDummyScan>, public NTable::IScan {
 public:
-    TDummyScan(TActorId tablet, bool postponed, EStatus abort, ui32 rows)
+    TDummyScan(TActorId tablet, bool postponed, EStatus status, ui32 rows)
         : TActor(&TThis::StateWork)
         , Tablet(tablet)
         , ExpectedRows(rows)
         , Postponed(postponed)
-        , Abort(abort)
+        , Status(status)
     {}
     ~TDummyScan() {}
 
@@ -298,7 +298,7 @@ private:
 
     EScan Seek(TLead &lead, ui64 seq) override
     {
-        if (seq && Abort == EStatus::Done)
+        if (seq && Status == EStatus::Done)
             return EScan::Final;
 
         lead.To(Scheme->Tags(), LeadKey, NTable::ESeek::Lower);
@@ -324,7 +324,7 @@ private:
     TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) override
     {
         Y_ENSURE(!exc, exc->what());
-        Y_ENSURE((int)Abort == (int)status);
+        Y_ENSURE((int)Status == (int)status);
 
         auto ctx = ActorContext();
         if (status == EStatus::Done) {
@@ -356,7 +356,7 @@ private:
     ui64 ExpectedRowId = 1;
     ui64 ExpectedRows = 0;
     bool Postponed = false;
-    EStatus Abort;
+    EStatus Status;
 };
 
 struct TEvTestFlatTablet {
@@ -373,25 +373,25 @@ struct TEvTestFlatTablet {
 
     struct TEvScanFinished : public TEventLocal<TEvScanFinished, EvScanFinished> {};
     struct TEvQueueScan : public TEventLocal<TEvQueueScan, EvQueueScan> {
-        TEvQueueScan(ui32 rows, bool postponed = false, bool snap = false, NTable::EStatus abort = NTable::EStatus::Done)
+        TEvQueueScan(ui32 rows, bool postponed = false, bool snap = false, NTable::EStatus status = NTable::EStatus::Done)
             : Postponed(postponed)
             , UseSnapshot(snap)
-            , Abort(abort)
+            , Status(status)
             , ReadVersion(TRowVersion::Max())
             , ExpectRows(rows)
         {}
 
-        TEvQueueScan(ui32 rows, TRowVersion snapshot, bool postponed = false, NTable::EStatus abort = NTable::EStatus::Done)
+        TEvQueueScan(ui32 rows, TRowVersion snapshot, bool postponed = false, NTable::EStatus status = NTable::EStatus::Done)
             : Postponed(postponed)
             , UseSnapshot(false)
-            , Abort(abort)
+            , Status(status)
             , ReadVersion(snapshot)
             , ExpectRows(rows)
         {}
 
         bool Postponed;
         bool UseSnapshot;
-        NTable::EStatus Abort;
+        NTable::EStatus Status;
         const TRowVersion ReadVersion;
         const ui32 ExpectRows = 0;
         ui64 ExpectedPageFaults = Max<ui64>();
@@ -476,7 +476,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
     void Handle(TEvTestFlatTablet::TEvQueueScan::TPtr &ev) {
         bool postpone = ev->Get()->Postponed;
         ui64 snap = ev->Get()->UseSnapshot ? SnapshotId : 0;
-        auto abort = ev->Get()->Abort;
+        auto abort = ev->Get()->Status;
         auto rows = abort != NTable::EStatus::Done ? 0 : ev->Get()->ExpectRows;
         Scan = new TDummyScan(SelfId(), postpone, abort, rows);
         Scan->LeadKey = ev->Get()->LeadKey;

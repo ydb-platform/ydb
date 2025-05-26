@@ -32,6 +32,7 @@ SRCS(
     ut_dictionary.cpp
     ut_column_filter.cpp
     ut_hash.cpp
+    ut_reader.cpp
 )
 
 END()

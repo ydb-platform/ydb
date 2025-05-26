@@ -43,7 +43,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
             needShardingFilter = true;
         }
     }
-    const bool preventDuplicates = GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::NO_DUPLICATES;
+    const bool preventDuplicates = GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES;
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                            [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
@@ -106,7 +106,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
     : TBase(commonContext) {
-    if (GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::NO_DUPLICATES) {
+    if (GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES) {
         DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateManager(*this));
     }
 }

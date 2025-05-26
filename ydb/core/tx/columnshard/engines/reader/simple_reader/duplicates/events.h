@@ -19,14 +19,11 @@ public:
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
+    YDB_READONLY_DEF(ui64, RecordsCount);
     YDB_READONLY_DEF(std::shared_ptr<IFilterSubscriber>, Subscriber);
 
 public:
-    TEvRequestFilter(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<IFilterSubscriber>& subscriber)
-        : Source(source)
-        , Subscriber(subscriber) {
-    }
+    TEvRequestFilter(const IDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

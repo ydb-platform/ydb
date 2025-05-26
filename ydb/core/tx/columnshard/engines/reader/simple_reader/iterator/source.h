@@ -250,6 +250,11 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
+    void StartFetchingDuplicateFilter(std::shared_ptr<IFilterSubscriber>&& subscriber) {
+        NActors::TActivationContext::AsActorContext().Send(
+            GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManagerVerified(), new TEvRequestFilter(*this, std::move(subscriber)));
+    }
+
     virtual TInternalPathId GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 

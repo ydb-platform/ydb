@@ -233,8 +233,7 @@ TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDa
 }
 
 TConclusion<bool> TDuplicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    NActors::TActivationContext::AsActorContext().Send(source->GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManager(),
-        new TEvRequestFilter(source, std::make_shared<TFilterSubscriber>(source, step)));
+    source->StartFetchingDuplicateFilter(std::make_shared<TFilterSubscriber>(source, step));
     return false;
 }
 

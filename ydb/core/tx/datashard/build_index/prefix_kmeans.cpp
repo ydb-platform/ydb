@@ -51,7 +51,7 @@ using namespace NKMeans;
  *     - Prefix: records the (prefix key, parent cluster ID) mapping
  */
 
-class TPrefixKMeansScanBase: public TActor<TPrefixKMeansScanBase>, public NTable::IScan {
+class TPrefixKMeansScanBase: public TActor<TPrefixKMeansScanBase>, public IActorExceptionHandler, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -197,6 +197,15 @@ public:
         Driver = nullptr;
         this->PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) final
+    {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Fail(exc);
+        return true;
     }
 
     void Describe(IOutputStream& out) const final

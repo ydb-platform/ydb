@@ -18,6 +18,7 @@ using namespace NTable;
 
 class TIncrementalRestoreScan
     : public IActorCallback
+    , public IActorExceptionHandler
     , public NTable::IScan
     , protected TChangeRecordBodySerializer
 {
@@ -198,6 +199,14 @@ public:
 
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Fail(exc);
+        return true;
     }
 
     void Describe(IOutputStream& o) const override {

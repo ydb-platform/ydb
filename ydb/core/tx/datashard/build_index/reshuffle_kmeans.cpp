@@ -46,7 +46,7 @@ using namespace NKMeans;
  *   - The row and any specified data columns are written to the output table
  */
 
-class TReshuffleKMeansScanBase: public TActor<TReshuffleKMeansScanBase>, public NTable::IScan {
+class TReshuffleKMeansScanBase: public TActor<TReshuffleKMeansScanBase>, public IActorExceptionHandler, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
@@ -151,6 +151,15 @@ public:
         Driver = nullptr;
         this->PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) final
+    {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Fail(exc);
+        return true;
     }
 
     void Describe(IOutputStream& out) const final

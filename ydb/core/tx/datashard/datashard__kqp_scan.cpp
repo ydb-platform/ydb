@@ -30,7 +30,7 @@ constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
 class TKqpScanResult : public IDestructable {};
 
-class TKqpScan : public TActor<TKqpScan>, public NTable::IScan {
+class TKqpScan : public TActor<TKqpScan>, public IActorExceptionHandler, public NTable::IScan {
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_TABLE_SCAN;
@@ -381,6 +381,14 @@ private:
         PassAway();
 
         return new TKqpScanResult();
+    }
+
+    bool OnUnhandledException(const std::exception& exc) final {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Fail(exc);
+        return true;
     }
 
     void Describe(IOutputStream& out) const final {

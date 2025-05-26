@@ -92,7 +92,7 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
 }
 
 template <NKikimrServices::TActivity::EType Activity>
-class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public NTable::IScan {
+class TBuildScanUpload: public TActor<TBuildScanUpload<Activity>>, public IActorExceptionHandler, public NTable::IScan {
     using TThis = TBuildScanUpload<Activity>;
     using TBase = TActor<TThis>;
 
@@ -261,6 +261,14 @@ public:
         Driver = nullptr;
         this->PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Fail(exc);
+        return true;
     }
 
     void UploadStatusToMessage(NKikimrTxDataShard::TEvBuildIndexProgressResponse& msg) {

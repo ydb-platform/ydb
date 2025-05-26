@@ -385,7 +385,7 @@ public:
 
 }; // TTxCdcStreamScanProgress
 
-class TCdcStreamScan: public IActorCallback, public IScan {
+class TCdcStreamScan: public IActorCallback, public IActorExceptionHandler, public IScan {
     using TStats = TCdcStreamScanManager::TStats;
 
     struct TDataShardId {
@@ -520,6 +520,14 @@ public:
 
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Fail(exc);
+        return true;
     }
 
 private:

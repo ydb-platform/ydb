@@ -34,7 +34,7 @@ protected:
     virtual void CloseEraser() = 0;
 };
 
-class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
+class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, public IScan, public IEraserOps {
     struct TDataShardId {
         TActorId ActorId;
         ui64 TabletId;
@@ -310,6 +310,14 @@ public:
         PassAway();
 
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Fail(exc);
+        return true;
     }
 
     void PassAway() override {

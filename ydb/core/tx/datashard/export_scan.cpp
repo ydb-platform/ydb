@@ -17,7 +17,7 @@ using namespace NActors;
 using namespace NExportScan;
 using namespace NTable;
 
-class TExportScan: private NActors::IActorCallback, public NTable::IScan {
+class TExportScan: private NActors::IActorCallback, public IActorExceptionHandler, public NTable::IScan {
     enum EStateBits {
         ES_REGISTERED = 0, // Actor is registered
         ES_INITIALIZED, // Seek(...) was called
@@ -227,6 +227,14 @@ public:
 
         PassAway();
         return new TExportScanProduct(outcome, Error, Stats->BytesRead, Stats->Rows);
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Fail(exc);
+        return true;
     }
 
     void PassAway() override {

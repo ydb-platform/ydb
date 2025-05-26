@@ -178,7 +178,7 @@ public:
         return nullptr;
     }
 
-    bool OnUnhandledException(const std::exception& exc) override
+    bool OnUnhandledException(const std::exception& exc) final
     {
         if (!Driver) {
             return false;

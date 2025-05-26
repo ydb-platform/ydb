@@ -42,7 +42,7 @@ using namespace NKMeans;
  *   - Contains up to K sampled rows (serialized), with associated probabilities
  */
 
-class TSampleKScan final: public TActor<TSampleKScan>, public NTable::IScan {
+class TSampleKScan final: public TActor<TSampleKScan>, public IActorExceptionHandler, public NTable::IScan {
 protected:
     const TTags ScanTags;
     const TVector<NScheme::TTypeInfo> KeyTypes;
@@ -171,6 +171,14 @@ public:
         Driver = nullptr;
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) final {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Fail(exc);
+        return true;
     }
 
     void Describe(IOutputStream& out) const final {

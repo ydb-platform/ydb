@@ -1202,6 +1202,7 @@ void TReadIteratorState::ForwardScanEvent(std::unique_ptr<IEventHandle>&& ev, ui
 
 class TDataShard::TReadScan
     : public TActor<TReadScan>
+    , public IActorExceptionHandler
     , public NTable::IScan
 {
 public:
@@ -1355,6 +1356,14 @@ private:
 
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) final {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Fail(exc);
+        return true;
     }
 
 private:

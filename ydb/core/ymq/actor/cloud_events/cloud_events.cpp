@@ -95,6 +95,10 @@ namespace NCloudEvents {
         std::cerr << "I got the audit message!!!" << std::endl;
     }
 
+    template void TAuditSender::Send<TCreateQueueEvent>(const TCreateQueueEvent&);
+    template void TAuditSender::Send<TUpdateQueueEvent>(const TUpdateQueueEvent&);
+    template void TAuditSender::Send<TDeleteQueueEvent>(const TDeleteQueueEvent&);
+
 // ===============================================================
     TString TProcessor::GetFullTablePath() const {
         if (!Root.empty()) {
@@ -109,6 +113,7 @@ namespace NCloudEvents {
             << "--!syntax_v1" << "\n"
             << "SELECT"
             << "Id,"
+            << "QueueName,"
             << "Type,"
             << "CreatedAt,"
             << "CloudId,"
@@ -119,9 +124,8 @@ namespace NCloudEvents {
             << "PeerName,"
             << "RequestId,"
             << "IdempotencyId,"
-            << "Name,"
             << "Labels"
-            << "FROM " << GetFullTablePath() << "\n";
+            << "FROM `" << GetFullTablePath() << "`\n";
     }
 
     TString TProcessor::GetInitDeleteQuery() const {
@@ -130,7 +134,7 @@ namespace NCloudEvents {
             << "DECLARE $Events AS List<Struct<Id:Uint64, Name:String>>;" << "\n"
             << "$EventsSource = (SELECT item.Id AS Id, item.Name AS Name"
                              << "FROM (SELECT $Events AS events) FLATTEN LIST BY events as item);" << "\n"
-            << "DELETE FROM " << GetFullTablePath()
+            << "DELETE FROM `" << GetFullTablePath() << "`"
             << "ON SELECT * FROM $EventsSource;" << "\n";
     }
 
@@ -150,7 +154,10 @@ namespace NCloudEvents {
         auto* request = ev->Record.MutableRequest();
 
         request->SetKeepSession(true);
-        request->SetDatabase(Database);
+
+        if (!Database.empty()) {
+            request->SetDatabase(Database);
+        }
 
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
@@ -216,7 +223,8 @@ namespace NCloudEvents {
             result.push_back({});
             auto& cloudEvent = result.back();
             uint_fast64_t id = *parser.ColumnParser(0).GetOptionalUint64();
-            cloudEvent.Type = *parser.ColumnParser(1).GetOptionalString();
+            TString type = *parser.ColumnParser(1).GetOptionalString();
+            cloudEvent.Type = DefaultEventTypePrefix + type;
             cloudEvent.CreatedAt = *parser.ColumnParser(2).GetOptionalUint64();
             cloudEvent.Id = convertId(id, cloudEvent.Type, cloudEvent.CreatedAt);
             cloudEvent.CloudId = *parser.ColumnParser(3).GetOptionalString();
@@ -258,6 +266,7 @@ namespace NCloudEvents {
         UpdateSessionId(ev);
 
         LastQuery = ELastQueryType::Delete;
+        // TODO: Add params
         RunQuery(DeleteQuery);
         Become(&TProcessor::StateWaitDeleteResponse);
     }
@@ -274,23 +283,24 @@ namespace NCloudEvents {
         UpdateSessionId(ev);
 
         for (const auto& cloudEvent : EventsList) {
-            if (cloudEvent.Type == "yandex.cloud.events.ymq.CreateMessageQueue") {
+            if (cloudEvent.Type.substr(DefaultEventTypePrefix.size()) == "CreateMessageQueue") {
                 TCreateQueueEvent ev;
                 TFiller<TCreateQueueEvent> filler(cloudEvent, ev);
                 filler.Fill();
                 TAuditSender::Send<TCreateQueueEvent>(ev);
-            } else if (cloudEvent.Type == "yandex.cloud.events.ymq.UpdateMessageQueue") {
+            } else if (cloudEvent.Type.substr(DefaultEventTypePrefix.size()) == "UpdateMessageQueue") {
                 TUpdateQueueEvent ev;
                 TFiller<TUpdateQueueEvent> filler(cloudEvent, ev);
                 filler.Fill();
                 TAuditSender::Send<TUpdateQueueEvent>(ev);
-            } else if (cloudEvent.Type == "yandex.cloud.events.ymq.DeleteMessageQueue") {
+            } else if (cloudEvent.Type.substr(DefaultEventTypePrefix.size()) == "DeleteMessageQueue") {
                 TDeleteQueueEvent ev;
                 TFiller<TDeleteQueueEvent> filler(cloudEvent, ev);
                 filler.Fill();
                 TAuditSender::Send<TDeleteQueueEvent>(ev);
             } else {
-                Y_UNREACHABLE();
+                std::cerr << "TYPE = " << cloudEvent.type << std::endl;
+                // Y_UNREACHABLE();
             }
         }
 

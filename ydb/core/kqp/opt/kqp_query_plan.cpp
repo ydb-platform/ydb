@@ -244,8 +244,8 @@ public:
                 planNode.TypeName = "Effect";
                 Visit(TExprBase(stage), planNode);
             } else if (stageBase.Outputs()) { // Sink
+                AFL_ENSURE(stageBase.Outputs().Cast().Size() == 1);
                 auto& planNode = AddPlanNode(phaseNode);
-                planNode.TypeName = "Sink";
                 Visit(TExprBase(stage), planNode);
             }
         }
@@ -347,7 +347,7 @@ private:
 
         for (const auto& [key, value] : planNode.NodeInfo) {
             writer.WriteKey(key);
-            writer.WriteJsonValue(&value, true);
+            writer.WriteJsonValue(&value, true, PREC_NDIGITS, 17);
         }
 
         if (!planNode.Operators.empty()) {
@@ -358,7 +358,7 @@ private:
                 writer.BeginObject();
                 for (const auto& [key, value] : op.Properties) {
                     writer.WriteKey(key);
-                    writer.WriteJsonValue(&value, true);
+                    writer.WriteJsonValue(&value, true, PREC_NDIGITS, 17);
                 }
 
                 writer.WriteKey("Inputs");
@@ -960,7 +960,8 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), stagePlanNode);
+                        AFL_ENSURE(outputs.Cast().Size() == 1);
+                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode);
                     }
                 }
             }
@@ -1178,6 +1179,8 @@ private:
                     return Sprintf(strRegexp[compSign].c_str(), attr.c_str(), value.c_str());
                 }
             }
+        } else if (auto olapApply = TMaybeNode<TKqpOlapApply>(node)) {
+            return NPlanUtils::ExtractPredicate(olapApply.Cast().Lambda()).Body;
         }
 
         for (const auto& child: node->Children()) {
@@ -2631,7 +2634,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
         NJson::ReadJsonTree(commonPlanInfo, &commonPlanJson, true);
 
         writer.WriteKey("tables");
-        writer.WriteJsonValue(&commonPlanJson);
+        writer.WriteJsonValue(&commonPlanJson, false, PREC_NDIGITS, 17);
     }
 
     writer.WriteKey("Plan");
@@ -2644,7 +2647,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
         NJson::ReadJsonTree(queryStats, &queryStatsJson, true);
 
         writer.WriteKey("Stats");
-        writer.WriteJsonValue(&queryStatsJson);
+        writer.WriteJsonValue(&queryStatsJson, false, PREC_NDIGITS, 17);
     }
 
     writer.WriteKey("Plans");
@@ -2667,7 +2670,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
 
         for (auto& subplan : txPlanJson.GetMapSafe().at("Plans").GetArraySafe()) {
             ModifyPlan(subplan, removeStageGuid);
-            writer.WriteJsonValue(&subplan, true);
+            writer.WriteJsonValue(&subplan, true, PREC_NDIGITS, 17);
         }
     }
 
@@ -3189,7 +3192,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     ModifyPlan(root, addStatsToPlanNode);
 
     NJsonWriter::TBuf txWriter;
-    txWriter.WriteJsonValue(&root, true);
+    txWriter.WriteJsonValue(&root, true, PREC_NDIGITS, 17);
     auto resultPlan = txWriter.Str();
     return AddSimplifiedPlan(resultPlan, optCtx, true);
 }
@@ -3257,14 +3260,14 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
         writer.BeginObject();
         if (auto tableAccesses = planMap.FindPtr("tables")) {
             writer.WriteKey("tables");
-            writer.WriteJsonValue(tableAccesses);
+            writer.WriteJsonValue(tableAccesses, false, PREC_NDIGITS, 17);
         }
         if (auto dqPlan = planMap.FindPtr("Plan")) {
             writer.WriteKey("Plan");
-            writer.WriteJsonValue(dqPlan);
+            writer.WriteJsonValue(dqPlan, false, PREC_NDIGITS, 17);
             writer.WriteKey("SimplifiedPlan");
             auto simplifiedPlan = SimplifyQueryPlan(*dqPlan);
-            writer.WriteJsonValue(&simplifiedPlan);
+            writer.WriteJsonValue(&simplifiedPlan, false, PREC_NDIGITS, 17);
         }
         writer.EndObject();
     }

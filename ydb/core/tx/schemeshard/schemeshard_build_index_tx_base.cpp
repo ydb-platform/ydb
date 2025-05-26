@@ -23,6 +23,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
         auto& buildInfo = *buildInfoPtr->Get();
         LOG_I("Change state from " << buildInfo.State << " to " << state);
+        if (state == TIndexBuildInfo::EState::Rejected ||
+            state == TIndexBuildInfo::EState::Cancelled ||
+            state == TIndexBuildInfo::EState::Done) {
+            buildInfo.EndTime = TAppData::TimeProvider->Now();
+        }
         buildInfo.State = state;
 
         NIceDb::TNiceDb db(txc.DB);
@@ -194,6 +199,15 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     index.SetId(ui64(indexInfo.Id));
     if (indexInfo.Issue) {
         AddIssue(index.MutableIssues(), indexInfo.Issue);
+    }
+    if (indexInfo.StartTime != TInstant::Zero()) {
+        *index.MutableStartTime() = SecondsToProtoTimeStamp(indexInfo.StartTime.Seconds());
+    }
+    if (indexInfo.EndTime != TInstant::Zero()) {
+        *index.MutableEndTime() = SecondsToProtoTimeStamp(indexInfo.EndTime.Seconds());
+    }
+    if (indexInfo.UserSID) {
+        index.SetUserSID(*indexInfo.UserSID);
     }
 
     for (const auto& item: indexInfo.Shards) {

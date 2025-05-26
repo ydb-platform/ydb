@@ -158,18 +158,21 @@ extern const std::string RootUserName;
 
 constexpr int TypicalMessagePartCount = 8;
 
+// COMPAT(nadya02): remove it when all timeouts are set
+constexpr TDuration DefaultRpcRequestTimeout = TDuration::Hours(24);
+
 using TFeatureIdFormatter = const std::function<std::optional<TStringBuf>(int featureId)>*;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString RequestIdAnnotation;
-extern const TString EndpointAnnotation;
-extern const TString RequestInfoAnnotation;
-extern const TString RequestUser;
-extern const TString ResponseInfoAnnotation;
+extern const std::string RequestIdAnnotation;
+extern const std::string EndpointAnnotation;
+extern const std::string RequestInfoAnnotation;
+extern const std::string RequestUser;
+extern const std::string ResponseInfoAnnotation;
 
-extern const TString FeatureIdAttributeKey;
-extern const TString FeatureNameAttributeKey;
+extern const std::string FeatureIdAttributeKey;
+extern const std::string FeatureNameAttributeKey;
 
 ////////////////////////////////////////////////////////////////////////////////
 

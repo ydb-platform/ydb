@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    schema_gateway.cpp
+    schema.cpp
 )
 
 PEERDIR(
@@ -9,3 +9,11 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    static
+)
+
+RECURSE_FOR_TESTS(
+    ut
+)

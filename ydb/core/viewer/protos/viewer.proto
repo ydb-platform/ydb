@@ -43,6 +43,7 @@ enum EObjectType {
     ExternalDataSource = 25;
     View = 26;
     ResourcePool = 27;
+    SysView = 28;
 }
 
 message TBrowseInfo {

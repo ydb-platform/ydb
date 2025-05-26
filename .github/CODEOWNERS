@@ -52,7 +52,7 @@
 /ydb/core/health_check @ydb-platform/core
 /ydb/core/kesus @ydb-platform/core
 /ydb/core/mind/hive @ydb-platform/core
-/ydb/core/mind/node_broker* @ydb-platform/core
+/ydb/core/mind/node_broker* @ydb-platform/core @snaury
 /ydb/core/protos/counters_replication.proto @ydb-platform/core
 /ydb/core/protos/replication.proto @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core

@@ -41,16 +41,19 @@ private:
     YDB_READONLY_DEF(TDuration, ServerTiming);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
+    YDB_READONLY_DEF(TString, DiffErrors);
+    YDB_READONLY_DEF(TString, DiffWarrnings);
     TQueryBenchmarkResult() = default;
 public:
     static TQueryBenchmarkResult Result(TRawResults&& rawResults,
-        const TDuration& serverTiming, const TString& queryPlan, const TString& planAst)
+        const TDuration& serverTiming, const TString& queryPlan, const TString& planAst, TStringBuf expected)
     {
         TQueryBenchmarkResult result;
         result.RawResults = std::move(rawResults);
         result.ServerTiming = serverTiming;
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
+        result.CompareWithExpected(expected);
         return result;
     }
 
@@ -62,7 +65,6 @@ public:
         return result;
     }
 
-    bool IsExpected(std::string_view expected) const;
     TString CalcHash() const;
 
     operator bool() const {
@@ -70,7 +72,8 @@ public:
     }
 
 private:
-    bool IsExpected(TStringBuf expected, size_t resultSetIndex) const;
+    void CompareWithExpected(TStringBuf expected);
+    void CompareWithExpected(TStringBuf expected, size_t resultSetIndex);
 };
 
 struct TQueryBenchmarkDeadline {
@@ -87,12 +90,12 @@ struct TQueryBenchmarkSettings {
 
 TString FullTablePath(const TString& database, const TString& table);
 bool HasCharsInString(const TString& str);
-TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkSettings& settings);
-TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkSettings& settings);
-TQueryBenchmarkResult Explain(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkSettings& settings);
-TQueryBenchmarkResult Explain(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkSettings& settings);
-NJson::TJsonValue GetQueryLabels(ui32 queryId);
-NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, ui32 queryId);
-NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId);
+TQueryBenchmarkResult Execute(const TString& query, TStringBuf expected, NTable::TTableClient & client, const TQueryBenchmarkSettings& settings);
+TQueryBenchmarkResult Execute(const TString& query, TStringBuf expected, NQuery::TQueryClient & client, const TQueryBenchmarkSettings& settings);
+TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient & client, const TQueryBenchmarkSettings& settings);
+TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient & client, const TQueryBenchmarkSettings& settings);
+NJson::TJsonValue GetQueryLabels(TStringBuf queryId);
+NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, TStringBuf queryId);
+NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, TStringBuf queryId);
 
 } // NYdb::NConsoleClient::BenchmarkUtils

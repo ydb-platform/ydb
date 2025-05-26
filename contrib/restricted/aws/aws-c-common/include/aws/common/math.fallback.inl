@@ -94,12 +94,6 @@ AWS_STATIC_IMPL int aws_add_u32_checked(uint32_t a, uint32_t b, uint32_t *r) {
     return AWS_OP_SUCCESS;
 }
 
-/*
- * These are pure C implementations of the count leading/trailing zeros calls
- * They should not be necessary unless using a really esoteric compiler with
- * no intrinsics for these functions whatsoever.
- */
-#if !defined(__clang__) && !defined(__GNUC__)
 /**
  * Search from the MSB to LSB, looking for a 1
  */
@@ -144,11 +138,11 @@ AWS_STATIC_IMPL size_t aws_clz_i64(int64_t n) {
 }
 
 AWS_STATIC_IMPL size_t aws_clz_size(size_t n) {
-#    if SIZE_BITS == 64
+#if SIZE_BITS == 64
     return aws_clz_u64(n);
-#    else
+#else
     return aws_clz_u32(n);
-#    endif
+#endif
 }
 
 /**
@@ -193,14 +187,12 @@ AWS_STATIC_IMPL size_t aws_ctz_i64(int64_t n) {
 }
 
 AWS_STATIC_IMPL size_t aws_ctz_size(size_t n) {
-#    if SIZE_BITS == 64
+#if SIZE_BITS == 64
     return aws_ctz_u64(n);
-#    else
+#else
     return aws_ctz_u32(n);
-#    endif
-}
-
 #endif
+}
 
 AWS_EXTERN_C_END
 

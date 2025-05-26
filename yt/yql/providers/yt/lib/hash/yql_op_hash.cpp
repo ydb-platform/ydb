@@ -7,9 +7,23 @@
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/string/builder.h>
+
 namespace NYql {
 
 using namespace NNodes;
+
+TNodeHashCalculator::TNodeHashCalculator(const TTypeAnnotationContext& types, std::unordered_map<ui64, TString>& nodeHash, const TString& salt)
+    : Types(types)
+    , NodeHash(nodeHash)
+    , FullSalt(TStringBuilder() << salt << '|' << ToString(types.LangVer))
+{
+}
+
+TString TNodeHashCalculator::GetHash(const TExprNode& node) const {
+    TArgIndex argIndex;
+    return GetHashImpl(node, argIndex, 0);
+}
 
 void TNodeHashCalculator::UpdateFileHash(THashBuilder& builder, TStringBuf alias) const {
     auto block = Types.UserDataStorage->FindUserDataBlock(alias);
@@ -49,7 +63,7 @@ TString TNodeHashCalculator::GetHashImpl(const TExprNode& node, TArgIndex& argIn
     TString myHash;
     ui32 typeNum = node.Type();
     THashBuilder builder;
-    builder << Salt << typeNum;
+    builder << FullSalt << typeNum;
     switch (node.Type()) {
     case TExprNode::List: {
         if (!UpdateChildrenHash(builder, node, argIndex, frameLevel)) {

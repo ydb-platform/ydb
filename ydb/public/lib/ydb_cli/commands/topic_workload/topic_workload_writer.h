@@ -44,11 +44,11 @@ namespace NYdb {
         class TTopicWorkloadWriterWorker {
         public:
             static const size_t GENERATED_MESSAGES_COUNT = 32;
-            static void RetryableWriterLoop(TTopicWorkloadWriterParams& params);
-            static void WriterLoop(TTopicWorkloadWriterParams& params, TInstant endTime);
+            static void RetryableWriterLoop(const TTopicWorkloadWriterParams& params);
+            static void WriterLoop(const TTopicWorkloadWriterParams& params, TInstant endTime);
             static std::vector<TString> GenerateMessages(size_t messageSize);
         private:
-            TTopicWorkloadWriterWorker(TTopicWorkloadWriterParams&& params);
+            TTopicWorkloadWriterWorker(const TTopicWorkloadWriterParams& params);
             ~TTopicWorkloadWriterWorker();
 
             void Close();

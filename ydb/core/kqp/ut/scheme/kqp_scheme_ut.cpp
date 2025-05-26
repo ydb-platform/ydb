@@ -2928,22 +2928,138 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(AlterIndexImplTable) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(AlterIndexImplTable, VectorIndex) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAccessToIndexImplTables(true);
+        if (VectorIndex)
+            featureFlags.SetEnableVectorIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateSampleTablesWithIndex(session);
+        kikimr.GetTestClient().GrantConnect("user@builtin");
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+
+        auto adminSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("root@builtin")).CreateSession().GetValueSync().GetSession();
+
+        const char *tablePath, *implTablePath;
+        if (VectorIndex) {
+            CreateTestTableWithVectorIndex(adminSession);
+            tablePath = "/Root/TestTable";
+            implTablePath = "/Root/TestTable/vector_idx/indexImplLevelTable";
+        }
+        else {
+            CreateSampleTablesWithIndex(adminSession);
+            tablePath = "/Root/SecondaryKeys";
+            implTablePath = "/Root/SecondaryKeys/Index/indexImplTable";
+        }
+
+        // a user which does not have any implicit permissions
+        auto userSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("user@builtin")).CreateSession().GetValueSync().GetSession();        
 
         constexpr int minPartitionsCount = 10;
+        auto setPartitioningQuery = [&]() {
+            return userSession.ExecuteSchemeQuery(Sprintf(R"(
+                    ALTER TABLE `%s` SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT %d;
+                )", implTablePath, minPartitionsCount)).ExtractValueSync();
+        };
+        constexpr int replicasCount = 3;
+        auto setReplicasQuery = [&]() {
+            return userSession.ExecuteSchemeQuery(Sprintf(R"(
+                    ALTER TABLE `%s` SET READ_REPLICAS_SETTINGS "PER_AZ:%d";
+                )", implTablePath, replicasCount)).ExtractValueSync();
+        };        
+        auto setForbiddenSettingsQuery = [&]() {
+            return userSession.ExecuteSchemeQuery(Sprintf(R"(
+                    ALTER TABLE `%s` SET KEY_BLOOM_FILTER ENABLED;
+                )", implTablePath)).ExtractValueSync();
+        };
+        auto addColumnQuery = [&]() {
+            return userSession.ExecuteSchemeQuery(Sprintf(R"(
+                    ALTER TABLE `%s` ADD COLUMN column1 Uint64;
+                )", implTablePath)).ExtractValueSync();
+        };
+
+        // try altering indexImplTable without ALTER SCHEMA permission
         {
-            auto result = session.ExecuteSchemeQuery(Sprintf(R"(
-                        ALTER TABLE `/Root/SecondaryKeys/Index/indexImplTable` SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT %d;
-                    )", minPartitionsCount
-                )
-            ).ExtractValueSync();
+            auto result = setPartitioningQuery();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "Error: Cannot find table 'db.[/Root/SecondaryKeys/Index/indexImplTable]' because it does not exist or you do not have access permissions.",
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto result = setReplicasQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+      
+        // grant necessary permission
+        Grant(adminSession, "DESCRIBE SCHEMA", tablePath, "user@builtin");
+        Grant(adminSession, "ALTER SCHEMA", tablePath, "user@builtin");
+
+        // alter indexImplTable
+        {
+            auto result = setPartitioningQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = setReplicasQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }        
+        // check result
+        {
+            auto describe = userSession.DescribeTable(implTablePath).ExtractValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+            auto tableDesc = describe.GetTableDescription();
+
+            UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPartitioningSettings().GetMinPartitionsCount(), minPartitionsCount);
+            
+            const auto readReplicasSettings = tableDesc.GetReadReplicasSettings();
+            UNIT_ASSERT(readReplicasSettings);
+            UNIT_ASSERT(readReplicasSettings->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::PerAz);
+            UNIT_ASSERT_VALUES_EQUAL(readReplicasSettings->GetReadReplicasCount(), replicasCount);
+        }
+       
+
+        // try altering non-partitioning setting of indexImplTable as non-superuser
+        {
+            auto result = setForbiddenSettingsQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "path is not a common path",
+                result.GetIssues().ToString()
+            );
+        }
+        // try add column to indexImplTable as non-superuser
+        {
+            auto result = addColumnQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "path is not a common path",
+                result.GetIssues().ToString()
+            );
+        }
+
+        // become superuser
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user@builtin");
+        
+        // alter non-partitioning setting of indexImplTable as superuser
+        {
+            auto result = setForbiddenSettingsQuery();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        // try add column to indexImplTable as superuser
+        {
+            auto result = addColumnQuery();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Adding or dropping columns in index table is not supported",
                 result.GetIssues().ToString()
             );
         }
@@ -3377,6 +3493,39 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }    
 
+    Y_UNIT_TEST(RenameTableWithVectorIndex) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTestTableWithVectorIndex(session);
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable` RENAME TO TestTableRenamed;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/TestTableRenamed").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "vector_idx");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
+        }
+        {
+            auto describeLevelTable = session.DescribeTable("/Root/TestTableRenamed/vector_idx/indexImplLevelTable").GetValueSync();
+            UNIT_ASSERT_C(describeLevelTable.IsSuccess(), describeLevelTable.GetIssues().ToString());
+            auto describePostingTable = session.DescribeTable("/Root/TestTableRenamed/vector_idx/indexImplPostingTable").GetValueSync();
+            UNIT_ASSERT_C(describePostingTable.IsSuccess(), describePostingTable.GetIssues().ToString());
+        }
+    }     
+
     Y_UNIT_TEST(AlterTableWithDecimalColumn) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -3454,11 +3603,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
         };
 
-        checkColumn(0,22, 20);
-        checkColumn(3, 1, 0);
-        checkColumn(4, 2, 1);
-        checkColumn(5, 22,9);
-        checkColumn(6, 35, 10);
+        checkColumn(2, 1, 0);
+        checkColumn(3, 2, 1);
+        checkColumn(4, 22, 9);
+        checkColumn(5, 35, 10);
+        checkColumn(6, 22, 20);
     }
 
     Y_UNIT_TEST(AlterTableWithPgColumn) {
@@ -6668,7 +6817,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(CreateExternalDataSource) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddHostnamePatterns("my-bucket");
-        appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
 
         TKikimrRunner kikimr(appCfg);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -6751,6 +6899,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(DisableS3ExternalDataSource) {
         NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
         TKikimrRunner kikimr(appCfg);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -8355,8 +8504,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )", kikimr.GetEndpoint().c_str());
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "The transfer destination path '/Root/table_not_exists' not found");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Path does not exist");
         }
 
         // positive
@@ -8629,8 +8778,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )", kikimr.GetEndpoint().c_str());
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "The transfer destination path '/Root/table_not_exists' not found");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Path does not exist");
         }
 
         // positive
@@ -8736,7 +8885,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Check failed: path: '/Root/transfer', error: path hasn't been resolved, nearest resolved path: '/Root'");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "path hasn't been resolved");
         }
 
         {
@@ -9094,7 +9243,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Check failed: path: '/Root/transfer', error: path hasn't been resolved, nearest resolved path: '/Root'");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "path hasn't been resolved");
         }
 
         {

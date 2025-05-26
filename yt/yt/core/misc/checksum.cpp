@@ -3,7 +3,7 @@
 
 #include <yt/yt/core/misc/isa_crc64/checksum.h>
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
     #include <util/system/cpu_id.h>
 #endif
 
@@ -13,7 +13,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
 
 namespace NCrcNative0xE543279765927881 {
 
@@ -704,7 +704,7 @@ namespace {
 
 ui64 CrcImpl(const void* data, size_t length, ui64 seed)
 {
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
     static const bool Native = NX86::CachedHaveSSE42() && NX86::CachedHavePCLMUL();
     if (Native) {
         return NIsaCrc64::CrcImplFast(data, length, seed);

@@ -1755,7 +1755,7 @@ TEST_F(TFutureTest, AsyncViaCanceledInvoker2)
         << NYT::ToString(error);
 }
 
-TEST_F(TFutureTest, YT_12720)
+TError CreateFiberCanceledError(TError cancelationError)
 {
     auto aqueue = New<NConcurrency::TActionQueue>();
     auto invoker = aqueue->GetInvoker();
@@ -1768,8 +1768,13 @@ TEST_F(TFutureTest, YT_12720)
 
     WaitFor(taskStarted.ToFuture()).ThrowOnError();
 
-    future.Cancel(NYT::TError(NYT::EErrorCode::Canceled, "Fiber canceled in .Reset() of TFiberGuard"));
-    auto error = WaitFor(future);
+    future.Cancel(cancelationError);
+    return WaitFor(future);
+}
+
+TEST_F(TFutureTest, YT_12720)
+{
+    auto error = CreateFiberCanceledError(NYT::TError(NYT::EErrorCode::Canceled, "Fiber canceled in .Reset() of TFiberGuard"));
     EXPECT_FALSE(error.IsOK());
     EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Canceled);
     EXPECT_TRUE(NYT::ToString(error).Contains("Fiber canceled in .Reset() of TFiberGuard"))
@@ -1801,6 +1806,63 @@ TEST_F(TFutureTest, DiscardInApply)
     EXPECT_EQ(error.GetCode(), NYT::EErrorCode::Canceled);
     EXPECT_TRUE(NYT::ToString(error).Contains("Canceled!"))
         << NYT::ToString(error);
+}
+
+TEST_F(TFutureTest, ErrorFromException)
+{
+    // Creating error from exception whenever possible is important for FromExceptionEnricher. So test it with enricher.
+
+    static thread_local bool testFromExceptionEnricherEnabled = false;
+    testFromExceptionEnricherEnabled = true;
+    auto finally = Finally([] {
+        testFromExceptionEnricherEnabled = false;
+    });
+
+    static auto getAttribute = [] (const TError& error) {
+        return error.Attributes().Get<TString>("test_attribute", "");
+    };
+
+    TError::RegisterFromExceptionEnricher([](TError* error, const std::exception&) {
+        if (testFromExceptionEnricherEnabled) {
+            *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+        }
+    });
+
+    static auto getError = [] (auto&& func) -> TError {
+        return BIND(func).AsyncVia(GetSyncInvoker()).Run().Get();
+    };
+
+    // If there is no exception, there is no error.
+    EXPECT_TRUE(getError([] {}).IsOK());
+
+    // If there is std::exception, there is error and enricher is called.
+    {
+        auto error = getError([] {
+            throw std::runtime_error("test_std");
+        });
+        ASSERT_FALSE(error.IsOK());
+        EXPECT_TRUE(error.GetMessage().contains("test_std"));
+        EXPECT_EQ(getAttribute(error), "X");
+    }
+
+    // If there is TErrorException, there is an error and enricher is called.
+    {
+        auto error = getError([] {
+            THROW_ERROR_EXCEPTION("test_yt");
+        });
+        ASSERT_FALSE(error.IsOK());
+        EXPECT_TRUE(error.GetMessage().contains("test_yt"));
+        EXPECT_EQ(getAttribute(error), "X");
+    }
+
+    // If there is TFiberCanceledException, there is an error, but enricher is not called.
+    {
+        auto error = CreateFiberCanceledError(NYT::TError(NYT::EErrorCode::Canceled, "test_fiber_canceled"));
+
+        ASSERT_FALSE(error.IsOK());
+        EXPECT_TRUE(error.GetMessage().contains("test_fiber_canceled"));
+        EXPECT_EQ(getAttribute(error), "");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

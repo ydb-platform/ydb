@@ -114,7 +114,7 @@ public:
         if (request->wait_on_latch()) {
             Latch()->Wait();
         }
-        response->set_allocated_string(TString("r", request->size()));
+        response->set_allocated_string(std::string("r", request->size()));
         context->Reply();
     }
 

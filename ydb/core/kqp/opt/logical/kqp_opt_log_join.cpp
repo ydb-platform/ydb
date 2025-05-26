@@ -182,29 +182,11 @@ TDqJoin FlipLeftSemiJoin(const TDqJoin& join, TExprContext& ctx) {
 
 TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
     const TKqpTable& table, const TCoAtomList& columns,
-    const TExprBase& keysToLookup, const TVector<TCoAtom>& skipNullColumns, const TString& indexName,
-    const TKqpOptimizeContext& kqpCtx)
+    const TExprBase& keysToLookup, const TVector<TCoAtom>& skipNullColumns, const TString& indexName)
 {
-    if (kqpCtx.IsScanQuery()) {
-        YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin, "Stream lookup is not enabled for index lookup join");
-        TKqpStreamLookupSettings settings;
-        settings.Strategy = EStreamLookupStrategyType::LookupRows;
-        return Build<TKqlStreamLookupIndex>(ctx, pos)
-            .Table(table)
-            .LookupKeys<TCoSkipNullMembers>()
-                .Input(keysToLookup)
-                .Members()
-                    .Add(skipNullColumns)
-                    .Build()
-                .Build()
-            .Columns(columns)
-            .Index()
-                .Build(indexName)
-            .Settings(settings.BuildNode(ctx, pos))
-            .Done();
-    }
-
-    return Build<TKqlLookupIndex>(ctx, pos)
+    TKqpStreamLookupSettings settings;
+    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    return Build<TKqlStreamLookupIndex>(ctx, pos)
         .Table(table)
         .LookupKeys<TCoSkipNullMembers>()
             .Input(keysToLookup)
@@ -215,30 +197,14 @@ TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
         .Columns(columns)
         .Index()
             .Build(indexName)
+        .Settings(settings.BuildNode(ctx, pos))
         .Done();
 }
 
 TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
     const TKqpTable& table, const TCoAtomList& columns,
-    const TExprBase& keysToLookup, const TVector<TCoAtom>& skipNullColumns, const TKqpOptimizeContext& kqpCtx)
+    const TExprBase& keysToLookup, const TVector<TCoAtom>& skipNullColumns)
 {
-    if (kqpCtx.IsScanQuery()) {
-        YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin, "Stream lookup is not enabled for index lookup join");
-        TKqpStreamLookupSettings settings;
-        settings.Strategy = EStreamLookupStrategyType::LookupRows;
-        return Build<TKqlStreamLookupTable>(ctx, pos)
-            .Table(table)
-            .LookupKeys<TCoSkipNullMembers>()
-                .Input(keysToLookup)
-                .Members()
-                    .Add(skipNullColumns)
-                    .Build()
-                .Build()
-            .Columns(columns)
-            .Settings(settings.BuildNode(ctx, pos))
-            .Done();
-    }
-
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
     return Build<TKqlStreamLookupTable>(ctx, pos)
@@ -590,7 +556,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     for (ui32 i = 0; i < join.JoinKeys().Size(); ++i) {
         const auto& keyTuple = join.JoinKeys().Item(i);
 
-        auto leftKey = join.LeftLabel().Maybe<TCoVoid>()
+        auto leftKey = (join.LeftLabel().Maybe<TCoVoid>() || join.LeftLabel().Maybe<TCoAtomList>())
             ? Join('.', keyTuple.LeftLabel().Value(), keyTuple.LeftColumn().Value())
             : keyTuple.LeftColumn().StringValue();
 
@@ -885,8 +851,8 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         .Done();
 
     TExprBase lookup = indexName
-        ? BuildLookupIndex(ctx, join.Pos(), prefixLookup->MainTable, lookupColumns.Cast(), keysToLookup, skipNullColumns, indexName, kqpCtx)
-        : BuildLookupTable(ctx, join.Pos(), prefixLookup->MainTable, lookupColumns.Cast(), keysToLookup, skipNullColumns, kqpCtx);
+        ? BuildLookupIndex(ctx, join.Pos(), prefixLookup->MainTable, lookupColumns.Cast(), keysToLookup, skipNullColumns, indexName)
+        : BuildLookupTable(ctx, join.Pos(), prefixLookup->MainTable, lookupColumns.Cast(), keysToLookup, skipNullColumns);
 
     if (prefixLookup->Filter.IsValid()) {
         lookup = Build<TCoFlatMap>(ctx, join.Pos())

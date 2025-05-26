@@ -87,7 +87,7 @@ def main():
             FROM 
             `test_results/test_runs_column` 
         WHERE 
-            run_timestamp >= CurrentUtcDate()- Interval("P10D") 
+            run_timestamp >= CurrentUtcDate()- Interval("P1D") 
             and ( branch = 'main' or branch like 'stable-%')
             and job_name in (
                 'Nightly-run',

@@ -10,6 +10,8 @@
 
 #include <aws/common/hash_table.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_array_list;
 struct aws_byte_cursor;
 struct aws_http_message;
@@ -162,5 +164,6 @@ AWS_AUTH_API extern const struct aws_string *g_aws_signing_authorization_header_
 AWS_AUTH_API extern const struct aws_string *g_aws_signing_authorization_query_param_name;
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_AUTH_SIGNING_RESULT_H */

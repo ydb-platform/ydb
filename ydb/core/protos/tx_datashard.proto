@@ -269,6 +269,8 @@ message TKqpReadRangesSourceSettings {
     optional NKikimrDataEvents.ELockMode LockMode = 20;
     optional uint32 OptionalSorting = 21;
     optional bool IsBatch = 22 [default = false];
+
+    optional bool IsTableImmutable = 23 [default = false];
 }
 
 message TKqpTaskInfo {
@@ -645,6 +647,7 @@ message TEvProposeTransactionResult {
     optional bytes DataLastKey = 25; // Response data last key (for retries)
     reserved 26; // optional NKqpProto.TKqpStatsRun KqpRunStats = 26;
     optional NYql.NDqProto.TDqComputeActorStats ComputeActorStats = 27; // overall time + per-task statistics
+    optional NKikimrProto.TRowVersion CommitVersion = 28;
 }
 
 message TEvProposeTransactionRestart {
@@ -1549,7 +1552,7 @@ message TEvLocalKMeansRequest {
     optional uint64 Seed = 9;
 
     optional EKMeansState Upload = 11;
-    
+
     optional uint32 K = 10;
     optional uint32 NeedsRounds = 14;
 
@@ -1760,6 +1763,8 @@ message TEvKqpScan {
     optional string CSScanPolicy = 26;
     optional NKikimrKqp.TEvKqpScanCursor ScanCursor = 27;
     optional NKikimrDataEvents.ELockMode LockMode = 28;
+    optional double CpuGroupThreadsLimit = 29;
+    optional string CpuGroupName = 30;
 }
 
 message TEvCompactTable {

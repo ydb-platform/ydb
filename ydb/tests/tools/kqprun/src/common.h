@@ -33,6 +33,7 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
         Max
     };
 
+    ui32 DcCount = 1;
     std::map<TString, TStorageMeta::TTenant> Tenants;
     TDuration HealthCheckTimeout = TDuration::Seconds(10);
     EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;
@@ -85,6 +86,7 @@ struct TRequestOptions {
     TString Database;
     TDuration Timeout;
     size_t QueryId = 0;
+    std::unordered_map<TString, Ydb::TypedValue> Params;
 };
 
 }  // namespace NKqpRun

@@ -54,6 +54,7 @@ class TGeneralSerializedSlice {
 private:
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui32, InternalSplitsCount, 0);
+
 protected:
     std::vector<TSplittedEntity> Data;
     ui64 Size = 0;
@@ -127,10 +128,6 @@ public:
     void MergeSlice(TGeneralSerializedSlice&& slice);
 
     bool GroupBlobs(std::vector<TSplittedBlob>& blobs, const NSplitter::TEntityGroups& groups);
-
-    bool operator<(const TGeneralSerializedSlice& item) const {
-        return Size < item.Size;
-    }
 };
 
 }

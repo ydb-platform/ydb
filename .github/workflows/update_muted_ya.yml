@@ -2,7 +2,7 @@ name: Update Muted tests
 
 on:
   schedule:
-    - cron: "0 12 * * *"  # At 12-00 UTC every day
+    - cron: "0 6-20/2 * * *"  # Every 2 hours from 6:00 to 20:00 UTC
   workflow_dispatch:
     inputs:
       branches:
@@ -15,7 +15,7 @@ env:
   BRANCH_FOR_PR: update-muted-ya
   TITLE: "Update muted_ya.txt"
   REVIEWERS: "['ci']"
-  LABEL: mute-unmute
+  LABELS: "mute-unmute,not-for-changelog,ok-to-test"
   BUILD_TYPE: relwithdebinfo # Используем только один тип сборки
 
 jobs:
@@ -97,9 +97,7 @@ jobs:
             echo "Reset branch ${PR_BRANCH} to origin/${{ env.BASE_BRANCH }}"
             git reset --hard origin/${{ env.BASE_BRANCH }}
           fi
-          
-          git push origin ${PR_BRANCH} --force
-        
+                  
       - name: Run create_new_muted_ya.py
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya --branch=${{ env.BASE_BRANCH }}
@@ -232,11 +230,12 @@ jobs:
               repo: context.repo.repo,
               body: completeBody
             });
-      
+            
+            const labelsToAdd = process.env.LABELS.split(',');
             github.rest.issues.addLabels({
               ...context.repo,
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
-              labels: ['${{ env.LABEL }}']
+              labels: labelsToAdd
             });
 
       - name: Add reviewers
@@ -249,3 +248,17 @@ jobs:
           pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
           team_reviewers: ${{ env.REVIEWERS }}
           token: ${{ secrets.YDBOT_TOKEN }}
+      - name: Enable auto-merge
+        if: env.changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const pr = ${{ steps.create_or_update_pr.outputs.pr_number }};
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr,
+              auto_merge: true
+            });
+

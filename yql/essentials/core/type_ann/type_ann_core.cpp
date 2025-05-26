@@ -4443,6 +4443,10 @@ namespace NTypeAnnImpl {
         }
 
         const auto sourceType = input->Head().GetTypeAnn();
+        if (HasError(sourceType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         const auto options = CastResult<Strong>(sourceType, targetType);
         if (!(options & NKikimr::NUdf::ECastOptions::Impossible)) {
             auto type = targetType;
@@ -7740,7 +7744,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 }
             }
 
-            auto udfInfo = ctx.Types.UdfModules.FindPtr(moduleName);
+            TStringBuf normalizedModuleName, normalizedFuncName;
+            YQL_ENSURE(SplitUdfName(cached.NormalizedName, normalizedModuleName, normalizedFuncName));
+            auto udfInfo = ctx.Types.UdfModules.FindPtr(normalizedModuleName);
             TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : ""_sb;
             auto ret = ctx.Expr.Builder(input->Pos())
                 .Callable("Udf")
@@ -13355,7 +13361,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return Nothing();
             }
 
-            if (status == IGraphTransformer::TStatus::Ok && Types.OrderedColumns && !Types.LookupColumnOrder(*input)) {
+            if (status == IGraphTransformer::TStatus::Ok && Types.DeriveColumnOrder && !Types.LookupColumnOrder(*input)) {
                 if (auto func = columnOrderFunctions.FindPtr(name)) {
                     TExtContext funcCtx(ctx, Types);
                     status = (*func)(input, output, funcCtx);

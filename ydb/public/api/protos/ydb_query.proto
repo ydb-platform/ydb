@@ -190,6 +190,8 @@ message ExecuteQueryRequest {
 
 message ResultSetMeta {
     repeated Ydb.Column columns = 1;
+    uint64 number_rows = 2;
+    bool finished = 3;
 }
 
 message ExecuteQueryResponsePart {

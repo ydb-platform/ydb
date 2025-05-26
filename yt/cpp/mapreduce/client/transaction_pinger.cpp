@@ -69,7 +69,7 @@ void PingTx(NHttp::IClientPtr httpClient, const TPingableTransaction& tx)
 
     if (const auto& serviceTicketAuth = tx.GetContext().ServiceTicketAuth) {
         const auto serviceTicket = serviceTicketAuth->Ptr->IssueServiceTicket();
-        headers->Add("X-Ya-Service-Ticket", TString(serviceTicket));
+        headers->Add("X-Ya-Service-Ticket", serviceTicket);
     } else if (const auto& token = tx.GetContext().Token; !token.empty()) {
         headers->Add("Authorization", "OAuth " + token);
     }

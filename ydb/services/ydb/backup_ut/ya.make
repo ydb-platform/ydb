@@ -10,10 +10,14 @@ ELSE()
 ENDIF()
 
 SRCS(
+    backup_path_ut.cpp
+    encrypted_backup_ut.cpp
+    list_objects_in_s3_export_ut.cpp
     ydb_backup_ut.cpp
 )
 
 PEERDIR(
+    contrib/libs/fmt
     ydb/core/testlib/default
     ydb/core/util
     ydb/core/wrappers/ut_helpers

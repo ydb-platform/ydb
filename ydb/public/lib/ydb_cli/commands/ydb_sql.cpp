@@ -6,8 +6,10 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
+#include <ydb/public/lib/ydb_cli/common/progress_indication.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -43,6 +45,18 @@ void TCommandSql::Config(TConfig& config) {
         .StoreTrue(&ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    TStringStream description;
+    description << "Print progress of query execution. Requires non-none statistics collection mode. Available options: ";
+    description << "\n  " << colors.BoldColor() << "tty" << colors.OldColor()
+            << "\n    " << "Print progress to the terminal";
+    description << "\n  " << colors.BoldColor() << "none" << colors.OldColor()
+            << "\n    " << "Disables progress printing";
+    description << "\nDefault: " << colors.CyanColor() << "\"none\"" << colors.OldColor() << ".";
+
+    config.Opts->AddLongOption("progress", description.Str())
+        .RequiredArgument("[String]").Hidden().DefaultValue("none").StoreResult(&Progress);
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
         .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
@@ -122,6 +136,9 @@ void TCommandSql::Parse(TConfig& config) {
             << "nor path to file with script text (\"--file\", \"-f\") were provided." << Endl;
         config.PrintHelpAndExit();
     }
+    if (Progress && Progress != "tty" && Progress != "none") {
+        throw TMisuseException() << "Unknow progress option \"" << Progress << "\".";
+    }
     // Should be called after setting ReadingSomethingFromStdin
     ParseParameters(config);
 }
@@ -144,7 +161,18 @@ int TCommandSql::RunCommand(TConfig& config) {
         // Execute query
         settings.ExecMode(NQuery::EExecMode::Execute);
         auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
-        settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
+        auto statsMode = ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode);
+        settings.StatsMode(statsMode);
+        if (Progress == "tty") {
+            if (statsMode == NQuery::EStatsMode::None) {
+                throw TMisuseException() << "Non-none statistics collection mode are required to print progress.";
+            }
+            if (statsMode >= NQuery::EStatsMode::Full) {
+                settings.StatsCollectPeriod(std::chrono::milliseconds(3000));
+            } else {
+                settings.StatsCollectPeriod(std::chrono::milliseconds(500));
+            }
+        }
     }
 
     settings.Syntax(SyntaxType);
@@ -152,7 +180,7 @@ int TCommandSql::RunCommand(TConfig& config) {
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
         THolder<TParamsBuilder> paramBuilder;
-        while (!IsInterrupted() && GetNextParams(driver, Query, paramBuilder)) {
+        while (!IsInterrupted() && GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             auto asyncResult = client.StreamExecuteQuery(
                     Query,
                     NQuery::TTxControl::NoTx(),
@@ -190,28 +218,41 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
+        TProgressIndication progressIndication;
+        TMaybe<NQuery::TExecStats> execStats;
+
         while (!IsInterrupted()) {
-            auto streamPart = result.ReadNext().GetValueSync();
+            auto streamPart = result.ReadNext().ExtractValueSync();
             if (ThrowOnErrorAndCheckEOS(streamPart)) {
                 break;
             }
 
+            if (streamPart.HasStats()) {
+                execStats = streamPart.ExtractStats();
+
+                const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
+                for (const auto& queryPhase : protoStats.query_phases()) {
+                    for (const auto& tableAccessStats : queryPhase.table_access()) {
+                        progressIndication.UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes()});
+                    }
+                }
+                progressIndication.SetDurationUs(protoStats.total_duration_us());
+
+
+                progressIndication.Render();
+            }
+
             if (streamPart.HasResultSet() && !ExplainAnalyzeMode) {
+                progressIndication.Finish();
                 printer.Print(streamPart.GetResultSet());
             }
+        }
 
-            if (streamPart.GetStats().has_value()) {
-                const auto& queryStats = *streamPart.GetStats();
-                stats = queryStats.ToString();
-                ast = queryStats.GetAst();
-
-                if (queryStats.GetPlan()) {
-                    plan = queryStats.GetPlan();
-                }
-                if (queryStats.GetMeta()) {
-                    meta = queryStats.GetMeta();
-                }
-            }
+        if (execStats) {
+            stats = execStats->ToString();
+            plan = execStats->GetPlan();
+            ast = execStats->GetAst();
+            meta = execStats->GetMeta();
         }
     } // TResultSetPrinter destructor should be called before printing stats
 

@@ -261,6 +261,8 @@ message TKqpPhyCnHashShuffle {
         THashV1 HashV1 = 2;
         TColumnShardHashV1 ColumnShardHashV1 = 3;
     }
+
+    bool UseSpilling = 4;
 }
 
 message TKqpPhyCnBroadcast {
@@ -304,6 +306,7 @@ message TKqpPhyCnStreamLookup {
     bool KeepRowsOrder = 7;
     bool AllowNullKeys = 8;
     uint32 AllowNullKeysPrefixSize = 9;
+    bool IsTableImmutable = 10;
 }
 
 message TKqpPhyCnSequencer {
@@ -348,6 +351,7 @@ message TKqpReadRangesSource {
 
     repeated string SkipNullKeys = 8;
     uint64 SequentialInFlightShards = 9;
+    bool IsTableImmutable = 10;
 }
 
 message TKqpExternalSource {

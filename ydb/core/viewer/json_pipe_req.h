@@ -55,6 +55,7 @@ protected:
     NMon::TEvHttpInfo::TPtr Event;
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr HttpEvent;
     TCgiParameters Params;
+    NJson::TJsonValue PostData;
     TJsonSettings JsonSettings;
     TProto2JsonConfig Proto2JsonConfig;
     TDuration Timeout = TDuration::Seconds(10);
@@ -192,6 +193,7 @@ protected:
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> DatabaseNavigateResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> ResourceNavigateResponse;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfoResponse;
+    std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> ResourceBoardInfoResponse;
 
     NTabletPipe::TClientConfig GetPipeClientConfig();
 
@@ -273,6 +275,9 @@ protected:
     static bool IsSuccess(const NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult& ev);
     static TString GetError(const NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult& ev);
 
+    static bool IsSuccess(const TEvTxUserProxy::TEvProposeTransactionStatus& ev);
+    static TString GetError(const TEvTxUserProxy::TEvProposeTransactionStatus& ev);
+
     void UpdateSharedCacheTablet(TTabletId tabletId, std::unique_ptr<IEventBase> request);
 
     TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
@@ -320,13 +325,14 @@ protected:
     TRequestResponse<TEvViewer::TEvViewerResponse> MakeRequestViewer(TNodeId nodeId, TEvViewer::TEvViewerRequest* request, ui32 flags = 0);
     void RequestTxProxyDescribe(const TString& path, const NKikimrSchemeOp::TDescribeOptions& options = {});
     void RequestStateStorageEndpointsLookup(const TString& path);
-    void RequestStateStorageMetadataCacheEndpointsLookup(const TString& path);
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageMetadataCacheEndpointsLookup(const TString& path, ui64 cookie = 0);
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);
+    void BuildParamsFromFormData(TStringBuf data);
     void SetupTracing(const TString& handlerName);
 
     template<typename TJson>

@@ -11,6 +11,7 @@ import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/s3_settings.proto";
 import "ydb/core/protos/schemeshard/operations.proto";
 import "ydb/core/protos/subdomains.proto";
+import "ydb/core/protos/sys_view_types.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/yql_translation_settings.proto";
@@ -520,22 +521,52 @@ message TStorageTierConfig {
 
 message TCompactionLevelConstructorContainer {
     optional string ClassName = 1;
+    optional string DefaultSelectorName = 2;
 
     message TZeroLevel {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
         optional uint64 PortionsCountAvailable = 3;
         optional uint64 PortionsCountLimit = 4;
+        optional uint64 PortionsSizeLimit = 5;
     }
 
     message TOneLayer {
         optional uint32 ExpectedPortionSize = 1;
         optional float BytesLimitFraction = 2;
+        optional uint64 SizeLimitGuarantee = 3;
     }
 
     oneof Implementation {
         TZeroLevel ZeroLevel = 10;
         TOneLayer OneLayer = 11;
+    }
+
+}
+
+message TCompactionSelectorConstructorContainer {
+    optional string ClassName = 1;
+    optional string Name = 2;
+
+    message TTransparentSelector {
+    }
+
+    message TEmptySelector {
+    }
+
+    message TDataSnapshotInterval {
+        optional uint32 StartSecondsUTC = 1;
+        optional uint32 FinishSecondsUTC = 2;
+    }
+
+    message TSnapshotSelector {
+        optional TDataSnapshotInterval Interval = 1;
+    }
+
+    oneof Implementation {
+        TEmptySelector Empty = 10;
+        TTransparentSelector Transparent = 11;
+        TSnapshotSelector Snapshot = 12;
     }
 
 }
@@ -554,6 +585,7 @@ message TCompactionPlannerConstructorContainer {
 
     message TLCOptimizer {
         repeated TCompactionLevelConstructorContainer Levels = 1;
+        repeated TCompactionSelectorConstructorContainer Selectors = 2;
     }
 
     oneof Implementation {
@@ -1752,6 +1784,8 @@ message TModifyScheme {
 
     optional TMove MoveSequence = 77;
 
+    optional TSysViewDescription CreateSysView = 81;
+
     // Some entries are grouped by semantics, so are out of order
 }
 
@@ -1820,6 +1854,7 @@ enum EPathType {
     EPathTypeResourcePool = 21;
     EPathTypeBackupCollection = 22;
     EPathTypeTransfer = 23;
+    EPathTypeSysView = 24;
 }
 
 enum EPathSubType {
@@ -1877,6 +1912,7 @@ message TPathVersion {
     optional uint64 ViewVersion = 29;
     optional uint64 ResourcePoolVersion = 30;
     optional uint64 BackupCollectionVersion = 31;
+    optional uint64 SysViewVersion = 32;
 }
 
 // Describes single path
@@ -1968,6 +2004,7 @@ message TPathDescription {
     optional TViewDescription ViewDescription = 29;
     optional TResourcePoolDescription ResourcePoolDescription = 30;
     optional TBackupCollectionDescription BackupCollectionDescription = 31;
+    optional TSysViewDescription SysViewDescription = 32;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2179,4 +2216,9 @@ message TExportMetadata {
     optional string CompressionAlgorithm = 2;
     optional string EncryptionAlgorithm = 3;
     optional bytes IV = 4;
+}
+
+message TSysViewDescription {
+    optional string Name = 1;
+    optional NKikimrSysView.ESysViewType Type = 2;
 }

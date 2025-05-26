@@ -34,6 +34,8 @@ namespace NSQLComplete {
                 SetPrefix(name.Indentifier, ".", *Pragma);
             } else if constexpr (std::is_same_v<T, TFunctionName>) {
                 SetPrefix(name.Indentifier, "::", *Function);
+            } else if constexpr (std::is_same_v<T, TClusterName>) {
+                SetPrefix(name.Indentifier, ":", *Cluster);
             }
             return name;
         }, std::move(unqualified));
@@ -46,6 +48,8 @@ namespace NSQLComplete {
                 FixPrefix(name.Indentifier, ".", *Pragma);
             } else if constexpr (std::is_same_v<T, TFunctionName>) {
                 FixPrefix(name.Indentifier, "::", *Function);
+            } else if constexpr (std::is_same_v<T, TClusterName>) {
+                FixPrefix(name.Indentifier, ":", *Cluster);
             }
             return name;
         }, std::move(qualified));

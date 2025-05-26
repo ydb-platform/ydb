@@ -64,7 +64,7 @@ struct TYtJoinNodeOp : TYtJoinNode {
 
 struct TOptimizerLinkSettings {
     bool HasForceSortedMerge = false;
-    bool HasHints = false;
+    bool HasCBOUnsupportedHints = false;
 };
 
 TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx);

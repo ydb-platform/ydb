@@ -7,6 +7,8 @@
 
 #include <aws/event-stream/event_stream_rpc.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_channel;
 struct aws_event_stream_rpc_server_connection;
 
@@ -108,7 +110,7 @@ struct aws_event_stream_rpc_server_listener_options {
     /** host name to use for the listener. This depends on your socket type. */
     const char *host_name;
     /** port to use for your listener, assuming for the appropriate socket type. */
-    uint16_t port;
+    uint32_t port;
     const struct aws_socket_options *socket_options;
     /** optional: tls options for using when setting up your server. */
     const struct aws_tls_connection_options *tls_options;
@@ -138,7 +140,7 @@ AWS_EVENT_STREAM_API void aws_event_stream_rpc_server_listener_release(
  * Get the local port which the listener's socket is bound to.
  */
 AWS_EVENT_STREAM_API
-uint16_t aws_event_stream_rpc_server_listener_get_bound_port(
+uint32_t aws_event_stream_rpc_server_listener_get_bound_port(
     const struct aws_event_stream_rpc_server_listener *listener);
 
 /**
@@ -206,5 +208,6 @@ AWS_EVENT_STREAM_API int aws_event_stream_rpc_server_continuation_send_message(
     void *user_data);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_EVENT_STREAM_RPC_SERVER_H */

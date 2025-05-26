@@ -601,7 +601,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             auto& cmd = *request.MutableCmdReserveBytes();
             cmd.SetSize(it->second.Write.Request.ByteSize());
             cmd.SetLastRequest(false);
-            it->second.ReserveBytesSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(it->second.TraceId), "Topic.Writer.ReserveBytes");
+            it->second.ReserveBytesSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(it->second.TraceId), "Topic.BlobEncoder.ReserveBytes");
             it->second.ReserveBytesSpan.Attribute("bytes", static_cast<i64>(cmd.GetSize()));
 
             if (needToRequestQuota) {
@@ -611,9 +611,9 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
                 PendingQuota.emplace_back(it->first);
 
                 if (!RequestQuotaBatchSpan && it->second.TraceId) {
-                    RequestQuotaBatchSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId::NewTraceId(it->second.TraceId.GetVerbosity(), Max<ui32>()), "Topic.Writer.RequestQuotaBatch");
+                    RequestQuotaBatchSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId::NewTraceId(it->second.TraceId.GetVerbosity(), Max<ui32>()), "Topic.BlobEncoder.RequestQuotaBatch");
                 }
-                it->second.RequestQuotaSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(it->second.TraceId), "Topic.Writer.RequestQuota");
+                it->second.RequestQuotaSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(it->second.TraceId), "Topic.BlobEncoder.RequestQuota");
                 it->second.RequestQuotaSpan.Attribute("amount", static_cast<i64>(quotaAmount));
                 it->second.RequestQuotaSpan.Link(RequestQuotaBatchSpan.GetTraceId());
             }
@@ -857,7 +857,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
                 // Re-requesting the quota. We do this until we get a quota.
                 // We do not request a quota with a long waiting time because the writer may already be a destroyer, and the quota will still be waiting to be received.
                 if (!PendingReserve.empty()) {
-                    RequestQuotaBatchSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId::NewTraceId(PendingReserve.begin()->second.TraceId.GetVerbosity(), Max<ui32>()), "Topic.Writer.RequestQuotaBatch");
+                    RequestQuotaBatchSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId::NewTraceId(PendingReserve.begin()->second.TraceId.GetVerbosity(), Max<ui32>()), "Topic.BlobEncoder.RequestQuotaBatch");
                     RequestQuotaBatchSpan.Attribute("amount", static_cast<i64>(PendingQuotaAmount));
                     for (auto& [_, req] : PendingReserve) {
                         req.RequestQuotaSpan.Link(RequestQuotaBatchSpan.GetTraceId());
@@ -927,6 +927,11 @@ public:
             hFunc(TEvPartitionWriter::TEvWriteRequest, Reject);
             sFunc(TEvents::TEvPoison, PassAway);
         }
+    }
+
+    // used for tests to validate correct opts
+    const TPartitionWriterOpts GetOpts() {
+        return Opts;
     }
 
 private:

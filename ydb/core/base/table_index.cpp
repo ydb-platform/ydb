@@ -154,7 +154,11 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     }
     tmp.clear();
     tmp.insert(table.Keys.begin(), table.Keys.end());
-    tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end() - (isSecondaryIndex ? 0 : 1));
+    if (isSecondaryIndex) {
+        tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end());
+    } else {
+        // Vector indexes allow to add all columns both to index & data
+    }
     if (const auto* broken = IsContains(index.DataColumns, tmp, true)) {
         explain = TStringBuilder()
                   << "the same column can't be used as key and data column for one index, for example " << *broken;
@@ -183,6 +187,18 @@ bool IsBuildImplTable(std::string_view tableName) {
     // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
     return tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix0)
         || tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix1);
+}
+
+static constexpr TClusterId PostingParentFlag = (1ull << 63ull);
+
+// Note: if cluster id is too big, something is wrong with cluster enumeration 
+void EnsureNoPostingParentFlag(TClusterId parent) {
+    Y_ENSURE((parent & PostingParentFlag) == 0);
+}
+
+TClusterId SetPostingParentFlag(TClusterId parent) {
+    EnsureNoPostingParentFlag(parent);
+    return (parent | PostingParentFlag);
 }
 
 }

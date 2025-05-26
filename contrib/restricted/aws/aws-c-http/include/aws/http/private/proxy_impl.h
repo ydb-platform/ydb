@@ -52,7 +52,7 @@ struct aws_http_proxy_config {
 
     struct aws_byte_buf host;
 
-    uint16_t port;
+    uint32_t port;
 
     struct aws_tls_connection_options *tls_options;
 
@@ -97,7 +97,7 @@ struct aws_http_proxy_user_data {
      * Cached original connect options
      */
     struct aws_string *original_host;
-    uint16_t original_port;
+    uint32_t original_port;
     void *original_user_data;
     struct aws_tls_connection_options *original_tls_options;
     struct aws_client_bootstrap *original_bootstrap;
@@ -126,10 +126,16 @@ struct aws_http_proxy_user_data {
     struct aws_http_proxy_config *proxy_config;
 
     struct aws_event_loop *requested_event_loop;
+
+    const struct aws_host_resolution_config *host_resolution_config;
 };
 
+/* vtable of functions that proxy uses to interact with external systems.
+ * tests override the vtable to mock those systems */
 struct aws_http_proxy_system_vtable {
-    int (*setup_client_tls)(struct aws_channel_slot *right_of_slot, struct aws_tls_connection_options *tls_options);
+    int (*aws_channel_setup_client_tls)(
+        struct aws_channel_slot *right_of_slot,
+        struct aws_tls_connection_options *tls_options);
 };
 
 AWS_EXTERN_C_BEGIN

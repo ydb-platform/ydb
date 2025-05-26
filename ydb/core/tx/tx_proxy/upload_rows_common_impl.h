@@ -140,6 +140,7 @@ private:
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<NScheme::TTypeInfo> ValueColumnTypes;
     NSchemeCache::TSchemeCacheNavigate::EKind TableKind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
+    bool IsIndexImplTable = false;
     THashSet<TTabletId> ShardRepliesLeft;
     THashMap<TTabletId, TShardUploadRetryState> ShardUploadRetryStates;
     TUploadStatus Status;
@@ -181,6 +182,7 @@ protected:
 
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
+    bool AllowWriteToIndexImplTable = false;
     bool DiskQuotaExceeded = false;
     bool UpsertIfExists = false;
 
@@ -238,44 +240,6 @@ protected:
     const TKeyDesc* GetKeyRange() const {
         Y_ABORT_UNLESS(ResolvePartitionsResult->ResultSet.size() == 1);
         return ResolvePartitionsResult->ResultSet[0].KeyDescription.Get();
-    }
-
-    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
-                                                    TString& errorMessage)
-    {
-        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
-        batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
-        const auto startStatus = batchBuilder.Start(YdbSchema);
-        if (!startStatus.ok()) {
-            errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
-            return {};
-        }
-
-        for (const auto& kv : rows) {
-            const TSerializedCellVec& key = kv.first;
-            const TSerializedCellVec value(kv.second);
-
-            batchBuilder.AddRow(key.GetCells(), value.GetCells());
-        }
-
-        return batchBuilder.FlushBatch(false);
-    }
-
-    TVector<std::pair<TSerializedCellVec, TString>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                                TString& errorMessage) {
-        Y_ABORT_UNLESS(batch);
-        TVector<std::pair<TSerializedCellVec, TString>> out;
-        out.reserve(batch->num_rows());
-
-        ui32 keySize = KeyColumnPositions.size(); // YdbSchema contains keys first
-        TRowWriter writer(out, keySize);
-        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer, IsInfinityInJsonAllowed());
-        if (!batchConverter.Process(*batch, errorMessage)) {
-            return {};
-        }
-
-        RuCost = writer.GetRuCost();
-        return out;
     }
 
     bool IsInfinityInJsonAllowed() const {
@@ -434,14 +398,14 @@ private:
             if (!cp) {
                 return TConclusionStatus::Fail(Sprintf("Unknown column: %s", name.c_str()));
             }
-            i32 pgTypeMod = -1;            
+            i32 pgTypeMod = -1;
             const ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
-            
+
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
             if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
@@ -630,8 +594,9 @@ private:
 
         TableKind = entry.Kind;
         const bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
+        IsIndexImplTable = (entry.TableKind != NSchemeCache::ETableKind::KindRegularTable);
 
-        if (entry.TableId.IsSystemView()) {
+        if (entry.TableId.IsSystemView() || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);
         }
 
@@ -739,6 +704,12 @@ private:
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
+        }
+        if (IsIndexImplTable && !AllowWriteToIndexImplTable) {
+            return ReplyWithError(
+                Ydb::StatusIds::BAD_REQUEST,
+                "Writing to index implementation tables is not allowed.",
+                ctx);
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "starting LongTx");
@@ -998,6 +969,12 @@ private:
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
+        }
+        if (IsIndexImplTable && !AllowWriteToIndexImplTable) {
+            return ReplyWithError(
+                Ydb::StatusIds::BAD_REQUEST,
+                "Writing to index implementation tables is not allowed.",
+                ctx);
         }
 
         auto getShardsString = [] (const TVector<TKeyDesc::TPartitionInfo>& partitions) {

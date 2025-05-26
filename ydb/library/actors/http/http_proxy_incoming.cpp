@@ -114,6 +114,17 @@ protected:
         OnAccept();
     }
 
+    TString GetRequestDebugText() {
+        TStringBuilder text;
+        if (CurrentRequest) {
+            text << CurrentRequest->Method << " " << CurrentRequest->URL;
+            if (CurrentRequest->Body) {
+                text << ", " << CurrentRequest->Body.Size() << " bytes";
+            }
+        }
+        return text;
+    }
+
     void HandleConnected(TEvPollerReady::TPtr& event) {
         if (event->Get()->Read) {
             for (;;) {
@@ -142,7 +153,7 @@ protected:
                         CurrentRequest->Timer.Reset();
                         if (CurrentRequest->IsReady()) {
                             if (Endpoint->RateLimiter.Check(TActivationContext::Now())) {
-                                ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
+                                ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << GetRequestDebugText() << ")");
                                 Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
                                 CurrentRequest = nullptr;
                             } else {
@@ -153,7 +164,7 @@ protected:
                                 CleanupRequest(CurrentRequest);
                             }
                         } else if (CurrentRequest->IsError()) {
-                            ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << CurrentRequest->Method << " " << CurrentRequest->URL << ")");
+                            ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << GetRequestDebugText() << ")");
                             bool success = Respond(CurrentRequest->CreateResponseBadRequest());
                             if (!success) {
                                 return;
@@ -209,6 +220,31 @@ protected:
         Respond(event->Get()->Response);
     }
 
+    static TString GetChunkDebugText(THttpOutgoingDataChunkPtr chunk) {
+        TStringBuilder text;
+        if (chunk->DataSize) {
+            text << "data chunk " << chunk->DataSize << " bytes";
+        }
+        if (chunk->DataSize && chunk->IsEndOfData()) {
+            text << ", ";
+        }
+        if (chunk->IsEndOfData()) {
+            text << "end of stream";
+        }
+        return text;
+    }
+
+    static TString GetResponseDebugText(THttpOutgoingResponsePtr response) {
+        TStringBuilder text;
+        if (response) {
+            text << response->Status << " " << response->Message;
+            if (response->Body) {
+                text << ", " << response->Body.Size() << " bytes";
+            }
+        }
+        return text;
+    }
+
     void HandleConnected(TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& event) {
         if (event->Get()->Error) {
             ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - DataChunk error: " << event->Get()->Error);
@@ -225,8 +261,7 @@ protected:
                 return PassAway();
             }
         }
-        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (data chunk "
-            << event->Get()->DataChunk->Size() << (event->Get()->DataChunk->IsEndOfData() ? " bytes, final)" : " bytes)"));
+        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (" << GetChunkDebugText(event->Get()->DataChunk) << ")");
         if (event->Get()->DataChunk->IsEndOfData()) {
             CancelSubscriber = nullptr;
         }
@@ -240,7 +275,7 @@ protected:
     bool Respond(THttpOutgoingResponsePtr response) {
         THttpIncomingRequestPtr request = response->GetRequest();
         ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- ("
-            << response->Status << " " << response->Message << (response->IsDone() ? ")" : ") (incomplete)"));
+            << GetResponseDebugText(response) << (response->IsDone() ? ")" : ") (incomplete)"));
         if (!response->Status.StartsWith('2') && !response->Status.StartsWith('3') && response->Status != "404") {
             static constexpr size_t MAX_LOGGED_SIZE = 1024;
             ALOG_DEBUG(HttpLog,

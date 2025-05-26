@@ -153,7 +153,7 @@ public:
         TSource source,
         bool postprocess = true,
         bool setDefaults = true,
-        const NYPath::TYPath& path = {},
+        const std::function<NYPath::TYPath()>& pathGetter = {},
         std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy = {});
 
     void Save(NYson::IYsonConsumer* consumer) const;

@@ -605,6 +605,30 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 FormatResultSetYson(result.GetResultSet(0))
             );
         }
+        {
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                PRAGMA FilterPushdownOverJoinOptionalSide;
+
+                SELECT t1.Fk1, t1.Key1, t1.Key2, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value FROM `/Root/Join1_1` AS t1
+                LEFT JOIN `/Root/Join1_2` AS t2
+                ON t1.Fk1 = t2.Key
+                LEFT JOIN `/Root/Join1_3` AS t3
+                ON t2.Key = t3.Key
+                WHERE t2.Value IS NULL
+                ORDER BY t1.Key1, t1.Key2;
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(
+                R"([
+                    [#;[101];["One"];["no_right_key_1"];#;#;#;#];
+                    [#;[102];["Two"];["no_right_key_2"];#;#;#;#];
+                    [["Name3"];[105];["One"];["no_right_key_3"];#;#;#;#];
+                    [["Name4"];[106];["One"];#;["Name4"];#;#;#];
+                    [["Name4"];[106];["Two"];["Value4"];["Name4"];#;#;#]
+                ])",
+                FormatResultSetYson(result.GetResultSet(0))
+            );
+        }
     }
 
      Y_UNIT_TEST(LeftJoinPushdownPredicate_NestedJoin) {

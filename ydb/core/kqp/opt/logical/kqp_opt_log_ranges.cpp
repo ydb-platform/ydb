@@ -16,11 +16,15 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 TMaybeNode<TExprBase> KqpRewriteLiteralLookup(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!node.Maybe<TKqlLookupTable>()) {
+    if (!node.Maybe<TKqlLookupTableBase>()) {
         return {};
     }
 
-    const TKqlLookupTable& lookup = node.Cast<TKqlLookupTable>();
+    if (kqpCtx.IsScanQuery())  {
+        return {};
+    }
+
+    const TKqlLookupTableBase& lookup = node.Cast<TKqlLookupTableBase>();
     TMaybeNode<TExprBase> lookupKeys = lookup.LookupKeys();
     TMaybeNode<TCoSkipNullMembers> skipNullMembers;
     if (lookupKeys.Maybe<TCoSkipNullMembers>()) {
@@ -141,7 +145,7 @@ TMaybeNode<TExprBase> KqpRewriteLiteralLookup(const TExprBase& node, TExprContex
 }
 
 TExprBase KqpRewriteLookupTable(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!node.Maybe<TKqlLookupTable>()) {
+    if (!node.Maybe<TKqlLookupTableBase>()) {
         return node;
     }
 
@@ -149,16 +153,7 @@ TExprBase KqpRewriteLookupTable(const TExprBase& node, TExprContext& ctx, const 
         return literal.Cast();
     }
 
-    const TKqlLookupTable& lookup = node.Cast<TKqlLookupTable>();
-
-    TKqpStreamLookupSettings settings;
-    settings.Strategy = EStreamLookupStrategyType::LookupRows;
-    return Build<TKqlStreamLookupTable>(ctx, lookup.Pos())
-        .Table(lookup.Table())
-        .LookupKeys(lookup.LookupKeys())
-        .Columns(lookup.Columns())
-        .Settings(settings.BuildNode(ctx, lookup.Pos()))
-        .Done();
+    return node;
 }
 
 TExprBase KqpDropTakeOverLookupTable(const TExprBase& node, TExprContext&, const TKqpOptimizeContext& kqpCtx) {

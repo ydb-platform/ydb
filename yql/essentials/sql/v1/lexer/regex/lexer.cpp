@@ -1,5 +1,6 @@
 #include "lexer.h"
 
+#include "generic.h"
 #include "regex.h"
 
 #include <contrib/libs/re2/re2/re2.h>
@@ -9,41 +10,170 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/string.h>
+#include <util/generic/maybe.h>
 #include <util/string/subst.h>
 #include <util/string/ascii.h>
+#include <util/string/join.h>
 
 namespace NSQLTranslationV1 {
 
+    using NSQLReflect::TLexerGrammar;
     using NSQLTranslation::TParsedToken;
     using NSQLTranslation::TParsedTokenList;
 
-    class TRegexLexer: public NSQLTranslation::ILexer {
-        static constexpr const char* CommentTokenName = "COMMENT";
-        static constexpr const char* StringValueName = "STRING_VALUE";
+    size_t MatchANSIMultilineComment(TStringBuf remaining);
 
-        static constexpr const TStringBuf Utf8BOM = "\xEF\xBB\xBF";
-
-    public:
-        TRegexLexer(
-            bool ansi,
-            NSQLReflect::TLexerGrammar grammar,
-            const TVector<std::tuple<TString, TString>>& RegexByOtherName)
-            : Grammar_(std::move(grammar))
-            , Ansi_(ansi)
-        {
-            for (const auto& [token, regex] : RegexByOtherName) {
-                RE2::Options custom;
-                if (token != CommentTokenName && token != StringValueName) {
-                    custom.set_longest_match(true);
-                }
-
-                RE2* re2 = new RE2(regex, custom);
-                if (token == CommentTokenName) {
-                    CommentRegex_.Reset(re2);
-                } else {
-                    OtherRegexes_.emplace_back(token, re2);
-                }
+    TTokenMatcher ANSICommentMatcher(TString name, TTokenMatcher defaultComment) {
+        return [defaultComment, name = std::move(name)](TStringBuf prefix) -> TMaybe<TGenericToken> {
+            const auto basic = defaultComment(prefix);
+            if (basic.Empty()) {
+                return Nothing();
             }
+
+            if (!prefix.StartsWith("/*")) {
+                return basic;
+            }
+
+            size_t ll1Length = MatchANSIMultilineComment(prefix);
+            TStringBuf ll1Content = prefix.SubString(0, ll1Length);
+
+            Y_ENSURE(ll1Content == 0 || basic->Content <= ll1Content);
+            if (ll1Content == 0) {
+                return basic;
+            }
+
+            return TGenericToken{
+                .Name = name,
+                .Content = ll1Content,
+            };
+        };
+    }
+
+    size_t MatchANSIMultilineComment(TStringBuf prefix) {
+        if (!prefix.StartsWith("/*")) {
+            return 0;
+        }
+
+        size_t skipped = 0;
+
+        prefix.Skip(2);
+        skipped += 2;
+
+        for (;;) {
+            if (prefix.StartsWith("*/")) {
+                prefix.Skip(2);
+                skipped += 2;
+                return skipped;
+            }
+
+            bool isSkipped = false;
+            if (prefix.StartsWith("/*")) {
+                size_t limit = prefix.rfind("*/");
+                if (limit == std::string::npos) {
+                    return 0;
+                }
+
+                size_t len = MatchANSIMultilineComment(prefix.Head(limit));
+                prefix.Skip(len);
+                skipped += len;
+
+                isSkipped = len != 0;
+            }
+
+            if (isSkipped) {
+                continue;
+            }
+
+            if (prefix.size() == 0) {
+                return 0;
+            }
+
+            prefix.Skip(1);
+            skipped += 1;
+        }
+    }
+
+    TTokenMatcher KeywordMatcher(const NSQLReflect::TLexerGrammar& grammar) {
+        auto keyword = Compile("Keyword", KeywordPattern(grammar));
+        return [keyword = std::move(keyword)](TStringBuf content) -> TMaybe<TGenericToken> {
+            if (auto token = keyword(content)) {
+                return TGenericToken{
+                    .Name = TLexerGrammar::KeywordNameByBlock(token->Content),
+                    .Content = token->Content,
+                };
+            }
+            return Nothing();
+        };
+    }
+
+    TRegexPattern KeywordPattern(const NSQLReflect::TLexerGrammar& grammar) {
+        TVector<TRegexPattern> patterns;
+        patterns.reserve(grammar.KeywordNames.size());
+        for (const auto& keyword : grammar.KeywordNames) {
+            const TStringBuf content = TLexerGrammar::KeywordBlockByName(keyword);
+            patterns.push_back({
+                .Body = TString(content),
+                .IsCaseInsensitive = true,
+            });
+        }
+        return Merged(std::move(patterns));
+    }
+
+    TTokenMatcher PuntuationMatcher(const NSQLReflect::TLexerGrammar& grammar) {
+        THashMap<TString, TString> nameByBlock;
+        nameByBlock.reserve(grammar.PunctuationNames.size());
+        for (const auto& name : grammar.PunctuationNames) {
+            const auto& block = grammar.BlockByName.at(name);
+            nameByBlock[block] = name;
+        }
+
+        auto punct = Compile("Punctuation", PuntuationPattern(grammar));
+
+        return [nameByBlock = std::move(nameByBlock),
+                punct = std::move(punct)](TStringBuf content) -> TMaybe<TGenericToken> {
+            if (auto token = punct(content)) {
+                return TGenericToken{
+                    .Name = nameByBlock.at(token->Content),
+                    .Content = token->Content,
+                };
+            }
+            return Nothing();
+        };
+    }
+
+    TRegexPattern PuntuationPattern(const NSQLReflect::TLexerGrammar& grammar) {
+        TVector<TRegexPattern> patterns;
+        patterns.reserve(grammar.PunctuationNames.size());
+        for (const auto& name : grammar.PunctuationNames) {
+            patterns.push_back({RE2::QuoteMeta(grammar.BlockByName.at(name))});
+        }
+        return Merged(std::move(patterns));
+    }
+
+    TGenericLexerGrammar MakeGenericLexerGrammar(
+        bool ansi,
+        const TLexerGrammar& grammar,
+        const TVector<std::tuple<TString, TString>>& regexByOtherName) {
+        TGenericLexerGrammar generic;
+
+        generic.emplace_back(KeywordMatcher(grammar));
+        generic.emplace_back(PuntuationMatcher(grammar));
+
+        for (const auto& [name, regex] : regexByOtherName) {
+            generic.emplace_back(Compile(name, {regex}));
+            if (name == "COMMENT" && ansi) {
+                generic.back() = ANSICommentMatcher(name, std::move(generic.back()));
+            }
+        }
+
+        return generic;
+    }
+
+    class TRegexLexer: public NSQLTranslation::ILexer {
+    public:
+        TRegexLexer(IGenericLexer::TPtr lexer)
+            : Lexer_(std::move(lexer))
+        {
         }
 
         bool Tokenize(
@@ -52,213 +182,48 @@ namespace NSQLTranslationV1 {
             const TTokenCallback& onNextToken,
             NYql::TIssues& issues,
             size_t maxErrors) override {
-            size_t errors = 0;
+            bool isFailed = false;
 
-            size_t pos = 0;
-            if (query.StartsWith(Utf8BOM)) {
-                pos += Utf8BOM.size();
-            }
-
-            while (pos < query.size()) {
-                TParsedToken matched = Match(TStringBuf(query, pos));
-
-                if (matched.Name.empty() && maxErrors == errors) {
-                    break;
+            const auto onNext = [&](TGenericToken&& token) {
+                if (token.Name == TGenericToken::Error) {
+                    NYql::TPosition pos(token.Begin, 0, queryName);
+                    TString message = TString("no candidates, skipping ") + token.Content;
+                    issues.AddIssue(std::move(pos), std::move(message));
+                    isFailed = true;
+                    return;
                 }
 
-                if (matched.Name.empty()) {
-                    pos += 1;
-                    errors += 1;
-                    issues.AddIssue(NYql::TPosition(pos, 0, queryName), "no candidates");
-                    continue;
-                }
+                onNextToken({
+                    .Name = TString(token.Name),
+                    .Content = TString(token.Content),
+                });
+            };
 
-                pos += matched.Content.length();
-                onNextToken(std::move(matched));
-            }
-
-            onNextToken(TParsedToken{.Name = "EOF", .Content = "<EOF>"});
-            return errors == 0;
+            Lexer_->Tokenize(query, onNext, maxErrors);
+            return !isFailed;
         }
 
     private:
-        TParsedToken Match(const TStringBuf prefix) {
-            TParsedTokenList matches;
-
-            size_t keywordCount = MatchKeyword(prefix, matches);
-            MatchPunctuation(prefix, matches);
-            MatchRegex(prefix, matches);
-            MatchComment(prefix, matches);
-
-            if (matches.empty()) {
-                return {};
-            }
-
-            auto maxLength = MaxElementBy(matches, [](const TParsedToken& m) {
-                                 return m.Content.length();
-                             })->Content.length();
-
-            auto max = FindIf(matches, [&](const TParsedToken& m) {
-                return m.Content.length() == maxLength;
-            });
-
-            auto isMatched = [&](const TStringBuf name) {
-                return std::end(matches) != FindIf(matches, [&](const auto& m) {
-                           return m.Name == name;
-                       });
-            };
-
-            size_t conflicts = CountIf(matches, [&](const TParsedToken& m) {
-                return m.Content.length() == max->Content.length();
-            });
-            conflicts -= 1;
-            Y_ENSURE(
-                conflicts == 0 ||
-                (conflicts == 1 && keywordCount != 0 && isMatched("ID_PLAIN")) ||
-                (conflicts == 1 && isMatched("DIGITS") && isMatched("INTEGER_VALUE")));
-
-            Y_ENSURE(!max->Content.empty());
-            return *max;
-        }
-
-        bool MatchKeyword(const TStringBuf prefix, TParsedTokenList& matches) {
-            size_t count = 0;
-            for (const auto& keyword : Grammar_.KeywordNames) {
-                const TStringBuf block = NSQLReflect::TLexerGrammar::KeywordBlock(keyword);
-                const TStringBuf content = prefix.substr(0, block.length());
-                if (AsciiEqualsIgnoreCase(content, block)) {
-                    matches.emplace_back(keyword, TString(content));
-                    count += 1;
-                }
-            }
-            return count;
-        }
-
-        size_t MatchPunctuation(const TStringBuf prefix, TParsedTokenList& matches) {
-            size_t count = 0;
-            for (const auto& name : Grammar_.PunctuationNames) {
-                const auto& content = Grammar_.BlockByName.at(name);
-                if (prefix.substr(0, content.length()) == content) {
-                    matches.emplace_back(name, content);
-                    count += 1;
-                }
-            }
-            return count;
-        }
-
-        size_t MatchRegex(const TStringBuf prefix, TParsedTokenList& matches) {
-            size_t count = 0;
-            for (const auto& [token, regex] : OtherRegexes_) {
-                if (const TStringBuf match = TryMatchRegex(prefix, *regex); !match.empty()) {
-                    matches.emplace_back(token, TString(match));
-                    count += 1;
-                }
-            }
-            return count;
-        }
-
-        const TStringBuf TryMatchRegex(const TStringBuf prefix, const RE2& regex) {
-            re2::StringPiece input(prefix.data(), prefix.size());
-            if (RE2::Consume(&input, regex)) {
-                return TStringBuf(prefix.data(), input.data());
-            }
-            return "";
-        }
-
-        size_t MatchComment(const TStringBuf prefix, TParsedTokenList& matches) {
-            const TStringBuf reContent = TryMatchRegex(prefix, *CommentRegex_);
-            if (reContent.empty()) {
-                return 0;
-            }
-
-            if (!(Ansi_ && prefix.StartsWith("/*"))) {
-                matches.emplace_back(CommentTokenName, TString(reContent));
-                return 1;
-            }
-
-            size_t ll1Length = MatchANSIMultilineComment(prefix);
-            const TStringBuf ll1Content = prefix.SubString(0, ll1Length);
-
-            Y_ENSURE(ll1Content == 0 || reContent <= ll1Content);
-            if (ll1Content == 0) {
-                matches.emplace_back(CommentTokenName, TString(reContent));
-                return 1;
-            }
-
-            matches.emplace_back(CommentTokenName, TString(ll1Content));
-            return 1;
-        }
-
-        size_t MatchANSIMultilineComment(TStringBuf remaining) {
-            if (!remaining.StartsWith("/*")) {
-                return 0;
-            }
-
-            size_t skipped = 0;
-
-            remaining.Skip(2);
-            skipped += 2;
-
-            for (;;) {
-                if (remaining.StartsWith("*/")) {
-                    remaining.Skip(2);
-                    skipped += 2;
-                    return skipped;
-                }
-
-                bool isSkipped = false;
-                if (remaining.StartsWith("/*")) {
-                    size_t limit = remaining.rfind("*/");
-                    if (limit == std::string::npos) {
-                        return 0;
-                    }
-
-                    size_t len = MatchANSIMultilineComment(remaining.Head(limit));
-                    remaining.Skip(len);
-                    skipped += len;
-
-                    isSkipped = len != 0;
-                }
-
-                if (isSkipped) {
-                    continue;
-                }
-
-                if (remaining.size() == 0) {
-                    return 0;
-                }
-
-                remaining.Skip(1);
-                skipped += 1;
-            }
-        }
-
-        NSQLReflect::TLexerGrammar Grammar_;
-        TVector<std::tuple<TString, THolder<RE2>>> OtherRegexes_;
-        THolder<RE2> CommentRegex_;
-        bool Ansi_;
+        IGenericLexer::TPtr Lexer_;
     };
 
     namespace {
 
         class TFactory final: public NSQLTranslation::ILexerFactory {
         public:
-            explicit TFactory(bool ansi)
-                : Ansi_(ansi)
-                , Grammar_(NSQLReflect::LoadLexerGrammar())
-                , RegexByOtherName_(MakeRegexByOtherName(Grammar_, Ansi_))
-            {
+            explicit TFactory(bool ansi) {
+                auto grammar = NSQLReflect::LoadLexerGrammar();
+                auto regexes = MakeRegexByOtherName(grammar, ansi);
+                Lexer_ = MakeGenericLexer(MakeGenericLexerGrammar(ansi, grammar, regexes));
             }
 
             NSQLTranslation::ILexer::TPtr MakeLexer() const override {
                 return NSQLTranslation::ILexer::TPtr(
-                    new TRegexLexer(Ansi_, Grammar_, RegexByOtherName_));
+                    new TRegexLexer(Lexer_));
             }
 
         private:
-            bool Ansi_;
-            NSQLReflect::TLexerGrammar Grammar_;
-            TVector<std::tuple<TString, TString>> RegexByOtherName_;
+            IGenericLexer::TPtr Lexer_;
         };
 
     } // namespace

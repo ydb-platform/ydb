@@ -24,13 +24,13 @@ The choice of a method depends on the number of vectors and the nature of the wo
 
 ## Exact vector search {#vector-search-exact}
 
-{% include [vector_search_exact.md](_includes/vector_search_exact.md) %}
+{% include [vector_search_exact.md](../yql/reference/_includes/vector_search_exact.md) %}
 
 Learn more about [exact vector search](../yql/reference/udf/list/knn.md#exact-vector-search-examples).
 
 ## Approximate vector search without index {#vector-search-approximate}
 
-{% include [vector_search_approximate.md](_includes/vector_search_approximate.md) %}
+{% include [vector_search_approximate.md](../yql/reference/_includes/vector_search_approximate.md) %}
 
 Learn more about [approximate vector search without index](../yql/reference/udf/list/knn.md#approximate-vector-search-examples).
 

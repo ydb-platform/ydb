@@ -15,7 +15,7 @@ This package provides the necessary tools for authenticating with Yandex Cloud s
 Supported Yandex.Cloud authentication methods:
 
 - `Ydb.Sdk.Yc.ServiceAccountProvider`. [Service account](https://yandex.cloud/en/docs/iam/concepts/users/service-account) authentication, sample usage:
-    
+
     ```c#
     var saProvider = new ServiceAccountProvider(
         saFilePath: file, // Path to file with service account JSON info
@@ -24,7 +24,7 @@ Supported Yandex.Cloud authentication methods:
     ```
 
 - `Ydb.Sdk.Yc.MetadataProvider`. [Metadata service](https://yandex.cloud/en/docs/compute/operations/vm-connect/auth-inside-vm) authentication, works inside Yandex Cloud VMs and Cloud Functions. Sample usage:
-    
+
     ```c#
     var metadataProvider = new MetadataProvider(loggerFactory: loggerFactory);
     ```

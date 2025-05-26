@@ -3,6 +3,7 @@ PY3_LIBRARY()
     PY_SRCS (
         conftest.py
         clickbench.py
+        external.py
         tpcds.py
         tpch.py
     )

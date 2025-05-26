@@ -1,14 +1,21 @@
 #pragma once
 
+#include <yql/essentials/sql/v1/complete/core/name.h>
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
 
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 
 namespace NSQLComplete {
+
+    struct TEditRange {
+        size_t Begin = 0;
+        size_t Length = 0;
+    };
 
     struct TLocalSyntaxContext {
         using TKeywords = THashMap<TString, TVector<TString>>;
@@ -25,11 +32,30 @@ namespace NSQLComplete {
             EStatementKind StatementKind;
         };
 
+        struct TCluster {
+            TString Provider;
+        };
+
+        struct TObject {
+            TString Provider;
+            TString Cluster;
+            TString Path;
+            THashSet<EObjectKind> Kinds;
+            bool IsQuoted = false;
+
+            bool HasCluster() const {
+                return !Cluster.empty();
+            }
+        };
+
         TKeywords Keywords;
         TMaybe<TPragma> Pragma;
-        bool IsTypeName = false;
+        bool Type = false;
         TMaybe<TFunction> Function;
         TMaybe<THint> Hint;
+        TMaybe<TObject> Object;
+        TMaybe<TCluster> Cluster;
+        TEditRange EditRange;
     };
 
     class ILocalSyntaxAnalysis {

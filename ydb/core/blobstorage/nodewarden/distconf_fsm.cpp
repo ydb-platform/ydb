@@ -344,7 +344,7 @@ namespace NKikimr::NStorage {
 
         if (persistedConfig) { // we have a committed config, apply and spread it
             ApplyStorageConfig(*persistedConfig);
-            FanOutReversePush(&StorageConfig.value(), true /*recurseConfigUpdate*/);
+            FanOutReversePush(StorageConfig.get(), true /*recurseConfigUpdate*/);
         }
 
         NKikimrBlobStorage::TStorageConfig tempConfig;
@@ -414,7 +414,9 @@ namespace NKikimr::NStorage {
                     return {TStringBuilder() << "failed to propose configuration, base config contains errors: " << *error};
                 }
                 if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose)) {
-                    Y_FAIL_S("incorrect config proposed: " << *error);
+                    Y_FAIL_S("incorrect config proposed: " << *error
+                        << " Base# " << SingleLineProto(*propositionBase)
+                        << " Proposed# " << SingleLineProto(*configToPropose));
                 }
             } else {
                 if (auto error = ValidateConfig(*configToPropose)) {
@@ -443,7 +445,7 @@ namespace NKikimr::NStorage {
         } else if (HasConfigQuorum(*CurrentProposedStorageConfig, generateSuccessful, *Cfg)) {
             // apply configuration and spread it
             ApplyStorageConfig(*CurrentProposedStorageConfig);
-            FanOutReversePush(&StorageConfig.value(), true /*recurseConfigUpdate*/);
+            FanOutReversePush(StorageConfig.get(), true /*recurseConfigUpdate*/);
             CurrentProposedStorageConfig.reset();
         } else {
             STLOG(PRI_DEBUG, BS_NODE, NWDC47, "no quorum for ProposedStorageConfig", (Record, *res),
@@ -486,7 +488,7 @@ namespace NKikimr::NStorage {
                     SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
                     STLOG(PRI_ERROR, BS_NODE, NWDC49, "ProposedStorageConfig generation/fingerprint mismatch",
-                        (StorageConfig, StorageConfig), (Request, task.Request), (RootNodeId, GetRootNodeId()));
+                        (StorageConfig, StorageConfig.get()), (Request, task.Request), (RootNodeId, GetRootNodeId()));
                     Y_DEBUG_ABORT();
                 } else {
                     ProposedStorageConfigCookie = cookie;
@@ -561,9 +563,9 @@ namespace NKikimr::NStorage {
         THashSet<TNodeIdentifier> nodesAlreadyReplied{SelfNode};
 
         auto *ptr = response->AddNodes();
-        ptr->MutableBaseConfig()->CopyFrom(BaseConfig);
+        ptr->MutableBaseConfig()->CopyFrom(*BaseConfig);
         SelfNode.Serialize(ptr->AddNodeIds());
-        baseConfigs.emplace(BaseConfig, ptr);
+        baseConfigs.emplace(*BaseConfig, ptr);
 
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> committedConfigs;
         THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposedConfigs;

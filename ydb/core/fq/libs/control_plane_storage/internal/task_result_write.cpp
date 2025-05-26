@@ -27,6 +27,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     const int64_t startRowId = request.offset();
     const TInstant deadline = NProtoInterop::CastFromProto(request.deadline());
     const Ydb::ResultSet& resultSet = request.result_set();
+    const auto resultSetRowsSize = resultSet.rows().size();
     const int byteSize = resultSet.ByteSize();
 
     CPS_LOG_T("WriteResultDataRequest: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.ByteSize() << " " << deadline);
@@ -35,7 +36,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
         CPS_LOG_D("WriteResultDataRequest, validation failed: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.DebugString() << " " << deadline << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvWriteResultDataResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
-        LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSet.rows().size(), delta, deadline, byteSize, false);
+        LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSetRowsSize, delta, deadline, byteSize, false);
         return;
     }
 
@@ -83,7 +84,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,
@@ -91,7 +92,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
 
     success.Apply([=](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSet.rows().size(), delta, deadline, byteSize, future.GetValue());
+            LWPROBE(WriteResultDataRequest, resultId, resultSetId, startRowId, resultSetRowsSize, delta, deadline, byteSize, future.GetValue());
         });
 }
 

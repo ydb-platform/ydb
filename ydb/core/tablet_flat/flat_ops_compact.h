@@ -375,11 +375,7 @@ namespace NTabletFlatExecutor {
                     TStringBuilder error;
                     error << "Just compacted part needs to load pages";
                     for (auto collection : fetch) {
-                        error << " " << collection->PageCollection->Label().ToString() << ": [ ";
-                        for (auto pageId : collection->Pages) {
-                            error << pageId << " " << (NTable::NPage::EPage)collection->PageCollection->Page(pageId).Type << " ";
-                        }
-                        error << "]";
+                        error << " " << collection->DebugString(true);
                     }
                     Y_TABLET_ERROR(error);
                 }

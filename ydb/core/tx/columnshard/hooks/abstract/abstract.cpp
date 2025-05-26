@@ -10,7 +10,7 @@ TDuration ICSController::GetGuaranteeIndexationInterval() const {
 }
 
 TDuration ICSController::GetPeriodicWakeupActivationPeriod() const {
-    const TDuration defaultValue = NColumnShard::TSettings::DefaultPeriodicWakeupActivationPeriod;
+    const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetPeriodicWakeupActivationPeriodMs());
     return DoGetPeriodicWakeupActivationPeriod(defaultValue);
 }
 

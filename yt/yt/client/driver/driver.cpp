@@ -55,9 +55,16 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = DriverLogger;
+constinit const auto Logger = DriverLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
+
+static TClientOptions GetRootClientOptions(const TDriverConfigPtr& config)
+{
+    auto result = TClientOptions::Root();
+    result.MultiproxyTargetCluster = config->MultiproxyTargetCluster;
+    return result;
+}
 
 void Serialize(const TCommandDescriptor& descriptor, NYson::IYsonConsumer* consumer)
 {
@@ -107,7 +114,6 @@ TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const TString& commandNa
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 class TDriver
     : public IDriver
 {
@@ -115,18 +121,16 @@ public:
     TDriver(
         TDriverConfigPtr config,
         IConnectionPtr connection,
-        ISignatureGeneratorPtr signatureGenerator,
         ISignatureValidatorPtr signatureValidator)
         : Config_(std::move(config))
         , Connection_(std::move(connection))
         , ClientCache_(New<TClientCache>(Config_->ClientCache, Connection_))
         , RootClient_(ClientCache_->Get(
             GetRootAuthenticationIdentity(),
-            TClientOptions::FromAuthenticationIdentity(GetRootAuthenticationIdentity())))
+            GetRootClientOptions(Config_)))
         , ProxyDiscoveryCache_(CreateProxyDiscoveryCache(
             Config_->ProxyDiscoveryCache,
             RootClient_))
-        , SignatureGenerator_(std::move(signatureGenerator))
         , SignatureValidator_(std::move(signatureValidator))
         , StickyTransactionPool_(CreateStickyTransactionPool(Logger()))
     {
@@ -351,6 +355,8 @@ public:
         REGISTER_ALL(TResurrectChunkLocationsCommand,      "resurrect_chunk_locations",       Null,       Structured, true,  false);
         REGISTER_ALL(TRequestRestartCommand,               "request_restart",                 Null,       Structured, true,  false);
 
+        REGISTER    (TGetCurrentUserCommand,               "get_current_user",                Null,       Structured, false, false, ApiVersion4);
+
         REGISTER_ALL(TSetUserPasswordCommand,              "set_user_password",               Null,       Structured, true,  false);
         REGISTER_ALL(TIssueTokenCommand,                   "issue_token",                     Null,       Structured, true,  false);
         REGISTER_ALL(TRevokeTokenCommand,                  "revoke_token",                    Null,       Structured, true,  false);
@@ -451,6 +457,7 @@ public:
         options.ServiceTicketAuth = request.ServiceTicket
             ? std::make_optional(New<NAuth::TServiceTicketFixedAuth>(*request.ServiceTicket))
             : std::nullopt;
+        options.MultiproxyTargetCluster = Config_->MultiproxyTargetCluster;
 
         auto client = ClientCache_->Get(identity, options);
 
@@ -502,11 +509,6 @@ public:
     IConnectionPtr GetConnection() override
     {
         return Connection_;
-    }
-
-    ISignatureGeneratorPtr GetSignatureGenerator() override
-    {
-        return SignatureGenerator_;
     }
 
     ISignatureValidatorPtr GetSignatureValidator() override
@@ -732,18 +734,15 @@ private:
 IDriverPtr CreateDriver(
     IConnectionPtr connection,
     TDriverConfigPtr config,
-    ISignatureGeneratorPtr signatureGenerator,
     ISignatureValidatorPtr signatureValidator)
 {
     YT_VERIFY(connection);
     YT_VERIFY(config);
-    YT_VERIFY(signatureGenerator);
     YT_VERIFY(signatureValidator);
 
     return New<TDriver>(
         std::move(config),
         std::move(connection),
-        std::move(signatureGenerator),
         std::move(signatureValidator));
 }
 

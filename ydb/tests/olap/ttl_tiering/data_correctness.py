@@ -58,7 +58,7 @@ class TestDataCorrectness(TllTieringTestBase):
         )
 
     def wait_eviction(self, table: ColumnTableHelper):
-        deadline = datetime.datetime.now() + datetime.timedelta(seconds=60)
+        deadline = datetime.datetime.now() + datetime.timedelta(seconds=120)
         while (
             table.get_portion_stat_by_tier().get("__DEFAULT", {}).get("Portions", 0)
             > self.n_shards

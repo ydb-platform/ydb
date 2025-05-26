@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/s3/actors/yql_arrow_column_converters.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
@@ -73,7 +74,8 @@ private:
         }
 
         const TTypeAnnotationNode* targetType = nullptr;
-        if (const TS3Target target(targetNode); const auto settings = target.Settings()) {
+        const TS3Target target(targetNode);
+        if (const auto settings = target.Settings()) {
             if (const auto userschema = GetSetting(settings.Cast().Ref(), "userschema")) {
                 targetType = userschema->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             }
@@ -116,7 +118,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!NS3Util::ValidateS3ReadWriteSchema(sourceType->Cast<TStructExprType>(), ctx)) {
+        if (!NS3Util::ValidateS3WriteSchema(source->Pos(), target.Format().Value(), sourceType->Cast<TStructExprType>(), ctx)) {
             return TStatus::Error;
         }
 
@@ -178,8 +180,18 @@ private:
         }
 
         const auto format = tgt.Format();
+        const TTypeAnnotationNode* baseTargeType = nullptr;
 
-        auto baseTargeType = AnnotateTargetBase(format, keys, structType, ctx);
+        if (TString error; !UseBlocksSink(format, keys, structType, State_->Configuration, error)) {
+            if (error) {
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), error));
+                return TStatus::Error;
+            }
+            baseTargeType = AnnotateTargetBase(format, keys, structType, ctx);
+        } else {
+            baseTargeType = AnnotateTargetBlocks(structType, ctx);
+        }
+
         if (!baseTargeType) {
             return TStatus::Error;
         }
@@ -357,7 +369,7 @@ private:
     }
 
     TStatus HandleSink(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 4, ctx)) {
+        if (!EnsureArgsCount(*input, 5, ctx)) {
             return TStatus::Error;
         }
         input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
@@ -444,6 +456,16 @@ private:
         }
 
         return listItemType;
+    }
+
+    static const TTypeAnnotationNode* AnnotateTargetBlocks(const TStructExprType* structType, TExprContext& ctx) {
+        TTypeAnnotationNode::TListType items;
+        items.reserve(structType->GetSize() + 1);
+        for (const auto* item : structType->GetItems()) {
+            items.emplace_back(ctx.MakeType<TBlockExprType>(item->GetItemType()));
+        }
+        items.emplace_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+        return ctx.MakeType<TMultiExprType>(items);
     }
 
 private:

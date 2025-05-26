@@ -12,6 +12,7 @@
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/misc/finally.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/public.h>
 
 #include <yt/yt/core/ytree/convert.h>
@@ -20,15 +21,13 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
-
 namespace NYT::NHttp {
 
 using namespace NConcurrency;
 using namespace NProfiling;
 using namespace NNet;
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -64,7 +63,6 @@ public:
         IPollerPtr poller,
         IPollerPtr acceptor,
         IInvokerPtr invoker,
-        IMemoryUsageTrackerPtr memoryUsageTracker,
         IRequestPathMatcherPtr requestPathMatcher,
         bool ownPoller = false)
         : Config_(std::move(config))
@@ -72,7 +70,6 @@ public:
         , Poller_(std::move(poller))
         , Acceptor_(std::move(acceptor))
         , Invoker_(std::move(invoker))
-        , MemoryUsageTracker_(std::move(memoryUsageTracker))
         , OwnPoller_(ownPoller)
         , RequestPathMatcher_(std::move(requestPathMatcher))
     { }
@@ -127,7 +124,6 @@ private:
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
     const IInvokerPtr Invoker_;
-    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
     const bool OwnPoller_ = false;
 
     IRequestPathMatcherPtr RequestPathMatcher_;
@@ -296,8 +292,7 @@ private:
             connection->GetRemoteAddress(),
             GetCurrentInvoker(),
             EMessageType::Request,
-            Config_,
-            MemoryUsageTracker_);
+            Config_);
 
         if (Config_->IsHttps) {
             request->SetHttps();
@@ -308,8 +303,7 @@ private:
         auto response = New<THttpOutput>(
             connection,
             EMessageType::Response,
-            Config_,
-            MemoryUsageTracker_);
+            Config_);
 
         while (true) {
             auto requestId = TRequestId::Create();
@@ -388,7 +382,6 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
-    IMemoryUsageTrackerPtr memoryUsageTracker,
     bool ownPoller)
 {
     auto handlers = New<TRequestPathMatcher>();
@@ -398,7 +391,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        std::move(memoryUsageTracker),
         std::move(handlers),
         ownPoller);
 }
@@ -408,15 +400,19 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
-    IMemoryUsageTrackerPtr memoryUsageTracker,
     bool ownPoller)
 {
     auto address = TNetworkAddress::CreateIPv6Any(config->Port);
-    IListenerPtr listener;
     for (int i = 0;; ++i) {
         try {
-            listener = CreateListener(address, poller, acceptor, config->MaxBacklogSize);
-            break;
+            auto listener = CreateListener(address, poller, acceptor, config->MaxBacklogSize);
+            return CreateServer(
+                std::move(config),
+                std::move(listener),
+                std::move(poller),
+                std::move(acceptor),
+                std::move(invoker),
+                ownPoller);
         } catch (const std::exception& ex) {
             if (i + 1 == config->BindRetryCount) {
                 throw;
@@ -426,14 +422,6 @@ IServerPtr CreateServer(
             }
         }
     }
-    return CreateServer(
-        std::move(config),
-        std::move(listener),
-        std::move(poller),
-        std::move(acceptor),
-        std::move(invoker),
-        std::move(memoryUsageTracker),
-        ownPoller);
 }
 
 } // namespace
@@ -453,7 +441,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ false);
 }
 
@@ -461,8 +448,7 @@ IServerPtr CreateServer(
     TServerConfigPtr config,
     IListenerPtr listener,
     IPollerPtr poller,
-    IPollerPtr acceptor,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IPollerPtr acceptor)
 {
     auto invoker = poller->GetInvoker();
     return CreateServer(
@@ -471,15 +457,13 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        std::move(memoryUsageTracker),
         /*ownPoller*/ false);
 }
 
 IServerPtr CreateServer(
     TServerConfigPtr config,
     IPollerPtr poller,
-    IPollerPtr acceptor,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    IPollerPtr acceptor)
 {
     auto invoker = poller->GetInvoker();
     return CreateServer(
@@ -487,7 +471,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        std::move(memoryUsageTracker),
         /*ownPoller*/ false);
 }
 
@@ -517,7 +500,6 @@ IServerPtr CreateServer(TServerConfigPtr config, int pollerThreadCount)
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ true);
 }
 
@@ -532,7 +514,6 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
-        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ false);
 }
 

@@ -102,6 +102,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/test_tablet
     ydb/core/tracing
+    ydb/core/transfer
     ydb/core/tx
     ydb/core/tx/columnshard
     ydb/core/tx/conveyor/service

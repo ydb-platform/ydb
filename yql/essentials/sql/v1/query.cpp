@@ -3231,6 +3231,11 @@ public:
                         BuildQuotedAtom(Pos, "OrderedColumns"))));
                 }
 
+                if (ctx.DeriveColumnOrder) {
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "DeriveColumnOrder"))));
+                }
+
                 if (ctx.PqReadByRtmrCluster) {
                     auto pqSourceAll = Y("DataSource", BuildQuotedAtom(Pos, TString(PqProviderName)), BuildQuotedAtom(Pos, "$all"));
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", pqSourceAll,

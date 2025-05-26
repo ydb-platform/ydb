@@ -1,6 +1,7 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
 #include <ydb/core/mind/dynamic_nameserver.h>
+#include <ydb/core/protos/bridge.pb.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/streams/zstd/zstd.h>
@@ -8,15 +9,12 @@
 namespace NKikimr::NStorage {
 
     TDistributedConfigKeeper::TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig, bool isSelfStatic)
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> baseConfig, bool isSelfStatic)
         : IsSelfStatic(isSelfStatic)
         , Cfg(std::move(cfg))
         , BaseConfig(baseConfig)
-        , InitialConfig(baseConfig)
-    {
-        UpdateFingerprint(&BaseConfig);
-        InitialConfig.SetFingerprint(BaseConfig.GetFingerprint());
-    }
+        , InitialConfig(std::move(baseConfig))
+    {}
 
     void TDistributedConfigKeeper::Bootstrap() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
@@ -34,9 +32,9 @@ namespace NKikimr::NStorage {
 
         // generate initial drive set and query stored configuration
         if (IsSelfStatic) {
-            if (BaseConfig.GetSelfManagementConfig().GetEnabled()) {
+            if (BaseConfig->GetSelfManagementConfig().GetEnabled()) {
                 // read this only if it is possibly enabled
-                EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+                EnumerateConfigDrives(*InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
                     DrivesToRead.push_back(drive.GetPath());
                 });
                 std::sort(DrivesToRead.begin(), DrivesToRead.end());
@@ -97,11 +95,58 @@ namespace NKikimr::NStorage {
                 }
             }
 
-            SelfManagementEnabled = (!IsSelfStatic || BaseConfig.GetSelfManagementConfig().GetEnabled()) &&
+            SelfManagementEnabled = (!IsSelfStatic || BaseConfig->GetSelfManagementConfig().GetEnabled()) &&
                 config.GetSelfManagementConfig().GetEnabled() &&
                 config.GetGeneration();
 
-            StorageConfig.emplace(config);
+            if (config.HasClusterState() && Cfg->BridgeConfig) {
+                const auto& state = config.GetClusterState();
+
+                // prepare empty structure
+                auto bridgeInfo = std::make_shared<TBridgeInfo>();
+                bridgeInfo->Piles.resize(Cfg->BridgeConfig->PilesSize());
+
+                for (const auto& node : config.GetAllNodes()) {
+                    if (node.HasBridgePileId()) {
+                        const ui32 nodeId = node.GetNodeId();
+                        const ui32 pileId = node.GetBridgePileId();
+                        Y_ABORT_UNLESS(pileId < bridgeInfo->Piles.size());
+                        auto& pile = bridgeInfo->Piles[pileId];
+                        pile.StaticNodeIds.push_back(node.GetNodeId());
+                        bridgeInfo->StaticNodeIdToPile[nodeId] = &pile;
+                        if (nodeId == SelfNode.NodeId()) {
+                            bridgeInfo->SelfNodePile = &pile;
+                        }
+                    }
+                }
+
+                Y_ABORT_UNLESS(state.PerPileStateSize() == Cfg->BridgeConfig->PilesSize());
+                for (size_t i = 0; i < state.PerPileStateSize(); ++i) {
+                    auto& pile = bridgeInfo->Piles[i];
+                    pile.BridgePileId = TBridgePileId::FromValue(i);
+                    pile.State = state.GetPerPileState(i);
+                    std::ranges::sort(pile.StaticNodeIds);
+                }
+
+                const ui32 primary = state.GetPrimaryPile();
+                Y_ABORT_UNLESS(primary < Cfg->BridgeConfig->PilesSize());
+                bridgeInfo->Piles[primary].IsPrimary = true;
+                bridgeInfo->PrimaryPile = &bridgeInfo->Piles[primary];
+
+                if (const ui32 promoted = state.GetPromotedPile(); promoted != primary) {
+                    Y_ABORT_UNLESS(promoted < Cfg->BridgeConfig->PilesSize());
+                    auto& pile = bridgeInfo->Piles[promoted];
+                    Y_ABORT_UNLESS(pile.State == NKikimrBridge::TClusterState::SYNCHRONIZED);
+                    pile.IsBeingPromoted = true;
+                    bridgeInfo->BeingPromotedPile = &pile;
+                }
+
+                BridgeInfo = std::move(bridgeInfo);
+            } else {
+                Y_ABORT_UNLESS(!BridgeInfo);
+            }
+
+            StorageConfig = std::make_shared<NKikimrBlobStorage::TStorageConfig>(config);
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
                 ProposedStorageConfig.reset();
             }
@@ -232,8 +277,8 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(!StorageConfig || CheckFingerprint(*StorageConfig));
         Y_ABORT_UNLESS(!ProposedStorageConfig || CheckFingerprint(*ProposedStorageConfig));
-        Y_ABORT_UNLESS(CheckFingerprint(BaseConfig));
-        Y_ABORT_UNLESS(!InitialConfig.GetFingerprint() || CheckFingerprint(InitialConfig));
+        Y_ABORT_UNLESS(CheckFingerprint(*BaseConfig));
+        Y_ABORT_UNLESS(!InitialConfig->GetFingerprint() || CheckFingerprint(*InitialConfig));
 
         if (Scepter) {
             Y_ABORT_UNLESS(HasQuorum());
@@ -302,13 +347,12 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::ReportStorageConfigToNodeWarden(ui64 cookie) {
         Y_ABORT_UNLESS(StorageConfig);
         const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        const NKikimrBlobStorage::TStorageConfig *config = SelfManagementEnabled
-            ? &StorageConfig.value()
-            : &BaseConfig;
-        const NKikimrBlobStorage::TStorageConfig *proposedConfig = ProposedStorageConfig && SelfManagementEnabled
-            ? &ProposedStorageConfig.value()
+        const auto& config = SelfManagementEnabled ? StorageConfig : BaseConfig;
+        auto proposedConfig = ProposedStorageConfig && SelfManagementEnabled
+            ? std::make_shared<NKikimrBlobStorage::TStorageConfig>(*ProposedStorageConfig)
             : nullptr;
-        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*config, proposedConfig, SelfManagementEnabled);
+        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(config, std::move(proposedConfig), SelfManagementEnabled,
+            BridgeInfo);
         Send(wardenId, ev.release(), 0, cookie);
     }
 

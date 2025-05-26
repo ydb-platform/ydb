@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "ydb/core/protos/config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/bridge.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 
 package NKikimrBlobStorage;
@@ -11,6 +12,7 @@ message TNodeIdentifier {
     uint32 Port = 2;
     uint32 NodeId = 3;
     NActorsInterconnect.TNodeLocation Location = 4;
+    optional uint32 BridgePileId = 5;
 }
 
 message TStorageConfigMeta {
@@ -33,6 +35,7 @@ message TStorageConfig { // contents of storage metadata
     TStorageConfig PrevConfig = 100; // previous version of StorageConfig (if any)
     optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
     optional uint64 ExpectedStorageYamlVersion = 15;
+    NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
 }
 
 message TPDiskMetadataRecord {
@@ -150,6 +153,12 @@ message TEvNodeConfigGather {
     }
 }
 
+message TStateStorageConfig {
+    optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageConfig = 1;
+    optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageBoardConfig = 2;
+    optional NKikimrConfig.TDomainsConfig.TStateStorage SchemeBoardConfig = 3;
+}
+
 // Some kind of RPC -- this event can be sent to any NW, it will forward the request to root node.
 message TEvNodeConfigInvokeOnRoot {
     message TUpdateConfig {
@@ -189,13 +198,18 @@ message TEvNodeConfigInvokeOnRoot {
         bool SchemeBoard = 5;
     }
 
+    message TGetStateStorageConfig {
+    } 
+
     message TAdvanceGeneration
     {}
 
     message TFetchStorageConfig {
-        bool Manual = 1; // when set to true, distconf returns conventional configuration
+        reserved 1;
         bool MainConfig = 2;
         bool StorageConfig = 3;
+        bool AddSectionsForMigrationToV1 = 5; // add sections so this config becomes suitable for migration to v1
+        bool AddExplicitConfigs = 4; // add explicit settings for all managed entities
     }
 
     message TReplaceStorageConfig {
@@ -212,6 +226,10 @@ message TEvNodeConfigInvokeOnRoot {
         string SelfAssemblyUUID = 1;
     }
 
+    message TSwitchBridgeClusterState {
+        NKikimrBridge.TClusterState NewClusterState = 1;
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -223,6 +241,9 @@ message TEvNodeConfigInvokeOnRoot {
         TFetchStorageConfig FetchStorageConfig = 8;
         TReplaceStorageConfig ReplaceStorageConfig = 9;
         TBootstrapCluster BootstrapCluster = 10;
+        TSwitchBridgeClusterState SwitchBridgeClusterState = 11;
+        TStateStorageConfig ReconfigStateStorage = 12;
+        TGetStateStorageConfig GetStateStorageConfig = 13;
     }
 }
 
@@ -260,11 +281,12 @@ message TEvNodeConfigInvokeOnRootResult {
     TScepter Scepter = 3;
 
     reserved 4, 6, 7, 8, 9;
-
+    
     oneof Response {
         TQueryConfig QueryConfig = 5;
         TFetchStorageConfig FetchStorageConfig = 10;
         TReplaceStorageConfig ReplaceStorageConfig = 11;
+        TStateStorageConfig StateStorageConfig = 12;
     }
 }
 

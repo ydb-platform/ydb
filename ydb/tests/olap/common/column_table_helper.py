@@ -74,3 +74,8 @@ class ColumnTableHelper:
             raw_bytes, bytes = self._coollect_volumes_column(column_name)
         logging.info(f"Table `{self.path}`, volumes `{column_name}` ({raw_bytes}, {bytes})")
         return raw_bytes, bytes
+
+    def portions_actualized_in_sys(self):
+        portions = self.get_portion_stat_by_tier()
+        logger.info(f"portions: {portions}, blobs: {self.get_blob_stat_by_tier()}")
+        return "__DEFAULT" in portions

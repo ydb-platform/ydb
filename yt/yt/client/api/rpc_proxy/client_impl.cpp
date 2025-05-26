@@ -7,6 +7,7 @@
 #include "row_batch_writer.h"
 #include "table_mount_cache.h"
 #include "table_writer.h"
+#include "target_cluster_injecting_channel.h"
 #include "timestamp_provider.h"
 #include "transaction.h"
 
@@ -65,12 +66,10 @@ TClient::TClient(
     TConnectionPtr connection,
     const TClientOptions& clientOptions)
     : Connection_(std::move(connection))
-    , RetryingChannel_(CreateSequoiaAwareRetryingChannel(
-        CreateCredentialsInjectingChannel(
-            Connection_->CreateChannel(false),
-            clientOptions),
-        /*retryProxyBanned*/ true))
     , ClientOptions_(clientOptions)
+    , RetryingChannel_(CreateSequoiaAwareRetryingChannel(
+        WrapNonRetryingChannel(Connection_->CreateChannel(false)),
+        /*retryProxyBanned*/ true))
     , TableMountCache_(BIND(
         &CreateTableMountCache,
         Connection_->GetConfig()->TableMountCache,
@@ -116,9 +115,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 
 IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
 {
-    return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannelByAddress(address),
-        ClientOptions_);
+    return WrapNonRetryingChannel(Connection_->CreateChannelByAddress(address));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -142,9 +139,7 @@ IChannelPtr TClient::GetRetryingChannel() const
 
 IChannelPtr TClient::CreateNonRetryingStickyChannel() const
 {
-    return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannel(true),
-        ClientOptions_);
+    return WrapNonRetryingChannel(Connection_->CreateChannel(true));
 }
 
 IChannelPtr TClient::WrapStickyChannelIntoRetrying(IChannelPtr underlying) const
@@ -152,6 +147,19 @@ IChannelPtr TClient::WrapStickyChannelIntoRetrying(IChannelPtr underlying) const
     return CreateSequoiaAwareRetryingChannel(
         std::move(underlying),
         /*retryProxyBanned*/ false);
+}
+
+IChannelPtr TClient::WrapNonRetryingChannel(IChannelPtr underlying) const
+{
+    auto credentialsInjected = CreateCredentialsInjectingChannel(
+        std::move(underlying),
+        ClientOptions_);
+
+    auto targetClusterInjected = CreateTargetClusterInjectingChannel(
+        std::move(credentialsInjected),
+        ClientOptions_.MultiproxyTargetCluster);
+
+    return targetClusterInjected;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -685,7 +693,7 @@ TFuture<TGetTabletErrorsResult> TClient::GetTabletErrors(
 }
 
 TFuture<std::vector<TTabletActionId>> TClient::BalanceTabletCells(
-    const TString& tabletCellBundle,
+    const std::string& tabletCellBundle,
     const std::vector<TYPath>& movableTables,
     const TBalanceTabletCellsOptions& options)
 {
@@ -959,6 +967,20 @@ TFuture<void> TClient::RemoveQueueProducerSession(
     return req->Invoke().AsVoid();
 }
 
+TFuture<TGetCurrentUserResultPtr> TClient::GetCurrentUser(const TGetCurrentUserOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetCurrentUser();
+    SetTimeoutOptions(*req, options);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetCurrentUserPtr& rsp) {
+        auto response = New<TGetCurrentUserResult>();
+        response->User = rsp->user();
+        return response;
+    }));
+}
+
 TFuture<void> TClient::AddMember(
     const TString& group,
     const TString& member,
@@ -1054,8 +1076,8 @@ TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
 }
 
 TFuture<void> TClient::TransferAccountResources(
-    const TString& srcAccount,
-    const TString& dstAccount,
+    const std::string& srcAccount,
+    const std::string& dstAccount,
     NYTree::INodePtr resourceDelta,
     const TTransferAccountResourcesOptions& options)
 {
@@ -2514,21 +2536,21 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
             .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
             .ClusterName = FromProto<std::string>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
-            .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
+            .AccessControlObjects = FromProto<std::vector<std::string>>(rsp->access_control_objects()),
             .Clusters = FromProto<std::vector<std::string>>(rsp->clusters())
         };
     }));
 }
 
 TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
-    const TString& /*bundleName*/,
+    const std::string& /*bundleName*/,
     const NBundleControllerClient::TGetBundleConfigOptions& /*options*/)
 {
     ThrowUnimplemented("GetBundleConfig");
 }
 
 TFuture<void> TClient::SetBundleConfig(
-    const TString& /*bundleName*/,
+    const std::string& /*bundleName*/,
     const NBundleControllerClient::TBundleTargetConfigPtr& /*bundleConfig*/,
     const NBundleControllerClient::TSetBundleConfigOptions& /*options*/)
 {
@@ -2759,7 +2781,7 @@ TFuture<TFlowExecuteResult> TClient::FlowExecute(
     }));
 }
 
-TFuture<TShuffleHandlePtr> TClient::StartShuffle(
+TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     const std::string& account,
     int partitionCount,
     TTransactionId parentTransactionId,
@@ -2781,23 +2803,31 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
-        return ConvertTo<TShuffleHandlePtr>(TYsonString(rsp->shuffle_handle()));
+        return ConvertTo<TSignedShuffleHandlePtr>(TYsonStringBuf(rsp->signed_shuffle_handle()));
     }));
 }
 
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
-    const TShuffleHandlePtr& shuffleHandle,
+    const TSignedShuffleHandlePtr& signedShuffleHandle,
     int partitionIndex,
-    const TTableReaderConfigPtr& config)
+    std::optional<std::pair<int, int>> writerIndexRange,
+    const TShuffleReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.ReadShuffleData();
     InitStreamingRequest(*req);
 
-    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
+    req->set_signed_shuffle_handle(ConvertToYsonString(signedShuffleHandle).ToString());
     req->set_partition_index(partitionIndex);
-    req->set_reader_config(ConvertToYsonString(config).ToString());
+    if (options.Config) {
+        req->set_reader_config(ConvertToYsonString(options.Config).ToString());
+    }
+    if (writerIndexRange) {
+        auto* writerIndexRangeProto = req->mutable_writer_index_range();
+        writerIndexRangeProto->set_begin(writerIndexRange->first);
+        writerIndexRangeProto->set_end(writerIndexRange->second);
+    }
 
     return CreateRpcClientInputStream(std::move(req))
         .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -2806,17 +2836,24 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 }
 
 TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
-    const TShuffleHandlePtr& shuffleHandle,
+    const TSignedShuffleHandlePtr& signedShuffleHandle,
     const std::string& partitionColumn,
-    const TTableWriterConfigPtr& config)
+    std::optional<int> writerIndex,
+    const TShuffleWriterOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
     auto req = proxy.WriteShuffleData();
     InitStreamingRequest(*req);
 
-    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
+    req->set_signed_shuffle_handle(ConvertToYsonString(signedShuffleHandle).ToString());
     req->set_partition_column(ToProto(partitionColumn));
-    req->set_writer_config(ConvertToYsonString(config).ToString());
+    if (options.Config) {
+        req->set_writer_config(ConvertToYsonString(options.Config).ToString());
+    }
+    if (writerIndex) {
+        req->set_writer_index(*writerIndex);
+    }
+    req->set_overwrite_existing_writer_data(options.OverwriteExistingWriterData);
 
     return CreateRpcClientOutputStream(std::move(req))
         .ApplyUnique(BIND([] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {

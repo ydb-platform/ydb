@@ -83,17 +83,20 @@ protected:
     }
 
 public:
-    void WaitCompactions(const TDuration d) const {
+    bool WaitCompactions(const TDuration d) const {
         TInstant start = TInstant::Now();
         ui32 compactionsStart = GetCompactionStartedCounter().Val();
+        ui32 count = 0;
         while (Now() - start < d) {
             if (compactionsStart != GetCompactionStartedCounter().Val()) {
                 compactionsStart = GetCompactionStartedCounter().Val();
                 start = TInstant::Now();
+                ++count;
             }
             Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
+            Sleep(std::min(TDuration::Seconds(1), d));
         }
+        return count > 0;
     }
 
     void WaitIndexation(const TDuration d) const {

@@ -87,6 +87,7 @@ message THosts {
     optional string Address = 9;
     optional string Name = 10;
     repeated TExtendedHostConfigDrive Drive = 11;
+    optional string BridgePileName = 12;
 }
 
 message TTls {
@@ -157,6 +158,7 @@ message TEphemeralInputFields {
     optional TTls Tls = 8;
     optional FailDomainKind FailDomainType = 9 [default = Rack];
     optional TDomainsConfig.TSecurityConfig SecurityConfig = 10;
+    repeated TDomainsConfig.TStoragePoolType StoragePoolTypes = 11;
 
     enum FailDomainKind {
         Rack = 0;

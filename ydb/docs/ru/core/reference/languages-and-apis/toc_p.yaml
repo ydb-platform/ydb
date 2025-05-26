@@ -1,11 +1,13 @@
 items:
-- name: JDBC-драйвер
-  href: jdbc-driver/index.md
-  include:
-    mode: link
-    path: jdbc-driver/toc_p.yaml
 - name: ADO.NET
   href: ado-net/index.md
   include:
     mode: link
     path: ado-net/toc_p.yaml
+- name: JDBC-драйвер
+  href: jdbc-driver/index.md
+  include:
+    mode: link
+    path: jdbc-driver/toc_p.yaml
+- name: Model Context Protocol
+  href: mcp/index.md

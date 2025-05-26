@@ -51,6 +51,7 @@ SRCS(
     api/rpc_proxy/table_mount_cache.cpp
     api/rpc_proxy/table_reader.cpp
     api/rpc_proxy/table_writer.cpp
+    api/rpc_proxy/target_cluster_injecting_channel.cpp
     api/rpc_proxy/timestamp_provider.cpp
     api/rpc_proxy/transaction.cpp
     api/rpc_proxy/transaction_impl.cpp
@@ -218,10 +219,11 @@ PEERDIR(
     yt/yt/core/https
     yt/yt/library/auth
     yt/yt/library/decimal
-    yt/yt/library/re2
     yt/yt/library/erasure
     yt/yt/library/numeric
     yt/yt/library/quantile_digest
+    yt/yt/library/re2
+    yt/yt/library/tz_types
     yt/yt_proto/yt/client
     library/cpp/digest/crc32c
     library/cpp/json

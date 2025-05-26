@@ -1,15 +1,16 @@
 {%- macro AnnotationProcessors(funcName, annotation_processors) -%}
 {%-     if annotation_processors|length -%}
-{%-         set lomboks = annotation_processors|select('startsWith', 'contrib/java/org/projectlombok/lombok') -%}
-{%-         for lombok in lomboks %}
-    {{ funcName }}(files("$arcadia_root/{{ lombok }}"))
-{%-         endfor -%}
-{%-         set annotation_processors = annotation_processors|reject('in', lomboks) -%}
-{%-         if annotation_processors|length -%}
-{%-             for annotation_processor in annotation_processors %}
+{%-         for annotation_processor in annotation_processors %}
     {{ funcName }}(files("$arcadia_root/{{ annotation_processor }}"))
-{%-             endfor -%}
-{%-         endif -%}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro Kapts(funcName, kapts) -%}
+{%-     if kapts|length -%}
+{%-         for kapt in kapts %}
+    {{ funcName }}(files("$arcadia_root/{{ kapt }}"))
+{%-         endfor -%}
 {%-     endif -%}
 {%- endmacro -%}
 
@@ -38,7 +39,7 @@
 {%-             else %}
     {{ apiFunc }}({{ classpath }})
 {%-             endif -%}
-{%-             if library.excludes.consumer|length -%} {
+{%-             if library.excludes.consumer|length and not build_contribs -%} {
 {%-                 for exclude in library.excludes.consumer if exclude.classpath -%}
 {%-                     set classpath = exclude.classpath|replace('"','') -%}
 {%-                     set classpath_parts = split(classpath, ':') -%}
@@ -67,21 +68,26 @@
 {%- set test_file_jars = test_file_deps|map(attribute='jar')|reject("in", file_jars)|unique|sort -%}
 
 dependencies {
-{%- if has_errorprone -%}
-{%-     set errorprones = target.consumer|selectattr('classpath')|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations') -%}
-{%-     if errorprones|length -%}
-{%-         for errorprone in errorprones -%}
-{%-             set errorprone_version = errorprone.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
-{%-             set errorprone_parts = split(errorprone_version, '/', 2) %}
+{%- if errorprones|length -%}
+{%-     for errorprone in errorprones -%}
+{%-         set errorprone_version = errorprone.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
+{%-         set errorprone_parts = split(errorprone_version, '/', 2) %}
     errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
-{%-         endfor -%}
-{%-     endif -%}
+{%-     endfor -%}
 {%- endif -%}
 {#- glue -#}
 {{ AnnotationProcessors("annotationProcessor", target.use_annotation_processor) }}
 {%- for extra_target in extra_targets -%}
 {{ AnnotationProcessors("testAnnotationProcessor", extra_target.use_annotation_processor) }}
 {%- endfor -%}
+{%- if with_kapt -%}
+{{ Kapts("kapt", target.kapt.classpaths) }}
+{%- endif -%}
+{%- if with_test_kapt -%}
+{%-     for extra_target in extra_targets -%}
+{{ Kapts("testKapt", extra_target.kapt.classpaths) }}
+{%-     endfor -%}
+{%- endif -%}
 {#- glue -#}
 {{ AddNonFileDeps(target, file_classpaths, "implementation", "api") }}
 {%- for extra_target in extra_targets -%}

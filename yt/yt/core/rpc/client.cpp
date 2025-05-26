@@ -7,14 +7,13 @@
 #include <yt/yt/core/net/local_address.h>
 
 #include <yt/yt/core/misc/checksum.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/bus/tcp/dispatcher.h>
 
 #include <yt/yt/build/ya_version.h>
-
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/misc/cast.h>
 
@@ -28,7 +27,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = RpcClientLogger;
+constinit const auto Logger = RpcClientLogger;
 static const auto LightInvokerDurationWarningThreshold = TDuration::MilliSeconds(10);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -252,7 +251,7 @@ void TClientRequest::SetUserTag(const std::string& tag)
     UserTag_ = tag;
 }
 
-void TClientRequest::SetUserAgent(const TString& userAgent)
+void TClientRequest::SetUserAgent(const std::string& userAgent)
 {
     Header_.set_user_agent(userAgent);
 }
@@ -466,11 +465,11 @@ void TClientRequest::PrepareHeader()
         ToProto(Header_.mutable_server_attachments_streaming_parameters(), ServerAttachmentsStreamingParameters_);
     }
 
-    if (User_ && User_ != RootUserName) {
+    if (!User_.empty() && User_ != RootUserName) {
         Header_.set_user(User_);
     }
 
-    if (UserTag_ && UserTag_ != Header_.user()) {
+    if (!UserTag_.empty() && UserTag_ != Header_.user()) {
         Header_.set_user_tag(UserTag_);
     }
 
@@ -511,7 +510,7 @@ TClientResponse::TClientResponse(TClientContextPtr clientContext)
     , ClientContext_(std::move(clientContext))
 { }
 
-const TString& TClientResponse::GetAddress() const
+const std::string& TClientResponse::GetAddress() const
 {
     return Address_;
 }

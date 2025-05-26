@@ -8,7 +8,7 @@ namespace NYT::NKafka {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, KafkaLogger, "Kafka");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, KafkaLogger, NLogging::TLogger("Kafka").WithMinLevel(NLogging::ELogLevel::Trace));
 
 ////////////////////////////////////////////////////////////////////////////////
 

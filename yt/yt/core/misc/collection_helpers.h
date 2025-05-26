@@ -19,6 +19,11 @@ std::vector<typename T::key_type> GetKeys(
     size_t sizeLimit = std::numeric_limits<size_t>::max());
 
 template <class T>
+THashSet<typename T::key_type> GetKeySet(
+    const T& collection,
+    size_t sizeLimit = std::numeric_limits<size_t>::max());
+
+template <class T>
 std::vector<typename T::mapped_type> GetValues(
     const T& collection,
     size_t sizeLimit = std::numeric_limits<size_t>::max());

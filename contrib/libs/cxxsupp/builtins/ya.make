@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20.1.3)
+VERSION(20.1.5)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.3/compiler-rt-20.1.3.src.tar.xz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.5/compiler-rt-20.1.5.src.tar.xz)
 
 NO_COMPILER_WARNINGS()
 

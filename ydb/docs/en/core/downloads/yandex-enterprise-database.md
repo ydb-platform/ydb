@@ -31,34 +31,50 @@ Yandex Enterprise Database distributions are available for download via the link
 || **Version** | **Release date** | **Download** | **Checksums** | **Changelog** ||
 || **v24.3** |  |  |  |  ||
 || v.24.3.13.11 | 06.03.2024 |
+
 - [Distribution](https://binaries.ясубд.рф/release/24.3.13.11/yasubd-24.3.13.11-linux-amd64.tar.xz)
 - [Debug symbols](https://binaries.ясубд.рф/release/24.3.13.11/yasubd-24.3.13.11-linux-amd64-debug.tar.xz)
+
 |
+
 - [For distribution](https://binaries.ясубд.рф/release/24.3.13.11/checksums.txt)
 - [For debug symbols](https://binaries.ясубд.рф/release/24.3.13.11/checksums.debug.txt)
+
 | - ||
 || v.24.3.13.10 | 24.12.2024 |
+
 - [Distribution](https://binaries.ясубд.рф/release/24.3.13.10/yasubd-24.3.13.10-linux-amd64.tar.xz)
 - [Debug symbols](https://binaries.ясубд.рф/release/24.3.13.10/yasubd-24.3.13.10-linux-amd64-debug.tar.xz)
+
 |
+
 - [For distribution](https://binaries.ясубд.рф/release/24.3.13.10/checksums.txt)
 - [For debug symbols](https://binaries.ясубд.рф/release/24.3.13.10/checksums.debug.txt)
+
 | [See list](../changelog-server.md#24-3) ||
 || **v24.2** |  |  |  |  ||
 || v.24.2.7.1 | 20.08.2024 |
+
 - [Distribution](https://binaries.ясубд.рф/release/24.2.7.1/yasubd-24.2.7.1-linux-amd64.tar.xz)
 - [Debug symbols](https://binaries.ясубд.рф/release/24.2.7.1/yasubd-24.2.7.1-linux-amd64-debug.tar.xz)
+
 |
+
 - [For distribution](https://binaries.ясубд.рф/release/24.2.7.1/checksums.txt)
 - [For debug symbols](https://binaries.ясубд.рф/release/24.2.7.1/checksums.debug.txt)
+
 | [See list](../changelog-server.md#24-2) ||
 || **v24.1** |  |  |  |  ||
 || v.24.1.18.1 | 28.06.2024 |
+
 - [Distribution](https://binaries.ясубд.рф/release/24.1.18.1/yasubd-24.1.18.1-linux-amd64.tar.xz)
 - [Debug symbols](https://binaries.ясубд.рф/release/24.1.18.1/yasubd-24.1.18.1-linux-amd64-debug.tar.xz)
+
 |
+
 - [For distribution](https://binaries.ясубд.рф/release/24.1.18.1/checksums.txt)
 - [For debug symbols](https://binaries.ясубд.рф/release/24.1.18.1/checksums.debug.txt)
+
 | [See list](../changelog-server.md#24-1) ||
 || **v23.4** |  |  |  |  ||
 || v.23.4.11.1 | 15.05.2024 | [Distribution](https://binaries.ясубд.рф/release/23.4.11.1/yasubd-23.4.11.1-linux-amd64.tar.gz) | [Checksums](https://binaries.ясубд.рф/release/23.4.11.1/checksums.txt) | [See list](../changelog-server.md#23-4) ||
@@ -79,6 +95,6 @@ Yandex Enterprise Database distributions are available for download via the link
 || **v23.4** |  |  |  |  ||
 || v.23.4.11 | 14.05.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.4.11` | [See list](../changelog-server.md#23-4) ||
 || **v23.3** |  |  |  |  ||
-|| v.23.3.17 | 14.12.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.17` | [See list](../changelog-server-23.md#23-3-17) ||
+|| v.23.3.17 | 14.12.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.17` | [See list](../changelog-server.md#23-3-17) ||
 || v.23.3.13 | 12.10.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.13` | [See list](../changelog-server.md#23-3) ||
 |#

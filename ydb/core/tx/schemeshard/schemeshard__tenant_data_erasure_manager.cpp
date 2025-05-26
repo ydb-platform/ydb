@@ -61,7 +61,7 @@ void TTenantDataErasureManager::UpdateConfig(const NKikimrConfig::TDataErasureCo
 void TTenantDataErasureManager::Start() {
     TDataErasureManager::Start();
     const auto ctx = SchemeShard->ActorContext();
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Start: Status# " << static_cast<ui32>(Status));
 
     Queue->Start();
@@ -76,7 +76,7 @@ void TTenantDataErasureManager::Start() {
 void TTenantDataErasureManager::Stop() {
     TDataErasureManager::Stop();
     const auto ctx = SchemeShard->ActorContext();
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Stop");
 
     Queue->Stop();
@@ -112,6 +112,8 @@ void TTenantDataErasureManager::ClearWaitingDataErasureRequests() {
 }
 
 void TTenantDataErasureManager::Run(NIceDb::TNiceDb& db) {
+    CounterDataErasureOk = 0;
+    CounterDataErasureTimeout = 0;
     Status = EDataErasureStatus::IN_PROGRESS;
     for (const auto& [shardIdx, shardInfo] : SchemeShard->ShardInfos) {
         switch (shardInfo.TabletType) {
@@ -132,7 +134,7 @@ void TTenantDataErasureManager::Run(NIceDb::TNiceDb& db) {
     db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(Status);
 
     const auto ctx = SchemeShard->ActorContext();
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Run: Queue.Size# " << Queue->Size()
         << ", WaitingDataErasureShards.size# " << WaitingDataErasureShards.size()
         << ", Status# " << static_cast<ui32>(Status));
@@ -200,8 +202,8 @@ NOperationQueue::EStartStatus TTenantDataErasureManager::StartDataErasure(const 
 }
 
 void TTenantDataErasureManager::OnTimeout(const TShardIdx& shardIdx) {
+    CounterDataErasureTimeout++;
     UpdateMetrics();
-    SchemeShard->TabletCounters->Cumulative()[COUNTER_TENANT_DATA_ERASURE_TIMEOUT].Increment(1);
 
     ActivePipes.erase(shardIdx);
 
@@ -316,11 +318,11 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
         }
     }
 
-    SchemeShard->TabletCounters->Cumulative()[COUNTER_TENANT_DATA_ERASURE_OK].Increment(1);
+    CounterDataErasureOk++;
     UpdateMetrics();
 
     if (WaitingDataErasureShards.empty()) {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[TenantDataErasureManager] Data erasure in shards is completed. Send response to root schemeshard");
         Complete();
         db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(Status);
@@ -343,7 +345,7 @@ void TTenantDataErasureManager::Complete() {
     Status = EDataErasureStatus::COMPLETED;
 
     auto ctx = SchemeShard->ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Complete: Generation# " << Generation);
 }
 
@@ -446,6 +448,8 @@ void TTenantDataErasureManager::HandleNewPartitioning(const std::vector<TShardId
 void TTenantDataErasureManager::UpdateMetrics() {
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_SIZE].Set(Queue->Size());
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_RUNNING].Set(Queue->RunningSize());
+    SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_OK].Set(CounterDataErasureOk);
+    SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_TIMEOUT].Set(CounterDataErasureTimeout);
 }
 
 void TTenantDataErasureManager::SendResponseToRootSchemeShard() {

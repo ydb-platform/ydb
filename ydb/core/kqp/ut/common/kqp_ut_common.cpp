@@ -72,6 +72,8 @@ NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateJson2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateStringModule();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateMathModule();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateUnicodeModule();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
@@ -81,6 +83,9 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     funcRegistry->AddModule("", "Re2", CreateRe2Module());
     funcRegistry->AddModule("", "String", CreateStringModule());
     funcRegistry->AddModule("", "DateTime", CreateDateTime2Module());
+    funcRegistry->AddModule("", "Math", CreateMathModule());
+    funcRegistry->AddModule("", "Unicode", CreateUnicodeModule());
+    
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }
@@ -1394,6 +1399,16 @@ void InitRoot(Tests::TServer::TPtr server, TActorId sender) {
     server->SetupRootStoragePools(sender);
 }
 
+void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user) {
+    auto grantQuery = Sprintf(R"(
+            GRANT %s ON `%s` TO `%s`;
+        )",
+        permissions, path, user
+    );
+    auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+};  
+
 THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
 {
@@ -1542,6 +1557,35 @@ int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const
     }
 
     return result;
+}
+
+void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, bool checkFollower, bool readsExpected) {
+    for (size_t attempt = 0; attempt < 30; ++attempt)
+    {
+        Cerr << "... SELECT from partition_stats for " << tableName << " , attempt " << attempt << Endl;
+
+        const TString selectPartitionStats(Q_(Sprintf(R"(
+            SELECT *
+            FROM `/Root/.sys/partition_stats`
+            WHERE FollowerId %s 0 AND (RowReads != 0 OR RangeReadRows != 0) AND Path = '%s'   
+        )", (checkFollower ? "!=" : "="), tableName.c_str())));
+
+        auto result = session.ExecuteDataQuery(selectPartitionStats, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
+        Cerr << selectPartitionStats << Endl;
+
+        auto rs = result.GetResultSet(0);
+        if (readsExpected) {
+            if (rs.RowsCount() != 0)
+                return;
+            Sleep(TDuration::Seconds(5));
+        } else {
+            if (rs.RowsCount() == 0)
+                return;
+            Y_FAIL("!readsExpected, but there are read stats for %s", tableName.c_str());
+        }
+    }
+    Y_FAIL("readsExpected, but there is timeout waiting for read stats from %s", tableName.c_str());    
 }
 
 TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
@@ -1721,7 +1765,7 @@ NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue&
     if (!opt.IsMap()) {
         return {};
     }
-    
+
     if (!opt.GetMapSafe().contains("table")) {
         NJson::TJsonValue res;
         auto args = opt.GetMapSafe().at("args").GetArraySafe();

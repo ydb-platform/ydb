@@ -468,7 +468,11 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
             QPlayerStorage_ = MakeFileQStorage(".");
         }
         if (EQPlayerMode::Replay == QPlayerMode) {
-            QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+            try {
+                QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+            } catch (...) {
+                throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
+            }
             ProgramFile = "-replay-";
             ProgramText = "";
         } else if (EQPlayerMode::Capture == QPlayerMode) {

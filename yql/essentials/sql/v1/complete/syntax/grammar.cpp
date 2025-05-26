@@ -7,31 +7,31 @@ namespace NSQLComplete {
     class TSqlGrammar: public ISqlGrammar {
     public:
         TSqlGrammar(const NSQLReflect::TLexerGrammar& grammar)
-            : Parser(MakeDummyParser())
-            , AllTokens(ComputeAllTokens())
-            , KeywordTokens(ComputeKeywordTokens(grammar))
-            , PunctuationTokens(ComputePunctuationTokens(grammar))
+            : Parser_(MakeDummyParser())
+            , AllTokens_(ComputeAllTokens())
+            , KeywordTokens_(ComputeKeywordTokens(grammar))
+            , PunctuationTokens_(ComputePunctuationTokens(grammar))
         {
         }
 
         const antlr4::dfa::Vocabulary& GetVocabulary() const override {
-            return Parser->getVocabulary();
+            return Parser_->getVocabulary();
         }
 
         const std::unordered_set<TTokenId>& GetAllTokens() const override {
-            return AllTokens;
+            return AllTokens_;
         }
 
         const std::unordered_set<TTokenId>& GetKeywordTokens() const override {
-            return KeywordTokens;
+            return KeywordTokens_;
         }
 
         const std::unordered_set<TTokenId>& GetPunctuationTokens() const override {
-            return PunctuationTokens;
+            return PunctuationTokens_;
         }
 
         const std::string& SymbolizedRule(TRuleId rule) const override {
-            return Parser->getRuleNames().at(rule);
+            return Parser_->getRuleNames().at(rule);
         }
 
     private:
@@ -76,10 +76,10 @@ namespace NSQLComplete {
             return punctuationTokens;
         }
 
-        const THolder<antlr4::Parser> Parser;
-        const std::unordered_set<TTokenId> AllTokens;
-        const std::unordered_set<TTokenId> KeywordTokens;
-        const std::unordered_set<TTokenId> PunctuationTokens;
+        const THolder<antlr4::Parser> Parser_;
+        const std::unordered_set<TTokenId> AllTokens_;
+        const std::unordered_set<TTokenId> KeywordTokens_;
+        const std::unordered_set<TTokenId> PunctuationTokens_;
     };
 
     const ISqlGrammar& GetSqlGrammar() {

@@ -175,9 +175,10 @@ namespace NKikimr::NStorage {
         const bool IsSelfStatic = false;
         TIntrusivePtr<TNodeWardenConfig> Cfg;
         bool SelfManagementEnabled = false;
+        TBridgeInfo::TPtr BridgeInfo;
 
         // currently active storage config
-        std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
         TString MainConfigYaml; // the part we have to push (unless this is storage-only) to console
         std::optional<ui64> MainConfigYamlVersion;
         TString MainConfigFetchYaml; // the part we would get is we fetch from console
@@ -185,10 +186,10 @@ namespace NKikimr::NStorage {
         std::optional<TString> StorageConfigYaml; // set if dedicated storage yaml is enabled; otherwise nullopt
 
         // base config from config file
-        NKikimrBlobStorage::TStorageConfig BaseConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> BaseConfig;
 
         // initial config based on config file and stored committed configs
-        NKikimrBlobStorage::TStorageConfig InitialConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> InitialConfig;
         std::vector<TString> DrivesToRead;
 
         // proposed storage configuration of the cluster
@@ -286,8 +287,8 @@ namespace NKikimr::NStorage {
             return NKikimrServices::TActivity::NODEWARDEN_DISTRIBUTED_CONFIG;
         }
 
-        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg, const NKikimrBlobStorage::TStorageConfig& baseConfig,
-            bool isSelfStatic);
+        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> baseConfig, bool isSelfStatic);
 
         void Bootstrap();
         void PassAway() override;
@@ -365,14 +366,15 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
-        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
+        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, TGroupId groupId, ui32 groupGeneration,
             TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
             const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
             std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
             i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
-            bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit);
+            bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
+            std::optional<TBridgePileId> bridgePileId);
 
         void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig);
@@ -721,6 +723,9 @@ namespace NKikimr::NStorage {
 
         // scan all groups and find ones without quorum
         for (const auto& [groupId, group] : groups) {
+            if (group.Info->IsBridged()) {
+                continue;
+            }
             if (const auto& checker = group.Info->GetQuorumChecker(); !checker.CheckQuorumForGroup(group.Confirmed)) {
                 return false;
             }

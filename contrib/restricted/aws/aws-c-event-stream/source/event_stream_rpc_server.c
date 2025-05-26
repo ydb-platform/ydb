@@ -436,7 +436,7 @@ error:
     return NULL;
 }
 
-uint16_t aws_event_stream_rpc_server_listener_get_bound_port(
+uint32_t aws_event_stream_rpc_server_listener_get_bound_port(
     const struct aws_event_stream_rpc_server_listener *server) {
 
     struct aws_socket_endpoint address;
@@ -570,16 +570,6 @@ static int s_send_protocol_message(
 
     struct event_stream_connection_send_message_args *args =
         aws_mem_calloc(connection->allocator, 1, sizeof(struct event_stream_connection_send_message_args));
-
-    if (!message_args) {
-        AWS_LOGF_ERROR(
-            AWS_LS_EVENT_STREAM_RPC_SERVER,
-            "id=%p: allocation of callback args failed with error %s",
-            (void *)connection,
-            aws_error_debug_str(aws_last_error()));
-        return AWS_OP_ERR;
-    }
-
     args->allocator = connection->allocator;
     args->user_data = user_data;
     args->message_type = message_args->message_type;

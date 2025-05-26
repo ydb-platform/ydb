@@ -136,7 +136,8 @@ public:
         bool OnlyPhantomsRemain = false;
 
     public:
-        void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now, TInstant instant, bool onlyPhantomsRemain) {
+        void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now, TInstant instant, bool onlyPhantomsRemain,
+                TBlobStorageController *controller) {
             if (status != VDiskStatus) {
                 if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // became "replicating"
                     LastGotReplicating = instant;
@@ -159,7 +160,9 @@ public:
                 } else {
                     DropFromVSlotReadyTimestampQ();
                 }
-                const_cast<TGroupInfo&>(*Group).CalculateGroupStatus();
+                if (const_cast<TGroupInfo&>(*Group).CalculateGroupStatus()) {
+                    controller->SysViewChangedGroups.insert(Group->ID);
+                }
             }
             if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                 OnlyPhantomsRemain = onlyPhantomsRemain;
@@ -355,6 +358,8 @@ public:
 
         bool ShredInProgress = false; // set to true when shredding is started for this disk
 
+        NKikimrBlobStorage::TMaintenanceStatus::E MaintenanceStatus;
+
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
             static TTableAdapter<Table, TPDiskInfo,
@@ -372,7 +377,8 @@ public:
                     Table::LastSeenSerial,
                     Table::LastSeenPath,
                     Table::DecommitStatus,
-                    Table::ShredComplete
+                    Table::ShredComplete,
+                    Table::MaintenanceStatus
                 > adapter(
                     &TPDiskInfo::Path,
                     &TPDiskInfo::Kind,
@@ -388,7 +394,8 @@ public:
                     &TPDiskInfo::LastSeenSerial,
                     &TPDiskInfo::LastSeenPath,
                     &TPDiskInfo::DecommitStatus,
-                    &TPDiskInfo::ShredComplete
+                    &TPDiskInfo::ShredComplete,
+                    &TPDiskInfo::MaintenanceStatus
                 );
             callback(&adapter);
         }
@@ -411,7 +418,8 @@ public:
                    const TString& lastSeenSerial,
                    const TString& lastSeenPath,
                    ui32 staticSlotUsage,
-                   bool shredComplete)
+                   bool shredComplete,
+                   NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus)
             : HostId(hostId)
             , Path(path)
             , Kind(kind)
@@ -430,6 +438,7 @@ public:
             , LastSeenSerial(lastSeenSerial)
             , LastSeenPath(lastSeenPath)
             , StaticSlotUsage(staticSlotUsage)
+            , MaintenanceStatus(maintenanceStatus)
         {
             ExtractConfig(defaultMaxSlots);
         }
@@ -472,7 +481,8 @@ public:
         bool ShouldBeSettledBySelfHeal() const {
             return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
                 || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
-                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT;
+                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT
+                || MaintenanceStatus == NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
         }
 
         bool IsSelfHealReasonDecommit() const {
@@ -496,7 +506,8 @@ public:
         }
 
         bool AcceptsNewSlots() const {
-            return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE;
+            return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE
+                && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
         }
 
         bool Decommitted() const {
@@ -608,6 +619,8 @@ public:
                 OperatingStatus = Max(OperatingStatus, operating);
                 ExpectedStatus = Max(ExpectedStatus, expected);
             }
+
+            friend std::strong_ordering operator <=>(const TGroupStatus&, const TGroupStatus&) = default;
         } Status;
 
         // group status depends on the IsReady value for every VDisk; so it has to be updated every time there is possible
@@ -619,7 +632,7 @@ public:
         //
         // also it depends on the Status of underlying PDisks, so every time their status change, group status has to
         // be recalculated too
-        void CalculateGroupStatus();
+        bool CalculateGroupStatus();
 
         // group layout status: whether it is positioned correctly
         bool LayoutCorrect = false;
@@ -1554,7 +1567,7 @@ private:
     bool TryToRelocateBrokenDisksLocallyFirst = false;
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
-    NKikimrBlobStorage::TStorageConfig StorageConfig;
+    std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
     bool SelfManagementEnabled = false;
     std::optional<TYamlConfig> YamlConfig;
     ui64 YamlConfigHash = 0;
@@ -1807,6 +1820,7 @@ private:
     void Handle(TEvNodeWardenStorageConfig::TPtr ev);
     void Handle(TEvents::TEvUndelivered::TPtr ev);
     bool HostConfigEquals(const THostConfigInfo& left, const NKikimrBlobStorage::TDefineHostConfig& right) const;
+    void ApplyBscSettings(const NKikimrConfig::TBlobStorageConfig& bsConfig);
     void ApplyStorageConfig(bool ignoreDistconf = false);
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev);
@@ -2286,7 +2300,9 @@ public:
             ScrubState.UpdateVDiskState(&*it->second);
         }
         for (TGroupInfo *group : groups) {
-            group->CalculateGroupStatus();
+            if (group->CalculateGroupStatus()) {
+                SysViewChangedGroups.insert(group->ID);
+            }
         }
         ScheduleVSlotReadyUpdate();
         if (!timingQ.empty()) {

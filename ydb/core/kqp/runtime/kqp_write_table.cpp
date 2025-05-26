@@ -998,21 +998,18 @@ public:
             return IsClosed() && IsEmpty();
         }
 
-        void MakeNextBatches(i64 maxDataSize, std::optional<ui64> maxCount) {
+        void MakeNextBatches(std::optional<ui64> maxCount) {
             AFL_ENSURE(BatchesInFlight == 0);
             AFL_ENSURE(!IsEmpty());
-            i64 dataSize = 0;
+
             // For columnshard batch can be slightly larger than the limit.
             while ((!maxCount || BatchesInFlight < *maxCount)
-                    && BatchesInFlight < Batches.size()
-                    && (dataSize + GetBatch(BatchesInFlight).GetSerializedMemory() <= maxDataSize || BatchesInFlight == 0)) {
-                dataSize += GetBatch(BatchesInFlight).GetSerializedMemory();
+                    && BatchesInFlight < Batches.size()) {
                 ++BatchesInFlight;
             }
             AFL_ENSURE(BatchesInFlight != 0);
             AFL_ENSURE(BatchesInFlight == Batches.size()
-                || (maxCount && BatchesInFlight >= *maxCount)
-                || dataSize + GetBatch(BatchesInFlight).GetSerializedMemory() > maxDataSize);
+                || (maxCount && BatchesInFlight >= *maxCount));
         }
 
         TBatchWithMetadata& GetBatch(size_t index) {
@@ -1525,9 +1522,9 @@ private:
         if (shard.GetBatchesInFlight() == 0) {
             AFL_ENSURE(IsOlap != std::nullopt);
             if (*IsOlap) {
-                shard.MakeNextBatches(Settings.MemoryLimitPerMessage, 1);
+                shard.MakeNextBatches(1);
             } else {
-                shard.MakeNextBatches(Settings.MemoryLimitPerMessage, std::nullopt);
+                shard.MakeNextBatches(std::nullopt);
             }
         }
     }

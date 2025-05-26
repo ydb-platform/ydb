@@ -240,9 +240,6 @@ public:
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
-                .MemoryLimitPerMessage = std::min(
-                    MessageSettings.InFlightMemoryLimitPerActorBytes,
-                    MessageSettings.MemoryLimitPerMessageBytes),
                 .Inconsistent = InconsistentTx,
             },
             Alloc);
@@ -986,7 +983,11 @@ public:
             }()
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
             << ", OperationsCount=" << evWrite->Record.OperationsSize() << ", IsFinal=" << metadata->IsFinal
-            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode));
+            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode)
+            << ", BufferMemory=" << GetMemory());
+
+        AFL_ENSURE(Mode == EMode::WRITE || metadata->IsFinal);
+
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
@@ -1503,7 +1504,8 @@ private:
                 RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                     NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                    TStringBuilder() << "Stream write can't be used for this query.",
+                    TStringBuilder() << "Out of buffer memory. Used " << GetMemory()
+                        << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                     {});
                 return;
             }
@@ -1803,6 +1805,7 @@ public:
             }
 
             EnableStreamWrite &= settings.EnableStreamWrite;
+
             auto cookie = writeInfo.WriteTableActor->Open(
                 settings.OperationType,
                 std::move(settings.KeyColumns),
@@ -1902,7 +1905,8 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                TStringBuilder() << "Stream write queries aren't allowed.",
+                TStringBuilder() << "Out of buffer memory. Used " << GetTotalMemory()
+                        << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                 {});
             return false;
         }

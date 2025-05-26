@@ -41,7 +41,7 @@ void InterruptHandler(int) {
 class TPCCRunner {
 public:
     // we suppose that both constructor and destructor are called in a single "main" thread
-    TPCCRunner(const TRunConfig& config);
+    TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig);
     ~TPCCRunner();
 
     void RunSync();
@@ -52,6 +52,7 @@ private:
     void DumpFinalStats();
 
 private:
+    NConsoleClient::TClientCommand::TConfig ConnectionConfig;
     TRunConfig Config;
 
     std::shared_ptr<TLog> Log;
@@ -70,15 +71,16 @@ private:
 
 //-----------------------------------------------------------------------------
 
-TPCCRunner::TPCCRunner(const TRunConfig& config)
-    : Config(config)
-    , Log(std::make_shared<TLog>(CreateLogBackend("cerr", config.LogPriority, true)))
+TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig)
+    : ConnectionConfig(connectionConfig)
+    , Config(runConfig)
+    , Log(std::make_shared<TLog>(CreateLogBackend("cerr", Config.LogPriority, true)))
 {
     signal(SIGINT, InterruptHandler);
     signal(SIGTERM, InterruptHandler);
 
-    Config.ConnectionConfig.IsNetworkIntensive = true;
-    Config.ConnectionConfig.UsePerChannelTcpConnection = true;
+    ConnectionConfig.IsNetworkIntensive = true;
+    ConnectionConfig.UsePerChannelTcpConnection = true;
 
     const size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
     if (cpuCount == 0) {
@@ -87,22 +89,23 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
         std::exit(1);
     }
 
-    const size_t networkThreadCount = NConsoleClient::TYdbCommand::GetNetworkThreadNum(Config.ConnectionConfig);
+    const size_t networkThreadCount = NConsoleClient::TYdbCommand::GetNetworkThreadNum(ConnectionConfig);
     const size_t maxTerminalThreadCount = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
 
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
     // we might consider using less than maxTerminalThreads
-    const size_t threadCount = std::min(maxTerminalThreadCount, terminalsCount);
+    const size_t threadCount = Config.ThreadCount == 0 ?
+        std::min(maxTerminalThreadCount, terminalsCount) : Config.ThreadCount;
 
     // The number of terminals might be hundreds of thousands.
     // For now, we don't have more than 32 network threads (check TYdbCommand::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
-    const size_t driverCount = threadCount;
+    const size_t driverCount = Config.DriverCount == 0 ? threadCount : Config.DriverCount;
     std::vector<TDriver> drivers;
     drivers.reserve(driverCount);
     for (size_t i = 0; i < driverCount; ++i) {
-        drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(Config.ConnectionConfig));
+        drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
     }
 
     StatsVec.reserve(threadCount);
@@ -136,7 +139,7 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
             Config.NoSleep,
             TerminalsStopSource.get_token(),
             StopWarmup,
-            StatsVec[i % drivers.size()],
+            StatsVec[i % threadCount],
             Log);
 
         Terminals.emplace_back(std::move(terminalPtr));
@@ -265,13 +268,8 @@ void TPCCRunner::DumpFinalStats() {
 
 //-----------------------------------------------------------------------------
 
-TRunConfig::TRunConfig(const NConsoleClient::TClientCommand::TConfig& connectionConfig)
-    : ConnectionConfig(connectionConfig)
-{
-}
-
-void RunSync(const TRunConfig& config) {
-    TPCCRunner runner(config);
+void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
+    TPCCRunner runner(connectionConfig, runConfig);
     runner.RunSync();
 }
 

@@ -1262,14 +1262,13 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     ClosedInternalPartition = true;
     auto response = new TEvPQ::TEvGetWriteInfoResponse();
     response->Cookie = Partition.InternalPartitionId;
-    response->BodyKeys = std::move(BlobEncoder.DataKeysBody);
+    response->BodyKeys = std::move(CompactionBlobEncoder.DataKeysBody);
+    std::move(CompactionBlobEncoder.HeadKeys.begin(), CompactionBlobEncoder.HeadKeys.end(),
+              std::back_inserter(response->BodyKeys));
+    std::move(BlobEncoder.DataKeysBody.begin(), BlobEncoder.DataKeysBody.end(),
+              std::back_inserter(response->BodyKeys));
     response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
-    ui32 rcount = 0, rsize = 0;
-    ui64 insideHeadOffset = 0;
 
-    response->BlobsFromHead = GetReadRequestFromHead(0, 0, std::numeric_limits<ui32>::max(),
-                                                     std::numeric_limits<ui32>::max(), 0, &rcount, &rsize,
-                                                     &insideHeadOffset, 0);
     response->BytesWrittenGrpc = BytesWrittenGrpc.Value();
     response->BytesWrittenUncompressed = BytesWrittenUncompressed.Value();
     response->BytesWrittenTotal = BytesWrittenTotal.Value();
@@ -1376,10 +1375,6 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         tx.WriteInfoApplied = true;
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();
         WriteKeysSizeEstimate += tx.WriteInfo->SrcIdInfo.size();
-        WriteKeysSizeEstimate += tx.WriteInfo->BlobsFromHead.size();
-        for (const auto& blob : tx.WriteInfo->BlobsFromHead) {
-            WriteCycleSizeEstimate += blob.GetBlobSize();
-        }
     }
 
     return ret;
@@ -2519,8 +2514,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         HaveWriteMsg = true;
     }
 
-    PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
-             ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
     PQ_LOG_D("Head=" << BlobEncoder.Head << ", NewHead=" << BlobEncoder.NewHead);
 
     auto oldHeadOffset = BlobEncoder.NewHead.Offset;
@@ -2568,50 +2561,50 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         BlobEncoder.NewHead.Offset = Parameters->CurOffset;
     }
 
-    if (!t.WriteInfo->BlobsFromHead.empty()) {
-        auto& first = t.WriteInfo->BlobsFromHead.front();
-        // In one operation, a partition can write blocks of several transactions. Some of them can be broken down
-        // into parts. We need to take this division into account.
-        BlobEncoder.NewHead.PartNo += first.GetPartNo();
+    //if (!t.WriteInfo->BlobsFromHead.empty()) {
+    //    auto& first = t.WriteInfo->BlobsFromHead.front();
+    //    // In one operation, a partition can write blocks of several transactions. Some of them can be broken down
+    //    // into parts. We need to take this division into account.
+    //    BlobEncoder.NewHead.PartNo += first.GetPartNo();
 
-        Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
+    //    Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
 
-        BlobEncoder.NewPartitionedBlob(Partition,
-                                    BlobEncoder.NewHead.Offset,
-                                    first.SourceId,
-                                    first.SeqNo,
-                                    first.GetTotalParts(),
-                                    first.GetTotalSize(),
-                                    Parameters->HeadCleared, // headCleared
-                                    false,                   // needCompactHead
-                                    MaxBlobSize,
-                                    first.GetPartNo());
+    //    BlobEncoder.NewPartitionedBlob(Partition,
+    //                                BlobEncoder.NewHead.Offset,
+    //                                first.SourceId,
+    //                                first.SeqNo,
+    //                                first.GetTotalParts(),
+    //                                first.GetTotalSize(),
+    //                                Parameters->HeadCleared, // headCleared
+    //                                false,                   // needCompactHead
+    //                                MaxBlobSize,
+    //                                first.GetPartNo());
 
-        for (auto& blob : t.WriteInfo->BlobsFromHead) {
-            TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
-                .SourceId = blob.SourceId,
-                .SeqNo = blob.SeqNo,
-                .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
-                .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
-                .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
-                .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
-                .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
-                .DisableDeduplication = false,
-                .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
-                .Data = blob.Data,
-                .UncompressedSize = blob.UncompressedSize,
-                .PartitionKey = blob.PartitionKey,
-                .ExplicitHashKey = blob.ExplicitHashKey,
-                .External = false,
-                .IgnoreQuotaDeadline = true,
-                .HeartbeatVersion = std::nullopt,
-            }, std::nullopt};
-            msg.Internal = true;
+    //    for (auto& blob : t.WriteInfo->BlobsFromHead) {
+    //        TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
+    //            .SourceId = blob.SourceId,
+    //            .SeqNo = blob.SeqNo,
+    //            .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
+    //            .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
+    //            .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
+    //            .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
+    //            .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
+    //            .DisableDeduplication = false,
+    //            .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
+    //            .Data = blob.Data,
+    //            .UncompressedSize = blob.UncompressedSize,
+    //            .PartitionKey = blob.PartitionKey,
+    //            .ExplicitHashKey = blob.ExplicitHashKey,
+    //            .External = false,
+    //            .IgnoreQuotaDeadline = true,
+    //            .HeartbeatVersion = std::nullopt,
+    //        }, std::nullopt};
+    //        msg.Internal = true;
 
-            WriteInflightSize += msg.Msg.Data.size();
-            ExecRequest(msg, *Parameters, PersistRequest.Get());
-        }
-    }
+    //        WriteInflightSize += msg.Msg.Data.size();
+    //        ExecRequest(msg, *Parameters, PersistRequest.Get());
+    //    }
+    //}
     for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
         auto& sourceIdBatch = Parameters->SourceIdBatch;
         auto sourceId = sourceIdBatch.GetSource(srcId);

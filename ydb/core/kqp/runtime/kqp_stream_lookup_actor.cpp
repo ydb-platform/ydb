@@ -223,18 +223,32 @@ private:
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
 
+	auto alloc = BindAllocator();
+	const bool isTaskSmall = alloc.GetMutex()->GetUsed() <= 100 * 1024 * 1024;
+
         auto replyResultStats = StreamLookupWorker->ReplyResult(batch, freeSpace);
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
-        auto status = FetchInputRows();
+	const bool allReadsFinished = AllReadsFinished();
+	// This is a bit awkward attempt to workaround flow control problem.
+	// Task with stream lookup consume input from a different task.
+	// This input can be relatively small at the first glance and it's limited by the
+	// ChannelBufferSize.
+	// On the other hand, a stream lookup can add some extra space to the input.
+	// Then it chunks data into the pieces where each piece should be fitted into the
+	// ChannelBufferSize.
+	// So if we produce data slower input than consume, we can fail by mkql memory limit
+	// exceeded problem and because of that we should avoid fetching new input until freeSpace >= 0
+	if (isTaskSmall || !replyResultStats.SizeLimitExceeded) {
+	    FetchInputRows();
+	}
 
         if (Partitioning) {
             ProcessInputRows();
         }
 
-        const bool inputRowsFinished = status == NUdf::EFetchStatus::Finish;
-        const bool allReadsFinished = AllReadsFinished();
+        const bool inputRowsFinished = LastFetchStatus == NUdf::EFetchStatus::Finish;
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
 
         if (inputRowsFinished && allReadsFinished && !allRowsProcessed) {
@@ -513,14 +527,14 @@ private:
 
     NUdf::EFetchStatus FetchInputRows() {
         auto guard = BindAllocator();
+	if (LastFetchStatus == NUdf::EFetchStatus::Finish) return LastFetchStatus;
 
-        NUdf::EFetchStatus status;
         NUdf::TUnboxedValue row;
-        while ((status = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
+        while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             StreamLookupWorker->AddInputRow(std::move(row));
         }
 
-        return status;
+        return LastFetchStatus;
     }
 
     void ProcessInputRows() {
@@ -705,6 +719,7 @@ private:
     const ui64 InputIndex;
     NYql::NDq::TDqAsyncStats IngressStats;
     NUdf::TUnboxedValue Input;
+    NYql::NUdf::EFetchStatus LastFetchStatus = NYql::NUdf::EFetchStatus::Yield;
     const NActors::TActorId ComputeActorId;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;

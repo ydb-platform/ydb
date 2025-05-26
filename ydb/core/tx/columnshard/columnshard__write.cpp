@@ -192,7 +192,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 
     const auto& record = Proto(ev->Get());
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(record);
-    const auto& internalPathId = PathIdTranslator.GetInternalPathId(schemeShardLocalPathId);
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
     const ui64 writeId = record.GetWriteId();
     const ui64 cookie = ev->Cookie;
@@ -567,8 +567,10 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    const auto pathId = TInternalPathId::FromRawValue(operation.GetTableId().GetTableId());
-
+    const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(operation.GetTableId().GetTableId());
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+    AFL_VERIFY(internalPathId);
+    const auto& pathId = *internalPathId;
     if (!TablesManager.IsReadyForStartWrite(pathId, false)) {
         sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);
         return;

@@ -5,8 +5,10 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
-
 class TSpecialReadContext;
+}
+
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 private:
@@ -29,4 +31,4 @@ public:
     TDuplicateManager(const TSpecialReadContext& context);
 };
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

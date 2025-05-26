@@ -217,7 +217,7 @@ class TDuplicateFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
 
-    class TFilterSubscriber: public IFilterSubscriber {
+    class TFilterSubscriber: public NDuplicateFiltering::IFilterSubscriber {
     private:
         std::weak_ptr<IDataSource> Source;
         TFetchingScriptCursor Step;

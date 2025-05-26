@@ -250,9 +250,9 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    void StartFetchingDuplicateFilter(std::shared_ptr<IFilterSubscriber>&& subscriber) {
-        NActors::TActivationContext::AsActorContext().Send(
-            GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManagerVerified(), new TEvRequestFilter(*this, std::move(subscriber)));
+    void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
+        NActors::TActivationContext::AsActorContext().Send(GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManagerVerified(),
+            new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
     }
 
     virtual TInternalPathId GetPathId() const = 0;

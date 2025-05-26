@@ -7,8 +7,10 @@
 #include <ydb/library/actors/core/event_local.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
-
 class IDataSource;
+}
+
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class IFilterSubscriber {
 public:
@@ -26,4 +28,4 @@ public:
     TEvRequestFilter(const IDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber);
 };
 
-}   // namespace NKikimr::NOlap::NReader::NSimple
+}   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

@@ -118,17 +118,7 @@ public:
     auto operator<=>(const TSchemeShardLocalPathId&) const = default;
 };
 
-//TODO implement me
-class TPathIdTranslator {
-public:
-    std::optional <TSchemeShardLocalPathId> GetSchemeShardLocalPathId(const TInternalPathId pathId) const {
-        return TSchemeShardLocalPathId::FromRawValue(pathId.GetRawValue());
-    }
-    std::optional<TInternalPathId> GetInternalPathId(const TSchemeShardLocalPathId pathId) const {
-        return TInternalPathId::FromRawValue(pathId.GetRawValue());
-    }
-};
-
+static_assert(sizeof(TSchemeShardLocalPathId)==sizeof(ui64));
 
 } //namespace NKikimr::NColumnShard
 

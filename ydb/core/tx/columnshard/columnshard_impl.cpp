@@ -380,19 +380,18 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(tableProto);
-    const auto& internalPathId = PathIdTranslator.GetInternalPathId(schemeShardLocalPathId);
-    AFL_VERIFY(internalPathId);
-    if (TablesManager.HasTable(*internalPathId)) {
+    if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId)) {
         LOG_S_DEBUG("EnsureTable for existed pathId: " << *internalPathId << " at tablet " << TabletID());
         return;
     }
+    const auto internalPathId = TablesManager.CreateInternalPathId(schemeShardLocalPathId);
 
-    LOG_S_DEBUG("EnsureTable for pathId: " << *internalPathId
+    LOG_S_DEBUG("EnsureTable for pathId: " << internalPathId
                                            << " ttl settings: " << tableProto.GetTtlSettings()
                                            << " at tablet " << TabletID());
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
-    internalPathId->ToProto(tableVerProto);
+    internalPathId.ToProto(tableVerProto);
 
     // check schema changed
 
@@ -415,7 +414,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     {
         THashSet<NTiers::TExternalStorageId> usedTiers;
-        TTableInfo table(*internalPathId);
+        TTableInfo table(internalPathId, schemeShardLocalPathId);
         if (tableProto.HasTtlSettings()) {
             const auto& ttlSettings = tableProto.GetTtlSettings();
             *tableVerProto.MutableTtlSettings() = ttlSettings;
@@ -425,14 +424,14 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         }
         TablesManager.RegisterTable(std::move(table), db);
         if (!usedTiers.empty()) {
-            ActivateTiering(*internalPathId, usedTiers);
+            ActivateTiering(internalPathId, usedTiers);
         }
     }
 
     tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
 
-    TablesManager.AddTableVersion(*internalPathId, version, tableVerProto, schema, db);
-    InsertTable->RegisterPathInfo(*internalPathId);
+    TablesManager.AddTableVersion(internalPathId, version, tableVerProto, schema, db);
+    InsertTable->RegisterPathInfo(internalPathId);
 
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
@@ -444,7 +443,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(alterProto);
-    const auto& internalPathId = PathIdTranslator.GetInternalPathId(schemeShardLocalPathId);
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
     Y_ABORT_UNLESS(TablesManager.HasTable(*internalPathId), "AlterTable on a dropped or non-existent table");
 
@@ -482,7 +481,7 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(dropProto);
-    const auto& internalPathId = PathIdTranslator.GetInternalPathId(schemeShardLocalPathId);
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
     if (!TablesManager.HasTable(*internalPathId)) {
         LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << *internalPathId << " at tablet " << TabletID());

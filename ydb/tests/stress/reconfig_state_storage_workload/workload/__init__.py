@@ -197,11 +197,14 @@ class WorkloadInsertDelete(WorkloadBase):
 
 
 class WorkloadReconfigStateStorage(WorkloadBase):
-    def __init__(self, client, cluster, prefix, stop):
+    config_name = "StateStorage"
+
+    def __init__(self, client, cluster, prefix, stop, config_name):
         super().__init__(client, prefix, "reconfig_statestorage", stop)
         self.ringGroupActorIdOffset = 1
         self.cluster = cluster
         self.lock = threading.Lock()
+        self.config_name = config_name
 
     def get_stat(self):
         with self.lock:
@@ -217,26 +220,25 @@ class WorkloadReconfigStateStorage(WorkloadBase):
     def _loop(self):
         while not self.is_stop_requested():
             time.sleep(3)
-            configName = "StateStorage"
-            defaultRingGroup = [self.do_request_config()[f"{configName}Config"]["Ring"]]
+            defaultRingGroup = [self.do_request_config()[f"{self.config_name}Config"]["Ring"]]
             newRingGroup = [
                 {"RingGroupActorIdOffset": self.ringGroupActorIdOffset,"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
                 ]
             print(f"From: {defaultRingGroup} To: {newRingGroup}")
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = True
-            print(self.do_request({"ReconfigStateStorage": {f"{configName}Config": {
+            print(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": defaultRingGroup + newRingGroup}}}))
             time.sleep(3)
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = False
-            print(self.do_request({"ReconfigStateStorage": {f"{configName}Config": {
+            print(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": defaultRingGroup + newRingGroup}}}))
             time.sleep(3)
-            print(self.do_request({"ReconfigStateStorage": {f"{configName}Config": {
+            print(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                         "RingGroups": newRingGroup}}}))
             time.sleep(3)
-            curConfig = self.do_request_config()[f"{configName}Config"]
+            curConfig = self.do_request_config()[f"{self.config_name}Config"]
             expectedConfig = {"Ring": newRingGroup[0]} if len(newRingGroup) == 1 else {"RingGroups": newRingGroup}
             if curConfig != expectedConfig:
                 raise Exception(f"Incorrect reconfig: expected:{curConfig}, actual:{expectedConfig}")
@@ -247,13 +249,15 @@ class WorkloadReconfigStateStorage(WorkloadBase):
 
 
 class WorkloadRunner:
-    def __init__(self, client, cluster, path, duration, allow_nullables_in_pk):
+    config_name = "StateStorage"
+    def __init__(self, client, cluster, path, duration, allow_nullables_in_pk, config_name):
         self.client = client
         self.name = path
         self.cluster = cluster
         self.tables_prefix = "/".join([self.client.database, self.name])
         self.duration = duration
         self.allow_nullables_in_pk = allow_nullables_in_pk
+        self.config_name = config_name
         ydb.interceptor.monkey_patch_event_handler()
 
     def __enter__(self):
@@ -274,7 +278,7 @@ class WorkloadRunner:
         workloads = [
             WorkloadTablesCreateDrop(self.client, self.name, stop, self.allow_nullables_in_pk),
             WorkloadInsertDelete(self.client, self.name, stop),
-            WorkloadReconfigStateStorage(self.client, self.cluster, self.name, stop)
+            WorkloadReconfigStateStorage(self.client, self.cluster, self.name, stop, self.config_name)
         ]
         for w in workloads:
             w.start()

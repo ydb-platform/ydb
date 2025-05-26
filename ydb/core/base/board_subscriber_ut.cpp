@@ -263,7 +263,7 @@ void TBoardSubscriberTest::ReconnectReplica() {
 }
 
 void TBoardSubscriberTest::DropByDisconnect() {
-    auto replicas = ResolveReplicas();
+    auto replicas = ResolveReplicas()[0];
 
     const auto edgeSubscriber = Context->AllocateEdgeActor(1);
     CreateSubscriber("path", edgeSubscriber, 1);

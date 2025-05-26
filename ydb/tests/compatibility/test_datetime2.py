@@ -90,7 +90,7 @@ class TestDatetime2(MixedClusterFixture):
             DateTime::MakeDate(DateTime::Split(d)),
             DateTime::MakeDatetime(DateTime::Split(d)),
             DateTime::MakeTimestamp(DateTime::Split(d)),
-            
+
             -- added DateTime::MakeDate(DateTime::Split( because python sdk doesn't support Tz
             DateTime::MakeDate(DateTime::Split(DateTime::MakeTzDate(DateTime::Split(d)))),
             DateTime::MakeDate(DateTime::Split(DateTime::MakeTzDatetime(DateTime::Split(d)))),
@@ -213,7 +213,7 @@ class TestDatetime2(MixedClusterFixture):
             DateTime::MakeDate(DateTime::ParseIso8601(iso8601_str)),
             DateTime::MakeDate(DateTime::ParseHttp(http_str)),
             DateTime::MakeDate(DateTime::ParseX509(x509_str)),
-            DateTime::MakeDate(DateTime::Parse( "%Y-%m-%dT%H:%M:%S")(iso8601_str))
+            DateTime::MakeDate(DateTime::Parse("%Y-%m-%dT%H:%M:%S")(iso8601_str))
         FROM {self.table_name};
         """
 
@@ -245,4 +245,3 @@ class TestDatetime2(MixedClusterFixture):
             for query in queries:
                 result = session_pool.execute_with_retries(query)
                 assert len(result[0].rows) > 0
-

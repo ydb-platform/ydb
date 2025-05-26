@@ -3541,7 +3541,11 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         return;
     } else if (!msg->Success) {
         if (auto logl = Logger->Log(ELnLev::Error)) {
-            logl << NFmt::Do(*this) << " Broken on compaction error";
+            logl << NFmt::Do(*this) << " Broken on compaction error " << msg->Exception;
+        }
+
+        if (msg->Exception) {
+            Y_TABLET_ERROR(msg->Exception);
         }
 
         CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels), /* terminal */ true);

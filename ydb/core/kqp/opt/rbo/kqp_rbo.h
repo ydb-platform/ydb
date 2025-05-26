@@ -55,10 +55,12 @@ class TRuleBasedOptimizer {
     TRuleBasedOptimizer(TVector<TRuleBasedStage> stages, 
         const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
         TTypeAnnotationContext& typeCtx, 
-        const TKikimrConfiguration::TPtr& config) : Stages(stages),
+        const TKikimrConfiguration::TPtr& config,
+        TAutoPtr<IGraphTransformer> typeAnnTransformer) : Stages(stages),
         KqpCtx(kqpCtx),
         TypeCtx(typeCtx),
-        Config(config) {}
+        Config(config),
+        TypeAnnTransformer(typeAnnTransformer) {}
     
     TExprNode::TPtr Optimize(TOpRoot & root,  TExprContext& ctx);
 
@@ -66,9 +68,10 @@ class TRuleBasedOptimizer {
     const TIntrusivePtr<TKqpOptimizeContext>& KqpCtx;
     TTypeAnnotationContext& TypeCtx;
     const TKikimrConfiguration::TPtr& Config;
+    TAutoPtr<IGraphTransformer> TypeAnnTransformer;
 };
 
-TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx);
+TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TAutoPtr<IGraphTransformer> typeAnnTransformer);
 
 }
 }

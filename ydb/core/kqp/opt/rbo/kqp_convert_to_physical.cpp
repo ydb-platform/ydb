@@ -48,7 +48,7 @@ namespace {
 namespace NKikimr {
 namespace NKqp {
 
-TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
+TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TAutoPtr<IGraphTransformer> typeAnnTransformer) {
     THashMap<int, TExprNode::TPtr> stages;
     THashMap<int, TVector<TExprNode::TPtr>> stageArgs;
     auto & graph = root.PlanProps.StageGraph;
@@ -274,6 +274,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
     
 
     THashMap<int, TExprNode::TPtr> finalizedStages;
+    TVector<TExprNode::TPtr> txStages;
+
     auto stageIds = graph.StageIds;
     auto stageInputIds = graph.StageInputs;
 
@@ -295,7 +297,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
             stage = stages.at(id);
         }
         else {
-            stage = Build<TDqStage>(ctx, root.Node->Pos())
+            stage = Build<TDqPhyStage>(ctx, root.Node->Pos())
                 .Inputs()
                     .Add(inputs)
                     .Build()
@@ -305,6 +307,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
                     .Build()
                 .Settings().Build()
                 .Done().Ptr();
+            txStages.push_back(stage);
         }
 
         finalizedStages[id] = stage;
@@ -314,15 +317,98 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
     // Build a union all for the last stage
     int lastStageIdx = stageIds[stageIds.size()-1];
 
+    auto lastStage = finalizedStages.at(lastStageIdx);
+
+    // wrap in DqResult
+    auto dqResult = Build<TDqCnResult>(ctx, root.Node->Pos())
+        .Output()
+            .Stage(lastStage)
+            .Index().Build("0")
+        .Build()
+        .ColumnHints().Build()
+        .Done()
+        .Ptr();
+
+    TVector<TExprNode::TPtr> txSettings;
+    txSettings.push_back(Build<TCoNameValueTuple>(ctx, root.Node->Pos())
+                            .Name().Build("type")
+                            .Value<TCoAtom>().Build("compute")
+                            .Done()
+                            .Ptr());
+    // Build PhysicalTx
+    auto physTx = Build<TKqpPhysicalTx>(ctx, root.Node->Pos())
+        .Stages()
+            .Add(txStages)
+        .Build()
+        .Results()
+            .Add({dqResult})
+        .Build()
+        .ParamBindings().Build()
+        .Settings()
+            .Add(txSettings)
+        .Build()
+        .Done()
+        .Ptr();
+
+    TVector<TExprNode::TPtr> querySettings;
+    querySettings.push_back(Build<TCoNameValueTuple>(ctx, root.Node->Pos())
+                            .Name().Build("type")
+                            .Value<TCoAtom>().Build("data_query")
+                            .Done()
+                            .Ptr());
+
+    // Build result type
+    
+    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+    do {
+        status = typeAnnTransformer->Transform(dqResult, dqResult, ctx);
+    } while (status == IGraphTransformer::TStatus::Repeat);
+
+    typeAnnTransformer->Transform(dqResult, dqResult, ctx);
+    YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
+
+    auto binding = Build<TKqpTxResultBinding>(ctx, root.Node->Pos())
+        .Type(ExpandType(root.Node->Pos(), *dqResult->GetTypeAnn(), ctx))
+        .TxIndex().Build("0")
+        .ResultIndex().Build("0")
+        .Done();
+
+    // Build Physical query
+    auto physQuery = Build<TKqpPhysicalQuery>(ctx, root.Node->Pos())
+        .Transactions()
+            .Add({physTx})
+        .Build()
+        .Results()
+            .Add({binding})
+        .Build()
+        .Settings()
+            .Add(querySettings)
+        .Build()
+        .Done()
+        .Ptr();
+
+    //physQuery->SetTypeAnn(dqResult->GetTypeAnn());
+
+    do {
+        status = typeAnnTransformer->Transform(physQuery, physQuery, ctx);
+    } while (status == IGraphTransformer::TStatus::Repeat);
+
+    YQL_CLOG(TRACE, CoreDq) << "Final plan built";
+
+    return physQuery;
+
+    /*
+
     auto result = Build<TDqCnUnionAll>(ctx, root.Node->Pos())
         .Output()
             .Stage(finalizedStages.at(lastStageIdx))
             .Index().Build("0")
         .Build()
         .Done().Ptr();
-    YQL_CLOG(TRACE, CoreDq) << "Final plan built";
 
     return result;
+    */
+
 }
 
 }

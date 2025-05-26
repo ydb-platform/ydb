@@ -1435,9 +1435,11 @@ TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx)
         return TStatus::Error;
     }
 
-    // TODO: ???
+    TKqpPhysicalQuery query(node);
+    auto type = query.Results().Item(0).Ptr()->GetTypeAnn();
 
-    node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    //node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    node->SetTypeAnn(type);
     return TStatus::Ok;
 }
 

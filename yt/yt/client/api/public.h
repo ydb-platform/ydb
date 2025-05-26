@@ -208,15 +208,15 @@ inline const NYPath::TYPath ClusterNamePath("//sys/@cluster_name");
 inline const NYPath::TYPath HttpProxiesPath("//sys/http_proxies");
 inline const NYPath::TYPath RpcProxiesPath("//sys/rpc_proxies");
 inline const NYPath::TYPath GrpcProxiesPath("//sys/grpc_proxies");
-inline const TString AliveNodeName("alive");
-inline const TString BannedAttributeName("banned");
-inline const TString RoleAttributeName("role");
-inline const TString AddressesAttributeName("addresses");
-inline const TString BalancersAttributeName("balancers");
+inline const std::string AliveNodeName("alive");
+inline const std::string BannedAttributeName("banned");
+inline const std::string RoleAttributeName("role");
+inline const std::string AddressesAttributeName("addresses");
+inline const std::string BalancersAttributeName("balancers");
 inline const std::string DefaultRpcProxyRole("default");
 inline const std::string DefaultHttpProxyRole("data");
-inline const TString JournalPayloadKey("payload");
-inline const TString HunkPayloadKey("payload");
+inline const std::string JournalPayloadKey("payload");
+inline const std::string HunkPayloadKey("payload");
 
 ////////////////////////////////////////////////////////////////////////////////
 

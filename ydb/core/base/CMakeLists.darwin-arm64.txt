@@ -128,6 +128,7 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_impl.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_ringwalker.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/storage_pools.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/subdomain.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/tablet.h

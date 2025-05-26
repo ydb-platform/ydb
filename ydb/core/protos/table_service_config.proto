@@ -371,5 +371,7 @@ message TTableServiceConfig {
 
     optional bool DefaultEnableShuffleElimination = 80 [default = false];
 
+    optional bool EnableFoldUdfs = 82 [ default = true ];
+
     optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true ];
 };

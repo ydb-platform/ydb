@@ -14,9 +14,6 @@ class TestYdbTransferWorkload(object):
         cls.cluster = KiKiMR(KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
-                "enable_parameterized_decimal": True,
-                "enable_table_datetime64": True,
-                "enable_vector_index": True,
                 "enable_topic_transfer": True,
             }
         ))

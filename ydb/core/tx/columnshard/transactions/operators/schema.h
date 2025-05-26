@@ -26,10 +26,10 @@ private:
         THashSet<TInternalPathId> result;
         for (auto&& i : tables) {
             const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(i);
-            const auto& internalPathId = owner.PathIdTranslator.GetInternalPathId(schemeShardLocalPathId);
-            AFL_VERIFY(internalPathId);
-            if (owner.TablesManager.HasTable(*internalPathId, true)) {
-                result.emplace(*internalPathId);
+            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId)) {
+                if (owner.TablesManager.HasTable(*internalPathId, true)) {
+                    result.emplace(*internalPathId);
+                }
             }
         }
         if (result.size()) {

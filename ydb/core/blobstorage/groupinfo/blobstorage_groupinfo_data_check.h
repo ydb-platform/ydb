@@ -56,7 +56,10 @@ public:
             }
         }
 
-        // form parts layout report
+        // checking layout
+        TStringStream layoutReport;
+        layoutReport << "Layout info:" << Endl;
+
         TStringStream str;
         bool hasUnequalParts = false;
         for (ui32 partId = 0; partId < 6; ++partId) {
@@ -80,86 +83,126 @@ public:
             str << Endl;
         }
 
-        TStringStream layout;
-        layout << "Layout:" << Endl;
-        layout << str.Str();
+        layoutReport << str.Str();
         if (hasUnequalParts) {
             partsState.IsOk = false;
-            layout << "ERROR: Unequal parts" << Endl;
+            layoutReport << "ERROR: There are unequal parts" << Endl;
         }
-        partsState.DataErrorInfo += layout.Str();
+        partsState.DataErrorInfo = layoutReport.Str();
+
+        // checking erasure
+        TStringStream erasureReport;
+        erasureReport << "Erasure info:" << Endl;
 
         std::vector<ui32> partIds;
+        partIds.reserve(6);
+        bool erasureError = false;
+
+        TErasureType::ECrcMode crcMode = (TErasureType::ECrcMode)id.CrcMode();
+
+        auto checkCombination = [&]() {
+            // iterate over combinations of part versions
+            for (const auto& seen0 : seenParts[partIds[0]]) {
+            for (const auto& seen1 : seenParts[partIds[1]]) {
+            for (const auto& seen2 : seenParts[partIds[2]]) {
+            for (const auto& seen3 : seenParts[partIds[3]]) {
+                std::array<TRope, 6> data;
+                data[partIds[0]] = seen0.Data;
+                data[partIds[1]] = seen1.Data;
+                data[partIds[2]] = seen2.Data;
+                data[partIds[3]] = seen3.Data;
+
+                ui32 restoreMask = 0;
+                restoreMask |= (1 << partIds[4]);
+                if (partIds.size() == 6) {
+                    restoreMask |= (1 << partIds[5]);
+                }
+
+                ErasureRestore(crcMode, TErasureType::Erasure4Plus2Block, id.BlobSize(), nullptr, data, restoreMask);
+
+                std::array<std::vector<ui32>, 4> diskIdxs{
+                    seen0.DiskIdxs, seen1.DiskIdxs, seen2.DiskIdxs, seen3.DiskIdxs};
+
+                auto checkOnePart = [&](ui32 partId) {
+                    for (const auto& seen : seenParts[partId]) {
+                        TStringStream str;
+                        str << "{ ";
+                        for (ui32 part = 0; part < 4; ++part) {
+                            str << "part " << partIds[part] + 1 << " disks [ ";
+                            for (const auto& diskIdx : diskIdxs[part]) {
+                                str << diskIdx << " ";
+                            }
+                            str << "]; ";
+                        }
+                        str << "} CHECK part " << partId + 1 << " disks [ ";
+                        for (const auto& diskIdx : seen.DiskIdxs) {
+                            str << diskIdx << " ";
+                        }
+                        str << "] -> ";
+
+                        int cmp = TRope::Compare(seen.Data, data[partId]);
+                        if (cmp) {
+                            erasureError = true;
+                        } else {
+                            str << "OK" << Endl;
+                            erasureReport << str.Str(); // report only succesful restore
+                        }
+                    }
+                };
+
+                checkOnePart(partIds[4]);
+                if (partIds.size() == 6) {
+                    checkOnePart(partIds[5]);
+                }
+            }}}}
+        };
+
         for (ui32 partId = 0; partId < 6; ++partId) {
             if (!seenParts[partId].empty()) {
                 partIds.push_back(partId);
             }
         }
-        if (partIds.size() <= 4) {
+        if (partIds.size() <= 4) { // 4 or less parts total, nothing to check
             return partsState;
         }
 
-        // check erasure
-        TErasureType::ECrcMode crcMode = (TErasureType::ECrcMode)id.CrcMode();
-        str.Clear();
-
-        // iterate over different combinations of first 4 parts, restore and compare with 5 and maybe 6
-        for (const auto& seen0 : seenParts[partIds[0]]) {
-        for (const auto& seen1 : seenParts[partIds[1]]) {
-        for (const auto& seen2 : seenParts[partIds[2]]) {
-        for (const auto& seen3 : seenParts[partIds[3]]) {
-            std::array<TRope, 6> data;
-            data[partIds[0]] = seen0.Data;
-            data[partIds[1]] = seen1.Data;
-            data[partIds[2]] = seen2.Data;
-            data[partIds[3]] = seen3.Data;
-
-            ui32 restoreMask = 0;
-            restoreMask |= (1 << partIds[4]);
-            if (partIds.size() > 5) {
-                restoreMask |= (1 << partIds[5]);
+        // fast path: there's no unequal parts; if simple check is ok, return
+        if (!hasUnequalParts) {
+            checkCombination();
+            if (!erasureError) {
+                partsState.DataErrorInfo += erasureReport.Str();
+                return partsState;
             }
+        }
 
-            ErasureRestore(crcMode, TErasureType::Erasure4Plus2Block, id.BlobSize(), nullptr, data, restoreMask);
-
-            std::array<std::vector<ui32>, 4> diskIdxs{
-                seen0.DiskIdxs, seen1.DiskIdxs, seen2.DiskIdxs, seen3.DiskIdxs};
-
-            auto checkErasure = [&](ui32 partId) {
-                for (const auto& seen : seenParts[partId]) {
-                    str << "{ ";
-                    for (ui32 part = 0; part < 4; ++part) {
-                        str << "part " << partIds[part] + 1 << " disks [ ";
-                        for (const auto& diskIdx : diskIdxs[part]) {
-                            str << diskIdx << " ";
+        if (partIds.size() == 5) {
+            checkCombination();
+        } else { // partIds.size() == 6
+            // iterate over different combinations to find good parts
+            for (ui8 gap1 = 0; gap1 < 5; ++gap1) {
+                for (ui8 gap2 = gap1 + 1; gap2 < 6; ++gap2) {
+                    ui8 idx = 0;
+                    for (ui8 p = 0; p < 6; ++p) {
+                        if (p == gap1) {
+                            partIds[4] = p;
+                        } else if (p == gap2) {
+                            partIds[5] = p;
+                        } else {
+                            partIds[idx] = p;
+                            ++idx;
                         }
-                        str << "]; ";
                     }
-                    str << "} CHECK part " << partId + 1 << " disks [ ";
-                    for (const auto& diskIdx : seen.DiskIdxs) {
-                        str << diskIdx << " ";
-                    }
-                    str << "] -> ";
-
-                    int cmp = TRope::Compare(seen.Data, data[partId]);
-                    str << (cmp ? "ERROR" : "OK") << Endl;
-                    if (cmp) {
-                        partsState.IsOk = false;
-                    }
+                    checkCombination();
                 }
-            };
-
-            checkErasure(partIds[4]);
-            if (partIds.size() > 5) {
-                checkErasure(partIds[5]);
             }
-        }}}}
+        }
 
-        TStringStream erasure;
-        erasure << "Erasure restore info:" << Endl;
-        erasure << str.Str();
+        if (erasureError) {
+            partsState.IsOk = false;
+            erasureReport << "ERROR: There are erasure restore fails" << Endl;
+        }
 
-        partsState.DataErrorInfo += erasure.Str();
+        partsState.DataErrorInfo += erasureReport.Str();
         return partsState;
     }
 };
@@ -200,6 +243,9 @@ public:
             }
         }
 
+        TStringStream layoutReport;
+        layoutReport << "Layout info:" << Endl;
+
         TStringStream str;
         bool hasUnequalParts = (seenParts.size() > 1);
         ui32 ver = 0;
@@ -215,15 +261,13 @@ public:
             ++ver;
         }
         str << Endl;
+        layoutReport << str.Str();
 
-        TStringStream layout;
-        layout << "Layout:" << Endl;
-        layout << str.Str();
         if (hasUnequalParts) {
             partsState.IsOk = false;
-            layout << "ERROR: Unequal parts" << Endl;
+            layoutReport << "ERROR: There are unequal parts" << Endl;
         }
-        partsState.DataErrorInfo += layout.Str();
+        partsState.DataErrorInfo = layoutReport.Str();
 
         return partsState;
     }

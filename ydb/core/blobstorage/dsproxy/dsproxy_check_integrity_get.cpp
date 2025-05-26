@@ -70,14 +70,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
             case NKikimrProto::OK:
                 PartLayout.AddItem(diskIdx, partId - 1, Info->Type);
                 PartLayoutWithNotYet.AddItem(diskIdx, partId - 1, Info->Type);
-
-                if (result.HasBufferData()) {
-                    TRope rope(result.GetBufferData());
-                    PartsData.Parts[partId - 1].push_back(std::make_pair(diskIdx, std::move(rope)));
-                } else if (result.HasPayloadId()) {
-                    TRope rope(ev->GetPayload(result.GetPayloadId()));
-                    PartsData.Parts[partId - 1].push_back(std::make_pair(diskIdx, std::move(rope)));
-                }
+                PartsData.Parts[partId - 1].push_back(std::make_pair(diskIdx, ev->GetBlobData(result)));
                 break;
 
             case NKikimrProto::NOT_YET:
@@ -187,7 +180,16 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         } else {
             PendingResult->DataStatus = TEvCheckIntegrityResult::DS_ERROR;
         }
-        PendingResult->DataErrorInfo = partsState.DataErrorInfo;
+
+        TStringStream str;
+        str << "Disks:" << Endl;
+        for (ui32 diskIdx = 0; diskIdx < Info->GetTopology().GetTotalVDisksNum(); ++diskIdx) {
+            auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(diskIdx, Id.Hash());
+            str << diskIdx << ": " << Info->CreateVDiskID(vDiskIdShort) << Endl;
+        }
+
+        PendingResult->DataErrorInfo = str.Str();
+        PendingResult->DataErrorInfo += partsState.DataErrorInfo;
 
         ReplyAndDie(NKikimrProto::OK);
     }

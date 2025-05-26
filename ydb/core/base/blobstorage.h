@@ -1374,13 +1374,13 @@ struct TEvBlobStorage {
         };
         EPlacementStatus PlacementStatus;
 
-        // TODO: calculate data status
         enum EDataStatus {
             DS_OK = 1,      // all data parts contain valid data
             DS_ERROR = 2,   // some parts definitely contain invalid data
             DS_UNKNOWN = 3, // status is unknown because of missing disks or network problems
         };
         EDataStatus DataStatus;
+        TString DataErrorInfo; // textual info about errors in blob data
 
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
@@ -1396,6 +1396,7 @@ struct TEvBlobStorage {
                 << " ErrorReason# " << ErrorReason
                 << " PlacementStatus# " << (int)PlacementStatus
                 << " DataStatus# " << (int)DataStatus
+                << " DataErrorInfo# " << DataErrorInfo
                 << " }";
             return str.Str();
         }

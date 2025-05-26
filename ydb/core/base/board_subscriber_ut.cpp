@@ -67,7 +67,7 @@ class TBoardSubscriberTest: public NUnitTest::TTestBase {
         Context->Send(proxy, edge, new TEvStateStorage::TEvResolveBoard("path"));
         auto ev = Context->GrabEdgeEvent<TEvStateStorage::TEvResolveReplicasList>(edge);
 
-        auto allReplicas = ev->Get()->Replicas;
+        auto allReplicas = ev->Get()->GetPlainReplicas();
         return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
     }
 
@@ -263,7 +263,7 @@ void TBoardSubscriberTest::ReconnectReplica() {
 }
 
 void TBoardSubscriberTest::DropByDisconnect() {
-    auto replicas = ResolveReplicas()[0];
+    auto replicas = ResolveReplicas();
 
     const auto edgeSubscriber = Context->AllocateEdgeActor(1);
     CreateSubscriber("path", edgeSubscriber, 1);

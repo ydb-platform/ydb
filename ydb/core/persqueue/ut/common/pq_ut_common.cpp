@@ -983,7 +983,7 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
                 UNIT_ASSERT_VALUES_EQUAL(ui32((unsigned char)r.GetData().back()), r.GetSeqNo() % 256);
                 ++off;
             } else if (settings.Offsets.size() > i) {
-                UNIT_ASSERT(settings.Offsets[i] == (i64)r.GetOffset());
+                UNIT_ASSERT_VALUES_EQUAL(settings.Offsets[i], (i64)r.GetOffset());
             }
         }
     } else {

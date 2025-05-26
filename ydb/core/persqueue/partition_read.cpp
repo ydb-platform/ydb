@@ -43,7 +43,14 @@ ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) cons
     if (!readTimestamp) {
         return offset;
     }
-    return Max(GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp, Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1)), offset);
+    auto estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp, Max<ui64>());
+    if (estimatedOffset == Max<ui64>()) {
+        estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp, Max<ui64>());
+    }
+    if (estimatedOffset == Max<ui64>()) {
+        estimatedOffset = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
+    }
+    return Max(estimatedOffset, offset);
 }
 
 void TPartition::SendReadingFinished(const TString& consumer) {

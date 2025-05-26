@@ -21,8 +21,12 @@ class TDriverMock
 public:
     std::optional<NTable::EScan> LastScan;
 
-    void Touch(NTable::EScan scan) noexcept {
+    void Touch(NTable::EScan scan) override {
         LastScan = scan;
+    }
+
+    void Fail(const std::exception& exc) override {
+        Y_ENSURE(false, exc.what());
     }
 };
 

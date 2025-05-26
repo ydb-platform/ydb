@@ -1,5 +1,7 @@
 LIBRARY()
 
+INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+
 PEERDIR(
     ydb/core/tx/replication/service
 )
@@ -20,4 +22,3 @@ RECURSE_FOR_TESTS(
     ut/functional
     ut/large
 )
-

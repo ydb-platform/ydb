@@ -1,3 +1,4 @@
+* Switched highlighting engine
 
 ## 2.21.0 ##
 

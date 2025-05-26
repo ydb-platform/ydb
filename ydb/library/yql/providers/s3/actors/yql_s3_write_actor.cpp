@@ -1,6 +1,8 @@
 #include "yql_s3_write_actor.h"
 #include "yql_s3_actors_util.h"
+#if defined(_linux_) || defined(_darwin_)
 #include "yql_arrow_column_converters.h"
+#endif
 
 #include <arrow/result.h>
 #include <arrow/table.h>
@@ -799,6 +801,7 @@ private:
     const std::vector<TString> Keys;
 };
 
+#if defined(_linux_) || defined(_darwin_)
 class TS3BlockWriteActor : public TS3WriteActorBase {
     using TBase = TS3WriteActorBase;
 
@@ -938,6 +941,7 @@ private:
     TString SerializedData;
     std::unique_ptr<parquet::arrow::FileWriter> Writer;
 };
+#endif
 
 } // namespace
 
@@ -982,6 +986,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         return {actor, actor};
     }
 
+#if defined(_linux_) || defined(_darwin_)
     const auto& arrowSettings = params.GetArrowSettings();
 
     const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
@@ -1012,6 +1017,10 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
 
     const auto actor = new TS3BlockWriteActor(std::move(settings), s3Params);
     return {actor, actor};
+#else
+    YQL_ENSURE(false, "Block sink is not supported for this platform");
+    return {nullptr, nullptr};
+#endif
 }
 
 } // namespace NYql::NDq

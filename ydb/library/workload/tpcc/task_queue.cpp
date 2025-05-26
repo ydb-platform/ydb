@@ -42,9 +42,9 @@ struct alignas(64) TPerThreadContext {
 class TTaskQueue : public ITaskQueue {
 public:
     TTaskQueue(size_t threadCount,
-               size_t maxRunningTerminals,
-               size_t maxReadyTerminals,
-               size_t maxReadyTransactions,
+               size_t maxRunningInternal,
+               size_t maxReadyInternal,
+               size_t maxReadyExternal,
                std::shared_ptr<TLog> log);
 
     ~TTaskQueue() {
@@ -56,12 +56,12 @@ public:
     void Run() override;
     void Join() override;
 
-    void TaskReady(std::coroutine_handle<>, size_t terminalId) override;
-    void AsyncSleep(std::coroutine_handle<> handle, size_t terminalId, std::chrono::milliseconds delay) override;
-    bool IncInflight(std::coroutine_handle<> handle, size_t terminalId) override;
+    void TaskReady(std::coroutine_handle<>, size_t threadHint) override;
+    void AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::milliseconds delay) override;
+    bool IncInflight(std::coroutine_handle<> handle, size_t threadHint) override;
     void DecInflight() override;
 
-    void TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t terminalId) override;
+    void TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t threadHint) override;
 
     bool CheckCurrentThread() const override;
 
@@ -71,12 +71,12 @@ private:
 
 private:
     size_t ThreadCount;
-    size_t MaxRunningTerminals;
-    size_t MaxReadyTerminals;
-    size_t MaxReadyTransactions;
+    size_t MaxRunningInternal;
+    size_t MaxReadyInternal;
+    size_t MaxReadyExternal;
     std::shared_ptr<TLog> Log;
 
-    std::atomic<size_t> RunningTerminalCount{0};
+    std::atomic<size_t> RunningInternalCount{0};
 
     std::stop_source ThreadsStopSource;
     std::vector<std::thread> Threads;
@@ -84,33 +84,33 @@ private:
 };
 
 TTaskQueue::TTaskQueue(size_t threadCount,
-            size_t maxRunningTerminals,
-            size_t maxReadyTerminals,
-            size_t maxReadyTransactions,
+            size_t maxRunningInternal,
+            size_t maxReadyInternal,
+            size_t maxReadyExternal,
             std::shared_ptr<TLog> log)
     : ThreadCount(threadCount)
-    , MaxRunningTerminals(maxRunningTerminals)
-    , MaxReadyTerminals(maxReadyTerminals)
-    , MaxReadyTransactions(maxReadyTransactions)
+    , MaxRunningInternal(maxRunningInternal)
+    , MaxReadyInternal(maxReadyInternal)
+    , MaxReadyExternal(maxReadyExternal)
     , Log(std::move(log))
 {
-    Y_UNUSED(MaxRunningTerminals);
+    Y_UNUSED(MaxRunningInternal);
     if (ThreadCount == 0) {
         LOG_E("Zero TaskQueue threads");
         throw std::invalid_argument("Thread count must be greater than zero");
     }
 
-    // usually almost all terminals sleep and we have a long timer queue
-    const size_t maxSleepingTerminals = MaxReadyTerminals;
+    // usually almost all internal tasks (at leat in TPC-C) sleep and we have a long timer queue
+    const size_t maxSleepingInternal = MaxReadyInternal;
     constexpr size_t timerBucketSize = 100;
-    const size_t timerBucketCount = (maxSleepingTerminals + timerBucketSize - 1) / timerBucketSize;
+    const size_t timerBucketCount = (maxSleepingInternal + timerBucketSize - 1) / timerBucketSize;
 
     PerThreadContext.resize(ThreadCount);
     for (auto& context: PerThreadContext) {
         context.SleepingTasks.Resize(timerBucketCount, timerBucketSize);
-        context.ReadyTasksInternal.Resize(MaxReadyTerminals);
-        context.InflightWaitingTasksInternal.Resize(MaxReadyTerminals);
-        context.ReadyTasksExternal.Resize(MaxReadyTransactions);
+        context.ReadyTasksInternal.Resize(MaxReadyInternal);
+        context.InflightWaitingTasksInternal.Resize(MaxReadyInternal);
+        context.ReadyTasksExternal.Resize(MaxReadyExternal);
     }
 }
 
@@ -142,8 +142,8 @@ void TTaskQueue::HandleQueueFull(const char* queueType) {
     throw std::runtime_error(std::string("Task queue is full: ") + queueType);
 }
 
-void TTaskQueue::TaskReady(std::coroutine_handle<> handle, size_t terminalId) {
-    auto index = terminalId % PerThreadContext.size();
+void TTaskQueue::TaskReady(std::coroutine_handle<> handle, size_t threadHint) {
+    auto index = threadHint % PerThreadContext.size();
     auto& context = PerThreadContext[index];
 
     if (!context.ReadyTasksInternal.TryPush(std::move(handle))) {
@@ -151,25 +151,25 @@ void TTaskQueue::TaskReady(std::coroutine_handle<> handle, size_t terminalId) {
     }
 }
 
-void TTaskQueue::AsyncSleep(std::coroutine_handle<> handle, size_t terminalId, std::chrono::milliseconds delay) {
-    auto index = terminalId % PerThreadContext.size();
+void TTaskQueue::AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::milliseconds delay) {
+    auto index = threadHint % PerThreadContext.size();
     auto& context = PerThreadContext[index];
     context.SleepingTasks.Add(delay, std::move(handle));
 }
 
-bool TTaskQueue::IncInflight(std::coroutine_handle<> handle, size_t terminalId) {
-    if (MaxRunningTerminals == 0) {
+bool TTaskQueue::IncInflight(std::coroutine_handle<> handle, size_t threadHint) {
+    if (MaxRunningInternal == 0) {
         return false;
     }
 
-    auto runningCount = RunningTerminalCount.fetch_add(1, std::memory_order_relaxed);
-    if (runningCount < MaxRunningTerminals) {
+    auto runningCount = RunningInternalCount.fetch_add(1, std::memory_order_relaxed);
+    if (runningCount < MaxRunningInternal) {
         return false; // do not suspend
     }
 
-    RunningTerminalCount.fetch_sub(1, std::memory_order_relaxed);
+    RunningInternalCount.fetch_sub(1, std::memory_order_relaxed);
 
-    auto index = terminalId % PerThreadContext.size();
+    auto index = threadHint % PerThreadContext.size();
     auto& context = PerThreadContext[index];
     if (!context.InflightWaitingTasksInternal.TryPush(std::move(handle))) {
         HandleQueueFull("inflight-waiting");
@@ -179,14 +179,14 @@ bool TTaskQueue::IncInflight(std::coroutine_handle<> handle, size_t terminalId) 
 }
 
 void TTaskQueue::DecInflight() {
-    if (MaxRunningTerminals == 0) {
+    if (MaxRunningInternal == 0) {
         return;
     }
-    RunningTerminalCount.fetch_sub(1, std::memory_order_relaxed);
+    RunningInternalCount.fetch_sub(1, std::memory_order_relaxed);
 }
 
-void TTaskQueue::TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t terminalId) {
-    auto index = terminalId % PerThreadContext.size();
+void TTaskQueue::TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t threadHint) {
+    auto index = threadHint % PerThreadContext.size();
     auto& context = PerThreadContext[index];
 
     TGuard guard(context.ReadyTasksLock);
@@ -199,7 +199,7 @@ void TTaskQueue::RunThread(size_t threadId) {
     TaskQueueThreadId = static_cast<int>(threadId);
     TThread::SetCurrentThreadName((TStringBuilder() << "task_queue_" << threadId).c_str());
 
-    // TODO: just set seed? Or use random generator per terminal?
+    // TODO: just set seed? Or use random generator per internal task?
 
     auto& context = PerThreadContext[threadId];
 
@@ -207,12 +207,12 @@ void TTaskQueue::RunThread(size_t threadId) {
         auto now = Clock::now();
 
         bool hasProgress = false;
-        if (MaxRunningTerminals != 0) {
+        if (MaxRunningInternal != 0) {
             while (!context.InflightWaitingTasksInternal.Empty()
-                    && RunningTerminalCount.load(std::memory_order_relaxed) < MaxRunningTerminals) {
-                auto runningCount = RunningTerminalCount.fetch_add(1, std::memory_order_relaxed);
-                if (runningCount >= MaxRunningTerminals) {
-                    RunningTerminalCount.fetch_sub(1, std::memory_order_relaxed);
+                    && RunningInternalCount.load(std::memory_order_relaxed) < MaxRunningInternal) {
+                auto runningCount = RunningInternalCount.fetch_add(1, std::memory_order_relaxed);
+                if (runningCount >= MaxRunningInternal) {
+                    RunningInternalCount.fetch_sub(1, std::memory_order_relaxed);
                     break;
                 }
 
@@ -249,7 +249,6 @@ void TTaskQueue::RunThread(size_t threadId) {
             handleExternal->resume();
         }
 
-        // TODO: limit max number of active terminals (or queries, which is the same)
         std::coroutine_handle<> handleInternal;
         if (context.ReadyTasksInternal.TryPop(handleInternal)) {
             hasProgress = true;
@@ -275,16 +274,16 @@ bool TTaskQueue::CheckCurrentThread() const {
 
 std::unique_ptr<ITaskQueue> CreateTaskQueue(
     size_t threadCount,
-    size_t maxRunningTerminals,
-    size_t maxReadyTerminals,
-    size_t maxReadyTransactions,
+    size_t maxRunningInternal,
+    size_t maxReadyInternal,
+    size_t maxReadyExternal,
     std::shared_ptr<TLog> log)
 {
     return std::make_unique<TTaskQueue>(
         threadCount,
-        maxRunningTerminals,
-        maxReadyTerminals,
-        maxReadyTransactions,
+        maxRunningInternal,
+        maxReadyInternal,
+        maxReadyExternal,
         std::move(log));
 }
 

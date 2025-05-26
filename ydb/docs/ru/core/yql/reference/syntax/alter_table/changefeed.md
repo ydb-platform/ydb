@@ -28,7 +28,10 @@
     * `DEBEZIUM_JSON` — записывать данные в {% if oss == true and backend_name == "YDB" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
 * `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == true and backend_name == "YDB" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}.
 * `RETENTION_PERIOD` — {% if oss == true and backend_name == "YDB" %}[время хранения записей](../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
-* `TOPIC_MIN_ACTIVE_PARTITIONS` — {% if oss == true and backend_name == "YDB" %}[количество партиций топика](../../../../concepts/cdc.md#topic-partitions){% else %}количество партиций топика{% endif %}. По умолчанию количество партиций топика равно количеству партиций таблицы.
+* `TOPIC_AUTO_PARTITIONING` — {% if oss == true and backend_name == "YDB" %}[режим автопартиционирования топика](../../../../concepts/cdc.md#topic-partitions){% else %}режим автопартиционирования топика{% endif %}:
+    * `ENABLED` — для потока изменений будет создан {% if oss == true and backend_name == "YDB" %}[автопартиционированный топик](../../../../concepts/topic.md#autopartitioning){% else %}автопартиционированный топик{% endif %}. Количество партиций в таком топике увеличивается автоматически по мере роста скорости обновления таблицы. Параметры автопартиционирования топика можно {% if oss == true and backend_name == "YDB" %}[настроить](../alter-topic.md#alter-topic){% else %}настроить{% endif %}.
+    * `DISABLED` — для потока изменений будет создан топик без {% if oss == true and backend_name == "YDB" %}[автопартиционирования](../../../../concepts/topic.md#autopartitioning){% else %}автопартиционирования{% endif %}. Это значение по умолчанию.
+* `TOPIC_MIN_ACTIVE_PARTITIONS` — {% if oss == true and backend_name == "YDB" %}[количество партиций топика](../../../../concepts/cdc.md#topic-partitions){% else %}количество партиций топика{% endif %}. По умолчанию количество партиций топика равно количеству партиций таблицы. Для автопартиционированных топиков количество партиций увеличивается по мере роста скорости обновления таблицы. Если при создании ченджфида опция `TOPIC_AUTO_PARTITIONING` была отключена (`DISABLED`), то число партиций в топике, связанном с таким ченджфидом, впоследствии изменить нельзя.
 * `INITIAL_SCAN` — включение-выключение {% if oss == true and backend_name == "YDB" %}[первоначального сканирования](../../../../concepts/cdc.md#initial-scan){% else %}первоначального сканирования{% endif %} таблицы. По умолчанию выключено.
 
 {% if audience == "tech" %}
@@ -73,6 +76,17 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
     INITIAL_SCAN = TRUE
+);
+```
+
+Пример создания потока изменений с автопартиционированием:
+
+```yql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    TOPIC_AUTO_PARTITIONING = 'ENABLED',
+    TOPIC_MIN_ACTIVE_PARTITIONS = 2
 );
 ```
 

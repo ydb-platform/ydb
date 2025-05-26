@@ -360,6 +360,7 @@ void TNodeInfo::SendReconnect(const TActorId& local) {
 }
 
 void TNodeInfo::SetDown(bool down) {
+    Hive.UpdateCounterNodesDown(static_cast<i64>(down) - static_cast<i64>(Down));
     Down = down;
     if (Down) {
         Hive.ObjectDistributions.RemoveNode(*this);
@@ -370,6 +371,7 @@ void TNodeInfo::SetDown(bool down) {
 }
 
 void TNodeInfo::SetFreeze(bool freeze) {
+    Hive.UpdateCounterNodesFrozen(static_cast<i64>(freeze) - static_cast<i64>(Freeze));
     Freeze = freeze;
     if (Freeze) {
         for (const auto& [state, tablets] : Tablets) {

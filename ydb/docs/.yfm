@@ -3,6 +3,7 @@ langs: ['en','ru']
 apply-presets: true
 allowCustomResources: true
 included: true
+strict: true
 resources:
   style:
     - _assets/tags.css
@@ -10,6 +11,11 @@ resources:
   csp:
     - "img-src":
         - "https://github.ydb.tech"
+    - "frame-src":
+        - "https://vk.com"
+        - "https://login.vk.com"
+        - "https://runtime.strm.yandex.ru"
+        - "https://www.youtube.com"
 
 docs-viewer:
   project-name: ydb

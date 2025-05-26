@@ -315,21 +315,21 @@ private:
     void FeedMainToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowMainToPosting(*OutputBuf, Child + *pos, key, row, DataPos);
+            AddRowMainToPosting(*OutputBuf, Child + *pos, key, row.Slice(DataPos));
         }
     }
 
     void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuildToBuild(*OutputBuf, Child + *pos, key, row);
+            AddRowBuildToBuild(*OutputBuf, Child + *pos, key.Slice(1), row, key);
         }
     }
 
     void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuildToPosting(*OutputBuf, Child + *pos, key, row, DataPos);
+            AddRowBuildToPosting(*OutputBuf, Child + *pos, key.Slice(1), row.Slice(DataPos), key);
         }
     }
 };

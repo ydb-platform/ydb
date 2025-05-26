@@ -134,6 +134,7 @@ private:
 
     std::unique_ptr<ITaskQueue> TaskQueue;
 
+    Clock::time_point MeasurementsStartTs;
     std::unique_ptr<TAllStatistics> LastStatisticsSnapshot;
 };
 
@@ -268,8 +269,8 @@ void TPCCRunner::RunSync() {
     // TODO: convert to minutes when needed
     LOG_I("Measuring during " << Config.RunSeconds << " seconds");
 
-    auto startTs = Clock::now();
-    auto stopDeadline = startTs + std::chrono::seconds(Config.RunSeconds);
+    MeasurementsStartTs = Clock::now();
+    auto stopDeadline = MeasurementsStartTs + std::chrono::seconds(Config.RunSeconds);
     while (!StopByInterrupt.stop_requested()) {
         if (now >= stopDeadline) {
             break;
@@ -346,6 +347,14 @@ std::unique_ptr<TAllStatistics> TPCCRunner::CollectStatistics(Clock::time_point 
 }
 
 void TPCCRunner::DumpFinalStats() {
+    if (MeasurementsStartTs == Clock::time_point{}) {
+        std::cout << "Stopped before measurements" << std::endl;
+    }
+
+    auto now = Clock::now();
+    double secondsPassed = duration_cast<std::chrono::duration<double>>(now - MeasurementsStartTs).count();
+    auto minutesPassed = secondsPassed / 60;
+
     TTerminalStats stats;
 
     // Collect stats from all terminals
@@ -369,11 +378,17 @@ void TPCCRunner::DumpFinalStats() {
               << std::endl;
     std::cout << std::string(65, '-') << std::endl;
 
+    size_t totalNewOrders = 0;
+
     // Print stats for each transaction type
     const char* txNames[] = {"NewOrder", "Delivery", "OrderStatus", "Payment", "StockLevel"};
     for (size_t i = 0; i < 5; ++i) {
         auto type = static_cast<TTerminalStats::ETransactionType>(i);
         const auto& txStats = stats.GetStats(type);
+
+        if (type == TTerminalStats::E_NEW_ORDER) {
+            totalNewOrders += txStats.OK;
+        }
 
         totalOK += txStats.OK;
         totalFailed += txStats.Failed;
@@ -395,6 +410,13 @@ void TPCCRunner::DumpFinalStats() {
               << std::setw(15) << totalUserAborted
               << std::endl;
     std::cout << std::string(65, '-') << std::endl;
+
+    if (minutesPassed >= 1) {
+        size_t tpmC = size_t(totalNewOrders / minutesPassed);
+        std::cout << "tpmC: " << tpmC << std::endl;
+    } else {
+        std::cout << "Less than minute passed, tpmC calculation skipped" << std::endl;
+    }
 }
 
 } // anonymous

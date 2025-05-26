@@ -524,6 +524,126 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Scan");
         UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 3);
     }
+
+    Y_UNIT_TEST_TWIN(AlterDuringUpsertTransaction, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto ret = session1.ExecuteSchemeQuery(R"(
+            CREATE TABLE `TestTable` (
+                Key Uint32,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ret.IsSuccess(), ret.GetIssues().ToString());
+
+        auto txControl = TTxControl::BeginTx();
+        auto upsertResult = session1.ExecuteDataQuery(R"(
+            UPSERT INTO `TestTable` (Key, Value1) VALUES
+                (1u, "First"),
+                (2u, "Second")
+        )", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+        auto tx1 = upsertResult.GetTransaction();
+        UNIT_ASSERT(tx1);
+
+        auto alterResult = session2.ExecuteSchemeQuery(R"(
+            ALTER TABLE `TestTable` ADD COLUMN Value2 Int32
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(alterResult.IsSuccess(), alterResult.GetIssues().ToString());
+
+        auto commitResult = tx1->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
+        UNIT_ASSERT_C(commitResult.GetIssues().ToString().contains("Scheme changed. Table: `/Root/TestTable`.")
+            || commitResult.GetIssues().ToString().contains("Table '/Root/TestTable' scheme changed."),
+            commitResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(AlterAfterUpsertTransaction, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto ret = session1.ExecuteSchemeQuery(R"(
+            CREATE TABLE `TestTable` (
+                Key Uint32,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ret.IsSuccess(), ret.GetIssues().ToString());
+
+        auto txControl = TTxControl::BeginTx();
+        auto upsertResult = session1.ExecuteDataQuery(R"(
+            UPSERT INTO `TestTable` (Key, Value1) VALUES
+                (1u, "First"),
+                (2u, "Second");
+            SELECT * FROM `TestTable`;
+        )", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+        auto tx1 = upsertResult.GetTransaction();
+        UNIT_ASSERT(tx1);
+
+        auto alterResult = session2.ExecuteSchemeQuery(R"(
+            ALTER TABLE `TestTable` ADD COLUMN Value2 Int32
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(alterResult.IsSuccess(), alterResult.GetIssues().ToString());
+
+        auto commitResult = tx1->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(AlterAfterUpsertBeforeUpsertTransaction, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
+        auto db = kikimr.GetTableClient();
+        auto session1 = db.CreateSession().GetValueSync().GetSession();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto ret = session1.ExecuteSchemeQuery(R"(
+            CREATE TABLE `TestTable` (
+                Key Uint32,
+                Value1 String,
+                PRIMARY KEY (Key)
+            )
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ret.IsSuccess(), ret.GetIssues().ToString());
+
+        auto txControl = TTxControl::BeginTx();
+        auto upsertResult = session1.ExecuteDataQuery(R"(
+            UPSERT INTO `TestTable` (Key, Value1) VALUES
+                (1u, "First"),
+                (2u, "Second");
+            SELECT * FROM `TestTable`;
+        )", txControl).ExtractValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+        auto tx1 = upsertResult.GetTransaction();
+        UNIT_ASSERT(tx1);
+
+        auto alterResult = session2.ExecuteSchemeQuery(R"(
+            ALTER TABLE `TestTable` ADD COLUMN Value2 Int32
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(alterResult.IsSuccess(), alterResult.GetIssues().ToString());
+
+        auto upsertResult2 = session1.ExecuteDataQuery(R"(
+            UPSERT INTO `TestTable` (Key, Value1) VALUES
+                (1u, "First"),
+                (2u, "Second");
+        )", TTxControl::Tx(*tx1)).ExtractValueSync();
+        UNIT_ASSERT_C(upsertResult2.IsSuccess(), upsertResult2.GetIssues().ToString());
+
+        auto commitResult = tx1->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
+    }
 }
 
 } // namespace NKqp

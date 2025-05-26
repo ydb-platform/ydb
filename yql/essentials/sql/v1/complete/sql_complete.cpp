@@ -214,14 +214,27 @@ namespace NSQLComplete {
         INameService::TPtr Names_;
     };
 
+    ISqlCompletionEngine::TConfiguration MakeConfiguration(THashSet<TString> allowedStmts) {
+        allowedStmts.emplace("sql_stmt");
+
+        ISqlCompletionEngine::TConfiguration config;
+        for (const std::string& name : GetSqlGrammar().GetAllRules()) {
+            if (name.ends_with("_stmt") && !allowedStmts.contains(name)) {
+                config.IgnoredRules.emplace(name);
+            }
+        }
+        return config;
+    }
+
     ISqlCompletionEngine::TConfiguration MakeYDBConfiguration() {
-        return {};
+        return {
+            .IgnoredRules = {},
+        };
     }
 
     ISqlCompletionEngine::TConfiguration MakeYQLConfiguration() {
-        std::unordered_set<std::string> whitelist = {
+        return MakeConfiguration(/* allowedStmts = */ {
             "lambda_stmt",
-            "sql_stmt",
             "pragma_stmt",
             "select_stmt",
             "named_nodes_stmt",
@@ -237,16 +250,7 @@ namespace NSQLComplete {
             "if_stmt",
             "for_stmt",
             "values_stmt",
-        };
-
-        ISqlCompletionEngine::TConfiguration config;
-        for (const std::string& name : GetSqlGrammar().GetAllRules()) {
-            if (name.ends_with("_stmt") && !whitelist.contains(name)) {
-                config.IgnoredRules.emplace(name);
-            }
-        }
-
-        return config;
+        });
     }
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(

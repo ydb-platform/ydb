@@ -693,8 +693,6 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
         cz.Head.Offset = bodyKey.GetOffset() + bodyKey.GetCount();
         cz.Head.PartNo = 0;
-
-        cz.EndOffset = cz.Head.Offset;
     }
 
     // Compaction Head
@@ -707,8 +705,6 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
         cz.Head.Offset = headKey.GetOffset();
         cz.Head.PartNo = headKey.GetPartNo();
-
-        cz.EndOffset = headKey.GetOffset() + headKey.GetCount();
     }
 
     // FastWrite Body
@@ -721,22 +717,30 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
         fwz.Head.Offset = bodyKey.GetOffset() + bodyKey.GetCount();
         fwz.Head.PartNo = 0;
-
-        fwz.EndOffset = fwz.Head.Offset;
     }
 
-    if (fwz.DataKeysBody.empty()) {
-        cz.StartOffset = startOffset;
-        //cz.EndOffset = endOffset;
+    if (!cz.DataKeysBody.empty()) {
+        const auto& front = cz.DataKeysBody.front();
+        const auto& back = cz.DataKeysBody.back();
 
-        fwz.StartOffset = endOffset;
-        //fwz.EndOffset = endOffset;
-    } else {
-        cz.StartOffset = startOffset;
-        //cz.EndOffset = fwz.DataKeysBody.front().Key.GetOffset();
+        cz.StartOffset = front.Key.GetOffset();
+        cz.EndOffset = back.Key.GetOffset() + back.Key.GetCount();
+    }
 
-        fwz.StartOffset = cz.EndOffset;
-        //fwz.EndOffset = endOffset;
+    if (!cz.HeadKeys.empty()) {
+        const auto& front = cz.HeadKeys.front();
+        const auto& back = cz.HeadKeys.back();
+
+        cz.StartOffset = Max<ui64>(cz.StartOffset, front.Key.GetOffset());
+        cz.EndOffset = back.Key.GetOffset() + back.Key.GetCount();
+    }
+
+    if (!fwz.DataKeysBody.empty()) {
+        const auto& front = fwz.DataKeysBody.front();
+        const auto& back = fwz.DataKeysBody.back();
+
+        fwz.StartOffset = front.Key.GetOffset();
+        fwz.EndOffset = back.Key.GetOffset() + back.Key.GetCount();
     }
 
     if (cz.IsEmpty()) {
@@ -818,7 +822,9 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 );
 
                 Y_ABORT_UNLESS(offset + 1 >= Partition()->CompactionBlobEncoder.StartOffset);
-                Y_ABORT_UNLESS(offset < Partition()->CompactionBlobEncoder.EndOffset);
+                Y_ABORT_UNLESS(offset < Partition()->CompactionBlobEncoder.EndOffset,
+                               "offset=%" PRIu64 ", CompactionBlobEncoder.EndOffset=%" PRIu64,
+                               offset, Partition()->CompactionBlobEncoder.EndOffset);
                 Y_ABORT_UNLESS(size == read.GetValue().size(), "size=%d == read.GetValue().size() = %d", size, read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {

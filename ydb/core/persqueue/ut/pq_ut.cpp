@@ -1924,6 +1924,8 @@ Y_UNIT_TEST(TestGetTimestamps) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(50);
 
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
         tc.Runtime->UpdateCurrentTime(TInstant::Zero() + TDuration::Days(2));
         activeZone = false;
 

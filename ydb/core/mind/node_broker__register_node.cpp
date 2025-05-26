@@ -222,6 +222,7 @@ public:
             Self->Committed.UpdateEpochVersion();
             Self->AddNodeToEpochCache(node);
             Self->AddNodeToUpdateNodesLog(node);
+            Self->ScheduleProcessSubscribersQueue(ctx);
         }
 
         Reply(ctx);

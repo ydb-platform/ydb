@@ -350,6 +350,7 @@ private:
     THashMap<TActorId, TPipeServerInfo> PipeServers;
     THashMap<TActorId, TSubscriberInfo> Subscribers;
     TIntrusiveList<TSubscriberInfo> SubscribersQueue; // sorted by version
+    bool ScheduledProcessSubscribersQueue = false;
 
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;

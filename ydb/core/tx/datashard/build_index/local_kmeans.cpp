@@ -132,7 +132,7 @@ public:
     {
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
-        ScanTags = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
+        ScanTags = MakeScanTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
         Lead.SetTags(ScanTags);
         {
             Ydb::Type type;

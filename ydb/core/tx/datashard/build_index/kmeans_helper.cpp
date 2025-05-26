@@ -56,7 +56,7 @@ void AddRowMainToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const T
         TSerializedCellVec{key});
 }
 
-void AddRowMainToPosting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos)
+void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos)
 {
     parent = SetPostingParentFlag(parent);
 
@@ -68,7 +68,7 @@ void AddRowMainToPosting(TBufferData& buffer, NTableIndex::TClusterId parent, TA
         TSerializedCellVec{key});
 }
 
-void AddRowBuildToBuild(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 prefixColumns)
+void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 prefixColumns)
 {
     EnsureNoPostingParentFlag(parent);
 
@@ -80,7 +80,7 @@ void AddRowBuildToBuild(TBufferData& buffer, NTableIndex::TClusterId parent, TAr
         TSerializedCellVec{key});
 }
 
-void AddRowBuildToPosting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos, ui32 prefixColumns)
+void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row, ui32 dataPos, ui32 prefixColumns)
 {
     parent = SetPostingParentFlag(parent);
 

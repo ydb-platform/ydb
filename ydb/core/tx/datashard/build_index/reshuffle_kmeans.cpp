@@ -117,7 +117,7 @@ public:
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
         NTable::TTag embeddingTag;
-        ScanTags = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, embeddingTag);
+        ScanTags = MakeScanTags(table, embedding, data, EmbeddingPos, DataPos, embeddingTag);
         Lead.SetTags(ScanTags);
         OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data));
     }

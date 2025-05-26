@@ -92,13 +92,15 @@ public:
                 .RelPath = "viewer/whoami",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = false,
+                .UseAuth = true,
+                .UseFallbackSIDs = false,
             });
             mon->RegisterActorPage({
                 .RelPath = "viewer/json/whoami", // temporary handling of old paths
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = false,
+                .UseAuth = true,
+                .UseFallbackSIDs = false,
             });
             mon->RegisterActorPage({
                 .Title = "Viewer",

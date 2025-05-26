@@ -1275,7 +1275,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     const ui64 CSGeneralCompactionMemoryLimit = NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
     const ui64 CSScanMemoryLimit = NOlap::TGlobalLimits::ScanMemoryLimit;
 
-    const ui64 TotalCPU = 20;
+    const ui64 TotalCPU = 256; // means unlimited
     const ui64 TotalMemory = 16ULL << 30;
 
     static_assert(KqpRmQueueMemory < TotalMemory);

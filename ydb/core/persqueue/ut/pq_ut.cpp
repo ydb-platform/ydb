@@ -1525,6 +1525,7 @@ Y_UNIT_TEST(TestWriteSplit) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         PQTabletPrepare({}, {{"user1", true}}, tc); //never delete
         const ui32 size  = PlainOrSoSlow(2_MB, 1_MB);

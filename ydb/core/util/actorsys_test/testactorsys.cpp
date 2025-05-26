@@ -251,10 +251,12 @@ void TTestActorSystem::SetupStateStorage(ui32 nodeId, ui32 stateStorageNodeId) {
 
         auto process = [&](auto&& generateId, auto&& createReplica) {
             auto info = MakeIntrusive<TStateStorageInfo>();
-            info->NToSelect = numReplicas;
-            info->Rings.resize(numReplicas);
+            info->RingGroups.resize(1);
+            auto& ringGroup = info->RingGroups.front();
+            ringGroup.NToSelect = numReplicas;
+            ringGroup.Rings.resize(numReplicas);
             for (ui32 i = 0; i < numReplicas; ++i) {
-                info->Rings[i].Replicas.push_back(generateId(stateStorageNodeId, i));
+                ringGroup.Rings[i].Replicas.push_back(generateId(stateStorageNodeId, i));
             }
             if (nodeId == stateStorageNodeId) {
                 for (ui32 i = 0; i < numReplicas; ++i) {

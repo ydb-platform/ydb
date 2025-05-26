@@ -193,12 +193,16 @@ message TDomainsConfig {
             optional bool UseSingleNodeActorId = 4;
             optional bool UseRingSpecificNodeSelection = 5;
             optional bool IsDisabled = 6 [default = false]; // used in the intermediate reconfiguration step
+            optional bool WriteOnly = 7 [default = false]; // used for ring groups
+            optional uint32 RingGroupActorIdOffset = 8 [default = 0]; // used for ActorId difference for multiple replicas on one node
         }
 
         optional uint32 SSId = 1 [default = 1];
-        optional TRing Ring = 2;
+        optional TRing Ring = 2; // for compatibility, use RingGroups
         optional uint32 StateStorageVersion = 3 [default = 0];
         repeated uint32 CompatibleVersions = 4;
+        repeated TRing RingGroups = 5;
+
     }
 
     message TStoragePoolType {

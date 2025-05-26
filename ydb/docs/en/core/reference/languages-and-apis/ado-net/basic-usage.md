@@ -174,7 +174,7 @@ ydbCommand.Parameters.Add(new YdbParameter("season_id", DbType.UInt64, 1U));
 ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));
 ```
 
-With ADO.NET, the query will be prepared for you so that the variables match [YQL](../../yql/reference/index.md). The type will be determined according to the [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) or the .NET type of the value itself.
+With ADO.NET, the query will be prepared for you so that the variables match [YQL](../../../yql/reference/index.md). The type will be determined according to the [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) or the .NET type of the value itself.
 
 ## Parameter Types
 

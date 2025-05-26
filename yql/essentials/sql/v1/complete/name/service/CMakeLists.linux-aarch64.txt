@@ -15,6 +15,7 @@
 add_subdirectory(static)
 add_subdirectory(ranking)
 add_subdirectory(union)
+add_subdirectory(schema)
 
 add_library(complete-name-service)
 

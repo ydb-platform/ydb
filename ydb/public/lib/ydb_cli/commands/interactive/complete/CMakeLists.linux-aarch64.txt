@@ -21,12 +21,20 @@ target_link_libraries(commands-interactive-complete PUBLIC
   yutil
   restricted-patched-replxx
   sql-v1-complete
+  complete-name-object
+  name-object-simple
+  name-service-schema
+  name-service-static
+  name-service-union
   v1-lexer-antlr4_pure
   v1-lexer-antlr4_pure_ansi
   interactive-highlight-color
+  common
 )
 
 target_sources(commands-interactive-complete PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/dummy_name_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.cpp
 )
 

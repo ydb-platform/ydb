@@ -12,22 +12,18 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(static)
-add_subdirectory(ranking)
-add_subdirectory(union)
-add_subdirectory(schema)
+add_subdirectory(simple)
 
-add_library(complete-name-service)
+add_library(complete-name-object)
 
 
-target_link_libraries(complete-name-service PUBLIC
+target_link_libraries(complete-name-object PUBLIC
   contrib-libs-cxxsupp
   yutil
-  essentials-core-sql_types
-  v1-complete-core
+  cpp-threading-future
 )
 
-target_sources(complete-name-service PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/name_service.cpp
+target_sources(complete-name-object PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/object/schema.cpp
 )
 

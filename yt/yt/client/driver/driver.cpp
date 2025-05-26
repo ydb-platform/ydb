@@ -59,6 +59,13 @@ constinit const auto Logger = DriverLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static TClientOptions GetRootClientOptions(const TDriverConfigPtr& config)
+{
+    auto result = TClientOptions::Root();
+    result.MultiproxyTargetCluster = config->MultiproxyTargetCluster;
+    return result;
+}
+
 void Serialize(const TCommandDescriptor& descriptor, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)
@@ -107,7 +114,6 @@ TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const TString& commandNa
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 class TDriver
     : public IDriver
 {
@@ -121,7 +127,7 @@ public:
         , ClientCache_(New<TClientCache>(Config_->ClientCache, Connection_))
         , RootClient_(ClientCache_->Get(
             GetRootAuthenticationIdentity(),
-            TClientOptions::FromAuthenticationIdentity(GetRootAuthenticationIdentity())))
+            GetRootClientOptions(Config_)))
         , ProxyDiscoveryCache_(CreateProxyDiscoveryCache(
             Config_->ProxyDiscoveryCache,
             RootClient_))
@@ -451,6 +457,7 @@ public:
         options.ServiceTicketAuth = request.ServiceTicket
             ? std::make_optional(New<NAuth::TServiceTicketFixedAuth>(*request.ServiceTicket))
             : std::nullopt;
+        options.MultiproxyTargetCluster = Config_->MultiproxyTargetCluster;
 
         auto client = ClientCache_->Get(identity, options);
 

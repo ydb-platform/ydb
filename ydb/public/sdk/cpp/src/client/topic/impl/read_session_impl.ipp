@@ -994,7 +994,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
             BreakConnectionAndReconnectImpl(EStatus::INTERNAL_ERROR,
                                             TStringBuilder()
                                                 << "Got unexpected partition stream data message. Topic: "
-                                                << partitionData.topic() << ". Partition: " << partitionData.partition()
+                                                << partitionData.topic().ShortDebugString() << ". Partition: " << partitionData.partition()
                                                 << " AssignId: " << partitionData.cookie().assign_id(),
                                             deferred);
             return;
@@ -1031,9 +1031,9 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         if (firstOffset == std::numeric_limits<ui64>::max()) {
             BreakConnectionAndReconnectImpl(EStatus::INTERNAL_ERROR,
                                             TStringBuilder() << "Got empty data message. Topic: "
-                                                << partitionData.topic()
+                                                << partitionData.topic().ShortDebugString()
                                                 << ". Partition: " << partitionData.partition()
-                                                << " message: " << msg,
+                                                << " message: " << msg.ShortDebugString(),
                                             deferred);
             return;
         }
@@ -1042,7 +1042,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         if (!CookieMapping.AddMapping(cookie)) {
             BreakConnectionAndReconnectImpl(EStatus::INTERNAL_ERROR,
                                             TStringBuilder() << "Got unexpected data message. Topic: "
-                                                << partitionData.topic()
+                                                << partitionData.topic().ShortDebugString()
                                                 << ". Partition: " << partitionData.partition()
                                                 << ". Cookie mapping already has such cookie",
                                             deferred);
@@ -1150,7 +1150,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Committed response: " << msg.ShortDebugString());
 
     std::map<ui64, TIntrusivePtr<TPartitionStreamImpl<true>>> partitionStreams;
     for (const Ydb::PersQueue::V1::CommitCookie& cookieProto : msg.cookies()) {

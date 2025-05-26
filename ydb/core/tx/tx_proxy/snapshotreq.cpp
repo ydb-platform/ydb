@@ -287,17 +287,21 @@ public:
                     break;
             }
 
-            if (entry.KeyDescription->TableId.IsSystemView() && IgnoreSystemViews) {
+            if ((entry.KeyDescription->TableId.IsSystemView() ||
+                 entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) &&
+                IgnoreSystemViews)
+            {
                 continue;
             }
 
-            if (entry.IsColumnTable) {
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
                 // OLAP tables don't create snapshots explicitly
                 hasColumnTable = true;
                 continue;
             }
 
-            if (entry.KeyDescription->TableId.IsSystemView() ||
+            if ((entry.KeyDescription->TableId.IsSystemView() ||
+                 entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) ||
                 TSysTables::IsSystemTable(entry.KeyDescription->TableId))
             {
                 const TString explanation = TStringBuilder()
@@ -1311,16 +1315,20 @@ public:
         TxProxyMon->TxPrepareResolveHgram->Collect((WallClockResolved - WallClockResolveStarted).MicroSeconds());
 
         for (const auto& entry : msg->Tables) {
-            if (entry.KeyDescription->TableId.IsSystemView() && IgnoreSystemViews) {
+            if ((entry.KeyDescription->TableId.IsSystemView() ||
+                 entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) &&
+                IgnoreSystemViews)
+            {
                 continue;
             }
 
-            if (entry.IsColumnTable) {
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
                 // OLAP tables don't create snapshots explicitly
                 continue;
             }
 
-            if (entry.KeyDescription->TableId.IsSystemView() ||
+            if ((entry.KeyDescription->TableId.IsSystemView() ||
+                 entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) ||
                 TSysTables::IsSystemTable(entry.KeyDescription->TableId))
             {
                 const TString explanation = TStringBuilder()

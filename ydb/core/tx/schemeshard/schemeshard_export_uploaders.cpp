@@ -3,6 +3,7 @@
 
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
@@ -399,10 +400,12 @@ public:
         TActorId schemeShard,
         ui64 exportId,
         const Ydb::Export::ExportToS3Settings& settings,
-        const NKikimrSchemeOp::TExportMetadata& exportMetadata
+        const NKikimrSchemeOp::TExportMetadata& exportMetadata,
+        bool enableChecksums
     )
         : SchemeShard(schemeShard)
         , ExportId(exportId)
+        , EnableChecksums(enableChecksums)
         , Settings(settings)
         , ExportMetadata(exportMetadata)
         , ExternalStorageConfig(new TS3ExternalStorageConfig(Settings))
@@ -472,12 +475,16 @@ private:
         if (const TString& encryption = ExportMetadata.GetEncryptionAlgorithm()) {
             writer.Write("encryption", encryption);
         }
+        if (EnableChecksums) {
+            writer.Write("checksum", "sha256");
+        }
         writer.CloseMap();
 
         writer.Flush();
         ss.Flush();
 
-        return AddFile("metadata.json", content);
+        return AddFile("metadata.json", content)
+            && (!EnableChecksums || AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(content)));
     }
 
     bool AddSchemaMappingMetadata() {
@@ -492,7 +499,8 @@ private:
         writer.Flush();
         ss.Flush();
 
-        return AddFile("SchemaMapping/metadata.json", content, IV, Key);
+        return AddFile("SchemaMapping/metadata.json", content, IV, Key)
+            && (!EnableChecksums || AddFile(NBackup::ChecksumKey("SchemaMapping/metadata.json"), NBackup::ComputeChecksum(content)));
     }
 
     bool AddSchemaMappingJson() {
@@ -510,7 +518,9 @@ private:
             iv = NBackup::TEncryptionIV::Combine(*IV, NBackup::EBackupFileType::SchemaMapping, 0, 0);
         }
 
-        return AddFile("SchemaMapping/mapping.json", schemaMapping.Serialize(), iv, Key);
+        const TString content = schemaMapping.Serialize();
+        return AddFile("SchemaMapping/mapping.json", content, iv, Key)
+            && (!EnableChecksums || AddFile(NBackup::ChecksumKey("SchemaMapping/mapping.json"), NBackup::ComputeChecksum(content)));
     }
 
     void ProcessQueue() {
@@ -598,6 +608,7 @@ private:
 private:
     TActorId SchemeShard;
     ui64 ExportId;
+    bool EnableChecksums = false;
 
     Ydb::Export::ExportToS3Settings Settings;
     NKikimrSchemeOp::TExportMetadata ExportMetadata;
@@ -622,9 +633,10 @@ IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, 
 }
 
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
-    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata
+    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
+    bool enableChecksums
 ) {
-    return new TExportMetadataUploader(schemeShard, exportId, settings, exportMetadata);
+    return new TExportMetadataUploader(schemeShard, exportId, settings, exportMetadata, enableChecksums);
 }
 
 } // NKikimr::NSchemeShard

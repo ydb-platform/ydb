@@ -45,6 +45,7 @@ target_link_options(ydb-library-workload-tpcc-ut PRIVATE
 
 target_sources(ydb-library-workload-tpcc-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/ut/circular_queue_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/ut/histogram_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/ut/task_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/ut/task_queue_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/ut/timer_queue_ut.cpp

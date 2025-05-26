@@ -26,14 +26,18 @@ target_link_libraries(library-workload-tpcc PUBLIC
   src-client-driver
   src-client-proto
   src-client-query
-  cpp-histogram-hdr
 )
 
 target_sources(library-workload-tpcc PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/common_queries.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/histogram.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/runner.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/task_queue.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/terminal.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_delivery.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_neworder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_orderstatus.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_payment.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_stocklevel.cpp
 )
 

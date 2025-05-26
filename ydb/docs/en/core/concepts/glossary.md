@@ -8,7 +8,7 @@ This section explains terms that are useful to any person working with {{ ydb-sh
 
 ### AI database {#ai-database}
 
-An **AI database** like {{ ydb-short-name }} is a data-management system purpose-built to fuel artificial-intelligence (AI) and machine-learning (ML) workloads. It extends classical database functionality with features such as vector similarity search, real-time analytics, flexible schema handling, and massive horizontal scalability capabilities essential for consuming, processing, and retrieving the heterogeneous, high-volume data on which modern AI depends. Read more in [{#T}](ai-database.md).
+An **AI database** like {{ ydb-short-name }} is a data management system purpose-built to fuel artificial-intelligence (AI) and machine-learning (ML) workloads. It extends classical database functionality with features such as vector similarity search, real-time analytics, flexible schema handling, and massive horizontal scalability capabilities essential for consuming, processing, and retrieving the heterogeneous, high-volume data on which modern AI depends. Read more in [{#T}](ai-database.md).
 
 ### Retrieval Augmented Generation (RAG) {#rag}
 
@@ -16,11 +16,11 @@ An **AI database** like {{ ydb-short-name }} is a data-management system purpose
 
 ### Distributed SQL {#distributed-sql}
 
-**Distributed SQL** describes a new generation of relational database systems that span multiple servers—sometimes multiple regions—while appearing to applications as a single, strongly consistent SQL database.  These systems retain full ACID transactions and the familiar relational model but add horizontal scalability, fault tolerance, and geo‑distribution. Read more in [{#T}](distributed-sql.md).
+The term **Distributed SQL** describes a new generation of relational database systems that span multiple servers—sometimes multiple regions—while appearing to applications as a single, strongly consistent SQL database.  These systems retain full ACID transactions and the familiar relational model, but add horizontal scalability, fault tolerance, and geo‑distribution. Read more in [{#T}](distributed-sql.md).
 
 ### Hybrid Transactional/Analytical Processing {#htap}
 
-**Hybrid Transactional/Analytical Processing (HTAP)** refers to database systems that can efficiently handle both [transactional (OLTP)](https://en.wikipedia.org/wiki/Online_transaction_processing) and [analytical (OLAP)](https://en.wikipedia.org/wiki/Online_analytical_processing) workloads within a single engine. HTAP databases eliminate the need for separate systems for these workloads and complex ETL processes, enabling real-time analytics on fresh transactional data without impacting performance. Read more in [{#T}](htap.md).
+The term **Hybrid Transactional/Analytical Processing (HTAP)** refers to database systems that can efficiently handle both [transactional (OLTP)](https://en.wikipedia.org/wiki/Online_transaction_processing) and [analytical (OLAP)](https://en.wikipedia.org/wiki/Online_analytical_processing) workloads within a single engine. HTAP databases eliminate the need for separate systems for these workloads and complex ETL processes, enabling real-time analytics on fresh transactional data without impacting performance. Read more in [{#T}](htap.md).
 
 ### Universal database {#universal-database}
 
@@ -28,7 +28,7 @@ A **universal database** is a comprehensive data management system designed to n
 
 ### Converged database {#converged-database}
 
-A **converged database** extends the [HTAP](#htap) vision by unifying *all* critical data capabilities—transactions, analytics, streams, vector search, graph, document, time‑series—within a single distributed platform. By collapsing multiple specialized engines into one strongly consistent, elastically scalable back‑end, a converged database removes the latency, integration cost, and governance risk that arise when data sprawls across purpose‑built systems. Read more in [{#T}](converged-database.md).
+A **converged database** extends the [HTAP](#htap) vision by unifying *all* critical data capabilities—transactions, analytics, streams, vector search, graph, document, time‑series—within a single distributed platform. By collapsing multiple specialized engines into one strongly consistent, elastically scalable back‑end, a converged database removes the latency, integration cost, and governance risks that arise when data sprawls across purpose‑built systems. Read more in [{#T}](converged-database.md).
 
 ### Cluster {#cluster}
 

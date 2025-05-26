@@ -8,7 +8,7 @@ Hybrid Transactional/Analytical Processing (HTAP) is a database architecture tha
 
 Traditionally, organizations separate online transaction processing systems from online analytical processing systems. This separation introduces data latency and architecture complexity, as analytical insights are based on data that lags behind current business events.
 
-HTAP approach removes this separation by unifying OLTP and OLAP on the same platform. In 2014, Gartner coined the term HTAP to describe this architecture. HTAP enables analytics to run in real-time on the same data that transactions are modifying. By eliminating separate environments for transactions and analytics, organizations reduce analytic staleness and simplify their data architecture.
+HTAP approach removes this separation by unifying OLTP and OLAP on the same platform. In 2014, Gartner coined the term HTAP to describe this architecture. HTAP enables analytics to run in real time on the same data that transactions are modifying. By eliminating separate environments for transactions and analytics, organizations reduce analytic staleness and simplify their data architecture.
 
 ## Core Concepts of HTAP
 

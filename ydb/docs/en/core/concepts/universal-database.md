@@ -8,7 +8,7 @@ A **universal database** is a comprehensive data management system designed to h
 
 * **Unified data platform**: A comprehensive system that natively supports multiple data paradigms including relational, document, key-value, time-series, and vector data.
 * **Workload versatility**: A single database engine capable of handling any combination of OLTP, OLAP, stream processing, vector search, and AI operations.
-* **Data fabric architecture**: Provides consistent data access and management across distributed environments, including cloud and on-premises deployments.
+* **Data fabric architecture**: Consistent data access and management across distributed environments, including cloud and on-premises deployments.
 * **AI-native capabilities**: Built-in support for AI workloads, including vector operations and embeddings management.
 * **Cross-domain data governance**: Unified security, compliance, and governance across all data types and processing modes.
 
@@ -20,8 +20,8 @@ A **universal database** is a comprehensive data management system designed to h
 * **Advanced streaming with [Topics](topic.md)**: Enterprise-grade publish/subscribe messaging system with exactly-once semantics and ordering guarantees.
 * **Comprehensive [Vector Search](vector_search.md)**: High-performance similarity search integrated into the core query engine.
 * **Extensible [Federated Queries](federated_query/index.md)**: Ability to query and combine data from diverse external sources through a unified SQL interface.
-* **Cross-region [Asynchronous Replication](async-replication.md)**: Replicate data between geographically distributed clusters with minimal latency.
-* **Event-driven architecture with [CDC](cdc.md)**: Capture and process data changes in real-time for event-driven applications.
+* **Cross-region [Asynchronous Replication](async-replication.md)**: Replicating data between geographically distributed clusters with minimal latency.
+* **Event-driven architecture with [CDC](cdc.md)**: Capturing and processing data changes in real-time for event-driven applications.
 
 ## Scalability in Universal Databases
 

@@ -58,7 +58,7 @@ class Nodes(object):
             else:
                 err = err.decode("utf-8", errors='replace')
 
-            retcode = process.poll()
+            retcode = process.wait()
             if retcode != 0:
                 status_line = "execution '{cmd}' finished with '{retcode}' retcode\n".format(
                     cmd=cmd,

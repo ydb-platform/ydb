@@ -1,4 +1,5 @@
-#include "events.h"
+#include <ydb/core/ymq/actor/events.h>
+#include <ydb/core/ymq/actor/service.h>
 
 #include <ydb/public/api/client/yc_public/events/ymq.pb.h>
 
@@ -154,14 +155,11 @@ namespace NCloudEvents {
         static void Send(const TProtoEvent& ev);
     };
 
-    template void TAuditSender::Send<TCreateQueueEvent>(const TCreateQueueEvent&);
-    template void TAuditSender::Send<TUpdateQueueEvent>(const TUpdateQueueEvent&);
-    template void TAuditSender::Send<TDeleteQueueEvent>(const TDeleteQueueEvent&);
-
     class TProcessor : public NActors::TActorBootstrapped<TProcessor> {
     private:
-        static constexpr std::string_view EventTableName = ".CloudEventsYmq";
+        static constexpr std::string_view EventTableName =  NKikimr::NSQS::TSqsService::CloudEventsTableName;
         static constexpr TDuration DefaultRetryTimeout = TDuration::Seconds(10);
+        static constexpr std::string_view DefaultEventTypePrefix = "yandex.cloud.events.ymq.";
 
         std::vector<TEventInfo> EventsList;
 

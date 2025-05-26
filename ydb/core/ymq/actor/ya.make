@@ -53,7 +53,6 @@ SRCS(
     untag_queue.cpp
     user_settings_names.cpp
     user_settings_reader.cpp
-    cloud_events.cpp
 )
 
 PEERDIR(
@@ -95,8 +94,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/credentials
     yql/essentials/minikql
     ydb/public/lib/deprecated/client
-    ydb/core/audit
-    ydb/public/api/client/yc_public/events
+    ydb/core/ymq/actor/cloud_events
 )
 
 YQL_LAST_ABI_VERSION()
@@ -111,7 +109,10 @@ GENERATE_ENUM_SERIALIZATION(queue_schema.h)
 
 END()
 
+RECURSE(
+    cloud_events
+)
+
 RECURSE_FOR_TESTS(
-    ut
     yc_search_ut
 )

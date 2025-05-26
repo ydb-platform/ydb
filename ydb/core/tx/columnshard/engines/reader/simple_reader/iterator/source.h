@@ -266,6 +266,9 @@ public:
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
 
+    virtual NArrow::TSimpleRow GetMinPK() const = 0;
+    virtual NArrow::TSimpleRow GetMaxPK() const = 0;
+
     void Abort() {
         DoAbort();
     }
@@ -434,6 +437,14 @@ public:
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
         return GetStageData().GetPortionAccessor().GetIndexRawBytes(indexIds, false);
+    }
+
+    virtual NArrow::TSimpleRow GetMinPK() const override {
+        return Portion->GetMeta().IndexKeyStart();
+    }
+
+    virtual NArrow::TSimpleRow GetMaxPK() const override {
+        return Portion->GetMeta().IndexKeyEnd();
     }
 
     const TPortionInfo& GetPortionInfo() const {

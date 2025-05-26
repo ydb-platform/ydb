@@ -591,7 +591,7 @@ struct TEnvironmentSetup {
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
-    void CreatePoolInBox(ui32 boxId, ui32 poolId, TString poolName) {
+    void CreatePoolInBox(ui32 boxId, ui32 poolId, TString poolName, ui32 defaultGroupSizeInUnits = 0) {
         NKikimrBlobStorage::TConfigRequest request;
 
         auto *cmd = request.AddCommand()->MutableDefineStoragePool();
@@ -602,6 +602,7 @@ struct TEnvironmentSetup {
         cmd->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
         cmd->SetVDiskKind("Default");
         cmd->SetNumGroups(1);
+        cmd->SetDefaultGroupSizeInUnits(defaultGroupSizeInUnits);
         cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
         if (Settings.Encryption) {
             cmd->SetEncryptionMode(TBlobStorageGroupInfo::EEncryptionMode::EEM_ENC_V1);
@@ -674,7 +675,7 @@ struct TEnvironmentSetup {
                 for (const auto& [vdiskId, vdiskActorId] : vdisks) {
                     dyn.PushBackActorId(vdiskActorId);
                 }
-                return new TBlobStorageGroupInfo(std::move(topology), std::move(dyn), "storage_pool");
+                return new TBlobStorageGroupInfo(std::move(topology), std::move(dyn), "storage_pool", {}, NPDisk::DEVICE_TYPE_UNKNOWN, group.GetGroupSizeInUnits());
             }
         }
         return nullptr;

@@ -137,6 +137,7 @@ struct TPDiskConfig : public TThrRefBase {
     bool UseSpdkNvmeDriver;
 
     ui64 ExpectedSlotCount = 0;
+    ui32 SlotSizeInUnits = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
@@ -316,6 +317,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " BufferPoolBufferCount# " << BufferPoolBufferCount << x;
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
+        str << " SlotSizeInUnits# " << SlotSizeInUnits << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
         str << " InsaneLogChunksMultiplier# " << InsaneLogChunksMultiplier << x;
@@ -423,6 +425,20 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasPlainDataChunks()) {
             PlainDataChunks = cfg->GetPlainDataChunks();
         }
+
+        if (cfg->HasSlotSizeInUnits()) {
+            SlotSizeInUnits = cfg->GetSlotSizeInUnits();
+        }
+    }
+
+    ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
+    }
+
+    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {
+        ui32 vu = groupSizeInUnits ?: 1;
+        ui32 pu = slotSizeInUnits ?: 1;
+        return int(vu / pu) + !!(vu % pu);
     }
 };
 

@@ -50,6 +50,7 @@ SRCS(
     ut_helpers.cpp
     validation.cpp
     vdisk_malfunction.cpp
+    group_size_in_units.cpp
 )
 
 PEERDIR(

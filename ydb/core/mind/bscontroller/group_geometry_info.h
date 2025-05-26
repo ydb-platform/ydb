@@ -85,10 +85,10 @@ namespace NKikimr::NBsController {
 
         void AllocateGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group, TGroupMapper::TGroupConstraintsDefinition& constrainsts,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
-                i64 requiredSpace) const {
+                ui32 groupSizeInUnits, i64 requiredSpace) const {
             TString error;
             for (const bool requireOperational : {true, false}) {
-                if (mapper.AllocateGroup(groupId.GetRawId(), group, constrainsts, replacedDisks, forbid, requiredSpace, requireOperational, error)) {
+                if (mapper.AllocateGroup(groupId.GetRawId(), group, constrainsts, replacedDisks, forbid, groupSizeInUnits, requiredSpace, requireOperational, error)) {
                     return;
                 }
             }
@@ -97,9 +97,11 @@ namespace NKikimr::NBsController {
 
         // returns pair of previous VDisk and PDisk id's
         std::pair<TVDiskIdShort, TPDiskId> SanitizeGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group, TGroupMapper::TGroupConstraintsDefinition&,
-                const THashMap<TVDiskIdShort, TPDiskId>& /*replacedDisks*/, TGroupMapper::TForbiddenPDisks forbid, i64 requiredSpace) const {
+                const THashMap<TVDiskIdShort, TPDiskId>& /*replacedDisks*/, TGroupMapper::TForbiddenPDisks forbid,
+                ui32 groupSizeInUnits, i64 requiredSpace
+        ) const {
             TString error;
-            auto misplacedVDisks = mapper.FindMisplacedVDisks(group);
+            auto misplacedVDisks = mapper.FindMisplacedVDisks(group, groupSizeInUnits);
             if (misplacedVDisks.Disks.size() == 0) {
                 error = TStringBuilder() << "cannot find misplaced disks, fail level: " << (ui32)misplacedVDisks.FailLevel;
             } else {
@@ -107,7 +109,7 @@ namespace NKikimr::NBsController {
                     for (const auto& replacedDisk : misplacedVDisks.Disks) {
                         TPDiskId pdiskId = group[replacedDisk.FailRealm][replacedDisk.FailDomain][replacedDisk.VDisk];
                         if (mapper.TargetMisplacedVDisk(groupId, group, replacedDisk, forbid, requiredSpace,
-                                requireOperational, error)) {
+                                requireOperational, groupSizeInUnits, error)) {
                             return {replacedDisk, pdiskId};
                         }
                     }

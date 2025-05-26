@@ -470,6 +470,7 @@ struct TPDiskMon {
     TReqCounters Harakiri;
     TReqCounters YardSlay;
     TReqCounters YardControl;
+    TReqCounters YardResize; // TODO(ydynnikov): implement counting
 
     TReqCounters ShredPDisk;
     TReqCounters PreShredCompactVDisk;

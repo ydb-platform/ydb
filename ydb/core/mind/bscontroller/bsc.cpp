@@ -58,7 +58,9 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
             Group = group;
             group->AddVSlot(this);
         }
-        ++pdisk->NumActiveSlots;
+        pdisk->NumActiveSlots += TPDiskConfig::GetOwnerWeight(
+            group->GroupSizeInUnits,
+            pdisk->SlotSizeInUnits);
     }
 }
 
@@ -565,7 +567,9 @@ void TBlobStorageController::ValidateInternalState() {
         for (const auto& [vslotId, vslot] : pdisk->VSlotsOnPDisk) {
             Y_ABORT_UNLESS(vslot == FindVSlot(TVSlotId(pdiskId, vslotId)));
             Y_ABORT_UNLESS(vslot->PDisk == pdisk.Get());
-            numActiveSlots += !vslot->IsBeingDeleted();
+            if (!vslot->IsBeingDeleted()) {
+                numActiveSlots += TPDiskConfig::GetOwnerWeight(vslot->Group->GroupSizeInUnits, pdisk->SlotSizeInUnits);
+            }
         }
         Y_ABORT_UNLESS(pdisk->NumActiveSlots == numActiveSlots);
     }
@@ -806,6 +810,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kProposeStoragePools:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMergeBoxes:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveGroups:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kChangeGroupSizeInUnits:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:

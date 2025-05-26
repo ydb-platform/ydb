@@ -251,7 +251,8 @@ public:
     }
 
     void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
-        NActors::TActivationContext::AsActorContext().Send(GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManagerVerified(),
+        NActors::TActivationContext::AsActorContext().Send(
+            std::static_pointer_cast<TSpecialReadContext>(GetContext())->GetDuplicatesManagerVerified(),
             new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
     }
 

@@ -308,7 +308,8 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
         // It's only legal, when the compiled UDF declares its
         // signature using run config at compilation phase, but then
         // omits it in favor to function currying at execution phase.
-        if (!runConfigFuncType->IsVoid()) {
+        // And vice versa for the forward compatibility.
+        if (!runConfigNodeType->IsVoid() && !runConfigFuncType->IsVoid()) {
             TString diff = TStringBuilder()
                 << "run config type mismatch, expected: "
                 << PrintNode((runConfigNodeType), true)
@@ -327,11 +328,15 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
         //   run config type.
         // * The type of the resulting callable has to be the same
         //   as the function type.
-        const auto firstArgType = funcInfo.FunctionType->GetArgumentType(0);
-        if (!runConfigNodeType->IsSameType(*firstArgType)) {
+        const auto firstArgType = runConfigNodeType->IsVoid()
+                                ? callable.GetType()->GetArgumentType(0)
+                                : funcInfo.FunctionType->GetArgumentType(0);
+        const auto runConfigType = runConfigNodeType->IsVoid()
+                                 ? runConfigFuncType : runConfigNodeType;
+        if (!runConfigType->IsSameType(*firstArgType)) {
             TString diff = TStringBuilder()
                 << "type mismatch, expected run config type: "
-                << PrintNode(runConfigNodeType, true)
+                << PrintNode(runConfigType, true)
                 << ", actual: "
                 << PrintNode(firstArgType, true);
             UdfTerminate((TStringBuilder() << pos
@@ -340,8 +345,12 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
                                            << "' "
                                            << TruncateTypeDiff(diff)).c_str());
         }
-        const auto callableFuncType = funcInfo.FunctionType->GetReturnType();
-        const auto callableNodeType = callable.GetType()->GetReturnType();
+        const auto callableFuncType = runConfigNodeType->IsVoid()
+                                    ? funcInfo.FunctionType
+                                    : funcInfo.FunctionType->GetReturnType();
+        const auto callableNodeType = runConfigNodeType->IsVoid()
+                                    ? AS_TYPE(TCallableType, callable.GetType()->GetReturnType())->GetReturnType()
+                                    : callable.GetType()->GetReturnType();
         if (!callableNodeType->IsSameType(*callableFuncType)) {
             TString diff = TStringBuilder()
                 << "type mismatch, expected return type: "
@@ -357,7 +366,9 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
 
         const auto runConfigCompNode = LocateNode(ctx.NodeLocator, *runCfgNode.GetNode());
         const auto runConfigArgs = funcInfo.FunctionType->GetArgumentsCount();
-        return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, funcInfo.FunctionType, userType);
+        return runConfigNodeType->IsVoid()
+            ? CreateUdfWrapper<true>(ctx, std::move(funcName), std::move(typeConfig), pos, funcInfo.FunctionType, userType)
+            : CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, funcInfo.FunctionType, userType);
     }
     MKQL_ENSURE(funcInfo.FunctionType->IsConvertableTo(*callable.GetType()->GetReturnType(), true),
                 "Function '" << funcName << "' type mismatch, expected return type: " << PrintNode(callable.GetType()->GetReturnType(), true) <<

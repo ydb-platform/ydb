@@ -35,6 +35,7 @@ target_sources(core-blobstorage-groupinfo PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_data_check.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h

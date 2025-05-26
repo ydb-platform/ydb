@@ -1,10 +1,15 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
+#include <util/random/random.h>
+
 struct TCheckIntegrityEnvBase {
     TEnvironmentSetup Env;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TLogoBlobID Id;
     std::vector<TVDiskID> VDisks;
+
+    TString Data;
+    TString ErrorData;
 
     std::unique_ptr<IEventHandle> Result;
 
@@ -19,8 +24,23 @@ struct TCheckIntegrityEnvBase {
         Info = Env.GetGroupInfo(groups.front());
 
         TString error;
-        const bool success = TLogoBlobID::Parse(Id, "[72075186270680851:57:3905:6:786432:4194304:0]", error);
+        const bool success = TLogoBlobID::Parse(Id, "[72075186270680851:57:3905:6:786432:1024:0]", error);
         UNIT_ASSERT(success);
+
+        auto size = Id.BlobSize();
+        Data.resize(size);
+        for (ui32 i = 0; i < size; ++i) {
+            Data[i] = RandomNumber<ui8>();
+        }
+        ErrorData.resize(size);
+        for (ui32 i = 0; i < size; ++i) {
+            ErrorData[i] = RandomNumber<ui8>();
+        }
+
+        for (ui32 i = 0; i < Info->Type.BlobSubgroupSize(); ++i) {
+            auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(i, Id.Hash());
+            VDisks.push_back(Info->CreateVDiskID(vDiskIdShort));
+        }
     }
 
     TEvBlobStorage::TEvCheckIntegrityResult* Request() {
@@ -65,6 +85,7 @@ struct TCheckIntegrityEnvBase {
 
 struct TCheckIntegrityEnvBlock42 : public TCheckIntegrityEnvBase {
     std::vector<TString> Parts;
+    std::vector<TString> ErrorParts;
 
     TCheckIntegrityEnvBlock42()
         : TCheckIntegrityEnvBase(TEnvironmentSetup::TSettings{
@@ -72,37 +93,39 @@ struct TCheckIntegrityEnvBlock42 : public TCheckIntegrityEnvBase {
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
         })
     {
-        TString data = TString(Id.BlobSize(), 'X');
+        auto crcMode = (TErasureType::ECrcMode)Id.CrcMode();
 
         TDataPartSet partSet;
-        Info->Type.SplitData((TErasureType::ECrcMode)Id.CrcMode(), data, partSet);
+        Info->Type.SplitData(crcMode, Data, partSet);
         for (ui32 i = 0; i < partSet.Parts.size(); ++i) {
             Parts.push_back(partSet.Parts[i].OwnedString.ConvertToString());
         }
 
-        for (ui32 i = 0; i < 8; ++i) {
-            auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(i, Id.Hash());
-            VDisks.push_back(Info->CreateVDiskID(vDiskIdShort));
+        TDataPartSet errorPartSet;
+        Info->Type.SplitData(crcMode, ErrorData, errorPartSet);
+        for (ui32 i = 0; i < errorPartSet.Parts.size(); ++i) {
+            ErrorParts.push_back(errorPartSet.Parts[i].OwnedString.ConvertToString());
         }
     }
 };
 
 struct TCheckIntegrityEnvMirror3dc : public TCheckIntegrityEnvBase {
-    TString Data;
-
     TCheckIntegrityEnvMirror3dc()
         : TCheckIntegrityEnvBase(TEnvironmentSetup::TSettings{
             .NodeCount = 9,
             .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
         })
-    {
-        Data = TString(Id.BlobSize(), 'X');
+    {}
+};
 
-        for (ui32 i = 0; i < 9; ++i) {
-            auto vDiskIdShort = Info->GetTopology().GetVDiskInSubgroup(i, Id.Hash());
-            VDisks.push_back(Info->CreateVDiskID(vDiskIdShort));
-        }
-    }
+struct TCheckIntegrityEnvMirror3of4 : public TCheckIntegrityEnvBase {
+
+    TCheckIntegrityEnvMirror3of4()
+        : TCheckIntegrityEnvBase(TEnvironmentSetup::TSettings{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+        })
+    {}
 };
 
 Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
@@ -244,6 +267,179 @@ Y_UNIT_TEST_SUITE(CheckIntegrityBlock42) {
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_RECOVERABLE);
     }
 
+    Y_UNIT_TEST(PlacementStatusUnknown) {
+        TCheckIntegrityEnvBlock42 check;
+
+        for (ui32 i = 0; i < 5; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        }
+
+        THashSet<TVDiskID> errorDisks;
+        errorDisks.insert(check.VDisks[0]);
+        errorDisks.insert(check.VDisks[1]);
+
+        check.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            return check.InjectError(NKikimrProto::ERROR, errorDisks, ev);
+        };
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN);
+    }
+
+    Y_UNIT_TEST(DataOk) {
+        TCheckIntegrityEnvBlock42 check;
+
+        for (ui32 i = 0; i < 6; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        }
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+
+    Y_UNIT_TEST(DataOkAdditionalEqualParts) {
+        TCheckIntegrityEnvBlock42 check;
+
+        for (ui32 i = 0; i < 6; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        }
+        check.Env.PutBlob(check.VDisks[6], TLogoBlobID(check.Id, 1), check.Parts[0]);
+        check.Env.PutBlob(check.VDisks[7], TLogoBlobID(check.Id, 2), check.Parts[1]);
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+
+    Y_UNIT_TEST(DataErrorAdditionalUnequalParts) {
+        TCheckIntegrityEnvBlock42 check;
+
+        for (ui32 i = 0; i < 6; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        }
+        check.Env.PutBlob(check.VDisks[6], TLogoBlobID(check.Id, 1), check.ErrorParts[0]);
+        check.Env.PutBlob(check.VDisks[7], TLogoBlobID(check.Id, 1), check.ErrorParts[1]);
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+
+    Y_UNIT_TEST(DataErrorSixPartsOneBroken) {
+        TCheckIntegrityEnvBlock42 check;
+
+        for (ui32 i = 0; i < 5; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        }
+        check.Env.PutBlob(check.VDisks[5], TLogoBlobID(check.Id, 6), check.ErrorParts[5]);
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+
+    Y_UNIT_TEST(DataErrorSixPartsTwoBroken) {
+        TCheckIntegrityEnvBlock42 check;
+
+        for (ui32 i = 0; i < 4; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        }
+        check.Env.PutBlob(check.VDisks[4], TLogoBlobID(check.Id, 5), check.ErrorParts[4]);
+        check.Env.PutBlob(check.VDisks[5], TLogoBlobID(check.Id, 6), check.ErrorParts[5]);
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+
+    Y_UNIT_TEST(DataOkErasureFiveParts) {
+        TCheckIntegrityEnvBlock42 check;
+
+        for (ui32 i = 0; i < 5; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        }
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_RECOVERABLE);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+
+    Y_UNIT_TEST(DataErrorFivePartsOneBroken) {
+        TCheckIntegrityEnvBlock42 check;
+
+        for (ui32 i = 0; i < 4; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        }
+        check.Env.PutBlob(check.VDisks[4], TLogoBlobID(check.Id, 5), check.ErrorParts[4]);
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_RECOVERABLE);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+
+    Y_UNIT_TEST(DataErrorHeavySixPartsWithManyBroken) {
+        TCheckIntegrityEnvBlock42 check;
+
+        for (ui32 i = 0; i < 6; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        }
+        for (ui32 i = 0; i < 6; ++i) {
+            check.Env.PutBlob(check.VDisks[6], TLogoBlobID(check.Id, i + 1), check.ErrorParts[i]);
+        }
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+
+    Y_UNIT_TEST(DataStatusUnknown) {
+        TCheckIntegrityEnvBlock42 check;
+
+        for (ui32 i = 0; i < 5; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Parts[i]);
+        }
+
+        THashSet<TVDiskID> errorDisks;
+        errorDisks.insert(check.VDisks[0]);
+        errorDisks.insert(check.VDisks[1]);
+
+        check.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            return check.InjectError(NKikimrProto::ERROR, errorDisks, ev);
+        };
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_UNKNOWN);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
 }
 
 Y_UNIT_TEST_SUITE(CheckIntegrityMirror3dc) {
@@ -350,5 +546,109 @@ Y_UNIT_TEST_SUITE(CheckIntegrityMirror3dc) {
         auto result = check.Request();
         UNIT_ASSERT(result->Status == NKikimrProto::OK);
         UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_RECOVERABLE);
+    }
+
+    Y_UNIT_TEST(DataOk) {
+        TCheckIntegrityEnvMirror3dc check;
+
+        for (ui32 i = 0; i < 3; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Data);
+        }
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_OK);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+
+    Y_UNIT_TEST(DataErrorOneCopy) {
+        TCheckIntegrityEnvMirror3dc check;
+
+        for (ui32 i = 0; i < 2; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Data);
+        }
+        check.Env.PutBlob(check.VDisks[2], TLogoBlobID(check.Id, 3), check.ErrorData);
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+
+    Y_UNIT_TEST(DataErrorManyCopies) {
+        TCheckIntegrityEnvMirror3dc check;
+
+        for (ui32 i = 0; i < 3; ++i) {
+            check.Env.PutBlob(check.VDisks[i], TLogoBlobID(check.Id, i + 1), check.Data);
+        }
+        for (ui32 i = 0; i < 3; ++i) {
+            check.Env.PutBlob(check.VDisks[i + 3], TLogoBlobID(check.Id, i + 1), check.ErrorData);
+        }
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+        UNIT_ASSERT(result->DataStatus == TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR);
+
+        Cerr << result->DataErrorInfo << Endl;
+    }
+}
+
+Y_UNIT_TEST_SUITE(CheckIntegrityMirror3of4) {
+
+    Y_UNIT_TEST(PlacementOk) {
+        TCheckIntegrityEnvMirror3of4 check;
+
+        check.Env.PutBlob(check.VDisks[0], TLogoBlobID(check.Id, 1), check.Data);
+        check.Env.PutBlob(check.VDisks[1], TLogoBlobID(check.Id, 2), check.Data);
+        check.Env.PutBlob(check.VDisks[2], TLogoBlobID(check.Id, 1), check.Data);
+        check.Env.PutBlob(check.VDisks[4], TLogoBlobID(check.Id, 3), {});
+        check.Env.PutBlob(check.VDisks[5], TLogoBlobID(check.Id, 3), {});
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_OK);
+    }
+
+    Y_UNIT_TEST(PlacementMissingParts) {
+        TCheckIntegrityEnvMirror3of4 check;
+
+        check.Env.PutBlob(check.VDisks[0], TLogoBlobID(check.Id, 1), check.Data);
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_RECOVERABLE);
+    }
+
+    Y_UNIT_TEST(PlacementBlobIsLost) {
+        TCheckIntegrityEnvMirror3of4 check;
+
+        check.Env.PutBlob(check.VDisks[4], TLogoBlobID(check.Id, 3), {});
+        check.Env.PutBlob(check.VDisks[5], TLogoBlobID(check.Id, 3), {});
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::OK);
+        UNIT_ASSERT(result->PlacementStatus == TEvBlobStorage::TEvCheckIntegrityResult::PS_ERROR);
+    }
+
+    Y_UNIT_TEST(PlacementDisintegrated) {
+        TCheckIntegrityEnvMirror3of4 check;
+
+        THashSet<TVDiskID> errorDisks;
+        for (ui32 i = 5; i < 8; ++i) {
+            errorDisks.insert(check.VDisks[i]);
+        }
+
+        check.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            return check.InjectError(NKikimrProto::ERROR, errorDisks, ev);
+        };
+
+        auto result = check.Request();
+        UNIT_ASSERT(result->Status == NKikimrProto::ERROR);
+        Cerr << result->ErrorReason << Endl;
     }
 }

@@ -1,6 +1,5 @@
 import pytest
 import random
-import threading
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -14,11 +13,11 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
         yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
 
     def _get_random_vector(self, type, size):
-        if type == "Float":
+        if type == "FloatVector":
             values = [round(random.uniform(-100, 100), 2) for _ in range(size)]
             return ",".join(f'{val}f' for val in values)
 
-        if type == "Uint8":
+        if type == "Uint8Vector":
             values = [random.randint(0, 255) for _ in range(size)]
         else:
             values = [random.randint(-127, 127) for _ in range(size)]
@@ -116,7 +115,7 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
             ("Uint8", "distance", "euclidean"),
             ("Int8", "distance", "euclidean"),
             ("Float", "distance", "euclidean"),
-        ]
+        ],
     )
     def test_statistics_followers(self, vector_type, distance, distance_func):
         self.rows_count = 30

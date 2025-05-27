@@ -442,6 +442,74 @@ namespace NKikimr::NStorage {
         return std::nullopt;
     }
 
+    std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config) {
+        // copy bridge info into state storage configs for easier access in replica processors/proxies
+        if (config->HasClusterState()) {
+            auto fillInBridge = [&](auto *pb) -> std::optional<TString> {
+                auto& clusterState = config->GetClusterState();
+                if (!pb->RingGroupsSize() || pb->HasRing()) {
+                    return "configuration has Ring field set or no RingGroups";
+                }
+                auto *groups = pb->MutableRingGroups();
+                for (int i = 0, count = groups->size(); i < count; ++i) {
+                    auto *group = groups->Mutable(i);
+                    if (!group->HasBridgePileId()) {
+                        return "bridge pile id is not set for a ring group";
+                    } else if (ui32 pileId = group->GetBridgePileId(); pileId < clusterState.PerPileStateSize()) {
+                        using T = NKikimrConfig::TDomainsConfig::TStateStorage;
+                        std::optional<T::EPileState> state;
+                        if (pileId == clusterState.GetPrimaryPile()) {
+                            state = pileId == clusterState.GetPromotedPile()
+                                ? T::PRIMARY
+                                : T::DEMOTED;
+                        } else if (pileId == clusterState.GetPromotedPile()) {
+                            state = T::PROMOTED;
+                        } else {
+                            switch (clusterState.GetPerPileState(pileId)) {
+                                case NKikimrBridge::TClusterState::DISCONNECTED:
+                                    state = T::DISCONNECTED;
+                                    break;
+
+                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED:
+                                    state = T::NOT_SYNCHRONIZED;
+                                    break;
+
+                                case NKikimrBridge::TClusterState::SYNCHRONIZED:
+                                    state = T::SYNCHRONIZED;
+                                    break;
+
+                                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
+                                case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
+                                    Y_DEBUG_ABORT("unexpected value");
+                            }
+                        }
+                        if (!state) {
+                            return "can't determine correct pile state for ring group";
+                        }
+                        group->SetPileState(*state);
+                    } else {
+                        return "bridge pile id is out of bounds";
+                    }
+                }
+                return std::nullopt;
+            };
+
+            std::optional<TString> error;
+            if (!error && config->HasStateStorageConfig()) {
+                error = fillInBridge(config->MutableStateStorageConfig());
+            }
+            if (!error && config->HasStateStorageBoardConfig()) {
+                error = fillInBridge(config->MutableStateStorageBoardConfig());
+            }
+            if (!error && config->HasSchemeBoardConfig()) {
+                error = fillInBridge(config->MutableSchemeBoardConfig());
+            }
+            return error;
+        }
+
+        return std::nullopt;
+    }
+
 } // NKikimr::NStorage
 
 template<>

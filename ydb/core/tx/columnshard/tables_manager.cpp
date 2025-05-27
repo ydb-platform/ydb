@@ -352,9 +352,9 @@ void TTablesManager::AddTableVersion(const TInternalPathId pathId, const NOlap::
 
 namespace {
 
-ui64 RandomOffsetForTests() {
-    if (false) { //(NYDBTest::TControllers::GetColumnShardController()->UseRandomOffsetForInternalPathIds())
-        return RandomNumber(1000);
+ui64 RandomOffsetForTests(ui64 tabletId) {
+    if (true) { //(NYDBTest::TControllers::GetColumnShardController()->UseRandomOffsetForInternalPathIds())
+        return (TAppData::RandomProvider->GenRand64() ^ tabletId) % 1000;
     } else {
         return 1000000;
     }
@@ -372,7 +372,7 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
     , SchemaObjectsCache(schemaCache)
     , PortionsStats(portionsStats)
     , TabletId(tabletId)
-    , InternalPathIdOffset(RandomOffsetForTests()) {
+    , InternalPathIdOffset(RandomOffsetForTests(tabletId)) {
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const TInternalPathId pathId) const {

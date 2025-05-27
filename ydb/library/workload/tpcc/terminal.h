@@ -55,7 +55,7 @@ public:
         std::atomic<size_t> UserAborted = 0;
 
         mutable TSpinLock HistLock;
-        THistogram LatencyHistogramMs{256, 8192};
+        THistogram LatencyHistogramMs{256, 32768};
     };
 
 public:

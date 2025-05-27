@@ -244,6 +244,7 @@ void TTaskQueue::ProcessInflightQueue(
     }
 
     auto& stats = context.Stats;
+    double executingTime = 0;
     while (!context.InflightWaitingTasksInternal.Empty()
             && RunningInternalCount.load(std::memory_order_relaxed) < MaxRunningInternal) {
         auto runningCount = RunningInternalCount.fetch_add(1, std::memory_order_relaxed);
@@ -258,10 +259,15 @@ void TTaskQueue::ProcessInflightQueue(
                 LOG_D("Thread " << threadId << " resumed task waited for inflight (internal)");
                 internalInflightWaitTimeMs = int(internalTask.Timer.Passed() * 1000);
                 stats.InternalTasksResumed.fetch_add(1, std::memory_order_relaxed);
+
+                THPTimer timer;
                 internalTask.Handle.resume();
+                executingTime += timer.Passed();
             }
         }
     }
+
+    stats.ExecutingTime.fetch_add(executingTime, std::memory_order_relaxed);
 }
 
 void TTaskQueue::RunThread(size_t threadId) {
@@ -273,7 +279,10 @@ void TTaskQueue::RunThread(size_t threadId) {
     auto& context = *PerThreadContext[threadId];
     auto& stats = context.Stats;
 
+    THPTimer totalTimer;
     while (!ThreadsStopSource.stop_requested()) {
+        double executingTime = 0;
+
         std::optional<ui64> internalInflightWaitTimeMs;
         std::optional<ui64> internalQueueTimeMs;
         std::optional<ui64> externalQueueTimeMs;
@@ -299,7 +308,10 @@ void TTaskQueue::RunThread(size_t threadId) {
             LOG_T("Thread " << threadId << " resumed task (external)");
             stats.ExternalTasksResumed.fetch_add(1, std::memory_order_relaxed);
             externalQueueTimeMs = int(externalTask->Timer.Passed() * 1000);
+
+            THPTimer timer;
             externalTask->Handle.resume();
+            executingTime += timer.Passed();
         }
 
         // Internal task
@@ -310,7 +322,9 @@ void TTaskQueue::RunThread(size_t threadId) {
                 LOG_D("Thread " << threadId << " resumed task (internal)");
                 stats.InternalTasksResumed.fetch_add(1, std::memory_order_relaxed);
                 internalQueueTimeMs = int(internalTask.Timer.Passed() * 1000);
+                THPTimer timer;
                 internalTask.Handle.resume();
+                executingTime += timer.Passed();
             }
         }
 
@@ -319,6 +333,8 @@ void TTaskQueue::RunThread(size_t threadId) {
         stats.InternalTasksSleeping.store(context.SleepingTasks.Size(), std::memory_order_relaxed);
         stats.InternalTasksWaitingInflight.store(context.InflightWaitingTasksInternal.Size(), std::memory_order_relaxed);
         stats.InternalTasksReady.store(context.ReadyTasksInternal.Size(), std::memory_order_relaxed);
+        stats.ExecutingTime.fetch_add(executingTime, std::memory_order_relaxed);
+        stats.TotalTime.fetch_add(totalTimer.PassedReset());
         {
             TGuard guard(stats.HistLock);
             if (internalInflightWaitTimeMs) {

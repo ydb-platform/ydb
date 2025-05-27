@@ -57,6 +57,15 @@ struct TAllStatistics {
             NewOrderFailPerSecond = 1.0 *
                 (TerminalStats->GetStats(TTerminalStats::E_NEW_ORDER).Failed.load(std::memory_order_relaxed) -
                     prev.TerminalStats->GetStats(TTerminalStats::E_NEW_ORDER).Failed.load(std::memory_order_relaxed)) / seconds;
+
+            ExecutingTime = TaskThreadStats->ExecutingTime.load(std::memory_order_relaxed) -
+                prev.TaskThreadStats->ExecutingTime.load(std::memory_order_relaxed);
+
+            TotalTime = TaskThreadStats->TotalTime.load(std::memory_order_relaxed) -
+                prev.TaskThreadStats->TotalTime.load(std::memory_order_relaxed);
+
+            InternalInflightWaitTimeMs = TaskThreadStats->InternalInflightWaitTimeMs;
+            InternalInflightWaitTimeMs.Sub(prev.TaskThreadStats->InternalInflightWaitTimeMs);
         }
 
         std::unique_ptr<ITaskQueue::TThreadStats> TaskThreadStats;
@@ -66,6 +75,9 @@ struct TAllStatistics {
         size_t QueriesPerSecond = 0;
         double NewOrderOkPerSecond = 0;
         double NewOrderFailPerSecond = 0;
+        double ExecutingTime = 0;
+        double TotalTime = 0;
+        THistogram InternalInflightWaitTimeMs{ITaskQueue::TThreadStats::BUCKET_COUNT, ITaskQueue::TThreadStats::MAX_HIST_VALUE};
     };
 
     TAllStatistics(size_t threadCount)
@@ -344,28 +356,29 @@ void TPCCRunner::UpdateDisplayDeveloperMode() {
 
     std::cout << std::left
               << std::setw(5) << "Thr"
+              << std::setw(5) << "Load"
               << std::setw(15) << "terminals/s"
               << std::setw(15) << "queries/s"
-              << std::setw(20) << "NewOrder OK/s"
               << std::setw(20) << "NewOrder Fail/s"
               << std::setw(20) << "inflight queue"
-              << std::setw(20) << "ready terminals"
-              << std::setw(20) << "ready queries"
+              << std::setw(20) << "wait p50, ms"
+              << std::setw(20) << "wait p90, ms"
               << std::endl;
 
-    std::cout << std::string(128, '-') << std::endl;
+    std::cout << std::string(135, '-') << std::endl;
 
     for (size_t i = 0; i < LastStatisticsSnapshot->StatVec.size(); ++i) {
         const auto& stats = LastStatisticsSnapshot->StatVec[i];
+        double load = LastStatisticsSnapshot->StatVec[i].ExecutingTime / LastStatisticsSnapshot->StatVec[i].TotalTime;
         std::cout << std::left
                   << std::setw(5) << i
+                  << std::setw(5) << std::setprecision(2) << load
                   << std::setw(15) << std::fixed << stats.TerminalsPerSecond
                   << std::setw(15) << std::fixed << stats.QueriesPerSecond
-                  << std::setw(20) << std::fixed << std::setprecision(2) << stats.NewOrderOkPerSecond
                   << std::setw(20) << std::fixed << std::setprecision(2) << stats.NewOrderFailPerSecond
                   << std::setw(20) << stats.TaskThreadStats->InternalTasksWaitingInflight
-                  << std::setw(20) << stats.TaskThreadStats->InternalTasksReady
-                  << std::setw(20) << stats.TaskThreadStats->ExternalTasksReady
+                  << std::setw(20) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(50)
+                  << std::setw(20) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90)
                   << std::endl;
     }
 

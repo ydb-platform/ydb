@@ -18,12 +18,15 @@ NKikimr::TConclusionStatus TMetadataFromStore::DoFillMetadata(const NColumnShard
     THashSet<TInternalPathId> pathIds;
     AFL_VERIFY(read.PKRangesFilter);
     for (auto&& filter : *read.PKRangesFilter) {
-        const auto fromPathId = TInternalPathId::FromRawValue(*filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1));
-        const auto toPathId = TInternalPathId::FromRawValue(*filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>()));
-        auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
-        for (auto&& pathInfo : pathInfos) {
+        const auto fromPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1));
+        const auto toPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>()));
+        const auto& internalPathIds = shard->GetTablesManager().ResolveInternalPathIds(fromPathId, toPathId);
+        auto pathInfos = logsIndex->GetTables(internalPathIds);
+        for (auto&& pathInfo : pathInfos) { //TODO fixme
+            const auto& internalPathId = pathInfo->GetPathId();
+            const auto& schemShardLocalPathId = shard->GetTablesManager().GetTables().at(internalPathId).GetSchemeShardLocalPathId();
             if (pathIds.emplace(pathInfo->GetPathId()).second) {
-                metadata->IndexGranules.emplace_back(BuildGranuleView(*pathInfo, metadata->IsDescSorted(), metadata->GetRequestSnapshot()));
+                metadata->IndexGranules.emplace_back(BuildGranuleView(*pathInfo, schemShardLocalPathId, metadata->IsDescSorted(), metadata->GetRequestSnapshot()));
             }
         }
     }
@@ -45,14 +48,15 @@ NKikimr::TConclusionStatus TMetadataFromTable::DoFillMetadata(const NColumnShard
     }
     AFL_VERIFY(read.PKRangesFilter);
     for (auto&& filter : *read.PKRangesFilter) {
-        const auto fromPathId = TInternalPathId::FromRawValue(*filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1));
-        const auto toPathId = TInternalPathId::FromRawValue(*filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>()));
-        if (fromPathId <= read.PathId && read.PathId <= toPathId) {
+        const auto fromPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1));
+        const auto toPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>()));
+        const auto readPathId = shard->GetTablesManager().GetTables().at(read.PathId).GetSchemeShardLocalPathId(); //todo fixme
+        if (fromPathId.GetRawValue() <= readPathId.GetRawValue() && readPathId.GetRawValue() < toPathId.GetRawValue()) {
             auto pathInfo = logsIndex->GetGranuleOptional(read.PathId);
             if (!pathInfo) {
                 continue;
             }
-            metadata->IndexGranules.emplace_back(BuildGranuleView(*pathInfo, metadata->IsDescSorted(), metadata->GetRequestSnapshot()));
+            metadata->IndexGranules.emplace_back(BuildGranuleView(*pathInfo, readPathId, metadata->IsDescSorted(), metadata->GetRequestSnapshot()));
             break;
         }
     }

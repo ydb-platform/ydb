@@ -170,13 +170,22 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     // For now, we don't have more than 32 network threads (check TYdbCommand::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
     const size_t driverCount = Config.DriverCount == 0 ? threadCount : Config.DriverCount;
+
+    const size_t maxSessionsPerClient = (Config.MaxInflight + driverCount - 1) / driverCount;
+    NQuery::TSessionPoolSettings sessionPoolSettings;
+    sessionPoolSettings.MaxActiveSessions(maxSessionsPerClient);
+    sessionPoolSettings.MinPoolSize(maxSessionsPerClient);
+
+    NQuery::TClientSettings clientSettings;
+    clientSettings.SessionPoolSettings(sessionPoolSettings);
+
     std::vector<TDriver> drivers;
     drivers.reserve(driverCount);
     std::vector<std::shared_ptr<NQuery::TQueryClient>> clients;
     clients.reserve(driverCount);
     for (size_t i = 0; i < driverCount; ++i) {
         auto& driver = drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
-        clients.emplace_back(std::make_shared<NQuery::TQueryClient>(driver));
+        clients.emplace_back(std::make_shared<NQuery::TQueryClient>(driver, clientSettings));
     }
 
     StatsVec.reserve(threadCount);
@@ -195,7 +204,8 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         Log);
 
     LOG_I("Creating " << terminalsCount << " terminals and " << threadCount
-        << " workers on " << cpuCount << " cpus");
+        << " workers on " << cpuCount << " cpus, " << driverCount << " query clients with at most "
+        << maxSessionsPerClient << " sessions per client");
 
     Terminals.reserve(terminalsCount);
     for (size_t i = 0; i < terminalsCount; ++i) {

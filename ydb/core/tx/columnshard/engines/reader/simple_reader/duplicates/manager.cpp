@@ -9,7 +9,9 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& /*context*/)
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
-    ev->Get()->GetSubscriber()->OnFilterReady(NArrow::TColumnFilter::BuildAllowFilter());
+    NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
+    filter.Add(true, ev->Get()->GetRecordsCount());
+    ev->Get()->GetSubscriber()->OnFilterReady(std::move(filter));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

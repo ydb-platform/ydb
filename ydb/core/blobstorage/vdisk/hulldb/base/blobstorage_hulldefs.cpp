@@ -13,6 +13,19 @@ namespace NKikimr {
          LsmHullSpaceGroup.DskSpaceCompIndex()        += current.IndexBytesKeep    - prev.IndexBytesKeep;
          LsmHullSpaceGroup.DskSpaceCompInplacedData() += current.InplacedDataKeep  - prev.InplacedDataKeep;
          LsmHullSpaceGroup.DskSpaceCompHugeData()     += current.HugeDataKeep      - prev.HugeDataKeep;
+
+         ui64 userDataBytes = current.IndexBytesTotal + current.InplacedDataTotal + current.HugeDataTotal;
+         ui64 userDataBytesAfterCompaction = current.IndexBytesKeep + current.InplacedDataKeep + current.HugeDataKeep;
+
+         auto lsmLogBytesWritten = VCtx->VDiskCounters->GetSubgroup("subsystem", "lsmhull")->GetCounter("LsmLogBytesWritten");
+         ui64 recoveryLogBytes = lsmLogBytesWritten ? lsmLogBytesWritten->Val() : 0;
+
+         auto hugeStat = VCtx->GetHugeHeapFragmentation().Get();
+         ui64 defragSavingsBytes = static_cast<ui64>(hugeStat.CanBeFreedChunks) * ChunkSize;
+
+         UserBlobSpaceGroup.UserBlobBytesStored()          = userDataBytes + recoveryLogBytes;
+         UserBlobSpaceGroup.UserBlobBytesAfterCompaction() = userDataBytesAfterCompaction;
+         UserBlobSpaceGroup.UserBlobBytesCanBeFreed()      = userDataBytes - userDataBytesAfterCompaction + defragSavingsBytes;
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -113,6 +126,7 @@ namespace NKikimr {
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")
         , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
         , LsmHullSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
+        , UserBlobSpaceGroup(VCtx->VDiskCounters, "subsystem", "userblobspace")
     {}
 
 } // NKikimr

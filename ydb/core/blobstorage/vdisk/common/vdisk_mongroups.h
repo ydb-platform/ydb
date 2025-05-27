@@ -241,6 +241,24 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TUserBlobSpaceGroup
+        // Metrics for user blob space consumption reporting
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TUserBlobSpaceGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TUserBlobSpaceGroup)
+            {
+                COUNTER_INIT(UserBlobBytesStored, false);
+                COUNTER_INIT(UserBlobBytesAfterCompaction, false);
+                COUNTER_INIT(UserBlobBytesCanBeFreed, false);
+            }
+
+            COUNTER_DEF(UserBlobBytesStored);
+            COUNTER_DEF(UserBlobBytesAfterCompaction);
+            COUNTER_DEF(UserBlobBytesCanBeFreed);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TSyncerGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TSyncerGroup : public TBase {

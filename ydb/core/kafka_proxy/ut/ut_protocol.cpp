@@ -1072,17 +1072,24 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                 for (const auto& partition : topic.Partitions) {
                     if (topic.Name.value() == firstTopicName) {
-                        if (partition.PartitionIndex == 0) {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                        } else if (partition.PartitionIndex == 1) {
+                        // in first topic
+                        if (partition.PartitionIndex == 0 || partition.PartitionIndex == 1) {
+                            // check that if a partition has a non-zero committed offset (that doesn't exceed endoffset) and committed metadata
+                            // or a zero committed offset and metadata
+                            // than no error is thrown and metadata is updated
                             UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                         } else {
+                            // check that otherwise, if the committed offset exceeds current endoffset of the partition
+                            // than an error is returned and passed committed metadata is not saved
                             UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
                         }
                     } else {
                         if (partition.PartitionIndex == 1) {
+                            // nothing was produced in the second topic
+                            // check that if a zero offset is committed no error occurs and committed metadata is saved
                             UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                         } else {
+                            // otherwise, an error occurs, because committed offset exceeds endoffset
                             UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::OFFSET_OUT_OF_RANGE));
                         }
                     }
@@ -1104,10 +1111,16 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 5);
             UNIT_ASSERT_VALUES_EQUAL(partition0->Metadata, commitedMetaData);
             int i = 0;
+            // checking committed metadata for the first topic
             for (auto it = partitions.begin(); it != partitions.end(); it++) {
                 if (i != 2) {
+                    // for i == 0 and i == 1 check that committed metadata == "additional-info" as committed offset didn't exceed endoffset
+                    // for other i != 2 values check that committed metadata is empty as no metadata was committed
+                    // that a new value of metadata is saved
                     UNIT_ASSERT_VALUES_EQUAL(it->Metadata, partitionsAndOffsets[i].Metadata);
                 } else {
+                    // check that in case an error has occurred (because committed offset exceeded endoffset)
+                    // committed metadata is not saved
                     UNIT_ASSERT_VALUES_EQUAL(it->Metadata, std::nullopt);
                 }
                 i += 1;

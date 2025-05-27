@@ -95,7 +95,7 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
     Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
 
     if (!userInfo) {
-        Create(ctx, user, 0, false, session, 0, gen, step, static_cast<i64>(offset), 0, TInstant::Zero(), {}, false, "");
+        Create(ctx, user, 0, false, session, 0, gen, step, static_cast<i64>(offset), 0, TInstant::Zero(), {}, false);
     } else {
         userInfo->Session = session;
         userInfo->Generation = gen;

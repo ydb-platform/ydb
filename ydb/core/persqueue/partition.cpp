@@ -785,7 +785,6 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
             auto read = clientInfo->MutableReadPosition();
             read->SetOffset(readOffset);
-            // метадата?
             read->SetWriteTimestamp(snapshot.LastReadMessage.WriteTimestamp.MilliSeconds());
             read->SetCreateTimestamp(snapshot.LastReadMessage.CreateTimestamp.MilliSeconds());
             read->SetSize(GetSizeLag(readOffset));
@@ -3131,7 +3130,6 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
 
     if (!act.SessionId.empty() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && (i64)act.Offset <= userInfo.Offset) { //this is stale request, answer ok for it
         ScheduleReplyOk(act.Cookie);
-        // мб тут?
         return;
     }
 
@@ -3217,7 +3215,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
         userInfo.AnyCommits = false;
-        // userInfo.CommittedMetadata = "";
 
         PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << " drop done"
@@ -3234,7 +3231,6 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
         userInfo.AnyCommits = false;
-        // userInfo.CommittedMetadata = "";
 
         if (userInfo.Important) {
             userInfo.Offset = BlobEncoder.StartOffset;

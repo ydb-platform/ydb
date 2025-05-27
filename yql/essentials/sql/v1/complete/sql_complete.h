@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/sql/v1/complete/core/input.h>
+#include <yql/essentials/sql/v1/complete/core/environment.h>
 #include <yql/essentials/sql/v1/complete/name/service/name_service.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 
@@ -52,7 +53,8 @@ namespace NSQLComplete {
 
         virtual ~ISqlCompletionEngine() = default;
         virtual TCompletion Complete(TCompletionInput input) = 0; // TODO(YQL-19747): migrate YDB CLI to CompleteAsync
-        virtual NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input) = 0;
+        virtual NThreading::TFuture<TCompletion>
+        CompleteAsync(TCompletionInput input, TEnvironment env = {}) = 0;
     };
 
     using TLexerSupplier = std::function<NSQLTranslation::ILexer::TPtr(bool ansi)>;

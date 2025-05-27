@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    evaluate.cpp
     global.cpp
     use.cpp
 )

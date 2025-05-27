@@ -127,8 +127,8 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         return MakeSqlCompletionEngine(std::move(lexer), std::move(service));
     }
 
-    TVector<TCandidate> Complete(ISqlCompletionEngine::TPtr& engine, TString sharped) {
-        return engine->CompleteAsync(SharpedInput(sharped)).GetValueSync().Candidates;
+    TVector<TCandidate> Complete(ISqlCompletionEngine::TPtr& engine, TString sharped, TEnvironment env = {}) {
+        return engine->CompleteAsync(SharpedInput(sharped), std::move(env)).GetValueSync().Candidates;
     }
 
     TVector<TCandidate> CompleteTop(size_t limit, ISqlCompletionEngine::TPtr& engine, TString sharped) {
@@ -194,6 +194,41 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
         auto engine = MakeSqlCompletionEngineUT();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE "), expected);
+    }
+
+    Y_UNIT_TEST(UseClusterResultion) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "`maxim`"},
+                {ClusterName, "example"},
+                {ClusterName, "yt:saurus"},
+                {Keyword, "ANY"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(
+                Complete(
+                    engine,
+                    "USE yt:$cluster_name; SELECT * FROM ",
+                    {.Parameters = {{"cluster_name", "saurus"}}}),
+                expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {FolderName, "`.sys/`"},
+                {FolderName, "`local/`"},
+                {FolderName, "`prod/`"},
+                {FolderName, "`test/`"},
+                {ClusterName, "example"},
+                {ClusterName, "yt:saurus"},
+                {Keyword, "ANY"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(
+                Complete(
+                    engine,
+                    "USE yt:$cluster_name; SELECT * FROM ",
+                    {.Parameters = {}}),
+                expected);
+        }
     }
 
     Y_UNIT_TEST(Alter) {
@@ -981,12 +1016,17 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     }
 
     Y_UNIT_TEST(Tabbing) {
-        TString query =
-            "SELECT \n"
-            "  123467, \"Hello, {name}! 编码\"}, \n"
-            "  (1 + (5 * 1 / 0)), MIN(identifier), \n"
-            "  Bool(field), Math::Sin(var) \n"
-            "FROM `local/test/space/table` JOIN test;";
+        TString query = R"(
+USE example;
+
+SELECT
+    123467, \"Hello, {name}! 编码\"},
+    (1 + (5 * 1 / 0)), MIN(identifier),
+    Bool(field), Math::Sin(var)
+FROM `local/test/space/table` 
+JOIN yt:$cluster_name.test;
+)";
+
         query += query + ";";
         query += query + ";";
 

@@ -711,4 +711,33 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
             )proto"
         );
     }
+
+    Y_UNIT_TEST(RegexpPushdown) {
+        AssertFilter(
+            // Test REGEXP pushdown with a simple pattern matching digits
+            R"ast(
+                (Coalesce
+                    (Apply (Udf '"Re2.Grep") '"\\\\d+" (Member $row '"col_string"))
+                    (Bool '"false")
+                )
+                )ast",
+            R"proto(
+                regexp {
+                    value {
+                        column: "col_string"
+                    }
+                    pattern {
+                        typed_value {
+                            type {
+                                type_id: STRING
+                            }
+                            value {
+                                bytes_value: "\\\\d+"
+                            }
+                        }
+                    }
+                }
+            )proto"
+        );
+    }
 }

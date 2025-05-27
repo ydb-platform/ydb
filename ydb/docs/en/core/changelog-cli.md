@@ -6,21 +6,21 @@
 
 * Added the `--no-discovery` option to the root `{{ ydb-cli }}` command, allowing to skip discovery and connect to user-provided endpoint directly.
 * Added new options for workload commands:
-  * Added the `--scale` option to the [commands](./reference/ydb-cli/workload-tpch.md) `{{ ydb-cli }} workload tpch init` and `{{ ydb-cli }} workload tpcds init` to set the percentage of the benchmark's data size and workload to use, relative to full scale.
-  * Added the `--retries` option to the `{{ ydb-cli }} workload <clickbench|tpch|tpcds> run` commands to specify maximum retry count for every request.
-  * Added the `--partition-size` option to the `{{ ydb-cli }} workload <clickbench|tpcds|tpch> init` commands to set maximum partition size in megabytes for row tables.
-  * Added date range parameters (`--date-to`, `--date-from`) to the `{{ ydb-cli }} workload log run` operations to support uniform primary key distribution.
+  * Added the `--scale` option to the `{{ ydb-cli }} workload tpch init` and `{{ ydb-cli }} workload tpcds init` [commands](./reference/ydb-cli/workload-tpch.md) to set the percentage of the benchmark's data size and workload to use, relative to full scale.
+  * Added the `--retries` option to the `{{ ydb-cli }} workload <clickbench|tpch|tpcds> run` [commands](./reference/ydb-cli/workload-click-bench.md) to specify maximum retry count for every request.
+  * Added the `--partition-size` option to the `{{ ydb-cli }} workload <clickbench|tpcds|tpch> init` [commands](./reference/ydb-cli/workload-click-bench.md) to set maximum partition size in megabytes for row tables.
+  * Added date range parameters (`--date-to`, `--date-from`) to the `{{ ydb-cli }} workload log run` command to support uniform primary key distribution.
 * Enhanced backup and restore functionality:
-  * Added the `--replace` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md) to remove existing objects that match those in the backup before restoration.
-  * Improved the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md) by not saving tables with ASYNC REPLICATION and their changefeeds to local backups. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
+  * Added the `--replace` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) to remove existing objects that match those in the backup before restoration.
+  * Improved the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) by not saving tables with ASYNC REPLICATION and their changefeeds to local backups. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
 * Enhanced CLI usability:
-  * Improved help messages with better distinction between detailed and brief help.
-  * Added automatic pair insertion for brackets in interactive mode.
+  * Improved help messages with better distinction between detailed (`-hh`) and brief (`-h`) help.
+  * Added automatic pair insertion for brackets in `{{ ydb-cli }}` interactive mode.
   * Added support for files with BOM (Byte Order Mark) in the `{{ ydb-cli }} import file` [commands](./reference/ydb-cli/export-import/import-file.md).
-* **_(Requires server v25.1+)_** **_(Experimental)_** Improved latency debugging capabilities:
-  * Added the `--min-inflight` parameter to the `{{ ydb-cli }} debug latency` command to set minimum number of concurrent requests (default: 1).
-  * Added the `--percentile` option to the `{{ ydb-cli }} debug latency` command to specify custom latency percentiles.
-  * Enhanced the `{{ ydb-cli }} debug latency` output with additional GRPC ping measurements.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Improved the `{{ ydb-cli }} debug latency` command:
+  * Added the `--min-inflight` parameter to set minimum number of concurrent requests (default: 1).
+  * Added the `--percentile` option to specify custom latency percentiles.
+  * Enhanced the output with additional GRPC ping measurements.
 
 ### Bug fixes
 

@@ -115,26 +115,7 @@ class LoadSuiteBase:
         ssh_key_file = os.getenv('SSH_KEY_FILE')
         if ssh_key_file is not None:
             ssh_cmd += ['-i', ssh_key_file]
-        print(f'command: {ssh_cmd + [host, cmd]}')
         return yatest.common.execute(ssh_cmd + [host, cmd], wait=False, text=True)
-    
-    def execute_cmd(cls, host: str, cmd: str):
-        current_host = cls._execute_local('hostname')
-        try:
-            if current_host == host:
-                execution = cls._execute_local(cmd)
-            else:
-                execution = cls.__execute_ssh(host, cmd)
-            result = execution.std_out + '\n' + execution.std_err
-        except Exception as exc:
-            result = str(exc)
-        return result
-
-    def _execute_local(cls, cmd: str):
-        print(f'command: {cmd}')
-        return yatest.common.execute(cmd, wait=True, text=True )
-
-        
 
     @classmethod
     def __hide_query_text(cls, text, query_text):
@@ -357,7 +338,7 @@ class LoadSuiteBase:
             raise exc
         if result.warning_message:
             raise Exception(result.warning_message)
-    
+
     @classmethod
     def setup_class(cls) -> None:
         start_time = time()

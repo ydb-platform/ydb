@@ -537,9 +537,9 @@ class YdbCluster:
                 raise
             LOGGER.warning(f"Command timed out after {timeout} seconds: {e}")
             # Return any partial output we got
-            output = e.stdout or ""
+            output = YdbCluster._safe_decode(e.stdout)
             if e.stderr:
-                output += "\nSTDERR:\n" + e.stderr.decode('utf-8')
+                output += "\nSTDERR:\n" + YdbCluster._safe_decode(e.stderr)
             return output
             
         except subprocess.SubprocessError as e:
@@ -547,6 +547,23 @@ class YdbCluster:
                 raise
             LOGGER.error(f"Error executing local command: {e}")
             return f"Error: {str(e)}"
+
+    @staticmethod
+    def _safe_decode(data) -> str:
+        """
+        Безопасно декодирует данные в строку
+        
+        Args:
+            data: данные для декодирования (str, bytes или None)
+            
+        Returns:
+            str: декодированная строка
+        """
+        if data is None:
+            return ""
+        if isinstance(data, bytes):
+            return data.decode('utf-8', errors='replace')
+        return str(data)
 
     @staticmethod
     def execute_ssh_command(host: str, cmd: Union[str, list], raise_on_error: bool = True, timeout: Optional[float] = None, raise_on_timeout: bool = True) -> str:
@@ -600,9 +617,9 @@ class YdbCluster:
                 raise
             LOGGER.warning(f"SSH command timed out after {timeout} seconds on {host}: {e}")
             # Return any partial output we got
-            output = e.stdout or ""
+            output = YdbCluster._safe_decode(e.stdout)
             if e.stderr:
-                output += "\nSTDERR:\n" + e.stderr.decode('utf-8')
+                output += "\nSTDERR:\n" + YdbCluster._safe_decode(e.stderr)
             return output
             
         except subprocess.SubprocessError as e:

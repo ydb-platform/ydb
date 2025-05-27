@@ -93,7 +93,8 @@ class SimpleQueueBase(LoadSuiteBase):
                 allure.attach(error_msg, 'Binary deployment error', allure.attachment_type.TEXT)
                 command_error = error_msg
         with allure.step('Checking scheme state'):
-            result = node.execute_command(YdbCliHelper.get_cli_command() + ["scheme", "ls", "-lR"], raise_on_error=False)
+            cli_path = deploy_results.get(node_host, {}).get(YDB_CLI_BINARY_NAME, {})['path']
+            result = node.execute_command([cli_path,'--endpoint', f'{YdbCluster.ydb_endpoint}','--database', f'/{YdbCluster.ydb_database}', "scheme", "ls", "-lR"], raise_on_error=False)
             allure.attach(str(result), 'Scheme state', allure.attachment_type.TEXT)
             LOGGER.info(f'res:{result}')
             LOGGER.info(f'path to check:{node.host.split('.')[0]}_0')

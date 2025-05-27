@@ -51,7 +51,6 @@ public:
     TEvPollerReady* InactivityEvent = nullptr;
 
     const TActorId ListenerActorId;
-    const TActorId KafkaTxnCoordinatorActorId = NKafka::MakeTransactionsServiceID();
 
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
@@ -104,7 +103,7 @@ public:
 
     void Bootstrap() {
         Context->ConnectionId = SelfId();
-        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement;
+        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
         // if no authentication required, then we can use local database as our target
         if (!Context->RequireAuthentication) {
             Context->DatabasePath = NKikimr::AppData()->TenantName;
@@ -341,7 +340,7 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddPartitionsToTxnRequestData>& message) {
-        Send(MakeTransactionsServiceID(), new TEvKafka::TEvAddPartitionsToTxnRequest(
+        Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddPartitionsToTxnRequest(
             header->CorrelationId, 
             message,
             Context->ConnectionId,
@@ -350,7 +349,7 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddOffsetsToTxnRequestData>& message) {
-        Send(MakeTransactionsServiceID(), new TEvKafka::TEvAddOffsetsToTxnRequest(
+        Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvAddOffsetsToTxnRequest(
             header->CorrelationId, 
             message,
             Context->ConnectionId,
@@ -359,7 +358,7 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TTxnOffsetCommitRequestData>& message) {
-        Send(MakeTransactionsServiceID(), new TEvKafka::TEvTxnOffsetCommitRequest(
+        Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvTxnOffsetCommitRequest(
             header->CorrelationId, 
             message,
             Context->ConnectionId,
@@ -368,7 +367,7 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TEndTxnRequestData>& message) {
-        Send(MakeTransactionsServiceID(), new TEvKafka::TEvEndTxnRequest(
+        Send(MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvEndTxnRequest(
             header->CorrelationId, 
             message,
             Context->ConnectionId,
@@ -531,7 +530,7 @@ protected:
             return;
         }
 
-        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement;
+        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
         Context->UserToken = event->UserToken;
         Context->DatabasePath = event->DatabasePath;
         Context->AuthenticationStep = authStep;

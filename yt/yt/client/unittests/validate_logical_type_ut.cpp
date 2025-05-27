@@ -9,6 +9,8 @@
 
 namespace NYT::NTableClient {
 
+using namespace NTzTypes;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #define ERROR_ATTRS(logicalType, ysonString) \
@@ -182,6 +184,68 @@ TEST(TValidateLogicalTypeTest, TestAnyType)
     EXPECT_GOOD_TYPE(SimpleLogicalType(ESimpleLogicalValueType::Any), "[<>1]");
 }
 
+TEST(TValidateLogicalTypeTest, TestTimezoneType)
+{
+    // Simple example.
+    auto correctValue = MakeTzString<ui16>(42, "Europe/Moscow");
+    EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate>(correctValue));
+
+    // Short buffer.
+    TString shortValue = "1";
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate>(shortValue), "Not a valid timezone time");
+
+    // Wrong timezone.
+    auto wrongTimezoneValue = MakeTzString<ui16>(42, "Wrong/Timezone");
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate>(wrongTimezoneValue), "Not a valid timezone time");
+
+    // Empty timezone.
+    auto emptyTimezoneValue = MakeTzString<ui16>(42, "");
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate>(emptyTimezoneValue), "Not a valid timezone time");
+
+    // Validate max value.
+    auto maxDate = MakeTzString<ui16>(DateUpperBound - 1, "Europe/Moscow");
+    EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate>(maxDate));
+    auto maxDatetime = MakeTzString<ui32>(DatetimeUpperBound - 1, "Europe/Moscow");
+    EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDatetime>(maxDatetime));
+    auto maxTimestamp = MakeTzString<ui64>(TimestampUpperBound - 1, "Europe/Moscow");
+    EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzTimestamp>(maxTimestamp));
+    auto maxDate32 = MakeTzString<i32>(Date32UpperBound - 1, "Europe/Moscow");
+    EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate32>(maxDate32));
+    auto maxDatetime64 = MakeTzString<i64>(Datetime64UpperBound - 1, GetTzName(1));
+    EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDatetime64>(maxDatetime64));
+    auto maxTimestamp64 = MakeTzString<i64>(Timestamp64UpperBound - 1, GetTzName(1));
+    EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzTimestamp64>(maxTimestamp64));
+
+    // Validate too big value.
+    auto tooBigDate = MakeTzString<ui16>(DateUpperBound, GetTzName(1));
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate>(tooBigDate), "Not a valid timezone time");
+    auto tooBigDatetime = MakeTzString<ui32>(DatetimeUpperBound, GetTzName(1));
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDatetime>(tooBigDatetime), "Not a valid timezone time");
+    auto tooBigTimestamp = MakeTzString<ui64>(TimestampUpperBound, GetTzName(1));
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzTimestamp>(tooBigTimestamp), "Not a valid timezone time");
+    auto tooBigDate32 = MakeTzString<i32>(Date32UpperBound, GetTzName(1));
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate32>(tooBigDate32), "Not a valid timezone time");
+    auto tooBigDatetime64 = MakeTzString<i64>(Datetime64UpperBound, GetTzName(1));
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDatetime64>(tooBigDatetime64), "Not a valid timezone time");
+    auto tooBigTimestamp64 = MakeTzString<i64>(Timestamp64UpperBound, GetTzName(1));
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzTimestamp64>(tooBigTimestamp64), "Not a valid timezone time");
+
+    // Validate min value.
+    auto minDate32 = MakeTzString<i32>(Date32LowerBound, GetTzName(1));
+    EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate32>(minDate32));
+    auto minDatetime64 = MakeTzString<i64>(Datetime64LowerBound, GetTzName(1));
+    EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDatetime64>(minDatetime64));
+    auto minTimestamp64 = MakeTzString<i64>(Timestamp64LowerBound, GetTzName(1));
+    EXPECT_NO_THROW(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzTimestamp64>(minTimestamp64));
+
+    // Validate too small value.
+    auto tooSmallDate32 = MakeTzString<i32>(Date32LowerBound - 1, GetTzName(1));
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDate32>(tooSmallDate32), "Not a valid timezone time");
+    auto tooSmallDatetime64 = MakeTzString<i64>(Datetime64LowerBound - 1, GetTzName(1));
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzDatetime64>(tooSmallDatetime64), "Not a valid timezone time");
+    auto tooSmallTimestamp64 = MakeTzString<i64>(Timestamp64LowerBound - 1, GetTzName(1));
+    EXPECT_THROW_WITH_SUBSTRING(ValidateSimpleLogicalType<ESimpleLogicalValueType::TzTimestamp64>(tooSmallTimestamp64), "Not a valid timezone time");
+}
 
 TEST(TValidateLogicalTypeTest, TestJsonType)
 {

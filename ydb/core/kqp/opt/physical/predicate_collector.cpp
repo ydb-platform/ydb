@@ -9,6 +9,13 @@ namespace NKikimr::NKqp::NOpt {
 using namespace NYql;
 using namespace NYql::NNodes;
 
+THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions = {
+    {"EqualsIgnoreCase", "String.AsciiEqualsIgnoreCase"},
+    {"StartsWithIgnoreCase", "String.AsciiStartsWithIgnoreCase"},
+    {"EndsWithIgnoreCase", "String.AsciiEndsWithIgnoreCase"},
+    {"StringContainsIgnoreCase", "String.AsciiContainsIgnoreCase"}
+};
+
 namespace {
 
 bool IsSupportedPredicate(const TCoCompare& predicate) {
@@ -298,6 +305,18 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
         }
     }
 
+    if (options.PushdownSubstring) { //EnableSimpleIlikePushdown FF
+        if (IgnoreCaseSubstringMatchFunctions.contains(compare.CallableName())) {
+            const auto& right = compare.Right().Ref();
+            YQL_ENSURE(right.IsCallable("String") || right.IsCallable("Utf8"));
+            const auto pattern = right.Child(0);
+            YQL_ENSURE(pattern->IsAtom());
+            if (UTF8Detect(pattern->Content()) != ASCII) {
+                return false;
+            }
+        }
+    }
+
     return true;
 }
 
@@ -414,7 +433,7 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
         predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
         predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
-        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
+        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
     } else if (const auto maybeExists = predicate.Maybe<TCoExists>()) {
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
         predicateTree.CanBePushedApply = predicateTree.CanBePushed;

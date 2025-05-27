@@ -98,7 +98,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , SysLocks(this) {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
     SpaceWatcher = new TSpaceWatcher(this);
-    SpaceWatcherId = TActorContext::AsActorContext().Register(SpaceWatcher);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -1424,68 +1423,68 @@ class TTxAskPortionChunks: public TTransactionBase<TColumnShard> {
 private:
     using TBase = TTransactionBase<TColumnShard>;
     std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback> FetchCallback;
-    THashMap<TInternalPathId, std::vector<NOlap::TPortionInfo::TConstPtr>> PortionsByPath;
+    THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer> PortionsByPath;
     std::vector<TPortionConstructorV2> FetchedAccessors;
-    const TString Consumer;
     THashMap<NOlap::TPortionAddress, TPortionConstructorV2> Constructors;
 
 public:
     TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& fetchCallback,
-        std::vector<NOlap::TPortionInfo::TConstPtr>&& portions, const TString& consumer)
+        THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer>&& portions)
         : TBase(self)
         , FetchCallback(fetchCallback)
-        , Consumer(consumer)
-    {
-        for (auto&& i : portions) {
-            PortionsByPath[i->GetPathId()].emplace_back(i);
-        }
+        , PortionsByPath(std::move(portions)) {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
         NIceDb::TNiceDb db(txc.DB);
-        
+
         TBlobGroupSelector selector(Self->Info());
         bool reask = false;
-        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("consumer", Consumer)("event", "TTxAskPortionChunks::Execute");
+        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "TTxAskPortionChunks::Execute");
         for (auto&& i : PortionsByPath) {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", i.second.size())("path_id", i.first);
-            for (auto&& p : i.second) {
-                auto itPortionConstructor = Constructors.find(p->GetAddress());
-                if (itPortionConstructor == Constructors.end()) {
-                    TPortionConstructorV2 constructor(p);
-                    itPortionConstructor = Constructors.emplace(p->GetAddress(), std::move(constructor)).first;
-                } else if (itPortionConstructor->second.IsReady()) {
-                    continue;
-                }
-                if (!itPortionConstructor->second.HasRecords()) {
-                    auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(p->GetPathId().GetRawValue(), p->GetPortionId()).Select();
-                    if (!rowset.IsReady()) {
-                        reask = true;
-                    } else {
-                        AFL_VERIFY(!rowset.EndOfSet())("path_id", p->GetPathId())("portion_id", p->GetPortionId())(
-                            "debug", p->DebugString(true));
-                        NOlap::TColumnChunkLoadContextV2 info(rowset);
-                        itPortionConstructor->second.SetRecords(std::move(info));
+            for (auto&& c : i.second.GetConsumers()) {
+                NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", c.second.GetPortions().size());
+                for (auto&& p : c.second.GetPortions()) {
+                    auto itPortionConstructor = Constructors.find(p->GetAddress());
+                    if (itPortionConstructor == Constructors.end()) {
+                        TPortionConstructorV2 constructor(p);
+                        itPortionConstructor = Constructors.emplace(p->GetAddress(), std::move(constructor)).first;
+                    } else if (itPortionConstructor->second.IsReady()) {
+                        continue;
                     }
-                }
-                if (!itPortionConstructor->second.HasIndexes()) {
-                    if (!p->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())->GetIndexesCount()) {
-                        itPortionConstructor->second.SetIndexes({});
-                    } else {
-                        auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId().GetRawValue(), p->GetPortionId()).Select();
+                    if (!itPortionConstructor->second.HasRecords()) {
+                        auto rowset =
+                            db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(p->GetPathId().GetRawValue(), p->GetPortionId()).Select();
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else {
-                            std::vector<NOlap::TIndexChunkLoadContext> indexes;
-                            bool localReask = false;
-                            while (!localReask && !rowset.EndOfSet()) {
-                                indexes.emplace_back(NOlap::TIndexChunkLoadContext(rowset, &selector));
-                                if (!rowset.Next()) {
-                                    reask = true;
-                                    localReask = true;
+                            AFL_VERIFY(!rowset.EndOfSet())("path_id", p->GetPathId())("portion_id", p->GetPortionId())(
+                                "debug", p->DebugString(true));
+                            NOlap::TColumnChunkLoadContextV2 info(rowset);
+                            itPortionConstructor->second.SetRecords(std::move(info));
+                        }
+                    }
+                    if (!itPortionConstructor->second.HasIndexes()) {
+                        if (!p->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())->GetIndexesCount()) {
+                            itPortionConstructor->second.SetIndexes({});
+                        } else {
+                            auto rowset =
+                                db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId().GetRawValue(), p->GetPortionId()).Select();
+                            if (!rowset.IsReady()) {
+                                reask = true;
+                            } else {
+                                std::vector<NOlap::TIndexChunkLoadContext> indexes;
+                                bool localReask = false;
+                                while (!localReask && !rowset.EndOfSet()) {
+                                    indexes.emplace_back(NOlap::TIndexChunkLoadContext(rowset, &selector));
+                                    if (!rowset.Next()) {
+                                        reask = true;
+                                        localReask = true;
+                                    }
                                 }
+                                itPortionConstructor->second.SetIndexes(std::move(indexes));
                             }
-                            itPortionConstructor->second.SetIndexes(std::move(indexes));
                         }
                     }
                 }
@@ -1511,7 +1510,7 @@ public:
 };
 
 void TColumnShard::Handle(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& /*ctx*/) {
-    Execute(new TTxAskPortionChunks(this, ev->Get()->GetCallback(), std::move(ev->Get()->MutablePortions()), ev->Get()->GetConsumer()));
+    Execute(new TTxAskPortionChunks(this, ev->Get()->GetCallback(), std::move(ev->Get()->DetachPortions())));
 }
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx) {

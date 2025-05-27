@@ -164,6 +164,10 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     FillTableId(tableMeta, *tableProto.MutableId());
     tableProto.SetKind(GetPhyTableKind(tableMeta.Kind));
 
+    if (tableMeta.SysViewType) {
+        tableProto.SetSysViewType(static_cast<ui32>(*tableMeta.SysViewType));
+    }
+
     for (const auto& keyColumnName : tableMeta.KeyColumnNames) {
         auto keyColumn = tableMeta.Columns.FindPtr(keyColumnName);
         YQL_ENSURE(keyColumn);

@@ -714,8 +714,6 @@ public:
             TSession::TPtr session = GetSession(options.SessionId());
             session->EnsureInitializedSemaphore(options.Config());
 
-            TString tmpFolder = GetTablesTmpFolder(*options.Config());
-
             YQL_CLOG(INFO, ProviderYt) << "ReadOnly=" << options.ReadOnly() << ", Epoch=" << options.Epoch();
             TVector<TTableReq> tables(std::move(options.Tables()));
             if (YQL_CLOG_ACTIVE(INFO, ProviderYt)) {
@@ -737,6 +735,7 @@ public:
                 if (r.TableIndicies.empty()) {
                     r.ExecContext = MakeExecCtx(TGetTableInfoOptions(options), session, cluster, nullptr, nullptr);
                 }
+                TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster);
                 table.Table(NYql::TransformPath(tmpFolder, table.Table(), table.Anonymous(), session->UserName_));
                 r.TableIndicies.push_back(i);
             }
@@ -765,7 +764,7 @@ public:
             TSession::TPtr session = GetSession(options.SessionId());
             session->EnsureInitializedSemaphore(options.Config());
 
-            TString tmpFolder = GetTablesTmpFolder(*options.Config());
+            TString tmpFolder = GetTablesTmpFolder(*options.Config(), options.Cluster());
             TString tmpTablePath = NYql::TransformPath(tmpFolder,
                 TStringBuilder() << "tmp/" << GetGuidAsString(session->RandomProvider_->GenGuid()), true, session->UserName_);
 
@@ -1096,7 +1095,7 @@ public:
                 lambda = SerializeRuntimeNode(builder.MakeTuple(tupleNodes), builder.GetTypeEnvironment());
             }
 
-            TString tmpFolder = GetTablesTmpFolder(*options.Config());
+            TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster);
             TString tmpTablePath = NYql::TransformPath(tmpFolder,
                 TStringBuilder() << "tmp/" << GetGuidAsString(session->RandomProvider_->GenGuid()), true, session->UserName_);
 
@@ -1236,7 +1235,7 @@ public:
             }
             if (Services_.Config->GetLocalChainTest()) {
                 if (!src.empty()) {
-                    const auto& path = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), src.front().Name, true, session->UserName_);
+                    const auto& path = NYql::TransformPath(GetTablesTmpFolder(*options.Config(), src.front().Cluster), src.front().Name, true, session->UserName_);
                     const auto it = TestTables.find(path);
                     YQL_ENSURE(TestTables.cend() != it);
                     YQL_ENSURE(TestTables.emplace(dst, it->second).second);
@@ -1470,7 +1469,7 @@ public:
                 }
 
                 auto richYPath = NYT::TRichYPath(table);
-                auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), table, anon, session->UserName_);
+                auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config(), cluster), table, anon, session->UserName_);
                 auto p = entry->Snapshots.FindPtr(std::make_pair(realTableName, epoch));
                 YQL_ENSURE(p, "Table " << table << " has no snapshot");
                 richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix));
@@ -1609,13 +1608,13 @@ public:
     NThreading::TFuture<TRunResult> GetTableStat(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {
         if (TSession::TPtr session = GetSession(options.SessionId(), false)) {
             const TYtOutputOpBase opBase(node);
-            if (const auto cluster = TString{opBase.DataSink().Cluster().Value()}; auto ytServer = Clusters_->TryGetServer(cluster)) {
+            if (const auto cluster = opBase.DataSink().Cluster().StringValue(); auto ytServer = Clusters_->TryGetServer(cluster)) {
                 auto entry = session->TxCache_.GetEntry(ytServer);
                 auto execCtx = MakeExecCtx(std::move(options), session, cluster, opBase.Raw(), &ctx);
                 execCtx->SetOutput(opBase.Output());
                 YQL_ENSURE(execCtx->OutTables_.size() == 1U, "TODO: Support multi out.");
                 const auto tableName = execCtx->OutTables_.front().Name;
-                const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
+                const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), cluster);
                 const auto realTableName = NYT::AddPathPrefix(NYql::TransformPath(tmpFolder, execCtx->OutTables_.front().Name, true, session->UserName_), NYT::TConfig::Get()->Prefix);
                 auto batchGet = entry->Tx->CreateBatchRequest();
                 auto f = batchGet->Get(realTableName + "/@", TGetOptions()
@@ -1711,13 +1710,17 @@ public:
     TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) override {
         try {
             TSession::TPtr session = GetSession(options.SessionId());
-            const TString tmpFolder = GetTablesTmpFolder(*options.Config());
+            const TString cluster = options.Cluster();
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster);
 
-            auto execCtx = MakeExecCtx(std::move(options), session, options.Cluster(), nullptr, nullptr);
+            auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
             auto entry = execCtx->GetOrCreateEntry();
 
             TVector<NYT::TRichYPath> paths;
             for (const auto& pathInfo: execCtx->Options_.Paths()) {
+                YQL_ENSURE(pathInfo->Table->Cluster == cluster,
+                    "Remote tables are not supported in GetTablePartitions(): requested cluster " << pathInfo->Table->Cluster.Quote() <<
+                    ", runtime cluster: " << cluster.Quote());
                 const auto tablePath = TransformPath(tmpFolder, pathInfo->Table->Name, pathInfo->Table->IsTemp, session->UserName_);
                 NYT::TRichYPath richYtPath{NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix)};
                 if (!pathInfo->Table->IsTemp || pathInfo->Table->IsAnonymous) {
@@ -2545,14 +2548,13 @@ private:
         bool forceTransform,
         const std::unordered_map<EYtSettingType, TString>& strOpts)
     {
-        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
-        auto cluster = execCtx->Cluster_;
-        auto entry = execCtx->GetEntry();
-
         for (auto& p: src) {
-            p.Name = NYql::TransformPath(tmpFolder, p.Name, true, execCtx->Session_->UserName_);
+            p.Name = NYql::TransformPath(GetTablesTmpFolder(*execCtx->Options_.Config(), p.Cluster), p.Name, true, execCtx->Session_->UserName_);
         }
 
+        auto cluster = execCtx->Cluster_;
+        auto entry = execCtx->GetEntry();
+        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), cluster);
         auto dstPath = NYql::TransformPath(tmpFolder, dst, isAnonymous, execCtx->Session_->UserName_);
         if (execCtx->Hidden) {
             const auto origDstPath = dstPath;
@@ -2920,7 +2922,7 @@ private:
             return MakeFuture();
         }
 
-        const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
+        const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
         TVector<TString> toRemove;
         for (const auto& p : paths) {
             toRemove.push_back(NYql::TransformPath(tmpFolder, p, true, execCtx->Session_->UserName_));
@@ -3165,7 +3167,7 @@ private:
         }
 
         if (idxsToInferFromContent) {
-            TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
+            TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
             TString tmpTablePath = NYql::TransformPath(tmpFolder,
                 TStringBuilder() << "tmp/" << GetGuidAsString(execCtx->Session_->RandomProvider_->GenGuid()), true, execCtx->Session_->UserName_);
 
@@ -3607,7 +3609,7 @@ private:
         if (cluster.empty()) {
             cluster = Clusters_->GetDefaultClusterName();
         }
-        TString tmpFolder = GetTablesTmpFolder(*options.Config());
+        TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster);
         TString tmpTablePath = NYql::TransformPath(tmpFolder,
             TStringBuilder() << "tmp/" << GetGuidAsString(session->RandomProvider_->GenGuid()), true, session->UserName_);
         bool discard = options.FillSettings().Discard;
@@ -5095,7 +5097,7 @@ private:
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(fill.Content().Ref(), false);
 
-        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
+        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
         TString tmpTablePath = NYql::TransformPath(tmpFolder,
             TStringBuilder() << "tmp/" << GetGuidAsString(execCtx->Session_->RandomProvider_->GenGuid()), true, execCtx->Session_->UserName_);
 
@@ -5130,7 +5132,7 @@ private:
     }
 
     TFuture<void> DoDrop(TYtDropTable drop, const TExecContext<TRunOptions>::TPtr& execCtx) {
-        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
+        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
         auto table = drop.Table();
         bool isAnonymous = NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous);
         TString path = NYql::TransformPath(tmpFolder, table.Name().Value(), isAnonymous, execCtx->Session_->UserName_);
@@ -5146,7 +5148,7 @@ private:
     TFuture<void> DoStatOut(TYtStatOut statOut, const TExecContext<TRunOptions>::TPtr& execCtx) {
         auto input = statOut.Input();
 
-        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
+        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
 
         TString ytTable = TString{GetOutTable(input).Cast<TYtOutTable>().Name().Value()};
         ytTable = NYql::TransformPath(tmpFolder, ytTable, true, execCtx->Session_->UserName_);
@@ -5220,7 +5222,7 @@ private:
 
             auto entry = execCtx->GetOrCreateEntry();
             auto tx = entry->Tx;
-            const TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
+            const TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
             const NYT::EOptimizeForAttr tmpOptimizeFor = execCtx->Options_.Config()->OptimizeFor.Get(execCtx->Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR);
             TVector<NYT::TRichYPath> ytPaths(Reserve(execCtx->Options_.Paths().size()));
             TVector<size_t> pathMap;
@@ -5676,7 +5678,7 @@ private:
             entry = execCtx->GetOrCreateEntry();
         }
 
-        const TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
+        const TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
         execCtx->SetCacheItem({tmpTable}, {NYT::TNode::CreateMap()}, tmpFolder);
 
         TFuture<bool> future = execCtx->Config_->GetLocalChainTest()

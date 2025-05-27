@@ -4,6 +4,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/cms/cms.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
@@ -233,7 +234,11 @@ class TRestoreClient {
         ui32 dataFilesCount);
 
     TRestoreResult CheckSecretExistence(const TString& secretName);
+    TRestoreResult Drop(NScheme::ESchemeEntryType type, const TString& path, const TRestoreSettings& settings);
     TRestoreResult Restore(NScheme::ESchemeEntryType type, const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool isAlreadyExisting, bool delay);
+    TRestoreResult DropAndRestore(const TFsPath& fsPath, const TString& dbRestoreRoot, const TRestoreSettings& settings, const THashMap<TString, NScheme::ESchemeEntryType>& existingEntries);
+    TRestoreResult DropAndRestoreExternals(const TVector<NPrivate::TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources, const THashMap<TString, size_t>& externalTables, const TRestoreSettings& settings, const THashMap<TString, NScheme::ESchemeEntryType>& existingEntries);
+    TRestoreResult DropAndRestoreTablesAndDependents(const TVector<NPrivate::TFsBackupEntry>& backupEntries, const THashMap<TString, size_t>& tables, const TVector<size_t>& views, const THashMap<TString, size_t>& replications, const TString& dbRestoreRoot, const TRestoreSettings& settings, const THashMap<TString, NScheme::ESchemeEntryType>& existingEntries);
 
 public:
     explicit TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log);
@@ -252,6 +257,7 @@ private:
     NRateLimiter::TRateLimiterClient RateLimiterClient;
     NQuery::TQueryClient QueryClient;
     NCms::TCmsClient CmsClient;
+    NReplication::TReplicationClient ReplicationClient;
     std::shared_ptr<TLog> Log;
     // Used to creating child drivers with different database settings.
     TDriverConfig DriverConfig;

@@ -153,6 +153,12 @@ message TEvNodeConfigGather {
     }
 }
 
+message TStateStorageConfig {
+    optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageConfig = 1;
+    optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageBoardConfig = 2;
+    optional NKikimrConfig.TDomainsConfig.TStateStorage SchemeBoardConfig = 3;
+}
+
 // Some kind of RPC -- this event can be sent to any NW, it will forward the request to root node.
 message TEvNodeConfigInvokeOnRoot {
     message TUpdateConfig {
@@ -192,6 +198,9 @@ message TEvNodeConfigInvokeOnRoot {
         bool SchemeBoard = 5;
     }
 
+    message TGetStateStorageConfig {
+    } 
+
     message TAdvanceGeneration
     {}
 
@@ -217,6 +226,10 @@ message TEvNodeConfigInvokeOnRoot {
         string SelfAssemblyUUID = 1;
     }
 
+    message TSwitchBridgeClusterState {
+        NKikimrBridge.TClusterState NewClusterState = 1;
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -228,6 +241,9 @@ message TEvNodeConfigInvokeOnRoot {
         TFetchStorageConfig FetchStorageConfig = 8;
         TReplaceStorageConfig ReplaceStorageConfig = 9;
         TBootstrapCluster BootstrapCluster = 10;
+        TSwitchBridgeClusterState SwitchBridgeClusterState = 11;
+        TStateStorageConfig ReconfigStateStorage = 12;
+        TGetStateStorageConfig GetStateStorageConfig = 13;
     }
 }
 
@@ -265,11 +281,12 @@ message TEvNodeConfigInvokeOnRootResult {
     TScepter Scepter = 3;
 
     reserved 4, 6, 7, 8, 9;
-
+    
     oneof Response {
         TQueryConfig QueryConfig = 5;
         TFetchStorageConfig FetchStorageConfig = 10;
         TReplaceStorageConfig ReplaceStorageConfig = 11;
+        TStateStorageConfig StateStorageConfig = 12;
     }
 }
 

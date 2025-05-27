@@ -219,34 +219,41 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         return false;
     });
 
-    TNodeOnNodeOwnedMap replacements(members.size());
-    TExprNode::TListType columns, arguments;
-    columns.reserve(members.size());
-    arguments.reserve(members.size());
-    for (const auto& member : members) {
-        columns.emplace_back(member->TailPtr());
-        TString argumentName = "members_" + TString(columns.back()->Content());
-        arguments.emplace_back(ctx.NewArgument(member->Pos(), TStringBuf(argumentName)));
-        replacements.emplace(member.Get(), arguments.back());
-    }
-
-    for(const auto& pptr : parameters) {
-        TCoParameter parameter = TMaybeNode<TCoParameter>(pptr).Cast();
-        TString argumentName = "parameter_" + TString(parameter.Name().StringValue());
-        arguments.emplace_back(ctx.NewArgument(pptr->Pos(), TStringBuf(argumentName)));
-        replacements.emplace(pptr.Get(), arguments.back());
-    }
-
     // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
-    if (!columns.size()) {
+    if (!members.size()) {
         return nullptr;
     }
 
+    TNodeOnNodeOwnedMap replacements(members.size());
+    TExprNode::TListType realArgs;
+    TExprNode::TListType lambdaArgs;
+
+    for (const auto& member : members) {
+        const auto& columnName = member->TailPtr();
+        auto columnArg = Build<TKqpOlapApplyColumnArg>(ctx, member->Pos())
+            .TableRowType(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
+            .ColumnName(columnName)
+        .Done();
+
+        realArgs.push_back(columnArg.Ptr());
+        TString argumentName = "members_" + TString(columnName->Content());
+        lambdaArgs.emplace_back(ctx.NewArgument(member->Pos(), TStringBuf(argumentName)));
+        replacements.emplace(member.Get(), lambdaArgs.back());
+    }
+
+    for(const auto& pptr : parameters) {
+        realArgs.push_back(pptr);
+        const auto& parameter = TMaybeNode<TCoParameter>(pptr).Cast();
+        TString argumentName = "parameter_" + TString(parameter.Name().StringValue());
+        lambdaArgs.emplace_back(ctx.NewArgument(pptr->Pos(), TStringBuf(argumentName)));
+        replacements.emplace(pptr.Get(), lambdaArgs.back());
+    }
+
+
     return Build<TKqpOlapApply>(ctx, apply.Pos())
-        .Type(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
-        .Columns().Add(std::move(columns)).Build()
-        .Parameters().Add(std::move(parameters)).Build()
-        .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(arguments)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
+        .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(lambdaArgs)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
+        .Args().Add(std::move(realArgs)).Build()
+        .KernelName(ctx.NewAtom(apply.Pos(), ""))    
         .Done();
 }
 
@@ -458,6 +465,32 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
         return Build<TCoBool>(ctx, pos)
             .Literal().Build("false")
             .Done();
+    }
+
+    if (const auto* stringUdfFunction = IgnoreCaseSubstringMatchFunctions.FindPtr(predicate.CallableName())) {
+        const auto& leftArg = ctx.NewArgument(pos, "left");
+        const auto& rightArg = ctx.NewArgument(pos, "right");
+
+        const auto& callUdfLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {leftArg, rightArg}),
+            ctx.Builder(pos)
+                .Callable("Apply")
+                    .Callable(0, "Udf")
+                        .Atom(0, *stringUdfFunction)
+                    .Seal()
+                    .Add(1, leftArg)
+                    .Add(2, rightArg)
+                .Seal()
+            .Build()
+        );
+
+        return Build<TKqpOlapApply>(ctx, pos)
+            .Lambda(callUdfLambda)
+            .Args()
+                .Add(parameter.first)
+                .Add(parameter.second)
+            .Build()
+            .KernelName(ctx.NewAtom(pos, *stringUdfFunction))
+        .Done();
     }
 
     std::string compareOperator = "";

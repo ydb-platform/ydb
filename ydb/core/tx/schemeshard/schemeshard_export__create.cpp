@@ -73,7 +73,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         if (uid) {
             if (auto it = Self->ExportsByUid.find(uid); it != Self->ExportsByUid.end()) {
                 if (IsSameDomain(it->second, request.GetDatabaseName())) {
-                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), it->second);
+                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *it->second);
                     return Reply(std::move(response));
                 } else {
                     return Reply(
@@ -170,7 +170,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             Self->ExportsByUid[uid] = exportInfo;
         }
 
-        Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), exportInfo);
+        Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *exportInfo);
 
         Progress = true;
         return Reply(std::move(response));
@@ -408,10 +408,7 @@ private:
             return true;
         }
 
-        TString commonDestinationPrefix = exportSettings.destination_prefix();
-        if (commonDestinationPrefix.back() == '/') {
-            commonDestinationPrefix.pop_back();
-        }
+        TString commonDestinationPrefix = NBackup::NormalizeExportPrefix(exportSettings.destination_prefix());
 
         TMaybe<NBackup::TEncryptionIV> iv;
         if (exportSettings.has_encryption_settings()) {
@@ -435,28 +432,20 @@ private:
             if (exportPath.StartsWith(sourcePathRoot)) {
                 exportPath = exportPath.substr(sourcePathRoot.size() + 1); // cut all prefix + '/'
             }
+            exportPath = NBackup::NormalizeItemPath(exportPath); // Path without leading slash
             schemaMappingItem.SetSourcePath(exportPath);
 
             TString destinationPrefix;
             if (!exportItem.destination_prefix().empty()) {
                 TString& itemPrefix = *exportItem.mutable_destination_prefix();
-                if (itemPrefix[0] == '/') {
-                    destinationPrefix = itemPrefix = itemPrefix.substr(1);
-                } else {
-                    destinationPrefix = itemPrefix;
-                }
-                if (itemPrefix.back() == '/') {
-                    itemPrefix.pop_back();
-                }
+                destinationPrefix = itemPrefix = NBackup::NormalizeItemPrefix(itemPrefix);
             } else {
                 std::stringstream itemPrefix;
                 if (exportSettings.has_encryption_settings()) {
                     // Anonymize object name in export
                     itemPrefix << std::setfill('0') << std::setw(3) << std::right << itemIndex;
                 } else {
-                    TStringBuf exportPathBuf = exportPath;
-                    exportPathBuf.SkipPrefix("/");
-                    itemPrefix << exportPathBuf;
+                    itemPrefix << exportPath;
                 }
                 destinationPrefix = itemPrefix.str();
             }
@@ -487,7 +476,7 @@ private:
         }
 
         exportInfo.ExportMetadataUploader = ctx.Register(
-            CreateExportMetadataUploader(Self->SelfId(), exportInfo.Id, exportSettings, exportInfo.ExportMetadata));
+            CreateExportMetadataUploader(Self->SelfId(), exportInfo.Id, exportSettings, exportInfo.ExportMetadata, exportInfo.EnableChecksums));
         Self->RunningExportSchemeUploaders.emplace(exportInfo.ExportMetadataUploader);
         return true;
     }

@@ -1,8 +1,15 @@
 #include "mkql_buffer.h"
 
-namespace NKikimr {
+namespace NKikimr::NMiniKQL {
 
-namespace NMiniKQL {
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
+NMonitoring::TDynamicCounters::TCounterPtr TotalBytesWastedCounter;
+
+void InitializeGlobalPagedBufferCounters(::NMonitoring::TDynamicCounterPtr root) {
+    NMonitoring::TDynamicCounterPtr subGroup = root->GetSubgroup("counters", "utils")->GetSubgroup("subsystem", "mkqlalloc");
+    TotalBytesWastedCounter = subGroup->GetCounter("PagedBuffer/TotalBytesWasted");
+}
+#endif
 
 const size_t TBufferPage::PageCapacity = TBufferPage::PageAllocSize - sizeof(TBufferPage);
 
@@ -14,10 +21,16 @@ TBufferPage* TBufferPage::Allocate() {
         throw std::bad_alloc();
     }
     TBufferPage* result = ::new (ptr) TBufferPage();
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
+    TotalBytesWastedCounter->Add(result->Wasted());
+#endif
     return result;
 }
 
 void TBufferPage::Free(TBufferPage* page) {
+#if defined(PROFILE_MEMORY_ALLOCATIONS)
+    TotalBytesWastedCounter->Sub(page->Wasted());
+#endif
     free(page);
 }
 
@@ -25,8 +38,8 @@ void TPagedBuffer::AppendPage() {
     TBufferPage* page = nullptr;
     if (Tail_) {
         auto tailPage = TBufferPage::GetPage(Tail_);
-        auto next = tailPage->Next();
-        if (next) {
+        if (auto next = tailPage->Next()) {
+            // TODO: can we get here?
             page = next;
             page->Clear();
         } else {
@@ -54,6 +67,4 @@ TChunkedBuffer TPagedBuffer::AsChunkedBuffer(const TConstPtr& buffer) {
     return result;
 }
 
-} // NMiniKQL
-
-} // NKikimr
+} // namespace NKikimr::NMiniKQL

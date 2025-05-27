@@ -7,6 +7,7 @@ PY3TEST()
         test_log_scenario.py
         zip_bomb.py
     )
+    FORK_SUBTESTS()
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)

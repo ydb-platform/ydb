@@ -98,43 +98,43 @@ struct TGetTotalCheckpointsStateSizeContext : public TThrRefBase {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TFuture<TDataQueryResult> SelectGraphCoordinators(const TGenerationContextPtr& context)
-// {
-//     // TODO: use prepared queries
+TFuture<TDataQueryResult> SelectGraphCoordinators(const TGenerationContextPtr& context)
+{
+    // TODO: use prepared queries
 
-//     auto query = Sprintf(R"(
-//         --!syntax_v1
-//         PRAGMA TablePathPrefix("%s");
+    auto query = Sprintf(R"(
+        --!syntax_v1
+        PRAGMA TablePathPrefix("%s");
 
-//         SELECT *
-//         FROM %s;
-//     )", context->TablePathPrefix.c_str(), CoordinatorsSyncTable);
+        SELECT *
+        FROM %s;
+    )", context->TablePathPrefix.c_str(), CoordinatorsSyncTable);
 
-//     return context->Session.ExecuteDataQuery(
-//         query,
-//         TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-//         context->ExecDataQuerySettings);
-// }
+    return context->Session.ExecuteDataQuery(
+        query,
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+        context->ExecDataQuerySettings);
+}
 
-// TFuture<TStatus> ProcessCoordinators(
-//     const TDataQueryResult& selectResult,
-//     const TGenerationContextPtr&,
-//     const TGetCoordinatorsContextPtr& getContext)
-// {
-//     if (!selectResult.IsSuccess()) {
-//         return MakeFuture<TStatus>(selectResult);
-//     }
+TFuture<TStatus> ProcessCoordinators(
+    const TDataQueryResult& selectResult,
+    const TGenerationContextPtr&,
+    const TGetCoordinatorsContextPtr& getContext)
+{
+    if (!selectResult.IsSuccess()) {
+        return MakeFuture<TStatus>(selectResult);
+    }
 
-//     TResultSetParser parser(selectResult.GetResultSet(0));
+    TResultSetParser parser(selectResult.GetResultSet(0));
 
-//     while (parser.TryNextRow()) {
-//         getContext->Coordinators.emplace_back(
-//             *parser.ColumnParser("graph_id").GetOptionalString(),
-//             *parser.ColumnParser("generation").GetOptionalUint64());
-//     }
+    while (parser.TryNextRow()) {
+        getContext->Coordinators.emplace_back(
+            *parser.ColumnParser("graph_id").GetOptionalString(),
+            *parser.ColumnParser("generation").GetOptionalUint64());
+    }
 
-//     return MakeFuture<TStatus>(selectResult);
-// }
+    return MakeFuture<TStatus>(selectResult);
+}
 
 TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
     // TODO: use prepared query
@@ -613,7 +613,7 @@ public:
 
     TFuture<TIssues> RegisterGraphCoordinator(const TCoordinatorId& coordinator) override;
 
-    //TFuture<TGetCoordinatorsResult> GetCoordinators() override;
+    TFuture<TGetCoordinatorsResult> GetCoordinators() override;
 
     TFuture<TCreateCheckpointResult> CreateCheckpoint(
         const TCoordinatorId& coordinator,
@@ -661,6 +661,7 @@ public:
 private:
     TFuture<TCreateCheckpointResult> CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& context);
     std::optional<TInstant> GetExpireAt();
+    TFuture<TIssues> UpdateGenerationTtlImpl(const TCoordinatorId& coordinator);
 
 private:
     IEntityIdGenerator::TPtr EntityIdGenerator;
@@ -796,41 +797,41 @@ TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinator
     return StatusToIssues(future);
 }
 
-// TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoordinators() {
-//     auto getContext = MakeIntrusive<TGetCoordinatorsContext>();
+TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoordinators() {
+    auto getContext = MakeIntrusive<TGetCoordinatorsContext>();
 
-//     auto future = YdbConnection->TableClient.RetryOperation(
-//         [prefix = YdbConnection->TablePathPrefix, getContext,
-//          execDataQuerySettings = DefaultExecDataQuerySettings(),
-//          expireAt = GetExpireAt()] (TSession session) {
-//             auto generationContext = MakeIntrusive<TGenerationContext>(
-//                 session,
-//                 false,
-//                 prefix,
-//                 CoordinatorsSyncTable,
-//                 "graph_id",
-//                 "generation",
-//                 "expire_at",
-//                 "",
-//                 0UL,
-//                 expireAt,
-//                 execDataQuerySettings);
+    auto future = YdbConnection->TableClient.RetryOperation(
+        [prefix = YdbConnection->TablePathPrefix, getContext,
+         execDataQuerySettings = DefaultExecDataQuerySettings(),
+         expireAt = GetExpireAt()] (TSession session) {
+            auto generationContext = MakeIntrusive<TGenerationContext>(
+                session,
+                false,
+                prefix,
+                CoordinatorsSyncTable,
+                "graph_id",
+                "generation",
+                "expire_at",
+                "",
+                0UL,
+                expireAt,
+                execDataQuerySettings);
 
-//             auto future = SelectGraphCoordinators(generationContext);
-//             return future.Apply(
-//                 [generationContext, getContext] (const TFuture<TDataQueryResult>& future) {
-//                     return ProcessCoordinators(future.GetValue(), generationContext, getContext);
-//                 });
-//         });
+            auto future = SelectGraphCoordinators(generationContext);
+            return future.Apply(
+                [generationContext, getContext] (const TFuture<TDataQueryResult>& future) {
+                    return ProcessCoordinators(future.GetValue(), generationContext, getContext);
+                });
+        });
 
-//     return StatusToIssues(future).Apply(
-//         [getContext] (const TFuture<TIssues>& future) {
-//             auto result = TGetCoordinatorsResult(
-//                 std::move(getContext->Coordinators),
-//                 future.GetValue());
-//             return MakeFuture(result);
-//         });
-// }
+    return StatusToIssues(future).Apply(
+        [getContext] (const TFuture<TIssues>& future) {
+            auto result = TGetCoordinatorsResult(
+                std::move(getContext->Coordinators),
+                future.GetValue());
+            return MakeFuture(result);
+        });
+}
 
 TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpoint(
     const TCoordinatorId& coordinator,
@@ -924,40 +925,53 @@ TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
             return UpdateCheckpointWithCheckWrapper(future, checkpointContext);
         });
 
-    return StatusToIssues(future);
+    return StatusToIssues(future).Apply(
+        [prefix = YdbConnection->TablePathPrefix,
+         newStatus,
+         coordinator,
+         thisPtr = TIntrusivePtr(this)] (const TFuture<TIssues>& future) {
+            if (newStatus != ECheckpointStatus::Completed) {
+                return future;
+            }
+
+            NYql::TIssues issues = future.GetValue();
+            if (issues) {
+                return future;
+            }
+
+            return thisPtr->UpdateGenerationTtlImpl(coordinator);
+        });
 }
+
+TFuture<TIssues> TCheckpointStorage::UpdateGenerationTtlImpl(const TCoordinatorId& coordinator) {
+    auto future = YdbConnection->TableClient.RetryOperation(
+        [prefix = YdbConnection->TablePathPrefix,
+        coordinator,
+        execDataQuerySettings = DefaultExecDataQuerySettings(),
+        expireAt = GetExpireAt()] (TSession session) {
+
+        auto generationContext = MakeIntrusive<TGenerationContext>(
+            session,
+            false,
+            prefix,
+            CoordinatorsSyncTable,
+            "graph_id",
+            "generation",
+            "expire_at",
+            coordinator.GraphId,
+            coordinator.Generation,
+            expireAt,
+            execDataQuerySettings);
+        return UpdateGenerationTtl(generationContext);
+        });
+    return StatusToIssues(future);
+} 
 
 TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
     const TCoordinatorId& coordinator,
     const TCheckpointId& checkpointId)
 {
-    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, ECheckpointStatus::Aborted, ECheckpointStatus::Pending, 0ul);
-    auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix,
-         coordinator,
-         checkpointContext,
-         execDataQuerySettings = DefaultExecDataQuerySettings(),
-         expireAt = GetExpireAt()] (TSession session) {
-            auto generationContext = MakeIntrusive<TGenerationContext>(
-                session,
-                false,
-                prefix,
-                CoordinatorsSyncTable,
-                "graph_id",
-                "generation",
-                "expire_at",
-                coordinator.GraphId,
-                coordinator.Generation,
-                expireAt,
-                execDataQuerySettings);
-
-            checkpointContext->GenerationContext = generationContext;
-
-            auto future = CheckGeneration(generationContext);
-            return UpdateCheckpointWithCheckWrapper(future, checkpointContext);
-        });
-
-    return StatusToIssues(future);
+    return UpdateCheckpointStatus(coordinator, checkpointId, ECheckpointStatus::Aborted, ECheckpointStatus::Pending, 0ul);
 }
 
 TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckpoints(const TString& graph) {

@@ -319,6 +319,39 @@ TFuture<TStatus> CheckGeneration(const TGenerationContextPtr& context) {
     return SelectGenerationWithCheck(context);
 }
 
+TFuture<TStatus> UpdateGenerationTtl(const TGenerationContextPtr& context) {
+    auto query = Sprintf(R"(
+        --!syntax_v1
+        PRAGMA TablePathPrefix("%s");
+        DECLARE $pk AS String;
+        DECLARE $expire_at AS Optional<Timestamp>;
+
+        UPDATE %s SET %s = $expire_at WHERE %s=$pk;
+    )", context->TablePathPrefix.c_str(),
+        context->Table.c_str(),
+        context->ExpireAtColumn.c_str(),
+        context->PrimaryKeyColumn.c_str());
+
+    NYdb::TParamsBuilder params;
+    params
+        .AddParam("$pk")
+        .String(context->PrimaryKey)
+        .Build()
+        .AddParam("$expire_at")
+        .OptionalTimestamp(context->ExpireAt)
+        .Build();
+
+    return context->Session.ExecuteDataQuery(
+        query,
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+        params.Build(),
+        context->ExecDataQuerySettings).Apply(
+        [] (const TFuture<TDataQueryResult>& future) {
+            TStatus status = future.GetValue();
+            return status;
+        });
+}
+
 TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
     if (!context->Transaction || !context->Transaction->IsActive()) {
         auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "trying to rollback non-active transaction");

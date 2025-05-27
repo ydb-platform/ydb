@@ -144,6 +144,8 @@ NThreading::TFuture<NYdb::TStatus> RegisterCheckGeneration(const TGenerationCont
 // Checks that generation is equal to the one in DB
 NThreading::TFuture<NYdb::TStatus> CheckGeneration(const TGenerationContextPtr& context);
 
+NThreading::TFuture<NYdb::TStatus> UpdateGenerationTtl(const TGenerationContextPtr& context);
+
 NThreading::TFuture<NYdb::TStatus> RollbackTransaction(const TGenerationContextPtr& context);
 
 NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const NConfig::TYdbStorageConfig& config);

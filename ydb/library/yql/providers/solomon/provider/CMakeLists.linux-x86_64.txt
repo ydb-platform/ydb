@@ -54,6 +54,7 @@ target_sources(providers-solomon-provider PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_io_discovery.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_load_meta.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_logical_optimize.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_mkql_compiler.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_physical_optimize.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_provider.cpp

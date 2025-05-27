@@ -142,11 +142,13 @@ TTerminalTask TTerminal::Run() {
                         << result.GetIssues().ToOneLineString());
                 }
             }
+            TaskQueue.DecInflight();
             if (!NoSleep) {
                 LOG_T("Terminal " << Context.TerminalID << " is going to sleep for "
                     << transaction.ThinkTime.count() << "s (think time)");
                 co_await TSuspend(TaskQueue, Context.TerminalID, transaction.ThinkTime);
             }
+            continue;
         } catch (const TUserAbortedException& ex) {
             // it's OK, inc statistics and ignore
             Stats->IncUserAborted(static_cast<TTerminalStats::ETransactionType>(txIndex));
@@ -162,6 +164,8 @@ TTerminalTask TTerminal::Run() {
             LOG_E(ss.Str());
             std::quick_exit(1);
         }
+
+        // only here if exception cought
 
         TaskQueue.DecInflight();
     }

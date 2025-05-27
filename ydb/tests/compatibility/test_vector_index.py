@@ -195,7 +195,14 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
                 vector_type=vector_type,
                 distance=distance_func,
             )
-
+        self.wait_inddex_ready(
+            targets=targets,
+            vector_types=vector_types,
+            vector_type=vector_type,
+            distance=distance,
+            order=order,
+            distance_func=distance_func,
+        )
         self.select_from_index(
             target=targets[distance][distance_func], name=vector_types[vector_type], data_type=vector_type, order=order
         )

@@ -29,6 +29,7 @@ namespace {
 constexpr auto SleepMsEveryIterationMainLoop = std::chrono::milliseconds(50);
 constexpr auto DisplayUpdateInterval = std::chrono::seconds(15);
 constexpr auto GracefulShutdownTimeout = std::chrono::seconds(5);
+constexpr auto MinWarmupPerTerminal = std::chrono::milliseconds(1);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
 
@@ -246,9 +247,6 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     // we want to have even load distribution and not start terminals from first INFLIGHT warehouses,
     // then next, etc. Long warmup resolves this, but we want to have a good start even without warmup
     std::random_shuffle(Terminals.begin(), Terminals.end());
-    for (auto& terminal: Terminals) {
-        terminal->Start();
-    }
 }
 
 TPCCRunner::~TPCCRunner() {
@@ -301,20 +299,43 @@ void TPCCRunner::RunSync() {
     TaskQueue->Run();
 
     // TODO: convert to minutes when needed
-    LOG_D("Starting warmup");
+
+    // We don't want to start all terminals at the same time, because then there will be
+    // a huge queue of ready terminals, which we can't handle
+
+    int minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
+    int warmupSeconds;
+    if (Config.WarmupSeconds < minWarmupSeconds) {
+        LOG_I("Forced minimal warmup time: " << minWarmupSeconds << " seconds");
+        warmupSeconds = minWarmupSeconds;
+    } else {
+        warmupSeconds = Config.WarmupSeconds;
+    }
+
+    LOG_I("Starting warmup for " << warmupSeconds << " seconds");
 
     LastStatisticsSnapshot = std::make_unique<TAllStatistics>(StatsVec.size());
     LastStatisticsSnapshot->Ts = Clock::now();
 
     auto warmupStartTs = Clock::now();
-    auto warmupStopDeadline = warmupStartTs + std::chrono::seconds(Config.WarmupSeconds);
-    while (!StopByInterrupt.stop_requested()) {
+    auto warmupStopDeadline = warmupStartTs + std::chrono::seconds(warmupSeconds);
+
+    size_t startedTerminalId = 0;
+    for (; startedTerminalId < Terminals.size() && !StopByInterrupt.stop_requested(); ++startedTerminalId) {
         if (now >= warmupStopDeadline) {
             break;
         }
-        std::this_thread::sleep_for(SleepMsEveryIterationMainLoop);
+        Terminals[startedTerminalId]->Start();
+
+        std::this_thread::sleep_for(MinWarmupPerTerminal);
         now = Clock::now();
         UpdateDisplayIfNeeded(now);
+    }
+    ++startedTerminalId;
+
+    // start the rest of terminals
+    for (; startedTerminalId < Terminals.size() && !StopByInterrupt.stop_requested(); ++startedTerminalId) {
+        Terminals[startedTerminalId]->Start();
     }
 
     StopWarmup.store(true, std::memory_order_relaxed);

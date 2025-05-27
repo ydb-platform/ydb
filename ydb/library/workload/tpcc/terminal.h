@@ -154,6 +154,7 @@ private:
 
     TTerminalTask Task;
 
+    bool Started = false;
     bool WarmupWasStopped = false;
 };
 

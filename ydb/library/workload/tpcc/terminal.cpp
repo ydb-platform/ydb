@@ -80,7 +80,10 @@ TTerminal::TTerminal(size_t terminalID,
 }
 
 void TTerminal::Start() {
-    TaskQueue.TaskReady(Task.Handle, Context.TerminalID);
+    if (!Started) {
+        TaskQueue.TaskReadyThreadSafe(Task.Handle, Context.TerminalID);
+        Started = true;
+    }
 }
 
 TTerminalTask TTerminal::Run() {
@@ -155,7 +158,7 @@ TTerminalTask TTerminal::Run() {
             LOG_T("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction aborted by user");
         } catch (const yexception& ex) {
             TStringStream ss;
-            ss << "Terminal " << Context.TerminalID << " got exception while transaction execution: "
+            ss << "Terminal " << Context.TerminalID << " got exception while " << transaction.Name << " execution: "
                 << ex.what();
             const auto* backtrace = ex.BackTrace();
             if (backtrace) {

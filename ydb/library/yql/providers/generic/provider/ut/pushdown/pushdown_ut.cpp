@@ -246,7 +246,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
         TypesCtx = MakeIntrusive<TTypeAnnotationContext>();
         TypesCtx->RandomProvider = CreateDeterministicRandomProvider(1);
 
-        auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
+        auto functionRegistry = CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {})->Clone();
         NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
         FunctionRegistry = std::move(functionRegistry);
 

@@ -119,28 +119,6 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         return mainTabletIds;
     }
 
-    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
-            const TString& table, const TVector<TString>& pk, const TVector<TString>& columns)
-    {
-        TStringBuilder keyFmt;
-        for (const auto& k : pk) {
-            keyFmt << "'('" << k << " (Null) (Void)) ";
-        }
-        const auto columnsFmt = "'" + JoinSeq(" '", columns);
-
-        NKikimrMiniKQL::TResult result;
-        TString error;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"((
-            (let range '(%s))
-            (let columns '(%s))
-            (let result (SelectRange '__user__%s range columns '()))
-            (return (AsList (SetResult 'Result result) ))
-        ))", keyFmt.data(), columnsFmt.data(), table.data()), result, error);
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
-
-        return result;
-    }
-
     struct TTableTraits {
         TString Path;
         TVector<TString> Key;

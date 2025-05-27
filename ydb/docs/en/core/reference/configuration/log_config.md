@@ -173,8 +173,8 @@ This configuration outputs logs in JSON format and sends them to Unified Agent.
 - If the `backend_file_name` parameter is specified, logs are written to this file. If the `sys_log` parameter is true, logs are sent to the system logger.
 - The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format, which is convenient for parsing by logging services.
 - The internal log buffer has the following size limits:
-  - Default total size: 10MB (10 * 1024 * 1024 bytes)
-  - Default grain size: 64KB (1024 * 64 bytes)
+  - Default total size: 10MB (10 &ast; 1024 &ast; 1024 bytes)
+  - Default grain size: 64KB (1024 &ast; 64 bytes)
   - Maximum message size: 1KB (1024 bytes)
 
 ## See Also

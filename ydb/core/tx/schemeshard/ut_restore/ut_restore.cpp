@@ -5658,54 +5658,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        auto topic = NDescUT::TTopic(0, 2);
 
-        const auto data = GenerateTestData(
-            {
+        const auto data = GenerateTestData({
                 EPathTypePersQueueGroup,
-                R"(partitioning_settings {
-  min_active_partitions: 1
-  max_active_partitions: 1
-  auto_partitioning_settings {
-    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-    partition_write_speed {
-      stabilization_window {
-        seconds: 300
-      }
-      up_utilization_percent: 80
-      down_utilization_percent: 20
-    }
-  }
-}
-retention_period {
-  seconds: 64800
-}
-supported_codecs {
-}
-partition_write_speed_bytes_per_second: 1048576
-partition_write_burst_bytes: 1048576
-consumers {
-  name: "consumer1"
-  read_from {
-  }
-  attributes {
-    key: "_service_type"
-    value: "data-streams"
-  }
-}
-consumers {
-  name: "consumer2"
-  read_from {
-  }
-  attributes {
-    key: "_service_type"
-    value: "data-streams"
-  }
-}
-)"});
+                topic.GetPublic().DebugString()
+        });
 
         THashMap<TString, TTestDataWithScheme> bucketContent;
 
-        bucketContent.emplace("/Topic", data);
+        bucketContent.emplace(topic.GetDir(), data);
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -5713,20 +5675,17 @@ consumers {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: "/Topic"
-                destination_path: "/MyRoot/Topic"
-              }
-            }
-        )", port));
+        TestImport(runtime, ++txId, "/MyRoot", NDescUT::TImportRequest(port, {topic.GetImportRequestItem()}).GetRequest());
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Topic"), {
+        auto consumers = topic.GetConsumers();
+
+        auto describePath = DescribePath(runtime, "/MyRoot" + topic.GetRestoredDir());
+        TestDescribeResult(describePath, {
             NLs::PathExist,
+            NLs::ConsumersSize(consumers.size()),
+            NLs::ConsumerExist(consumers.at(0).name()),
+            NLs::ConsumerExist(consumers.at(1).name()),
         });
     }
 
@@ -5746,41 +5705,16 @@ consumers {
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
-              Name: "Topic"
-              TotalGroupCount: 2
-              PartitionPerTablet: 1
-              PQTabletConfig {
-                  PartitionConfig {
-                      LifetimeSeconds: 10
-                  }
-              }
-          )");
+        auto topic = NDescUT::TTopic(1, 0);
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", topic.GetScheme().DebugString());
         env.TestWaitNotification(runtime, txId);
 
-        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Topic"
-                destination_prefix: ""
-              }
-            }
-        )", port));
+        TestExport(runtime, ++txId, "/MyRoot", NDescUT::TExportRequest(port, {topic.GetExportRequestItem()}).GetRequest());
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Restored"
-              }
-            }
-        )", port));
+        TestImport(runtime, ++txId, "/MyRoot", NDescUT::TImportRequest(port, {topic.GetImportRequestItem()}).GetRequest());
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
@@ -6304,49 +6238,12 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
+        auto topic = NDescUT::TTopic(0, 2);
         ShouldSucceed({{"",
             {
                 EPathTypePersQueueGroup,
-                R"(partitioning_settings {
-  min_active_partitions: 1
-  max_active_partitions: 1
-  auto_partitioning_settings {
-    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-    partition_write_speed {
-      stabilization_window {
-        seconds: 300
-      }
-      up_utilization_percent: 80
-      down_utilization_percent: 20
-    }
-  }
-}
-retention_period {
-  seconds: 64800
-}
-supported_codecs {
-}
-partition_write_speed_bytes_per_second: 1048576
-partition_write_burst_bytes: 1048576
-consumers {
-  name: "consumer1"
-  read_from {
-  }
-  attributes {
-    key: "_service_type"
-    value: "data-streams"
-  }
-}
-consumers {
-  name: "consumer2"
-  read_from {
-  }
-  attributes {
-    key: "_service_type"
-    value: "data-streams"
-  }
-}
-)"}
+                topic.GetPublic().DebugString()
+            }
         }}, R"(
                 ImportFromS3Settings {
                     endpoint: "localhost:%d"

@@ -1,5 +1,8 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
+#include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 
@@ -65,34 +68,143 @@ struct TTypedScheme {
 
 namespace NDescUT {
 
-class TSchemeFormat : public TString {};
-class TPublicFormat : public TString {};
+template <typename TSchemeProto>
+class TSchemeDescriber {
+public:
+    const TSchemeProto& GetScheme() const {
+        return Scheme;
+    }
 
-struct TFormatsDesc {
-    TSchemeFormat Scheme;
-    TPublicFormat Public;
+protected:
+    TSchemeProto Scheme;
 };
 
-class IDescriber {
+template <typename TPublicProto>
+class TPublicDescriber {
 public:
-    virtual const TSchemeFormat& GetSheme() const = 0;
-    virtual const TPublicFormat& GetPublic() const = 0;
+    const TPublicProto& GetPublic() const {
+        return Public;
+    }
 
+    bool CompareWithString(const TString& str) const {
+        TPublicProto proto;
+        google::protobuf::TextFormat::ParseFromString(str, &proto);
+
+        return Public.DebugString() == proto.DebugString();
+    } 
+protected:
+    TPublicProto Public;
+};
+
+class TFileDescriber {
+public:
+    TFileDescriber(const TString& dir, const TString& name) 
+                  : Dir(dir)
+                  , Path(dir + name) {}
+
+    const TString& GetDir() const {
+        return Dir;
+    }
+
+    const TString& GetPath() const {
+        return Path;
+    }
+
+protected:
+    const TString Dir;
+    const TString Path;
+};
+
+class TPermissions : public TPublicDescriber<Ydb::Scheme::ModifyPermissionsRequest>
+                   , public TFileDescriber {
+public:
+    TPermissions(const TString& dir) : TFileDescriber(dir, "/permissions.pb") {
+        google::protobuf::TextFormat::ParseFromString(
+                                R"(actions {
+                                    change_owner: "root@builtin"
+                                })", &Public);
+    }
+};
+
+template <typename TSchemeProto, typename TPublicProto>
+class TObjectDescriber : public TSchemeDescriber<TSchemeProto>
+                       , public TPublicDescriber<TPublicProto> {
+public:
     template <typename TFormat>
     TFormat Get() const {return {};}
 
-    template <> 
-    virtual const TSchemeFormat& Get<const TSchemeFormat&>() const {
-        return GetSheme();
+    template <>
+    const TSchemeProto& Get<const TSchemeProto&>() const {
+        return this->GetScheme();
     }
 
-    template <> 
-    virtual const TPublicFormat& Get<const TPublicFormat&>() const {
-        return GetPublic();
+    template <>
+    const TPublicProto& Get<const TPublicProto&>() const {
+        return this->GetPublic();
+    }
+};
+
+template <typename TSchemeProto, typename TPublicProto>
+class TSchemeObjectDescriber : public TObjectDescriber<TSchemeProto, TPublicProto> 
+                             , public TFileDescriber {
+public:
+    TSchemeObjectDescriber(const TString& dir, const TString& name) 
+                  : TFileDescriber(dir, name)
+                  , Permissions(dir) {
+        ExportRequestItem = GetItemsFromTemp(ExportRequestItemTemp);
+        ImportRequestItem = GetItemsFromTemp(ImportRequestItemTemp);
+    }
+    
+    const TPermissions& GetPermissions() const {
+        return Permissions;
+    }
+    
+    const TString& GetExportRequestItem() const {
+        return ExportRequestItem;
     }
 
-    virtual const TFormatsDesc& GetFormatsDesc() const {
-        return FormatsDesc;
+    const TString& GetImportRequestItem() const {
+        return ImportRequestItem;
+    }
+
+    TString GetRestoredDir() const {
+        return Dir + "_restored";
+    }
+                  
+protected:
+    const TPermissions Permissions;
+    TString ExportRequestItem;
+    TString ImportRequestItem;
+
+private:
+
+    TString GetItemsFromTemp(const char* temp) {
+        return Sprintf(temp, Dir.c_str(), Dir.c_str());
+    }
+
+    const char* ExportRequestItemTemp = R"(
+        items {
+            source_path: "/MyRoot%s"
+            destination_prefix: "%s"
+        }
+    )";
+
+    const char* ImportRequestItemTemp = R"(
+        items {
+            source_prefix: "%s"
+            destination_path: "/MyRoot%s_restored"
+        }
+    )";
+};
+
+class TXxportRequest {
+public:
+    TXxportRequest(const char* type, ui16 port, const TVector<TString>& items) {
+        Request = Sprintf(RequestTemp, type, port, Reduce(items).c_str());
+    }
+
+    const TString& GetRequest() const {
+        return Request;
     }
 
     static TString Reduce(const TVector<TString>& items) {
@@ -104,56 +216,10 @@ public:
         );
     }
 
-    template <typename TProto>
-    static void CompareStringsAsProto(const TString& left, const TString& right) {
-        TProto protoLeft;
-        google::protobuf::TextFormat::ParseFromString(left, &protoLeft);
-
-        TProto protoRight;
-        google::protobuf::TextFormat::ParseFromString(right, &protoRight);
-
-        UNIT_ASSERT_STRINGS_EQUAL(protoLeft.DebugString(), protoRight.DebugString());
-    } 
-
-    virtual ~IDescriber() = default;
-
 private:
-    TFormatsDesc FormatsDesc = {};
-};
-
-class TPermissions {
-public:
-    TPermissions(const TString& dir) : Path(dir + "/permissions.pb") {}
-    const TString& GetPath() const {
-        return Path;
-    }
-
-    const TString& GetContent() const {
-        return Content;
-    }
-
-private:
-    const TString Path;
-    const TString Content = R"(actions {
-  change_owner: "root@builtin"
-}
-)";
-};
-
-class TExportRequest {
-public:
-    TExportRequest(ui16 port, const TVector<TString>& items) {
-        ExportRequest = Sprintf(ExportRequestTemp, port, IDescriber::Reduce(items).c_str());
-    }
-
-    const TString& GetRequest() const {
-        return ExportRequest;
-    }
-
-private:
-    TString ExportRequest;
-    const char* ExportRequestTemp = R"(
-        ExportToS3Settings {
+    TString Request;
+    const char* RequestTemp = R"(
+        %sSettings {
             endpoint: "localhost:%d"
             scheme: HTTP
             %s
@@ -161,150 +227,100 @@ private:
     )";
 };
 
-class TTopic : public IDescriber {
+class TExportRequest : public TXxportRequest {
+public:
+    TExportRequest(ui16 port, const TVector<TString>& items)
+                  : TXxportRequest("ExportToS3", port, items) {}
+};
+
+class TImportRequest : public TXxportRequest {
+public:
+    TImportRequest(ui16 port, const TVector<TString>& items)
+                  : TXxportRequest("ImportFromS3", port, items) {}
+};
+
+class TTopic : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription,
+                                             Ydb::Topic::CreateTopicRequest> {
 private:
-class TConsumer : public IDescriber {
+class TConsumer : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer,
+                                          Ydb::Topic::Consumer> {
 public:
     TConsumer(ui64 number, bool important = false) {
-        Scheme = {Sprintf(consumerScheme, number, important ? "true" : "false")};
-        Public = {Sprintf(consumerPublic, number, important ? "\n  important: true" : "")};
-    }
-
-    const TSchemeFormat& GetSheme() const override {
-        return Scheme;
-    }
-
-    const TPublicFormat& GetPublic() const override {
-        return Public;
+        google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerScheme, number), &Scheme);
+        google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerPublic, number), &Public);
+        Scheme.SetImportant(important);
+        if (important) 
+            Public.set_important(important);
     }
 
 private:
-    TSchemeFormat Scheme;
-    TPublicFormat Public;
-
-    const char* consumerScheme = R"(
-        Consumers {
+    const char* ConsumerScheme = R"(
         Name: "Consumer_%d"
-        Important: %s
-        }
     )";
 
-    const char* consumerPublic = R"(consumers {
-  name: "Consumer_%d"%s
-  read_from {
-  }
-  attributes {
-    key: "_service_type"
-    value: "data-streams"
-  }
-})";
+    const char* ConsumerPublic = R"(
+        name: "Consumer_%d"
+        read_from {
+        }
+        attributes {
+            key: "_service_type"
+            value: "data-streams"
+        }
+    )";
 };
 
 public:
     TTopic(ui64 number, ui64 countConsumers = 0) 
-    : Dir(Sprintf("/Topic_%d", number))
-    , Path(Dir + "/create_topic.pb")
-    , Permissions(Dir) {
+       : TSchemeObjectDescriber(Sprintf("/Topic_%d", number), "/create_topic.pb") {
+        google::protobuf::TextFormat::ParseFromString(Sprintf(TopicScheme, number), &Scheme);
+        google::protobuf::TextFormat::ParseFromString(TopicPublic, &Public);
+
         for (ui64 i = 0; i < countConsumers; ++i) {
-            Consumers.emplace_back(i, i % 2);
+            auto consumer = TConsumer(i, i % 2);
+            *Scheme.MutablePQTabletConfig()->AddConsumers() = consumer.GetScheme();
+            *Public.mutable_consumers()->Add() = consumer.GetPublic();
         }
-        Scheme = {Sprintf(topicScheme, number, GetSchemeConsumers().c_str())};
-        Public = {Sprintf(topicPublic, GetPublicConsumers().c_str())};
-        RequestItem = Sprintf(requestItem, number, number);
     }
 
-    const TSchemeFormat& GetSheme() const override {
-        return Scheme;
-    }
-
-    const TPublicFormat& GetPublic() const override {
-        return Public;
-    }
-
-    const TString& GetCreateTopicPath() const {
-        return Path;
-    }
-
-    const TString& GetDir() const {
-        return Dir;
-    }
-
-    const TPermissions& GetParmissions() const {
-        return Permissions;
-    }
-
-    const TString& GetRequestItem() const {
-        return RequestItem;
+    ::google::protobuf::RepeatedPtrField<Ydb::Topic::Consumer> GetConsumers() {
+        return Public.consumers();
     }
 
 private:
-    const TString Dir;
-    const TString Path;
-    TPermissions Permissions;
-    TSchemeFormat Scheme;
-    TPublicFormat Public;
-    TString RequestItem;
-    TVector<TConsumer> Consumers;
-
-    template <typename TFormat>
-    TFormat GetConsumers() const {
-        TFormat result;
-        for (const auto& consumer : Consumers) {
-            result += consumer.Get<TFormat>() + "\n";
-        }
-        return result;
-    }
-
-    TSchemeFormat GetSchemeConsumers() const {
-        return GetConsumers<TSchemeFormat>();
-    }
-
-    TPublicFormat GetPublicConsumers() const {
-        return GetConsumers<TPublicFormat>();
-    }
-
-    const char* topicScheme = R"(
+    const char* TopicScheme = R"(
         Name: "Topic_%d"
         TotalGroupCount: 2
         PartitionPerTablet: 1
         PQTabletConfig {
-        PartitionConfig {
-            LifetimeSeconds: 10
-        }
-        %s
-        }
-    )";
-
-    const char* topicPublic = R"(partitioning_settings {
-  min_active_partitions: 2
-  max_active_partitions: 1
-  auto_partitioning_settings {
-    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-    partition_write_speed {
-      stabilization_window {
-        seconds: 300
-      }
-      up_utilization_percent: 80
-      down_utilization_percent: 20
-    }
-  }
-}
-retention_period {
-  seconds: 10
-}
-supported_codecs {
-}
-partition_write_speed_bytes_per_second: 50000000
-partition_write_burst_bytes: 50000000
-%s)";
-
-    const char* requestItem = R"(
-        items {
-            source_path: "/MyRoot/Topic_%d"
-            destination_prefix: "/Topic_%d"
+            PartitionConfig {
+                LifetimeSeconds: 10
+            }
         }
     )";
 
+    const char* TopicPublic = R"(
+        partitioning_settings {
+            min_active_partitions: 2
+            max_active_partitions: 1
+            auto_partitioning_settings {
+                strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                partition_write_speed {
+                    stabilization_window {
+                        seconds: 300
+                    }
+                    up_utilization_percent: 80
+                    down_utilization_percent: 20
+                }
+            }
+        }
+        retention_period {
+            seconds: 10
+        }
+        supported_codecs {
+        }
+        partition_write_speed_bytes_per_second: 50000000
+        partition_write_burst_bytes: 50000000
+    )";
 };
 
 } //NDesc

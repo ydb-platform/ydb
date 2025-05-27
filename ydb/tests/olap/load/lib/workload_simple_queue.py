@@ -4,6 +4,7 @@ import os
 import stat
 import tempfile
 import yatest
+import logging
 from .conftest import LoadSuiteBase
 from os import getenv
 from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper
@@ -12,6 +13,8 @@ from ydb.tests.olap.lib.utils import get_external_param
 from enum import Enum, auto
 
 from library.python import resource
+
+LOGGER = logging.getLogger(__name__)
 
 STRESS_BINARIES_DEPLOY_PATH = '/tmp/stress_binaries/'
 WORKLOAD_BINARY_NAME = 'simple_queue'  # Имя бинарного файла
@@ -66,20 +69,23 @@ class SimpleQueueBase(LoadSuiteBase):
                 target_path = binary_result['path']
                 cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database {YdbCluster.ydb_database} --duration {self.timeout} --mode {table_type}"
                 allure.attach(cmd, 'Command to execute', allure.attachment_type.TEXT)
-                print(f"Executing command on node {node.host} (is_local: {node.is_local})")
+                LOGGER.info(f"Executing command on node {node.host} (is_local: {node.is_local})")
                 
                 result = node.execute_command(cmd, raise_on_error=False, timeout=int(self.timeout * 1.5), raise_on_timeout=False)
-                print(f"Command execution result: {result}")
+                LOGGER.info(f"Command execution result: {result}")
                 if result is None:
-                    print("Warning: Command execution returned None")
+                    LOGGER.warning("Warning: Command execution returned None")
                 allure.attach(str(result) if result is not None else "No output", 'Command execution result', allure.attachment_type.TEXT)
-                print(f'res:{result}')
-            #Logging.info(f'res:{result}') - это положит и в allure log в логи теста
+                LOGGER.info(f'res:{result}')
+            else:
+                error_msg = f"Binary deployment failed on node {node.host}. Binary result: {binary_result}"
+                LOGGER.error(f"Error: {error_msg}")
+                allure.attach(error_msg, 'Binary deployment error', allure.attachment_type.TEXT)
         with allure.step('Checking scheme state'):
             result = node.execute_command(YdbCliHelper.get_cli_command() + ["scheme", "ls", "-lR"], raise_on_error=False)
             allure.attach(str(result), 'Scheme state', allure.attachment_type.TEXT)
-            print(f'res:{result}')
-            print(f'path to check:{node.host.split('.')[0]}_0')
+            LOGGER.info(f'res:{result}')
+            LOGGER.info(f'path to check:{node.host.split('.')[0]}_0')
                        
 
         result = YdbCliHelper.WorkloadRunResult()

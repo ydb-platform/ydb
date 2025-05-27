@@ -10,14 +10,14 @@
 {%- macro Kapts(funcName, kapts) -%}
 {%-     if kapts|length -%}
 {%-         for kapt in kapts|unique|sort %}
-    {{ funcName }}(files("$arcadia_root/{{ kapt }}"))
+    {{ funcName }}(files("$output_root/{{ kapt }}"))
 {%-         endfor -%}
 {%-     endif -%}
 {%- endmacro -%}
 
 {%- macro AddFileJars(file_jars) -%}
 {%-     for file_jar in file_jars %}
-        "$arcadia_root/{{ file_jar }}"{%- if not loop.last -%},{%- endif -%}
+        "$output_root/{{ file_jar }}"{%- if not loop.last -%},{%- endif -%}
 {%-     endfor -%}
 {%- endmacro -%}
 

@@ -2,7 +2,7 @@ items:
 - name: Аутентификация
   href: authentication.md
   items:
-  - name: Настройки кеширования результатов аутентификации
+  - name: Кеширование результатов аутентификации
     href: caching-authentication-results.md
 - name: Авторизация
   href: authorization.md

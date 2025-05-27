@@ -204,7 +204,7 @@ class YdbCluster:
         return f'http://{host}:{cls.ydb_mon_port}'
 
     @classmethod
-    def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False) -> list[YdbCluster.Node]:
+    def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False, role: Optional[YdbCluster.Node.Role] = None) -> list[YdbCluster.Node]:
         try:
             url = f'{cls._get_service_url()}/viewer/json/nodes?'
             if db_only or path is not None:
@@ -212,15 +212,20 @@ class YdbCluster:
             if path is not None:
                 url += f'&path={path}&tablets=true'
             headers = {}
-            # token = os.getenv('OLAP_YDB_OAUTH', None)
-            # if token is not None:
-            #    headers['Authorization'] = token
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
             if not isinstance(data, dict):
                 raise Exception(f'Incorrect response type: {data}')
-            return [YdbCluster.Node(n) for n in data.get('Nodes', [])]
+            
+            # Create nodes from the response
+            nodes = [YdbCluster.Node(n) for n in data.get('Nodes', [])]
+            
+            # Filter nodes by role if specified
+            if role is not None:
+                nodes = [node for node in nodes if node.role == role]
+            
+            return nodes
         except requests.HTTPError as e:
             LOGGER.error(f'{e.strerror}: {e.response.content}')
         except Exception as e:

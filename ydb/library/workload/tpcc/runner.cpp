@@ -4,6 +4,7 @@
 #include "log.h"
 #include "task_queue.h"
 #include "terminal.h"
+#include "transactions.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
@@ -356,6 +357,7 @@ void TPCCRunner::UpdateDisplayDeveloperMode() {
     }
 
     std::cout << "\nRunning terminals: " << TaskQueue->GetRunningCount();
+    std::cout << "\nRunning transactions: " << TransactionsInflight.load(std::memory_order_relaxed);
     std::cout << "\nCurrent tpmC: " << std::fixed << std::setprecision(2) << LastStatisticsSnapshot->Tpmc << std::endl;
 }
 

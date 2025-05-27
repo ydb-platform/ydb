@@ -1329,7 +1329,7 @@ public:
         }
 
         NKikimrConfig::TAppConfig appConfig;
-        NYamlConfig::ResolveAndParseYamlConfig(AppConfig.GetStartupConfigYaml(), Labels, appConfig);
+        NYamlConfig::ResolveAndParseYamlConfig(AppConfig.GetStartupConfigYaml(), {}, Labels, appConfig);
         ApplyConfigForNode(appConfig);
     }
 

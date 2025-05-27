@@ -84,8 +84,6 @@ void ResolveAndParseYamlConfig(
     TString* resolvedYamlConfig = nullptr,
     TString* resolvedJsonConfig = nullptr);
 
-void ResolveAndParseYamlConfig(const TString& mainYamlConfig, const TMap<TString, TString>& labels, NKikimrConfig::TAppConfig& appConfig);
-
 enum class EValidationResult {
     Ok,
     Warn,

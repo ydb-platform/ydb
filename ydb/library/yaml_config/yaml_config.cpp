@@ -84,27 +84,6 @@ void ResolveAndParseYamlConfig(
     NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), appConfig, true, true);
 }
 
-void ResolveAndParseYamlConfig(const TString& mainYamlConfig, const TMap<TString, TString>& labels, NKikimrConfig::TAppConfig& appConfig) {
-    TStringStream resolvedJsonConfigStream;
-    if (mainYamlConfig) {
-        auto tree = NFyaml::TDocument::Parse(mainYamlConfig);
-        TSet<NYamlConfig::TNamedLabel> namedLabels;
-        for (auto& [name, label] : labels) {
-            namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
-        }
-        auto config = NYamlConfig::Resolve(tree, namedLabels);
-        resolvedJsonConfigStream << NFyaml::TJsonEmitter(config.second);
-    }
-    else {
-        resolvedJsonConfigStream << "{}";
-    }
-
-    NJson::TJsonValue json;
-    Y_ABORT_UNLESS(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid startup config");
-
-    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), appConfig, true, true);
-}
-
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {
     if (from.HasNameserviceConfig()) {
         to.MutableNameserviceConfig()->CopyFrom(from.GetNameserviceConfig());

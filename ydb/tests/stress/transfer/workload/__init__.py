@@ -4,6 +4,7 @@ import ydb
 import time
 import unittest
 
+
 class Workload(unittest.TestCase):
     def __init__(self, endpoint, database, duration, mode):
         self.database = database
@@ -61,7 +62,7 @@ class Workload(unittest.TestCase):
                 );
             """
         )
-    
+
     def write_to_topic(self):
         finished_at = time.time() + self.duration
         self.message_count = 0
@@ -90,9 +91,9 @@ class Workload(unittest.TestCase):
 
             if last_offset + 1 == self.message_count:
                 return
-        
+
         self.assertTrue(False, f"Transfer still work after {iterations} seconds. Last offset is {last_offset}")
-    
+
     def loop(self):
         self.create_table()
         self.create_topic()
@@ -108,4 +109,3 @@ class Workload(unittest.TestCase):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.pool.stop()
         self.driver.stop()
-

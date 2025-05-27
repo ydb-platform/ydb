@@ -1,3 +1,4 @@
+* Removed `--executor` option from `ydb workload run` commands. Use always `generic`.
 * Added object names completion in interactive mode
 
 * Added `--threads` option to `ydb workload clickbench run`, `ydb workload tpch run` and `ydb workload tpcds run`. It allows to send workload queries by multiple threads.

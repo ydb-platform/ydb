@@ -87,17 +87,6 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 
     config.Opts->MutuallyExclusiveOpt(includeOpt, excludeOpt);
 
-    config.Opts->AddLongOption("executer", "Query executer type."
-            " Options: scan, generic\n"
-            "scan - use scan queries;\n"
-            "generic - use generic queries.")
-        .DefaultValue(QueryExecuterType)
-        .GetOpt().Handler1T<TStringBuf>([this](TStringBuf arg) {
-                const auto l = to_lower(TString(arg));
-                if (!TryFromString(arg, QueryExecuterType)) {
-                    throw yexception() << "Ivalid query executer type: " << arg;
-                }
-            });
     config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
 
     config.Opts->AddLongOption("global-timeout", "Global timeout for all requests")
@@ -302,16 +291,14 @@ void CollectStats(TPrettyTable& table, IOutputStream* csv, NJson::TJsonValue* js
 
 using namespace BenchmarkUtils;
 
-template <typename TClient>
-class TWorkloadCommandBenchmark::TIterationExecution: public IObjectInQueue, public TAtomicRefCount<TIterationExecution<TClient>> {
+class TWorkloadCommandBenchmark::TIterationExecution: public IObjectInQueue, public TAtomicRefCount<TIterationExecution> {
 public:
-    using TPtr = TIntrusivePtr<TIterationExecution<TClient>>;
-    TIterationExecution(const TWorkloadCommandBenchmark& owner, TClient* client, const TString& query, const TString& queryName, const TString& expected)
+    using TPtr = TIntrusivePtr<TIterationExecution>;
+    TIterationExecution(const TWorkloadCommandBenchmark& owner, const TString& query, const TString& queryName, const TString& expected)
         : QueryName(queryName)
         , Query(query)
         , Expected(expected)
         , Owner(owner)
-        , Client(client)
     {}
 
     void Process(void*) override {
@@ -325,15 +312,15 @@ public:
             return;
         }
         try {
-            if (Client) {
+            if (Owner.QueryClient) {
                 auto settings = Owner.GetBenchmarkSettings(execute);
                 if (execute) {
                     if (Owner.PlanFileName) {
                         settings.PlanFileName = TStringBuilder() << Owner.PlanFileName << "." << QueryName << "." << ToString(Iteration) << ".in_progress";
                     }
-                    Result = Execute(Query, Expected, *Client, settings);
+                    Result = Execute(Query, Expected, *Owner.QueryClient, settings);
                 } else {
-                    Result = Explain(Query, *Client, settings);
+                    Result = Explain(Query, *Owner.QueryClient, settings);
                 }
             } else {
                 Result = TQueryBenchmarkResult::Result(TQueryBenchmarkResult::TRawResults(), TDuration::Zero(), "", "", "");
@@ -390,14 +377,12 @@ public:
 
 private:
     const TWorkloadCommandBenchmark& Owner;
-    TClient* Client;
 };
 
 
-template <typename TClient>
-int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen) {
+int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& workloadGen) {
     const auto qtokens = workloadGen.GetWorkload(Type);
-    using TIterations = TVector<typename TIterationExecution<TClient>::TPtr>;
+    using TIterations = TVector<TIterationExecution::TPtr>;
     TIterations iterations;
     auto qIter = qtokens.cbegin();
     for (ui32 queryN = 0; queryN < qtokens.size() && Now() < GlobalDeadline; ++queryN, ++qIter) {
@@ -408,7 +393,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
             continue;
         }
         for (ui32 i = 0; i < IterationsCount + (PlanFileName ? 1 : 0); ++i) {
-            iterations.emplace_back(MakeIntrusive<TIterationExecution<TClient>>(*this, client, query, queryName, qInfo.ExpectedResult.c_str()));
+            iterations.emplace_back(MakeIntrusive<TIterationExecution>(*this, query, queryName, qInfo.ExpectedResult.c_str()));
         }
     }
     if (Threads > 1) {
@@ -614,12 +599,7 @@ BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkS
 }
 
 int TWorkloadCommandBenchmark::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& /*config*/) {
-    switch (QueryExecuterType) {
-    case EQueryExecutor::Scan:
-        return RunBench(TableClient.Get(), workloadGen);
-    case EQueryExecutor::Generic:
-        return RunBench(QueryClient.Get(), workloadGen);
-    }
+    return RunBench(workloadGen);
 }
 
 }

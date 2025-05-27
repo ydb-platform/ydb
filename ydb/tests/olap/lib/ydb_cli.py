@@ -182,7 +182,6 @@ class YdbCliHelper:
             cmd += [
                 '--json', self.json_path,
                 '--output', self.__query_output_path,
-                '--executer', 'generic',
                 '--include', ','.join(self.query_names),
                 '--iterations', str(self.iterations),
                 '--plan', self.__plan_path,

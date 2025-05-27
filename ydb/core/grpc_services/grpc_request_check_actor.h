@@ -67,7 +67,7 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAnd
             return {};
         }
         return {
-            {permissions, {{"gizmo_id", it->second}}}
+            {permissions, {{"folder_id", it->second}}}
         };
     } else {
         return {};

@@ -52,8 +52,6 @@ TQueryInfoList TVectorWorkloadGenerator::GetWorkload(int type) {
             return SelectScan();
         case EType::SelectIndex:
             return SelectIndex();
-        case EType::SelectPrefixIndex:
-            return SelectPrefixIndex();
         default:
             return TQueryInfoList();
     }
@@ -63,7 +61,6 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TVectorWorkloadGenerator::GetSup
     TVector<TWorkloadType> result;
     result.emplace_back(static_cast<int>(EType::SelectScan), "select-scan", "Select top-K vector using brute force scan");
     result.emplace_back(static_cast<int>(EType::SelectIndex), "select-index", "Select top-K vector using index");
-    result.emplace_back(static_cast<int>(EType::SelectPrefixIndex), "select-prefix-index", "Select top-K vector using prefix index");
     return result;
 }
 
@@ -72,11 +69,10 @@ TQueryInfoList TVectorWorkloadGenerator::SelectScan() {
 }
 
 TQueryInfoList TVectorWorkloadGenerator::SelectIndex() {
+    //TODO check, where it is prefix index
+    //SelectPrefixIndexImpl();
     return TQueryInfoList(1, SelectIndexImpl());
-}
-
-TQueryInfoList TVectorWorkloadGenerator::SelectPrefixIndex() {
-    return TQueryInfoList(1, SelectPrefixIndexImpl());
+    
 }
 
 TQueryInfo TVectorWorkloadGenerator::SelectScanImpl() {
@@ -178,13 +174,13 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     };
 
     auto addInitParam = [&]() {
-        opts.AddLongOption(0, "vector-count", "Number of vectors to init the table.")
+        opts.AddLongOption(0, "rows", "Number of vectors to init the table.")
             .Required().StoreResult(&VectorInitCount);
         opts.AddLongOption(0, "distance", "Distance/similarity function")
             .Required().StoreResult(&Distance);
         opts.AddLongOption(0, "vector-type", "Type of vectors")
             .Required().StoreResult(&VectorType);
-        opts.AddLongOption(0, "vector-dimension", "Vector dimension.")
+        opts.AddLongOption(0, "dimension", "Vector dimension.")
             .Required().StoreResult(&VectorDimension);
         opts.AddLongOption(0, "kmeans-tree-levels", "Number of levels in the kmeans tree")
             .Required().StoreResult(&KmeansTreeLevels);
@@ -214,11 +210,10 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             opts.AddLongOption(0, "max-id", "Maximum id of vector to return. Only vectors lower than 'max-id' will be scanned.")
                 .DefaultValue(10).StoreResult(&MaxId);
             break;
-        case TVectorWorkloadGenerator::EType::SelectPrefixIndex:
-            addSelectParam();
-            break;
         case TVectorWorkloadGenerator::EType::SelectIndex:
             addSelectParam();
+            opts.AddLongOption(0, "kmeans-tree-clusters", " Number of top clusters during search.")
+                .DefaultValue(1).StoreResult(&Limit);
             break;
         }
         break;

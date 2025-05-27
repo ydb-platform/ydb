@@ -41,8 +41,7 @@ public:
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
     enum class EType {
         SelectScan,
-        SelectIndex,
-        SelectPrefixIndex
+        SelectIndex
     };
 
 private:

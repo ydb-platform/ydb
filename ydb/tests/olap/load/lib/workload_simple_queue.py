@@ -73,13 +73,16 @@ class SimpleQueueBase(LoadSuiteBase):
                 target_path = binary_result['path']
                 cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database /{YdbCluster.ydb_database} --duration {self.timeout} --mode {table_type}"
                 allure.attach(cmd, 'Command to execute', allure.attachment_type.TEXT)
-                LOGGER.info(f"Executing command on node {node.host} (is_local: {node.is_local})")
+                LOGGER.info(f"Executing command on node {node.host}")
                 
                 try:
-                    result = node.execute_command(cmd, raise_on_error=True, timeout=int(self.timeout * 3), raise_on_timeout=False)
-                    LOGGER.info(f"Command executed successfully: {result}")
-                    allure.attach(str(result), 'Command execution result', allure.attachment_type.TEXT)
-                    command_result = result
+                    stdout, stderr = node.execute_command(cmd, raise_on_error=True, timeout=int(self.timeout * 3), raise_on_timeout=False)
+                    LOGGER.info(f"Command executed successfully. STDOUT: {stdout}")
+                    if stderr:
+                        LOGGER.warning(f"Command stderr: {stderr}")
+                    allure.attach(stdout, 'Command stdout', allure.attachment_type.TEXT)
+                    command_result = stdout
+                    command_error = stderr
                 except Exception as e:
                     error_msg = f"Command execution failed: {str(e)}"
                     LOGGER.error(error_msg)
@@ -94,9 +97,13 @@ class SimpleQueueBase(LoadSuiteBase):
                 command_error = error_msg
         with allure.step('Checking scheme state'):
             cli_path = deploy_results.get(node_host, {}).get(YDB_CLI_BINARY_NAME, {})['path']
-            result = node.execute_command([cli_path,'--endpoint', f'{YdbCluster.ydb_endpoint}','--database', f'/{YdbCluster.ydb_database}', "scheme", "ls", "-lR"], raise_on_error=False)
-            allure.attach(str(result), 'Scheme state', allure.attachment_type.TEXT)
-            LOGGER.info(f'res:{result}')
+            stdout, stderr = node.execute_command([cli_path,'--endpoint', f'{YdbCluster.ydb_endpoint}','--database', f'/{YdbCluster.ydb_database}', "scheme", "ls", "-lR"], raise_on_error=False)
+            allure.attach(stdout, 'Scheme state stdout', allure.attachment_type.TEXT)
+            if stderr:
+                allure.attach(stderr, 'Scheme state stderr', allure.attachment_type.TEXT)
+            LOGGER.info(f'stdout: {stdout}')
+            if stderr:
+                LOGGER.warning(f'stderr: {stderr}')
             LOGGER.info(f'path to check:{node.host.split('.')[0]}_0')
                        
 
@@ -106,11 +113,11 @@ class SimpleQueueBase(LoadSuiteBase):
         if command_result is not None:
             result.stdout = str(command_result)
             # Проверяем на наличие ошибок в выводе
-            if "error" in str(command_result).lower():
-                result.add_error(str(command_result))
+            if "error" in str(command_error).lower():
+                result.add_error(str(command_error))
             # Проверяем на наличие предупреждений
-            if "warning" in str(command_result).lower():
-                result.add_warning(str(command_result))
+            if not "warning: permanently added" in str(command_error).lower() and "warning" in str(command_error).lower():
+                result.add_warning(str(command_error))
         elif command_error is not None:
             # Добавляем ошибку выполнения команды
             result.add_error(command_error)

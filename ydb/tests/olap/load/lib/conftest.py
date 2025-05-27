@@ -12,7 +12,6 @@ from datetime import datetime
 from pytz import timezone
 from time import time
 from typing import Optional
-import subprocess
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
@@ -359,31 +358,6 @@ class LoadSuiteBase:
         if result.warning_message:
             raise Exception(result.warning_message)
     
-    def copy_file_or_dir(self, file_or_dir, target_path):
-        cls.execute_cmd(['mkdir -p %s' % self._artifacts_path])
-
-        transit_path = os.path.join(self._artifacts_path, os.path.basename(file_or_dir))
-
-        self.ssh_command(['sudo', 'rm', '-rf', target_path], raise_on_error=True)
-
-        self._run_in_subprocess(
-            ["scp"] + self._ssh_options + ['-r', file_or_dir, self._path_at_host(transit_path)], raise_on_error=True
-        )
-
-        self.ssh_command(["sudo", "mv", transit_path, target_path], raise_on_error=True)
-    
-    @staticmethod
-    def _run_in_subprocess(self, command, raise_on_error=False):
-        try:
-            ret_str = subprocess.check_output(command, stderr=subprocess.STDOUT)
-            return ret_str
-        except subprocess.CalledProcessError as e:
-            if raise_on_error:
-                raise
-            else:
-                print ("Ssh command failed with output (it was ignored) = " + e.output.decode("utf-8", errors="replace"))
-                
-
     @classmethod
     def setup_class(cls) -> None:
         start_time = time()

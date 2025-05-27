@@ -446,7 +446,10 @@ void TPCCRunner::DumpFinalStats() {
 
     if (minutesPassed >= 1) {
         size_t tpmC = size_t(totalNewOrders / minutesPassed);
+        double efficiency = 1.0 * tpmC * 100 / Config.WarehouseCount / 12.86;
+        std::cout << "warehouses: " << Config.WarehouseCount << std::endl;
         std::cout << "tpmC: " << tpmC << std::endl;
+        std::cout << "efficiency: " << std::setprecision(2) << efficiency << "%" << std::endl;
     } else {
         std::cout << "Less than minute passed, tpmC calculation skipped" << std::endl;
     }

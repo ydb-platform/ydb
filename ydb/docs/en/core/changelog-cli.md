@@ -1,5 +1,39 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.21.0
+
+### Features
+
+* Added the `--no-discovery` option to the root `{{ ydb-cli }}` command, allowing to skip discovery and connect to user-provided endpoint directly.
+* Added new options for workload commands:
+  * Added the `--scale` option to the [commands](./reference/ydb-cli/workload-tpch.md) `{{ ydb-cli }} workload tpch init` and `{{ ydb-cli }} workload tpcds init` to set the percentage of the benchmark's data size and workload to use, relative to full scale.
+  * Added the `--retries` option to the `{{ ydb-cli }} workload <clickbench|tpch|tpcds> run` commands to specify maximum retry count for every request.
+  * Added the `--partition-size` option to the `{{ ydb-cli }} workload <clickbench|tpcds|tpch> init` commands to set maximum partition size in megabytes for row tables.
+  * Added date range parameters (`--date-to`, `--date-from`) to the `{{ ydb-cli }} workload log run` operations to support uniform primary key distribution.
+* Enhanced backup and restore functionality:
+  * Added the `--replace` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md) to remove existing objects that match those in the backup before restoration.
+  * Improved the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md) by not saving tables with ASYNC REPLICATION and their changefeeds to local backups. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
+* Enhanced CLI usability:
+  * Improved help messages with better distinction between detailed and brief help.
+  * Added automatic pair insertion for brackets in interactive mode.
+  * Added support for files with BOM (Byte Order Mark) in the `{{ ydb-cli }} import file` [commands](./reference/ydb-cli/export-import/import-file.md).
+* **_(Requires server v25.1+)_** **_(Experimental)_** Improved latency debugging capabilities:
+  * Added the `--min-inflight` parameter to the `{{ ydb-cli }} debug latency` command to set minimum number of concurrent requests (default: 1).
+  * Added the `--percentile` option to the `{{ ydb-cli }} debug latency` command to specify custom latency percentiles.
+  * Enhanced the `{{ ydb-cli }} debug latency` output with additional GRPC ping measurements.
+
+### Bug fixes
+
+* Fixed the `{{ ydb-cli }} operation get` [command](./reference/ydb-cli/operation-get.md) to properly handle running operations.
+* Fixed the `{{ ydb-cli }} scheme rmdir` [command](./reference/ydb-cli/commands/dir.md#rmdir):
+  * Corrected subdomain deletion behavior.
+  * Improved ordering for external table and data source deletion.
+  * Added support for coordination nodes in recursive removal.
+* Fixed return code of the `{{ ydb-cli }} workload * run --check-canonical` command when results differ from canonical ones.
+* Fixed an issue where CLI was attempting to read parameters from stdin even without available data.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Fixed scheme error in the `{{ ydb-cli }} admin cluster dump` [command](./reference/ydb-cli/export-import/tools-dump.md#cluster) when specifying a domain database.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Fixed unauthorized error in the `{{ ydb-cli }} admin database restore` command when handling multiple database administrators in dump.
+
 ## Version 2.20.0 {#2-20-0}
 
 Released on March 5, 2025. To update to version **2.20.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
@@ -16,16 +50,16 @@ Released on March 5, 2025. To update to version **2.20.0**, select the [Download
 * Queries in the `{{ ydb-cli }} workload run` command are now executed in random order.
 * **_(Requires server v25.1+)_** Added support for [external data sources](./concepts/datamodel/external_data_source.md) and [external tables](./concepts/datamodel/external_table.md) in the `{{ ydb-cli }} tools dump` and `{{ ydb-cli }} tools restore` [commands](./reference/ydb-cli/export-import/tools-dump.md).
 * **_(Experimental)_** Added the `{{ ydb-cli }} admin node config init` command to initialize a directory with node configuration files.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster config generate` [command](/reference/ydb-cli/configs.md) to generate a dynamic configuration file from a cluster static configuration file.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin cluster config generate` [command](./reference/ydb-cli/commands/configuration/cluster/generate.md) to generate a dynamic configuration file from a cluster static configuration file.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the [command](./reference/ydb-cli/export-import/tools-dump.md#cluster) `{{ ydb-cli }} admin cluster dump` and the [command](./reference/ydb-cli/export-import/tools-restore.md#cluster) `{{ ydb-cli }} admin cluster restore` for dumping all cluster-level data. These dumps contain a list of databases with metadata, users, and groups but do not include schema objects.
 * **_(Requires server v25.1+)_** **_(Experimental)_** Added the `{{ ydb-cli }} admin database dump` and `{{ ydb-cli }} admin database restore` commands for dumping all database-level data. These dumps contain database metadata, schema objects, their data, users, and groups.
-* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `--dedicated-storage-section` and `--dedicated-cluster-section` options to the `ydb admin cluster config fetch` command, allowing cluster and storage config sections to be fetched separately.
+* **_(Requires server v25.1+)_** **_(Experimental)_** Added the `--dedicated-storage-section` and `--dedicated-cluster-section` options to the `{{ ydb-cli }} admin cluster config fetch` command, allowing cluster and storage config sections to be fetched separately.
 
 ### Bug fixes
 
 * Fixed a bug where the `{{ ydb-cli }} auth get-token` command attempted to authenticate twice: once while listing endpoints and again while executing the actual token request.
 * Fixed a bug where the `{{ ydb-cli }} import file csv` command was saving progress even if a batch upload had failed.
-* Fixed a bug where some errors could be ignored when restoring from a local backup with the `ydb tools restore` command.
+* Fixed a bug where some errors could be ignored when restoring from a local backup with the `{{ ydb-cli }} tools restore` command.
 * Fixed a memory leak in the data generator for the `{{ ydb-cli }} workload tpcds` benchmark.
 
 ## Version 2.19.0 {#2-19-0}

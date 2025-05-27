@@ -10,7 +10,10 @@ TABLE_NAME = "table"
 class TestVectorIndex(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-
+        self.table_name = TABLE_NAME
+        self.rows_count = 30
+        self.index_name = "vector_idx"
+        self.vector_dimension = 5
         yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
 
     def _get_random_vector(self, type, size):
@@ -27,7 +30,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
     def _create_index(self, vector_type, distance=None, similarity=None):
         if distance is not None:
             create_index_sql = f"""
-                ALTER TABLE {TABLE_NAME}
+                ALTER TABLE {self.table_name}
                 ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
                 ON (vec)
                 WITH (distance={distance},
@@ -39,7 +42,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
             """
         else:
             create_index_sql = f"""
-                ALTER TABLE {TABLE_NAME}
+                ALTER TABLE {self.table_name}
                 ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
                 ON (vec)
                 WITH (similarity={similarity},
@@ -72,7 +75,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
 
     def _drop_index(self):
         drop_index_sql = f"""
-            ALTER TABLE {TABLE_NAME}
+            ALTER TABLE {self.table_name}
             DROP INDEX `{self.index_name}`;
         """
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -85,7 +88,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
             values.append(f'({key}, Untag({name}([{vector}]), "{vector_type}"))')
 
         upsert_sql = f"""
-            UPSERT INTO `{TABLE_NAME}` (key, vec)
+            UPSERT INTO `{self.table_name}` (key, vec)
             VALUES {",".join(values)};
         """
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -96,7 +99,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
         select_sql = f"""
             $Target = {name}(Cast([{vector}] AS List<{data_type}>));
             SELECT key, vec, {target}(vec, $Target) as target
-            FROM {TABLE_NAME}
+            FROM {self.table_name}
             VIEW `{self.index_name}`
             ORDER BY {target}(vec, $Target) {order}
             LIMIT {self.rows_count};
@@ -111,7 +114,7 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
     def create_table(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
-                CREATE TABLE {TABLE_NAME} (
+                CREATE TABLE {self.table_name} (
                     key Int64 NOT NULL,
                     vec String NOT NULL,
                     PRIMARY KEY (key)
@@ -140,9 +143,6 @@ class TestVectorIndex(RestartToAnotherVersionFixture):
         ],
     )
     def test_vector_index(self, vector_type, distance, distance_func):
-        self.rows_count = 30
-        self.index_name = "vector_idx"
-        self.vector_dimension = 5
         vector_types = {
             "Uint8": "Knn::ToBinaryStringUint8",
             "Int8": "Knn::ToBinaryStringInt8",

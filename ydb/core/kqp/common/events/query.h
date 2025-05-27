@@ -35,6 +35,11 @@ struct TQueryRequestSettings {
         return *this;
     }
 
+    TQueryRequestSettings& SetResultSetType(const Ydb::ResultSet::Type& resultSetType) {
+        ResultSetType = resultSetType;
+        return *this;
+    }
+
     TQueryRequestSettings& SetSupportStreamTrailingResult(bool flag) {
         SupportsStreamTrailingResult = flag;
         return *this;
@@ -49,6 +54,7 @@ struct TQueryRequestSettings {
     bool KeepSession = false;
     bool UseCancelAfter = true;
     ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
+    Ydb::ResultSet::Type ResultSetType = Ydb::ResultSet::UNSPECIFIED;
     bool SupportsStreamTrailingResult = false;
 };
 
@@ -138,6 +144,10 @@ public:
 
     Ydb::Query::Syntax GetSyntax() const {
         return RequestCtx ? QuerySettings.Syntax : Record.GetRequest().GetSyntax();
+    }
+
+    Ydb::ResultSet::Type GetResultSetType() const {
+        return RequestCtx ? QuerySettings.ResultSetType : Record.GetRequest().GetResultSetType();
     }
 
     bool HasPreparedQuery() const {

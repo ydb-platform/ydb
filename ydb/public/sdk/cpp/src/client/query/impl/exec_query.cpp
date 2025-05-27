@@ -14,6 +14,7 @@
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 
 #include <library/cpp/threading/future/core/coroutine_traits.h>
+#include <ydb/public/sdk/cpp/src/library/arrow/arrow_helpers.h>
 
 namespace NYdb::inline Dev::NQuery {
 
@@ -198,20 +199,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 auto inRs = part.ExtractResultSet();
                 auto& inRsProto = TProtoAccessor::GetProto(inRs);
 
-                // TODO: Use result sets metadata
-                if (self->ResultSets_.size() <= part.GetResultSetIndex()) {
-                    self->ResultSets_.resize(part.GetResultSetIndex() + 1);
-                }
-
-                auto& resultSet = self->ResultSets_[part.GetResultSetIndex()];
-                if (resultSet.columns().empty()) {
-                    resultSet.mutable_columns()->CopyFrom(inRsProto.columns());
-                }
-
-                resultSet.mutable_rows()->Reserve(resultSet.mutable_rows()->size() + inRsProto.rows_size());
-                for (const auto& row : inRsProto.rows()) {
-                    *resultSet.mutable_rows()->Add() = row;
-                }
+                self->AddResultSet(self, inRsProto, part.GetResultSetIndex());
             }
 
             if (const auto& tx = part.GetTransaction()) {
@@ -220,6 +208,46 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
             self->Next();
         });
+    }
+
+private:
+    void AddResultSet(TPtr self, const Ydb::ResultSet& inRsProto, uint64_t resultSetIndex) {
+        // TODO: Use result sets metadata
+        if (self->ResultSets_.size() <= resultSetIndex) {
+            self->ResultSets_.resize(resultSetIndex + 1);
+        }
+
+        auto& resultSet = self->ResultSets_[resultSetIndex];
+        resultSet.set_type(inRsProto.type());
+
+        if (resultSet.columns().empty()) {
+            resultSet.mutable_columns()->CopyFrom(inRsProto.columns());
+        }
+
+        switch (resultSet.type()) {
+            case Ydb::ResultSet::MESSAGE: {
+                resultSet.mutable_rows()->Reserve(resultSet.mutable_rows()->size() + inRsProto.rows_size());
+                for (const auto& row : inRsProto.rows()) {
+                    *resultSet.mutable_rows()->Add() = row;
+                }
+                break;
+            }
+            case Ydb::ResultSet::ARROW: {
+                if (resultSet.arrow_batch_settings().schema().empty()) {
+                    const auto& protoSchema = inRsProto.arrow_batch_settings().schema();
+                    resultSet.mutable_arrow_batch_settings()->set_schema(protoSchema);
+                }
+
+                const auto& schema = resultSet.arrow_batch_settings().schema();
+                auto trySerializedBatch = NArrow::CombineSerializedBatches(resultSet.data(), inRsProto.data(), schema);
+                if (trySerializedBatch.ok()) {
+                    resultSet.set_data(*trySerializedBatch);
+                }
+                break;
+            }
+            default:
+                break;
+        }
     }
 };
 
@@ -234,6 +262,7 @@ public:
         request.set_exec_mode(::Ydb::Query::ExecMode(settings.ExecMode_));
         request.set_stats_mode(::Ydb::Query::StatsMode(settings.StatsMode_));
         request.set_pool_id(TStringType{settings.ResourcePool_});
+        request.set_result_set_type(Ydb::ResultSet::Type(settings.ResultSetType_));
         request.mutable_query_content()->set_text(TStringType{query});
         request.mutable_query_content()->set_syntax(::Ydb::Query::Syntax(settings.Syntax_));
         if (session.has_value()) {

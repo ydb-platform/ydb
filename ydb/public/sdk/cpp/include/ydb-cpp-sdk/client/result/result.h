@@ -4,6 +4,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+
 #include <string>
 
 namespace Ydb {
@@ -34,6 +36,13 @@ class TResultSet {
     friend class TResultSetParser;
     friend class NYdb::TProtoAccessor;
 public:
+    enum class EType {
+        Unspecified = 0,
+        Message = 10,
+        Arrow = 20,
+    };
+
+public:
     TResultSet(const Ydb::ResultSet& proto);
     TResultSet(Ydb::ResultSet&& proto);
 
@@ -48,6 +57,12 @@ public:
 
     //! Returns meta information (name, type) for columns
     const std::vector<TColumn>& GetColumnsMeta() const;
+
+    TResultSet::EType GetType() const;
+
+    std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const;
+    const TString& GetSerializedArrowBatch() const;
+    const TString& GetSerializedArrowBatchSchema() const;
 
 private:
     const Ydb::ResultSet& GetProto() const;
@@ -106,5 +121,7 @@ private:
 };
 
 using TResultSets = std::vector<TResultSet>;
+
+IOutputStream& operator<<(IOutputStream& out, const TResultSet::EType& type);
 
 } // namespace NYdb

@@ -37,6 +37,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic/common
     ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic
     ydb/public/sdk/cpp/src/client/proto
+    contrib/libs/apache/arrow
 )
 
 END()

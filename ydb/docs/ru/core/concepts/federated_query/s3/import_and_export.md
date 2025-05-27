@@ -35,4 +35,4 @@ WITH (
 AS SELECT * FROM external_table
 ```
 
-Колонки указанные в `PRIMARY KEY` должны быть помечены как `NOT NULL` во внешней таблице.
+Колонки, указанные в `PRIMARY KEY`, должны быть помечены как `NOT NULL` во внешней таблице.

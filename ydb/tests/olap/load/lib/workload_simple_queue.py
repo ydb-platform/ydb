@@ -63,6 +63,10 @@ class SimpleQueueBase(LoadSuiteBase):
             # Проверяем, успешно ли был развернут бинарный файл
             binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
             success = binary_result.get('success', False)
+            
+            # Инициализируем переменные для результата
+            command_result = None
+            command_error = None
 
             # Запускаем бинарный файл на ноде, если он был успешно развернут
             if success:
@@ -71,16 +75,23 @@ class SimpleQueueBase(LoadSuiteBase):
                 allure.attach(cmd, 'Command to execute', allure.attachment_type.TEXT)
                 LOGGER.info(f"Executing command on node {node.host} (is_local: {node.is_local})")
                 
-                result = node.execute_command(cmd, raise_on_error=False, timeout=int(self.timeout * 1.5), raise_on_timeout=False)
-                LOGGER.info(f"Command execution result: {result}")
-                if result is None:
-                    LOGGER.warning("Warning: Command execution returned None")
-                allure.attach(str(result) if result is not None else "No output", 'Command execution result', allure.attachment_type.TEXT)
-                LOGGER.info(f'res:{result}')
+                try:
+                    result = node.execute_command(cmd, raise_on_error=True, timeout=int(self.timeout * 1.5), raise_on_timeout=False)
+                    LOGGER.info(f"Command executed successfully: {result}")
+                    allure.attach(str(result), 'Command execution result', allure.attachment_type.TEXT)
+                    command_result = result
+                except Exception as e:
+                    error_msg = f"Command execution failed: {str(e)}"
+                    LOGGER.error(error_msg)
+                    allure.attach(error_msg, 'Command execution error', allure.attachment_type.TEXT)
+                    allure.attach(str(e), 'Exception details', allure.attachment_type.TEXT)
+                    command_error = str(e)
+                    raise  # Перебрасываем исключение, чтобы тест упал
             else:
                 error_msg = f"Binary deployment failed on node {node.host}. Binary result: {binary_result}"
                 LOGGER.error(f"Error: {error_msg}")
                 allure.attach(error_msg, 'Binary deployment error', allure.attachment_type.TEXT)
+                command_error = error_msg
         with allure.step('Checking scheme state'):
             result = node.execute_command(YdbCliHelper.get_cli_command() + ["scheme", "ls", "-lR"], raise_on_error=False)
             allure.attach(str(result), 'Scheme state', allure.attachment_type.TEXT)
@@ -91,14 +102,17 @@ class SimpleQueueBase(LoadSuiteBase):
         result = YdbCliHelper.WorkloadRunResult()
         
         # Добавляем результаты выполнения команды
-        if result is not None:
-            result.stdout = str(result)
+        if command_result is not None:
+            result.stdout = str(command_result)
             # Проверяем на наличие ошибок в выводе
-            if "error" in str(result).lower():
-                result.add_error(str(result))
+            if "error" in str(command_result).lower():
+                result.add_error(str(command_result))
             # Проверяем на наличие предупреждений
-            if "warning" in str(result).lower():
-                result.add_warning(str(result))
+            if "warning" in str(command_result).lower():
+                result.add_warning(str(command_result))
+        elif command_error is not None:
+            # Добавляем ошибку выполнения команды
+            result.add_error(command_error)
         
         # Добавляем статистику выполнения
         result.add_stat(f"SimpleQueue_{table_type}", "execution_time", self.timeout)
@@ -108,8 +122,10 @@ class SimpleQueueBase(LoadSuiteBase):
         # Добавляем информацию о выполнении в iterations
         iteration = YdbCliHelper.Iteration()
         iteration.time = self.timeout
-        if result is not None:
-            iteration.error_message = str(result) if "error" in str(result).lower() else None
+        if command_error is not None:
+            iteration.error_message = command_error
+        elif command_result is not None and "error" in str(command_result).lower():
+            iteration.error_message = str(command_result)
         result.iterations[0] = iteration
         
         self.process_query_result(result, f"SimpleQueue_{table_type}", False)

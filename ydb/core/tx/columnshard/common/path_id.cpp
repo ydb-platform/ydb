@@ -9,4 +9,3 @@ template<>
 void Out<NKikimr::NColumnShard::TSchemeShardLocalPathId>(IOutputStream& s, const NKikimr::NColumnShard::TSchemeShardLocalPathId& v) {
     s << v.GetRawValue();
 }
-

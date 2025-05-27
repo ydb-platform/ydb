@@ -98,7 +98,7 @@ std::vector<NKikimr::NColumnShard::TInternalPathId> TController::GetPathIds(cons
     for (auto&& i : ShardActuals) {
         if (i.first == tabletId) {
             const auto& index = i.second->GetIndexAs<NOlap::TColumnEngineForLogs>();
-            std::vector<std::shared_ptr<NOlap::TGranuleMeta>> granules = index.GetTables({}, {});
+            std::vector<std::shared_ptr<NOlap::TGranuleMeta>> granules = index.GetTables({});
 
             for (auto&& g : granules) {
                 result.emplace_back(g->GetPathId());

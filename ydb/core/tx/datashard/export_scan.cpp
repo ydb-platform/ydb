@@ -219,10 +219,10 @@ public:
 
     TAutoPtr<IDestructable> Finish(EStatus status, const std::exception*) override {
         auto outcome = EExportOutcome::Success;
-        if (!Success || status == EStatus::Error) {
-            outcome = EExportOutcome::Error;
-        } else if (status != EStatus::Done) {
+        if (status != EStatus::Done) {
             outcome = EExportOutcome::Aborted;
+        } else if (!Success) {
+            outcome = EExportOutcome::Error;
         }
 
         PassAway();

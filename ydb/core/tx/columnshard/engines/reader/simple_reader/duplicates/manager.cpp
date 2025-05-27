@@ -82,7 +82,7 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
     const TColumnDataSplitter& splitter = ev->Get()->GetSplitter();
     const TSnapshot maxVersion = mainSource->GetContext()->GetReadMetadata()->GetRequestSnapshot();
 
-    THashMap<ui64, std::vector<std::optional<TColumnDataSplitter::TSourceSegment>>> splitted;
+    THashMap<ui64, std::vector<TDuplicateMapInfo>> splitted;
     for (const auto& [id, data] : ev->Get()->GetColumnData()) {
         splitted[id] = splitter.SplitPortion(data, id, maxVersion);
     }
@@ -92,16 +92,16 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
         const auto& splittedMain = *TValidator::CheckNotNull(splitted.FindPtr(mainSource->GetSourceId()));
         AFL_VERIFY(splittedMain.size() == splitter.NumIntervals());
         for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
-            if (!splittedMain[i]) {
+            if (!splittedMain[i].GetRowsCount()) {
                 builtIntervals.insert(i);
-            } else if (auto* findBuilding = BuildingFilters.FindPtr(splittedMain[i]->GetInterval())) {
+            } else if (auto* findBuilding = BuildingFilters.FindPtr(splittedMain[i])) {
                 findBuilding->emplace_back(ev->Get()->GetCallback());
                 builtIntervals.insert(i);
-            } else if (auto findCached = FiltersCache.Find(splittedMain[i]->GetInterval()); findCached != FiltersCache.End()) {
+            } else if (auto findCached = FiltersCache.Find(splittedMain[i]); findCached != FiltersCache.End()) {
                 ev->Get()->GetCallback()->AddFilter(findCached.Key(), findCached.Value());
                 builtIntervals.insert(i);
             } else {
-                BuildingFilters[splittedMain[i]->GetInterval()].emplace_back(ev->Get()->GetCallback());
+                BuildingFilters[splittedMain[i]].emplace_back(ev->Get()->GetCallback());
             }
         }
     }
@@ -111,11 +111,11 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
         return;
     }
 
-    std::vector<THashMap<ui64, TColumnDataSplitter::TSourceSegment>> intervals(splitter.NumIntervals());
+    std::vector<THashMap<ui64, TDuplicateMapInfo>> intervals(splitter.NumIntervals());
     for (auto&& [source, portionIntervals] : splitted) {
         for (ui64 i = 0; i < portionIntervals.size(); ++i) {
             if (portionIntervals[i]) {
-                intervals[i].emplace(source, std::move(*portionIntervals[i]));
+                intervals[i].emplace(source, std::move(portionIntervals[i]));
             }
         }
     }
@@ -131,7 +131,7 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
         if (segments.empty() || builtIntervals.contains(i)) {
             // Do nothing
         } else if (segments.size() == 1 && maxVersion >= mainSource->GetRecordSnapshotMax()) {
-            const auto mapInfo = segments.begin()->second.GetInterval();
+            const TDuplicateMapInfo& mapInfo = segments.begin()->second;
             NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
             filter.Add(true, mapInfo.GetRowsCount());
             AFL_VERIFY(BuildingFilters.contains(mapInfo));
@@ -139,22 +139,20 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
         } else {
             THashMap<ui64, TDuplicateMapInfo> mapInfos;
             for (auto&& [source, segment] : segments) {
-                mapInfos.emplace(source, segment.GetInterval());
+                mapInfos.emplace(source, segment);
             }
-            const std::shared_ptr<TBuildDuplicateFilters> task =
-                std::make_shared<TBuildDuplicateFilters>(mainSource->GetContext()->GetReadMetadata()->GetReplaceKey(),
-                    IIndexInfo::GetSnapshotColumnNames(), mainSource->GetContext()->GetCommonContext()->GetCounters(), maxVersionBatch,
-                    std::make_unique<TFilterResultSubscriber>(SelfId(), std::move(mapInfos)));
+            const TColumnDataSplitter::TBorder& border = splitter.GetIntervalFinish(i);
+            const std::shared_ptr<TBuildDuplicateFilters> task = std::make_shared<TBuildDuplicateFilters>(mainSource->GetContext(),
+                maxVersionBatch, border.GetKey(), border.GetIsLast(), std::make_unique<TFilterResultSubscriber>(SelfId(), std::move(mapInfos)));
             for (auto&& [source, segment] : segments) {
-                task->AddSource(std::make_shared<NArrow::TGeneralContainer>(segment.ExtractData()),
-                    std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()), source);
-                Y_UNUSED(BuildingFilters.emplace(segment.GetInterval(), std::vector<std::shared_ptr<TInternalFilterConstructor>>()).second);
+                const auto* columnData = ev->Get()->GetColumnData().FindPtr(source);
+                AFL_VERIFY(columnData)("source", source);
+                task->AddSource(*columnData, segment.GetOffset(), source);
+                Y_UNUSED(BuildingFilters.emplace(segment, std::vector<std::shared_ptr<TInternalFilterConstructor>>()).second);
             }
             NConveyor::TScanServiceOperator::SendTaskToExecute(task, mainSource->GetContext()->GetCommonContext()->GetConveyorProcessId());
         }
     }
-
-    // FIXME: mem guard lost
 }
 
 void TDuplicateFilterConstructor::Handle(const TEvFiltersConstructed::TPtr& ev) {

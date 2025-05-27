@@ -59,7 +59,7 @@ public:
     }
 
     ui64 GetRawSize() const {
-        return Memory->GetMemory();
+        return MemoryGuard->GetMemory();
     }
 };
 

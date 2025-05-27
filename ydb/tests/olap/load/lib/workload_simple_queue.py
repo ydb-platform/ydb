@@ -71,12 +71,12 @@ class SimpleQueueBase(LoadSuiteBase):
             # Запускаем бинарный файл на ноде, если он был успешно развернут
             if success:
                 target_path = binary_result['path']
-                cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database {YdbCluster.ydb_database} --duration {self.timeout} --mode {table_type}"
+                cmd = f"{target_path} --endpoint {YdbCluster.ydb_endpoint} --database /{YdbCluster.ydb_database} --duration {self.timeout} --mode {table_type}"
                 allure.attach(cmd, 'Command to execute', allure.attachment_type.TEXT)
                 LOGGER.info(f"Executing command on node {node.host} (is_local: {node.is_local})")
                 
                 try:
-                    result = node.execute_command(cmd, raise_on_error=True, timeout=int(self.timeout * 1.5), raise_on_timeout=False)
+                    result = node.execute_command(cmd, raise_on_error=True, timeout=int(self.timeout * 3), raise_on_timeout=False)
                     LOGGER.info(f"Command executed successfully: {result}")
                     allure.attach(str(result), 'Command execution result', allure.attachment_type.TEXT)
                     command_result = result

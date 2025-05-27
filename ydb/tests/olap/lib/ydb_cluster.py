@@ -6,6 +6,7 @@ import requests
 import yaml
 import ydb
 import subprocess
+import yatest.common
 from ydb.tests.olap.lib.utils import get_external_param
 from copy import deepcopy
 from time import sleep, time
@@ -514,38 +515,101 @@ class YdbCluster:
             str: вывод команды или текст ошибки, если команда завершилась с ошибкой и raise_on_error=False
         """
         LOGGER.info(f"Executing local command: {cmd}")
+        
+        # Преобразуем строковую команду в список для yatest.common.execute
+        if isinstance(cmd, str):
+            # Для простых команд без пайпов и перенаправлений используем shell
+            cmd_list = ['sh', '-c', cmd]
+        else:
+            cmd_list = cmd
+        
         try:
-            if isinstance(cmd, list):
-                #yatest.common.execute(cmd, raise_on_error=raise_on_error, timeout=timeout)
-                result = subprocess.run(cmd, capture_output=True, text=True, check=False, timeout=timeout)
-            else:
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=False, timeout=timeout)
+            execution = yatest.common.execute(
+                cmd_list, 
+                wait=True, 
+                check_exit_code=False,  # Проверяем exit code сами
+                timeout=timeout
+            )
             
-            # Always return both stdout and stderr
-            output = result.stdout or ""
-            if result.stderr:
-                output += "\nSTDERR:\n" + result.stderr
+            # Формируем вывод из stdout и stderr
+            output = ""
+            if hasattr(execution, 'std_out') and execution.std_out:
+                output += YdbCluster._safe_decode(execution.std_out)
+            if hasattr(execution, 'std_err') and execution.std_err:
+                if output:
+                    output += "\nSTDERR:\n"
+                output += YdbCluster._safe_decode(execution.std_err)
             
-            # If command failed and we should raise
-            if result.returncode != 0 and raise_on_error:
-                raise subprocess.CalledProcessError(result.returncode, cmd, result.stdout, result.stderr)
+            # Проверяем exit code
+            exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
+            if exit_code != 0 and raise_on_error:
+                raise subprocess.CalledProcessError(
+                    exit_code, 
+                    cmd, 
+                    YdbCluster._safe_decode(execution.std_out) if hasattr(execution, 'std_out') else "",
+                    YdbCluster._safe_decode(execution.std_err) if hasattr(execution, 'std_err') else ""
+                )
             
             return output
+                
+        except yatest.common.ExecutionTimeoutError as e:
+            # Извлекаем информацию о команде и частичном выводе
+            timeout_info = f"Command timed out after {timeout} seconds"
+            output = ""
             
-        except subprocess.TimeoutExpired as e:
+            # ExecutionTimeoutError содержит объект выполнения как первый аргумент
+            if hasattr(e, 'args') and len(e.args) > 0:
+                execution_obj = e.args[0]
+                
+                # Пытаемся извлечь stdout и stderr из объекта выполнения
+                if hasattr(execution_obj, 'std_out') and execution_obj.std_out:
+                    output += YdbCluster._safe_decode(execution_obj.std_out)
+                if hasattr(execution_obj, 'std_err') and execution_obj.std_err:
+                    if output:
+                        output += "\nSTDERR:\n"
+                    output += YdbCluster._safe_decode(execution_obj.std_err)
+                
+                # Добавляем информацию о команде
+                if hasattr(execution_obj, 'command'):
+                    timeout_info += f"\nCommand: {execution_obj.command}"
+            
+            # Формируем полный вывод с информацией о таймауте
+            full_output = f"{timeout_info}\n{output}" if output else timeout_info
+            
+            # Логируем детальную информацию о таймауте
             if raise_on_timeout:
-                raise
-            LOGGER.warning(f"Command timed out after {timeout} seconds: {e}")
-            # Return any partial output we got
-            output = YdbCluster._safe_decode(e.stdout)
-            if e.stderr:
-                output += "\nSTDERR:\n" + YdbCluster._safe_decode(e.stderr)
-            return output
+                LOGGER.error(f"Local command timed out after {timeout} seconds")
+                LOGGER.error(f"Command: {cmd}")
+            else:
+                LOGGER.warning(f"Local command timed out after {timeout} seconds (timeout expected)")
+                LOGGER.info(f"Command: {cmd}")
             
-        except subprocess.SubprocessError as e:
+            if output:
+                LOGGER.info(f"Partial output before timeout:\n{output}")
+            else:
+                LOGGER.debug("No partial output available")
+            
+            if raise_on_timeout:
+                raise subprocess.TimeoutExpired(cmd, timeout, output=output)
+            
+            return full_output
+            
+        except yatest.common.ExecutionError as e:
+            if raise_on_error:
+                # Преобразуем yatest.common.ExecutionError в стандартное исключение
+                raise subprocess.CalledProcessError(
+                    e.execution_result.exit_code, 
+                    cmd, 
+                    YdbCluster._safe_decode(e.execution_result.std_out),
+                    YdbCluster._safe_decode(e.execution_result.std_err)
+                )
+            LOGGER.error(f"Error executing local command: {e}")
+            return f"Error: {str(e)}"
+            
+        except Exception as e:
             if raise_on_error:
                 raise
-            LOGGER.error(f"Error executing local command: {e}")
+            LOGGER.error(f"Unexpected error executing local command: {e}")
             return f"Error: {str(e)}"
 
     @staticmethod
@@ -599,33 +663,94 @@ class YdbCluster:
         
         LOGGER.info(f"Executing SSH command on {host}: {full_cmd}")
         try:
-            result = subprocess.run(full_cmd, capture_output=True, text=True, check=False, timeout=timeout)
+            execution = yatest.common.execute(
+                full_cmd, 
+                wait=True, 
+                check_exit_code=False,  # Проверяем exit code сами
+                timeout=timeout
+            )
             
-            # Always return both stdout and stderr
-            output = result.stdout or ""
-            if result.stderr:
-                output += "\nSTDERR:\n" + result.stderr
+            # Формируем вывод из stdout и stderr
+            output = ""
+            if hasattr(execution, 'std_out') and execution.std_out:
+                output += YdbCluster._safe_decode(execution.std_out)
+            if hasattr(execution, 'std_err') and execution.std_err:
+                if output:
+                    output += "\nSTDERR:\n"
+                output += YdbCluster._safe_decode(execution.std_err)
             
-            # If command failed and we should raise
-            if result.returncode != 0 and raise_on_error:
-                raise subprocess.CalledProcessError(result.returncode, full_cmd, result.stdout, result.stderr)
+            # Проверяем exit code
+            exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
+            if exit_code != 0 and raise_on_error:
+                raise subprocess.CalledProcessError(
+                    exit_code, 
+                    full_cmd, 
+                    YdbCluster._safe_decode(execution.std_out) if hasattr(execution, 'std_out') else "",
+                    YdbCluster._safe_decode(execution.std_err) if hasattr(execution, 'std_err') else ""
+                )
             
             return output
             
-        except subprocess.TimeoutExpired as e:
+        except yatest.common.ExecutionTimeoutError as e:
+            # Извлекаем информацию о команде и частичном выводе
+            timeout_info = f"SSH command timed out after {timeout} seconds on {host}"
+            output = ""
+            
+            # ExecutionTimeoutError содержит объект выполнения как первый аргумент
+            if hasattr(e, 'args') and len(e.args) > 0:
+                execution_obj = e.args[0]
+                
+                # Пытаемся извлечь stdout и stderr из объекта выполнения
+                if hasattr(execution_obj, 'std_out') and execution_obj.std_out:
+                    output += YdbCluster._safe_decode(execution_obj.std_out)
+                if hasattr(execution_obj, 'std_err') and execution_obj.std_err:
+                    if output:
+                        output += "\nSTDERR:\n"
+                    output += YdbCluster._safe_decode(execution_obj.std_err)
+                
+                # Добавляем информацию о команде
+                if hasattr(execution_obj, 'command'):
+                    timeout_info += f"\nCommand: {execution_obj.command}"
+            
+            # Формируем полный вывод с информацией о таймауте
+            full_output = f"{timeout_info}\n{output}" if output else timeout_info
+            
+            # Логируем детальную информацию о таймауте
             if raise_on_timeout:
-                raise
-            LOGGER.warning(f"SSH command timed out after {timeout} seconds on {host}: {e}")
-            # Return any partial output we got
-            output = YdbCluster._safe_decode(e.stdout)
-            if e.stderr:
-                output += "\nSTDERR:\n" + YdbCluster._safe_decode(e.stderr)
-            return output
+                LOGGER.error(f"SSH command timed out after {timeout} seconds on {host}")
+                LOGGER.error(f"Full command: {full_cmd}")
+                LOGGER.error(f"Original command: {cmd}")
+            else:
+                LOGGER.warning(f"SSH command timed out after {timeout} seconds on {host}")
+                LOGGER.info(f"Full command: {full_cmd}")
+                LOGGER.info(f"Original command: {cmd}")
             
-        except subprocess.SubprocessError as e:
+            if output:
+                LOGGER.info(f"Partial output before timeout:\n{output}")
+            else:
+                LOGGER.debug("No partial output available")
+            
+            if raise_on_timeout:
+                raise subprocess.TimeoutExpired(full_cmd, timeout, output=output)
+            
+            return full_output
+            
+        except yatest.common.ExecutionError as e:
+            if raise_on_error:
+                # Преобразуем yatest.common.ExecutionError в стандартное исключение
+                raise subprocess.CalledProcessError(
+                    e.execution_result.exit_code, 
+                    full_cmd, 
+                    YdbCluster._safe_decode(e.execution_result.std_out),
+                    YdbCluster._safe_decode(e.execution_result.std_err)
+                )
+            LOGGER.error(f"Error executing SSH command on {host}: {e}")
+            return f"Error: {str(e)}"
+            
+        except Exception as e:
             if raise_on_error:
                 raise
-            LOGGER.error(f"Error executing SSH command on {host}: {e}")
+            LOGGER.error(f"Unexpected error executing SSH command on {host}: {e}")
             return f"Error: {str(e)}"
 
 

@@ -695,18 +695,13 @@ private:
         return cmp <= 0;
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) override
+    TAutoPtr<IDestructable> Finish(EStatus status) override
     {
         auto ctx = ActorContext();
 
         if (!SchemaChanged) {
             if (status != EStatus::Done) {
-                TStringBuilder error;
-                error << "Scan finished with status " << status;
-                if (exc) {
-                    error << " " << exc->what();
-                }
-                Error = error;
+                Error = TStringBuilder() << "Scan finished with status " << status;
             }
 
             TAutoPtr<TEvTxProcessing::TEvStreamQuotaRelease> request
@@ -732,7 +727,7 @@ private:
         if (!Driver) {
             return false;
         }
-        Driver->Fail(exc);
+        Driver->Throw(exc);
         return true;
     }
 

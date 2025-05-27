@@ -60,6 +60,7 @@ protected:
     TSampler Sampler;
 
     IDriver* Driver = nullptr;
+    NYql::TIssues Issues;
 
     TLead Lead;
 
@@ -144,27 +145,28 @@ public:
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) final {
+    TAutoPtr<IDestructable> Finish(const std::exception& exc) final
+    {
+        Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+        return Finish(EStatus::Exception);
+    }
+
+    TAutoPtr<IDestructable> Finish(EStatus status) final {
         auto& record = Response->Record;
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
 
-        if (status == EStatus::Error) {
+        if (status == EStatus::Exception) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            TStringBuilder error;
-            error << "Scan failed";
-            if (exc) {
-                error << " " << exc->what();
-            }
-            NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue(error));
-            NYql::IssuesToMessage(issues, record.MutableIssues());
         } else if (status != NTable::EStatus::Done) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
             FillResponse();
         }
+
+        NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
             LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
@@ -182,7 +184,7 @@ public:
         if (!Driver) {
             return false;
         }
-        Driver->Fail(exc);
+        Driver->Throw(exc);
         return true;
     }
 

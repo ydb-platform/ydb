@@ -57,7 +57,7 @@ public:
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception*) override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
         auto& record = response->Record;
         record.SetShardTabletId(ShardTabletId);

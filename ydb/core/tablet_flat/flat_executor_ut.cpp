@@ -321,7 +321,7 @@ private:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) override
+    TAutoPtr<IDestructable> Finish(EStatus status) override
     {
         Y_ENSURE(!exc, exc->what());
         Y_ENSURE((int)Status == (int)status);

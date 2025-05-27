@@ -178,7 +178,7 @@ class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, publ
         auto response = MakeHolder<TEvDataShard::TEvConditionalEraseRowsResponse>();
         response->Record.SetTabletID(DataShard.TabletId);
 
-        if (!Success || status == EStatus::Error) {
+        if (!Success || status == EStatus::Exception) {
             response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ERASE_ERROR);
         } else if (status != EStatus::Done) {
             response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
@@ -305,7 +305,7 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception*) override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         Reply(status);
         PassAway();
 
@@ -316,7 +316,7 @@ public:
         if (!Driver) {
             return false;
         }
-        Driver->Fail(exc);
+        Driver->Throw(exc);
         return true;
     }
 

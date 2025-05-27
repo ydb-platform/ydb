@@ -511,7 +511,7 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception*) override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         // TODO: https://github.com/ydb-platform/ydb/issues/18806
         if (status != EStatus::Done) {
             Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED);
@@ -527,7 +527,7 @@ public:
         if (!Driver) {
             return false;
         }
-        Driver->Fail(exc);
+        Driver->Throw(exc);
         return true;
     }
 

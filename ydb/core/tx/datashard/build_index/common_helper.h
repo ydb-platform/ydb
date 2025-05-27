@@ -127,8 +127,13 @@ public:
         return true;
     }
 
+    void AddIssue(const std::exception& exc) {
+        UploadStatus.Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+    }
+
     template<typename TResponse> 
-    void Finish(TResponse& response, NTable::EStatus status, const std::exception* exc) {
+    void Finish(TResponse& response, NTable::EStatus status) {
         if (UploaderId) {
             TlsActivationContext->Send(new IEventHandle(UploaderId, TActorId(), new TEvents::TEvPoison));
             UploaderId = {};
@@ -136,14 +141,8 @@ public:
 
         response.SetUploadRows(UploadRows);
         response.SetUploadBytes(UploadBytes);
-        if (status == NTable::EStatus::Error) {
+        if (status == NTable::EStatus::Exception) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            TStringBuilder error;
-            error << "Scan failed";
-            if (exc) {
-                error << " " << exc->what();
-            }
-            UploadStatus.Issues.AddIssue(NYql::TIssue(error));
             NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
         } else if (status != NTable::EStatus::Done) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);

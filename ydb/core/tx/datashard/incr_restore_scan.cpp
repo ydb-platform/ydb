@@ -187,9 +187,8 @@ public:
         return Progress();
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) override {
-        LOG_D("Finish " << status
-            << ", exc: " << (exc ? exc->what() : TString("<none>")));
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        LOG_D("Finish " << status);
 
         if (status != EStatus::Done) {
             // TODO: https://github.com/ydb-platform/ydb/issues/18797
@@ -205,7 +204,7 @@ public:
         if (!Driver) {
             return false;
         }
-        Driver->Fail(exc);
+        Driver->Throw(exc);
         return true;
     }
 

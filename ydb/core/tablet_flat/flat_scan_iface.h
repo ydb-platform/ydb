@@ -60,25 +60,26 @@ namespace NTable {
      */
 
     enum class EScan {
-        Feed    = 0, // Feed rows from current iterator state
-        Sleep   = 1, // Suspend execution until explicit resume
-        Reset   = 3, // Reconfigure iterator with new settings
-        Final   = 8, // Impl. isn't needed in more rows or seeks
+        Feed = 0, // Feed rows from current iterator state
+        Sleep = 1, // Suspend execution until explicit resume
+        Reset = 3, // Reconfigure iterator with new settings
+        Final = 8, // Impl. isn't needed in more rows or seeks
     };
 
     enum class EStatus {
-        Done    = 0, // Regular process termination
-        Lost    = 1, // Owner entity is lost, no way for product
-        Term    = 2, // Explicit process termination by owner
-        Error   = 3, // Terminated due to execution env. error
+        Done = 0, // Regular process termination
+        Lost = 1, // Owner entity is lost, no way for product
+        Term = 2, // Explicit process termination by owner
+        StorageError = 3, // Some blob has been failed to load
+        Exception = 4, // Unhandled exception has happened, it may be accessed with `std::current_exception()`
     };
 
     class IDriver {
     public:
         virtual void Touch(EScan) = 0;
 
-        // Stops scan and calls IScan::Finish(EStatus::Error, exc)
-        virtual void Fail(const std::exception& exc) = 0;
+        // Stops scan and calls IScan::Finish(EStatus::Exception)
+        virtual void Throw(const std::exception& exc) = 0;
     };
 
 
@@ -119,7 +120,10 @@ namespace NTable {
         virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) = 0;
         virtual EScan Seek(TLead&, ui64 seq) = 0;
         virtual EScan Feed(TArrayRef<const TCell>, const TRow&) = 0;
-        virtual TAutoPtr<IDestructable> Finish(EStatus, const std::exception* exc) = 0;
+        virtual TAutoPtr<IDestructable> Finish(const std::exception&) {
+            return Finish(EStatus::Exception);
+        }
+        virtual TAutoPtr<IDestructable> Finish(EStatus) = 0;
         virtual void Describe(IOutputStream&) const = 0;
 
         /**

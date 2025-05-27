@@ -217,7 +217,7 @@ public:
         return MaybeSendBuffer();
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception*) override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         auto outcome = EExportOutcome::Success;
         if (status != EStatus::Done) {
             outcome = EExportOutcome::Aborted;
@@ -233,7 +233,7 @@ public:
         if (!Driver) {
             return false;
         }
-        Driver->Fail(exc);
+        Driver->Throw(exc);
         return true;
     }
 

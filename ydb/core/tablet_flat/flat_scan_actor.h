@@ -41,7 +41,7 @@ namespace NOps {
         using TSpent = NTable::TSpent;
         using IScan = NTable::IScan;
         using EScan = NTable::EScan;
-        using EAbort = NTable::EStatus;
+        using EStatus = NTable::EStatus;
         using ELnLev = NUtil::ELnLev;
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -339,7 +339,7 @@ namespace NOps {
                     return Spent->Alter(/* resources not available */ false);
 
                 case EScan::Final:
-                    return Terminate(EAbort::Done);
+                    return Terminate(EStatus::Done);
 
                 case EScan::Sleep:
                     Pause();
@@ -479,7 +479,7 @@ namespace NOps {
                 processed += stat.UpdateRows(Seen, Skipped);
 
                 if (ready == NTable::EReady::Gone) {
-                    Terminate(EAbort::Done);
+                    Terminate(EStatus::Done);
                     stat.UpdateCycles();
                     SendStat(stat);
                     return;
@@ -498,7 +498,7 @@ namespace NOps {
                 if (!MayProgress()) {
                     // We must honor EReady::Gone from an implicit callback
                     if (ImplicitPageFault() == NTable::EReady::Gone) {
-                        Terminate(EAbort::Done);
+                        Terminate(EStatus::Done);
                         stat.UpdateCycles();
                         SendStat(stat);
                         return;
@@ -544,7 +544,7 @@ namespace NOps {
         void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev)
         {
             if (!BlobQueue.ProcessResult(ev->Get())) {
-                return Terminate(EAbort::Error);
+                return Terminate(EStatus::StorageError);
             }
 
             BlobQueue.SendRequests(SelfId());
@@ -599,7 +599,7 @@ namespace NOps {
             const auto label = msg->Label;
             ColdPartLoaders.erase(label);
 
-            Terminate(EAbort::Error);
+            Terminate(EStatus::StorageError);
         }
 
         void Handle(NSharedCache::TEvResult::TPtr& ev)
@@ -616,7 +616,7 @@ namespace NOps {
                     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_nodata", true)->Inc();
                 }
 
-                return Terminate(EAbort::Error);
+                return Terminate(EStatus::StorageError);
             }
 
             Cache->DoSave(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
@@ -629,21 +629,21 @@ namespace NOps {
 
         void HandleUndelivered()
         {
-            Terminate(EAbort::Lost);
+            Terminate(EStatus::Lost);
         }
 
         void HandlePoison()
         {
-            Terminate(EAbort::Term);
+            Terminate(EStatus::Term);
         }
 
-        void Terminate(EAbort abort, const std::exception* exc = nullptr)
+        void Terminate(EStatus status, const std::exception* exc = nullptr)
         {
             auto trace = Args.Trace ? Cache->GrabTraces() : nullptr;
 
             if (auto logl = Logger->Log(ELnLev::Info)) {
                 logl
-                    << NFmt::Do(*this) << " end=" << ui32(abort)
+                    << NFmt::Do(*this) << " end=" << status
                     << ", " << Seen << "r seen, " << NFmt::Do(Cache->Stats())
                     << ", bio " << NFmt::If(Spent.Get());
 
@@ -659,11 +659,13 @@ namespace NOps {
 
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */
+            IScan* scan = DetachScan();
+            auto prod = exc
+                ? scan->Finish(*exc)
+                : scan->Finish(status);
 
-            auto prod = DetachScan()->Finish(abort, exc);
-
-            if (abort != EAbort::Lost) {
-                auto ev = new TEvResult(Serial, abort, std::move(Snapshot), prod);
+            if (status != EStatus::Lost) {
+                auto ev = new TEvResult(Serial, status, std::move(Snapshot), prod);
 
                 ev->Trace = std::move(trace);
 
@@ -689,12 +691,12 @@ namespace NOps {
 
             GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
 
-            Terminate(NTable::EStatus::Error, &exc);
+            Terminate(NTable::EStatus::Exception, &exc);
 
             return true;
         }
 
-        void Fail(const std::exception& exc) override
+        void Throw(const std::exception& exc) override
         {
             OnUnhandledException(exc);
         }

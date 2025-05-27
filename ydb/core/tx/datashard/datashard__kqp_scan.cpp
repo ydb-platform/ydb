@@ -332,13 +332,12 @@ private:
     }
 
 private:
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) final {
+    TAutoPtr<IDestructable> Finish(EStatus status) final {
         auto prio = status == EStatus::Done ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan"
             << ", at: " << ScanActorId << ", scanId: " << ScanId
             << ", table: " << TablePath << ", reason: " << status
-            << ", abortEvent: " << (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>"))
-            << ", exc: " << (exc ? exc->what() : TString("<none>")));
+            << ", abortEvent: " << (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>")));
 
         if (status != EStatus::Done || AbortEvent) {
             auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation, TabletId);
@@ -352,15 +351,12 @@ private:
                 }
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             } else {
-                ev->Record.SetStatus(status == NTable::EStatus::Error
+                ev->Record.SetStatus(status == NTable::EStatus::Exception
                     ? Ydb::StatusIds::INTERNAL_ERROR
                     : Ydb::StatusIds::ABORTED);
                 TStringBuilder error;
-                error << "Table " << TablePath << " scan failed, reason: " << ToString((int) status);
-                if (exc) {
-                    error << " " << exc->what();
-                }
-                auto issueId = status == NTable::EStatus::Error ? NYql::TIssuesIds::DEFAULT_ERROR : NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED;
+                error << "Table " << TablePath << " scan failed, reason: " << status;
+                auto issueId = status == NTable::EStatus::Exception ? NYql::TIssuesIds::DEFAULT_ERROR : NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED;
                 auto issue = NYql::YqlIssue({}, issueId, error);
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             }
@@ -390,7 +386,7 @@ private:
         if (!Driver) {
             return false;
         }
-        Driver->Fail(exc);
+        Driver->Throw(exc);
         return true;
     }
 

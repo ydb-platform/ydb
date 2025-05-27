@@ -224,7 +224,14 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) override {
+    TAutoPtr<IDestructable> Finish(const std::exception& exc) final
+    {
+        UploadStatus.Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+        return Finish(EStatus::Exception);
+    }
+
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         if (Uploader) {
             this->Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
@@ -236,14 +243,8 @@ public:
         progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
         progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
-        if (status == EStatus::Error) {
+        if (status == EStatus::Exception) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            TStringBuilder error;
-            error << "Scan failed";
-            if (exc) {
-                error << " " << exc->what();
-            }
-            UploadStatus.Issues.AddIssue(NYql::TIssue(error));
         } else if (status != EStatus::Done) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else if (!UploadStatus.IsSuccess()) {
@@ -270,7 +271,7 @@ public:
         if (!Driver) {
             return false;
         }
-        Driver->Fail(exc);
+        Driver->Throw(exc);
         return true;
     }
 

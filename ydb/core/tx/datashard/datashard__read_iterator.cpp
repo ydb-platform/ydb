@@ -1326,18 +1326,16 @@ private:
         return EScan::Reset;
     }
 
-    TAutoPtr<IDestructable> Finish(EStatus status, const std::exception* exc) final {
+    TAutoPtr<IDestructable> Finish(EStatus status) final {
         if (!Aborted) {
             switch (status) {
                 case EStatus::Done:
                     SendResult({}, /* last */ true);
                     break;
-                case EStatus::Error: {
+                case EStatus::Exception:
+                case EStatus::StorageError: {
                     TStringBuilder errorMessage;
-                    errorMessage << "Shard " << TabletId << " failed during a table scan";
-                    if (exc) {
-                        errorMessage << " " << exc->what();
-                    }
+                    errorMessage << "Shard " << TabletId << " failed during a table scan with status " << status;
                     SendError(Ydb::StatusIds::UNAVAILABLE, errorMessage);
                     break;
                 }
@@ -1362,7 +1360,7 @@ private:
         if (!Driver) {
             return false;
         }
-        Driver->Fail(exc);
+        Driver->Throw(exc);
         return true;
     }
 

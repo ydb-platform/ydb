@@ -36,31 +36,6 @@ public:
 
 class TColumnDataSplitter {
 public:
-    class TSourceSegment {
-    public:
-        // FIXME
-        using TSlice = NArrow::TGeneralContainer;
-
-    private:
-        TDuplicateMapInfo Interval;
-        TSlice Data;
-
-    public:
-        TSourceSegment(const TDuplicateMapInfo& interval, TSlice&& data)
-            : Interval(interval)
-            , Data(std::move(data)) {
-        }
-
-        const TDuplicateMapInfo& GetInterval() const {
-            return Interval;
-        }
-
-        TSlice&& ExtractData() {
-            return std::move(Data);
-        }
-    };
-
-private:
     class TBorder {
     private:
         YDB_READONLY_DEF(bool, IsLast);
@@ -118,7 +93,13 @@ public:
         return Borders.size() - 1;
     }
 
-    std::vector<std::optional<TSourceSegment>> SplitPortion(const std::shared_ptr<TColumnsData>& data, const ui64 sourceId, const TSnapshot& maxVersion) const {
+    const TBorder& GetIntervalFinish(const ui64 intervalIdx) const {
+        AFL_VERIFY(intervalIdx < NumIntervals());
+        return Borders[intervalIdx + 1];
+    }
+
+    std::vector<TDuplicateMapInfo> SplitPortion(
+        const std::shared_ptr<TColumnsData>& data, const ui64 sourceId, const TSnapshot& maxVersion) const {
         AFL_VERIFY(!Borders.empty());
 
         std::vector<ui64> borderOffsets;
@@ -139,13 +120,9 @@ public:
             borderOffsets.emplace_back(offset);
         }
 
-        std::vector<std::optional<TSourceSegment>> segments;
+        std::vector<TDuplicateMapInfo> segments;
         for (ui64 i = 1; i < borderOffsets.size(); ++i) {
-            TDuplicateMapInfo interval(maxVersion, borderOffsets[i - 1], borderOffsets[i] - borderOffsets[i - 1], sourceId);
-            // FIXME don't copy data for slicing
-            segments.emplace_back(interval.GetRowsCount()
-                                      ? TSourceSegment(interval, data->GetData()->Slice(interval.GetOffset(), interval.GetRowsCount()))
-                                      : std::optional<TSourceSegment>());
+            segments.emplace_back(TDuplicateMapInfo(maxVersion, borderOffsets[i - 1], borderOffsets[i] - borderOffsets[i - 1], sourceId));
         }
 
         return segments;

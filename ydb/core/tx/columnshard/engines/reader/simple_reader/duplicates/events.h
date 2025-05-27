@@ -32,17 +32,17 @@ public:
 class TColumnsData {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Data);
-    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> Memory;
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, MemoryGuard);
 
 public:
     TColumnsData(const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& memory)
         : Data(data)
-        , Memory(memory) {
-        AFL_VERIFY(Memory);
+        , MemoryGuard(memory) {
+        AFL_VERIFY(MemoryGuard);
     }
 
     ui64 GetRawSize() const {
-        return Memory->GetMemory();
+        return MemoryGuard->GetMemory();
     }
 };
 

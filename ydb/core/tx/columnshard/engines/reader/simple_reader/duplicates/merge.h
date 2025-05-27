@@ -51,13 +51,14 @@ class TBuildDuplicateFilters: public NConveyor::ITask {
 
     class TSourceMergingInfo {
     private:
-        YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Data);
-        YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
+        YDB_READONLY_DEF(std::shared_ptr<TColumnsData>, Batch);
+        YDB_READONLY_DEF(ui64, Offset);
 
     public:
-        TSourceMergingInfo(const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NArrow::TColumnFilter>& filter)
-            : Data(data)
-            , Filter(filter) {
+        TSourceMergingInfo(const std::shared_ptr<TColumnsData>& batch, const ui64 offset)
+            : Batch(batch)
+            , Offset(offset) {
+            AFL_VERIFY(batch);
         }
     };
 
@@ -76,6 +77,8 @@ private:
     TActorId Owner;
     NColumnShard::TScanCounters Counters;
     std::optional<NArrow::NMerger::TCursor> MaxVersion;
+    NArrow::TSimpleRow Finish;
+    bool IncludeFinish;
     std::unique_ptr<ISubscriber> Callback;
 
 private:
@@ -87,20 +90,21 @@ private:
     }
 
 public:
-    TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<std::string>& versionColumnNames,
-        const NColumnShard::TScanCounters& counters, const std::optional<NArrow::NMerger::TCursor>& maxVersion,
+    TBuildDuplicateFilters(const std::shared_ptr<NCommon::TSpecialReadContext>& context,
+        const std::optional<NArrow::NMerger::TCursor>& maxVersion, const NArrow::TSimpleRow& finish, const bool includeFinish,
         std::unique_ptr<ISubscriber>&& callback)
-        : PKSchema(pkSchema)
-        , VersionColumnNames(versionColumnNames)
-        , Counters(counters)
+        : PKSchema(context->GetReadMetadata()->GetReplaceKey())
+        , VersionColumnNames(IIndexInfo::GetSnapshotColumnNames())
+        , Counters(context->GetCommonContext()->GetCounters())
         , MaxVersion(maxVersion)
+        , Finish(finish)
+        , IncludeFinish(includeFinish)
         , Callback(std::move(callback)) {
         AFL_VERIFY(Callback);
     }
 
-    void AddSource(
-        const std::shared_ptr<NArrow::TGeneralContainer>& source, const std::shared_ptr<NArrow::TColumnFilter>& filter, const ui64 sourceId) {
-        AFL_VERIFY(SourcesById.emplace(sourceId, TSourceMergingInfo(source, filter)).second);
+    void AddSource(const std::shared_ptr<TColumnsData>& batch, const ui64 offset, const ui64 sourceId) {
+        AFL_VERIFY(SourcesById.emplace(sourceId, TSourceMergingInfo(batch, offset)).second);
     }
 };
 

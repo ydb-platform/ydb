@@ -5,23 +5,24 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 
 namespace NKikimr::NReplication {
 
 using namespace NKikimrReplication;
+using namespace NSchemeCache;
 
 enum class EWakeupType : ui64 {
     Describe,
     InitOffset
 };
 
-template<typename TDerived>
-class TBaseLocalTopicPartitionActor : public TActorBootstrapped<TDerived>
-                                    , protected NSchemeCache::TSchemeCacheHelpers {
+class TBaseLocalTopicPartitionActor : public TActorBootstrapped<TBaseLocalTopicPartitionActor>
+                                    , private TSchemeCacheHelpers {
 
-    using  TThis = TDerived;
+    using  TThis = TBaseLocalTopicPartitionActor;
     static constexpr size_t MaxAttempts = 5;
 
 public:
@@ -46,29 +47,29 @@ private:
         auto request = MakeHolder<TNavigate>();
         request->ResultSet.emplace_back(MakeNavigateEntry(TopicName, TNavigate::OpTopic));
         IActor::Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
-        Become(&TBaseLocalTopicPartitionActor::StateDescribe);
+        Become(&TThis::StateDescribe);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        static constexpr auto errorMarket = "LocalYdbProxy";
+        static const TString errorMarket = "LocalYdbProxy";
 
         auto& result = ev->Get()->Request;
 
-        if (!CheckNotEmpty(errorMarket, result, &TDerived::LogCritAndLeave)) {
+        if (!CheckNotEmpty(errorMarket, result, LeaveOnError())) {
             return;
         }
 
-        if (!CheckEntriesCount(errorMarket, result, 1, &TDerived::LogCritAndLeave)) {
+        if (!CheckEntriesCount(errorMarket, result, 1, LeaveOnError())) {
             return;
         }
 
         const auto& entry = result->ResultSet.at(0);
 
-        if (!CheckEntryKind(errorMarket, entry, TNavigate::EKind::KindTopic, &TDerived::LogCritAndLeave)) {
+        if (!CheckEntryKind(errorMarket, entry, TNavigate::EKind::KindTopic, LeaveOnError())) {
             return;
         }
 
-        if (!CheckEntrySucceeded(errorMarket, entry, &TThis::DoRetryDescribe)) {
+        if (!CheckEntrySucceeded(errorMarket, entry, DoRetryDescribe())) {
             return;
         }
 
@@ -86,12 +87,20 @@ private:
         }
     }
 
-    void DoRetryDescribe(const TString& error) {
-        if (Attempt == MaxAttempts) {
-            OnError(error);
-        } else {
-            IActor::Schedule(TDuration::Seconds(1 << Attempt++), new TEvents::TEvWakeup(static_cast<ui64>(EWakeupType::Describe)));
-        }
+    TCheckFailFunc DoRetryDescribe() {
+        return [this](const TString& error) {
+            if (Attempt == MaxAttempts) {
+                OnError(error);
+            } else {
+                IActor::Schedule(TDuration::Seconds(1 << Attempt++), new TEvents::TEvWakeup(static_cast<ui64>(EWakeupType::Describe)));
+            }
+        };
+    }
+
+    TCheckFailFunc LeaveOnError() {
+        return [this](const TString& error) {
+            OnFatalError(error);
+        };
     }
 
     STATEFN(StateDescribe) {
@@ -161,9 +170,9 @@ protected:
     size_t Attempt = 0;
 };
 
-class TLocalTopicPartitionReaderActor : public TBaseLocalTopicPartitionActor<TLocalTopicPartitionReaderActor> {
+class TLocalTopicPartitionReaderActor : public TBaseLocalTopicPartitionActor {
 
-    using TBase = TBaseLocalTopicPartitionActor<TLocalTopicPartitionReaderActor>;
+    using TBase = TBaseLocalTopicPartitionActor;
 
     constexpr static TDuration ReadTimeout = TDuration::MilliSeconds(1000);
     constexpr static ui64 ReadLimitBytes = 1_MB;
@@ -189,10 +198,12 @@ protected:
 
     void OnError(const TString& error) override {
         Send(Parent, CreateError(NYdb::EStatus::UNAVAILABLE, error));
+        PassAway();
     }
 
     void OnFatalError(const TString& error) override {
         Send(Parent, CreateError(NYdb::EStatus::SCHEME_ERROR, error));
+        PassAway();
     }
 
     std::unique_ptr<TEvYdbProxy::TEvTopicReaderGone> CreateError(NYdb::EStatus status, const TString& error) {
@@ -231,7 +242,7 @@ private:
             return;
         }
         if (record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
-            return OnError(TStringBuilder() << "Unimplimented response " << record.GetErrorCode() << ": " << record.GetErrorReason());
+            return OnError(TStringBuilder() << "Unimplimented response: " << record.GetErrorReason());
         }
         if (!record.HasPartitionResponse() || !record.GetPartitionResponse().HasCmdGetClientOffsetResult()) {
             return OnError(TStringBuilder() << "Unimplimented response");
@@ -343,6 +354,11 @@ private:
     void HandleOnWaitData(TEvPersQueue::TEvResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
+        TString error;
+        if (!NPQ::BasicCheck(record, error)) {
+            return OnError(TStringBuilder() << "Wrong response: " << error);
+        }
+
         if (record.GetPartitionResponse().HasCmdGetClientOffsetResult()) {
             // Skip set offset result for autocommit
             return;
@@ -404,20 +420,97 @@ private:
     ui64 SentOffset;
 };
 
-class TLocalTopicPartitionCommitActor : public TBaseLocalTopicPartitionActor<TLocalTopicPartitionCommitActor> {
+class TLocalTopicPartitionCommitActor : public TBaseLocalTopicPartitionActor {
+
+    using TBase = TBaseLocalTopicPartitionActor;
+
 public:
-    TLocalTopicPartitionCommitActor(const TActorId& replyTo, const std::string& database, std::string&& topicName, ui64 partitionId, std::string&& consumerName, std::optional<std::string>&& readSessionId, ui64 offset)
+    TLocalTopicPartitionCommitActor(const TActorId& parent, const std::string& database, std::string&& topicName, ui64 partitionId, std::string&& consumerName, std::optional<std::string>&& readSessionId, ui64 offset)
         : TBaseLocalTopicPartitionActor(database, std::move(topicName), partitionId)
-        , ReplyTo(replyTo)
+        , Parent(parent)
         , ConsumerName(std::move(consumerName))
         , ReadSessionId(std::move(readSessionId))
         , Offset(offset) {
+    }
+
+protected:
+    void OnDescribeFinished() override {
+        DoCommitOffset();
+    }
+
+    void OnError(const TString& error) override {
+        Send(Parent, CreateResponse(NYdb::EStatus::UNAVAILABLE, error));
+        PassAway();
+    }
+
+    void OnFatalError(const TString& error) override {
+        Send(Parent, CreateResponse(NYdb::EStatus::SCHEME_ERROR, error));
+        PassAway();
+    }
+
+    std::unique_ptr<TEvYdbProxy::TEvCommitOffsetResponse> CreateResponse(NYdb::EStatus status, const TString& error) {
+        NYdb::NIssue::TIssues issues;
+        if (error) {
+            issues.AddIssue(error);
         }
+        return std::make_unique<TEvYdbProxy::TEvCommitOffsetResponse>(NYdb::TStatus(status, std::move(issues)));
+    }
+
+    STATEFN(OnInitEvent) override {
+        Y_UNUSED(ev);
+    }
 
 private:
-    const TActorId ReplyTo;
-    const std::string ConsumerName;
-    const std::optional<std::string> ReadSessionId;
+    void DoCommitOffset() {
+        Send(PartitionPipeClient, CreateCommitRequest().release());
+        Become(&TLocalTopicPartitionCommitActor::StateCommitOffset);
+    }
+
+    void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        TString error;
+        if (!NPQ::BasicCheck(record, error)) {
+            return OnError(TStringBuilder() << "Wrong response: " << error);
+        }
+
+        if (!record.GetPartitionResponse().HasCmdGetClientOffsetResult()) {
+            return OnError("Unsupported response from partition");
+        }
+
+        Send(Parent, CreateResponse(NYdb::EStatus::SUCCESS, ""));
+    }
+
+    std::unique_ptr<TEvPersQueue::TEvRequest> CreateCommitRequest() const {
+        auto request = std::make_unique<TEvPersQueue::TEvRequest>();
+
+        auto& req = *request->Record.MutablePartitionRequest();
+        req.SetPartition(PartitionId);
+        auto& commit = *req.MutableCmdSetClientOffset();
+        commit.SetOffset(Offset);
+        commit.SetClientId(ConsumerName);
+        if (ReadSessionId) {
+            commit.SetSessionId(ReadSessionId.value());
+        }
+
+        return request;
+    }
+
+    STATEFN(StateCommitOffset) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPersQueue::TEvResponse, Handle);
+
+            hFunc(TEvTabletPipe::TEvClientDestroyed, TBase::Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
+        default:
+            OnInitEvent(ev);
+        }
+    }
+
+private:
+    const TActorId Parent;
+    const TString ConsumerName;
+    const std::optional<TString> ReadSessionId;
     const ui64 Offset;
 };
 

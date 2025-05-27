@@ -1534,6 +1534,8 @@ Y_UNIT_TEST(Union) {
             "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION ALL\nSELECT\n\t4\nUNION\nSELECT\n\t5\n;\n"},
         {"select 1 union all (select 2)",
             "SELECT\n\t1\nUNION ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+        {"select 1 union distinct select 2 union select 3 union distinct select 4 union select 5",
+            "SELECT\n\t1\nUNION DISTINCT\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION DISTINCT\nSELECT\n\t4\nUNION\nSELECT\n\t5\n;\n"},
     };
 
     TSetup setup;

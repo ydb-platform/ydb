@@ -88,7 +88,7 @@ message TEvWrite {
         OPERATION_DELETE = 5;
     }
     optional EModificationType ModificationType = 11;
-    optional TSchemeShardLocalPathId PathId = 12; //TSchemeShardLocalPathId
+    optional TSchemeShardLocalPathId PathId = 12;
 }
 
 message TLogicalMetadata {
@@ -108,7 +108,7 @@ message TEvWriteResult {
     optional uint64 WriteId = 4;
     optional uint64 TableId_Deprecated = 5;
     optional string DedupId = 6;
-    optional TSchemeShardLocalPathId PathId = 7; //TSchemeShardLocalPathId
+    optional TSchemeShardLocalPathId PathId = 7;
 }
 
 message TEvRead {
@@ -130,7 +130,7 @@ message TEvRead {
     // Serialized Olap program
     optional bytes OlapProgram = 10;
     optional NKikimrSchemeOp.EOlapProgramType OlapProgramType = 11;
-    optional TSchemeShardLocalPathId PathId = 12; //TSchemeShardLocalPathId
+    optional TSchemeShardLocalPathId PathId = 12;
 }
 
 message TEvReadResult {
@@ -144,7 +144,7 @@ message TEvReadResult {
     optional bool Finished = 8;
     optional bytes Data = 9;
     optional TMetadata Meta = 10;
-    optional TSchemeShardLocalPathId PathId = 11; //TSchemeShardLocalPathId
+    optional TSchemeShardLocalPathId PathId = 11;
 }
 
 enum ETransactionKind {
@@ -268,7 +268,7 @@ message TTableVersionInfo {
     optional uint32 TtlSettingsPresetId = 7;
     optional uint64 SchemaPresetVersionAdj = 8;
     optional uint64 TtlSettingsPresetVersionAdj = 9;
-    optional TInternalPathId PathId = 10; //TODO check schema caching 
+    optional TInternalPathId PathId = 10;
 }
 
 message TCreateTable {
@@ -277,7 +277,7 @@ message TCreateTable {
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 3;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 4;
     optional uint64 SchemaPresetVersionAdj = 6;
-    optional TSchemeShardLocalPathId PathId = 7; //TSchemeShardLocalPathId
+    optional TSchemeShardLocalPathId PathId = 7;
 }
 
 message TInitShard {
@@ -293,12 +293,12 @@ message TAlterTable {
     optional NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPreset = 4;
     optional NKikimrSchemeOp.TColumnDataLifeCycle TtlSettings = 5;
     optional uint64 SchemaPresetVersionAdj = 7;
-    optional TSchemeShardLocalPathId PathId = 8; //TSchemeShardLocalPathId
+    optional TSchemeShardLocalPathId PathId = 8;
 }
 
 message TDropTable {
     optional uint64 PathId_Deprecated = 1;
-    optional TSchemeShardLocalPathId PathId = 2; //TSchemeShardLocalPathId
+    optional TSchemeShardLocalPathId PathId = 2;
 }
 
 message TEnsureTables {

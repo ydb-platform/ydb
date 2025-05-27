@@ -2214,7 +2214,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         static const ui32 triggerPortionSize = 85 * 1000;
         static const ui32 overlapSize = 5 * 1000;
 
-        const ui32 numWrites = 5;
+        const ui32 numWrites = 23;
         {
             ui64 writeId = 0;
             for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {

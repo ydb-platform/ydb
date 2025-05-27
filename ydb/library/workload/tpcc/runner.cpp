@@ -172,8 +172,11 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     const size_t driverCount = Config.DriverCount == 0 ? threadCount : Config.DriverCount;
     std::vector<TDriver> drivers;
     drivers.reserve(driverCount);
+    std::vector<std::shared_ptr<NQuery::TQueryClient>> clients;
+    clients.reserve(driverCount);
     for (size_t i = 0; i < driverCount; ++i) {
-        drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+        auto& driver = drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+        clients.emplace_back(std::make_shared<NQuery::TQueryClient>(driver));
     }
 
     StatsVec.reserve(threadCount);
@@ -202,7 +205,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             warehouseID,
             Config.WarehouseCount,
             *TaskQueue,
-            drivers[i % drivers.size()],
+            clients[i % drivers.size()],
             Config.Path,
             Config.NoSleep,
             TerminalsStopSource.get_token(),

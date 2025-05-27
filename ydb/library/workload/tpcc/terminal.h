@@ -119,7 +119,7 @@ public:
         size_t warehouseID,
         size_t warehouseCount,
         ITaskQueue& taskQueue,
-        TDriver& driver,
+        std::shared_ptr<NQuery::TQueryClient>& client,
         const TString& path,
         bool noSleep,
         std::stop_token stopToken,
@@ -146,7 +146,6 @@ private:
 
 private:
     ITaskQueue& TaskQueue;
-    TDriver Driver;
     TTransactionContext Context;
     bool NoSleep;
     std::stop_token StopToken;

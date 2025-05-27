@@ -41,7 +41,7 @@ struct TCheckPermissionResult
     NObjectClient::TObjectId ObjectId;
     std::optional<TString> ObjectName;
     NSecurityClient::TSubjectId SubjectId;
-    std::optional<TString> SubjectName;
+    std::optional<std::string> SubjectName;
 };
 
 struct TCheckPermissionResponse
@@ -64,8 +64,8 @@ struct TCheckPermissionByAclResult
 
     NSecurityClient::ESecurityAction Action;
     NSecurityClient::TSubjectId SubjectId;
-    std::optional<TString> SubjectName;
-    std::vector<TString> MissingSubjects;
+    std::optional<std::string> SubjectName;
+    std::vector<std::string> MissingSubjects;
 };
 
 struct TSetUserPasswordOptions

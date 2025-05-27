@@ -120,6 +120,10 @@ namespace NKikimr::NStorage {
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
 
+        if (auto error = UpdateClusterState(config)) {
+            return error;
+        }
+
         return std::nullopt;
     }
 
@@ -561,8 +565,6 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig) {
-        auto *ring = ss->MutableRing();
-
         THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>> nodesByDataCenter;
 
         for (const auto& node : baseConfig.GetAllNodes()) {
@@ -604,12 +606,13 @@ namespace NKikimr::NStorage {
             auto r = pickNodes(v, Min<size_t>(v.size(), maxNodesPerDataCenter));
             nodes.insert(nodes.end(), r.begin(), r.end());
         }
+        auto *ring = ss->MutableRing();
+        ring->SetNToSelect(nodes.size() / 2 + 1);
 
         for (ui32 nodeId : nodes) {
             ring->AddNode(nodeId);
         }
 
-        ring->SetNToSelect(nodes.size() / 2 + 1);
     }
 
     bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {

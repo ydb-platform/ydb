@@ -20,6 +20,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 ) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     const auto& item = importInfo.Items.at(itemIdx);
+    Y_ABORT_UNLESS(item.Table);
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
@@ -44,11 +45,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
     Y_ABORT_UNLESS(ss->TableProfilesLoaded);
     Ydb::StatusIds::StatusCode status;
-    if (!FillTableDescription(modifyScheme, item.Scheme, ss->TableProfiles, status, error, true)) {
+    if (!FillTableDescription(modifyScheme, *item.Table, ss->TableProfiles, status, error, true)) {
         return nullptr;
     }
 
-    for(const auto& column: item.Scheme.columns()) {
+    for(const auto& column: item.Table->columns()) {
         switch (column.default_value_case()) {
             case Ydb::Table::ColumnMeta::kFromSequence: {
                 const auto& fromSequence = column.from_sequence();
@@ -122,7 +123,7 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
     return tableDesc;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TImportInfo& importInfo,
@@ -130,6 +131,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
 ) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     const auto& item = importInfo.Items.at(itemIdx);
+    Y_ABORT_UNLESS(item.Table);
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
 
@@ -144,7 +146,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
 
     auto& task = *modifyScheme.MutableRestore();
     task.SetTableName(dstPath.LeafName());
-    *task.MutableTableDescription() = RebuildTableDescription(GetTableDescription(ss, item.DstPathId), item.Scheme);
+    *task.MutableTableDescription() = RebuildTableDescription(GetTableDescription(ss, item.DstPathId), *item.Table);
 
     if (importInfo.Settings.has_encryption_settings()) {
         auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
@@ -191,7 +193,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose(
+THolder<TEvSchemeShard::TEvCancelTx> CancelRestoreTableDataPropose(
     const TImportInfo& importInfo,
     TTxId restoreTxId
 ) {
@@ -213,6 +215,7 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
 ) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     const auto& item = importInfo.Items.at(itemIdx);
+    Y_ABORT_UNLESS(item.Table);
 
     NKikimrIndexBuilder::TIndexBuildSettings settings;
 
@@ -222,8 +225,8 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
         settings.set_max_shards_in_flight(ss->MaxRestoreBuildIndexShardsInFlight);
     }
 
-    Y_ABORT_UNLESS(item.NextIndexIdx < item.Scheme.indexes_size());
-    settings.mutable_index()->CopyFrom(item.Scheme.indexes(item.NextIndexIdx));
+    Y_ABORT_UNLESS(item.NextIndexIdx < item.Table->indexes_size());
+    settings.mutable_index()->CopyFrom(item.Table->indexes(item.NextIndexIdx));
 
     if (settings.mutable_index()->type_case() == Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET) {
         settings.mutable_index()->mutable_global_index();
@@ -380,7 +383,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     modifyScheme.SetWorkingDir(dstPath.Dirname());
 
     auto codes =
-        NGRpcProxy::V1::FillProposeRequestImpl(dstPath.GetName(), item.Topic.GetRef(), modifyScheme, AppData(), error, dstPath.Dirname());
+        NGRpcProxy::V1::FillProposeRequestImpl(dstPath.GetName(), *item.Topic, modifyScheme, AppData(), error, dstPath.Dirname());
 
     if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
         return nullptr;

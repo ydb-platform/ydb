@@ -45,7 +45,7 @@ namespace NKafka {
     TKafkaInitProducerIdActor::TKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TString& transactionalId)
         : Context(context)
         , CorrelationId(correlationId)
-        , TransactionalId(std::move(transactionalId)) {
+        , TransactionalId(transactionalId) {
     }
         
     void TKafkaInitProducerIdActor::Bootstrap(const NActors::TActorContext& ctx) {
@@ -201,9 +201,9 @@ namespace NKafka {
     void TKafkaInitProducerIdActor::OnSuccessfullProducerStateUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr ev) {
         auto producerState = ParseProducerState(ev).value();
 
-        PersistedProducerState = std::move(producerState);
-
         SendSaveTxnProducerStateRequest(producerState);
+        
+        PersistedProducerState = std::move(producerState);
     }
 
     // requests to producer_state table
@@ -282,7 +282,7 @@ namespace NKafka {
     void TKafkaInitProducerIdActor::SendSaveTxnProducerStateRequest(const TProducerState& producerState) {
         KAFKA_LOG_D("Sending save txn producer state request");
 
-        Send(NKafka::MakeTransactionsServiceID(), new TEvKafka::TEvSaveTxnProducerRequest(
+        Send(NKafka::MakeTransactionsServiceID(SelfId().NodeId()), new TEvKafka::TEvSaveTxnProducerRequest(
             producerState.TransactionalId,
             {
                 producerState.ProducerId, 

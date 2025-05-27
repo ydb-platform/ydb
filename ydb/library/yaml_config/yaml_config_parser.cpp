@@ -927,7 +927,6 @@ endDiskTypeCheck:   ;
                     if (erasureName && !channel.HasErasureSpecies()) {
                         channel.SetErasureSpecies(erasureName.GetRef());
                     }
-                    Y_ENSURE_BT(channel.HasStoragePoolKind() || defaultDiskTypeLower, "Disk type is not specified for channel, id " << profile.GetProfileId());
                     if (defaultDiskTypeLower && !channel.HasStoragePoolKind()) {
                         channel.SetStoragePoolKind(defaultDiskTypeLower.GetRef());
                     }
@@ -1425,7 +1424,6 @@ endDiskTypeCheck:   ;
     }
 
     static NProtoBuf::RepeatedPtrField<NKikimrTabletBase::TTabletChannelInfo> BuildDefaultChannels(NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
-        Y_ENSURE_BT(ephemeralConfig.HasStaticErasure(), "Cannot build default tablet channels: static_erasure is not provided.");
         const TString& erasureName = ephemeralConfig.GetStaticErasure();
         NProtoBuf::RepeatedPtrField<NKikimrTabletBase::TTabletChannelInfo> channelsInfo;
 

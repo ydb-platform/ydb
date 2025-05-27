@@ -176,17 +176,18 @@ class TestDatetime2(MixedClusterFixture):
         return f"""
         SELECT
             DateTime::MakeDate(DateTime::StartOfYear(DateTime::Split(d))),
-            DateTime::MakeDate(DateTime::EndOfYear(DateTime::Split(d))),
             DateTime::MakeDate(DateTime::StartOfQuarter(DateTime::Split(d))),
-            DateTime::MakeDate(DateTime::EndOfQuarter(DateTime::Split(d))),
             DateTime::MakeDate(DateTime::StartOfMonth(DateTime::Split(d))),
-            DateTime::MakeDate(DateTime::EndOfMonth(DateTime::Split(d))),
             DateTime::MakeDate(DateTime::StartOfWeek(DateTime::Split(d))),
-            DateTime::MakeDate(DateTime::EndOfWeek(DateTime::Split(d))),
             DateTime::MakeDate(DateTime::StartOfDay(DateTime::Split(d))),
-            DateTime::MakeDate(DateTime::EndOfDay(DateTime::Split(d))),
             DateTime::MakeDate(DateTime::StartOf(DateTime::Split(d), DateTime::IntervalFromDays(val))),
-            DateTime::MakeDate(DateTime::EndOf(DateTime::Split(d), DateTime::IntervalFromDays(val)))
+            -- not supported in 24-4: https://st.yandex-team.ru/YQL-19644
+            -- DateTime::MakeDate(DateTime::EndOfQuarter(DateTime::Split(d))),
+            -- DateTime::MakeDate(DateTime::EndOfMonth(DateTime::Split(d))),
+            -- DateTime::MakeDate(DateTime::EndOfDay(DateTime::Split(d))),
+            -- DateTime::MakeDate(DateTime::EndOfWeek(DateTime::Split(d))),
+            -- DateTime::MakeDate(DateTime::EndOfYear(DateTime::Split(d))),
+            -- DateTime::MakeDate(DateTime::EndOf(DateTime::Split(d), DateTime::IntervalFromDays(val)))
         FROM {self.table_name};
         """
 

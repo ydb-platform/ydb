@@ -589,16 +589,14 @@ TFuture<TStatus> UpdateCheckpointWithCheckWrapper(
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCheckpointStorage : public ICheckpointStorage {
-    TYqSharedResources::TPtr YqSharedResources;
     TYdbConnectionPtr YdbConnection;
     const NConfig::TYdbStorageConfig Config;
 
 public:
     explicit TCheckpointStorage(
         const NConfig::TYdbStorageConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const IEntityIdGenerator::TPtr& entityIdGenerator,
-        const TYqSharedResources::TPtr& yqSharedResources);
+        const TYdbConnectionPtr& ydbConnection);
 
     ~TCheckpointStorage() = default;
 
@@ -662,11 +660,9 @@ private:
 
 TCheckpointStorage::TCheckpointStorage(
     const NConfig::TYdbStorageConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
-    const TYqSharedResources::TPtr& yqSharedResources)
-    : YqSharedResources(yqSharedResources)
-    , YdbConnection(NewYdbConnection(config, credentialsProviderFactory, YqSharedResources->CoreYdbDriver))
+    const TYdbConnectionPtr& ydbConnection)
+    : YdbConnection(ydbConnection)
     , Config(config)
     , EntityIdGenerator(entityIdGenerator)
 {
@@ -1191,12 +1187,11 @@ TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {
 
 TCheckpointStoragePtr NewYdbCheckpointStorage(
     const NConfig::TYdbStorageConfig& config,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
-    const TYqSharedResources::TPtr& yqSharedResources)
+    const TYdbConnectionPtr& ydbConnection)
 {
     Y_ABORT_UNLESS(entityIdGenerator);
-    return new TCheckpointStorage(config, credentialsProviderFactory, entityIdGenerator, yqSharedResources);
+    return new TCheckpointStorage(config, entityIdGenerator, ydbConnection);
 }
 
 } // namespace NFq

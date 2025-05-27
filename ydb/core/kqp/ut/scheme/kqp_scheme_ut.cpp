@@ -3376,11 +3376,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 DELETE FROM `/Root/TestTable` WHERE Key = 2;
             )sql";
 
+            TString returningQuery = R"sql(
+                REPLACE INTO `/Root/TestTable` (Key, Value) VALUES (1, "1") RETURNING Key, Value;
+            )sql";
+
             auto modificationQueries = {
                 upsertQuery,
                 insertQuery,
                 updateQuery,
-                deleteQuery
+                deleteQuery,
+                returningQuery,
             };
 
             for (const TString& query : modificationQueries) {

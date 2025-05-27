@@ -1147,7 +1147,7 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
         optSettings.VisitChanges = true;
         TExprNode::TPtr optResult;
         auto status = OptimizeExpr(query.Ptr(), optResult,
-            [&tablesData, &effectsMap](const TExprNode::TPtr& input, TExprContext& ctx) -> TExprNode::TPtr {
+            [&tablesData, &effectsMap](const TExprNode::TPtr& input, TExprContext& ctx) {
                 auto node = TExprBase(input);
 
                 if (auto maybeReturning = node.Maybe<TKiReturningList>()) {
@@ -1175,15 +1175,6 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                     auto& tableData = GetTableData(tablesData, cluster, table);
                     const auto& tableMeta = BuildTableMeta(tableData, effect.Pos(), ctx);
                     YQL_ENSURE(effectsMap[effect.Raw()]);
-
-                    if (tableData.Metadata->WritesToTableAreDisabled) {
-                        NYql::TIssues issues;
-                        issues.AddIssue(NYql::TIssue(ctx.GetPosition(effect.Pos()),
-                            TStringBuilder() << "Table `" << tableData.Metadata->Name << "` modification is disabled: "
-                                << tableData.Metadata->DisableWritesReason));
-                        ctx.IssueManager.AddIssues(ctx.GetPosition(effect.Pos()), issues);
-                        return nullptr;
-                    }
 
                     return Build<TKqlReturningList>(ctx, returning.Pos())
                         .Update(effectsMap[effect.Raw()])

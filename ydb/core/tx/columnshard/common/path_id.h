@@ -125,21 +125,19 @@ static_assert(sizeof(TSchemeShardLocalPathId)==sizeof(ui64));
 namespace NKikimr::NOlap {
 
 using TInternalPathId = NColumnShard::TInternalPathId;
-// using TLocalPathId = NColumnShard::TLocalPathId;
-// using TUnifiedPathId = NColumnShard::TUnifiedPathId;
-    
+
 } //namespace NKikimr::NOlap
 
 template <>
 struct THash<NKikimr::NColumnShard::TInternalPathId> {
     size_t operator()(const NKikimr::NColumnShard::TInternalPathId& p) const {
-        return p.GetRawValue();
+        return THash<ui64>()(p.GetRawValue());
     }
 };
 
 template <>
 struct THash<NKikimr::NColumnShard::TSchemeShardLocalPathId> {
     size_t operator()(const NKikimr::NColumnShard::TSchemeShardLocalPathId& p) const {
-        return p.GetRawValue();
+        return THash<ui64>()(p.GetRawValue());
     }
 };

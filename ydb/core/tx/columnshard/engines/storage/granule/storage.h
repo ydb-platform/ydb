@@ -170,16 +170,19 @@ public:
         }
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<TInternalPathId> pathIdFrom, const std::optional<TInternalPathId> pathIdTo) const {
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<THashSet<TInternalPathId>>& pathIdFilter) const {
         std::vector<std::shared_ptr<TGranuleMeta>> result;
-        for (auto&& i : Tables) {
-            if (pathIdFrom && i.first < *pathIdFrom) {
-                continue;
+        if (pathIdFilter.has_value()) {
+            const auto& pathIds = *pathIdFilter;
+            for (const auto& p: pathIds) {
+                if (const auto* meta = Tables.FindPtr(p)) {
+                    result.emplace_back(*meta);
+                }
             }
-            if (pathIdTo && i.first > *pathIdTo) {
-                continue;
+        } else {
+            for (const auto& [_, meta] : Tables) {
+                result.emplace_back(meta);
             }
-            result.emplace_back(i.second);
         }
         return result;
     }

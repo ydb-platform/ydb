@@ -190,6 +190,28 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
 
     PQ_LOG_D("begin compaction for " << cumulativeSize << " bytes in " << BlobEncoder.DataKeysBody.size() << " blobs");
 
+#if 1
+    TVector<TRequestedBlob> blobs;
+    TBlobKeyTokens tokens;
+
+    ui64 size = 0;
+    for (const auto& k : BlobEncoder.DataKeysBody) {
+        size += k.Size;
+        if (size > cumulativeSize) {
+            size -= k.Size;
+            break;
+        }
+
+        blobs.emplace_back(k.Key.GetOffset(),
+                           k.Key.GetPartNo(),
+                           k.Key.GetCount(),
+                           k.Key.GetInternalPartsCount(),
+                           k.Size,
+                           TString(),
+                           k.Key);
+        tokens.Append(k.BlobKeyToken);
+    }
+#else
     ui32 size = 0;
     ui32 count = 0;
     TBlobKeyTokens tokens;
@@ -203,6 +225,7 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
                                               0, // lastOffset
                                               &tokens);
     PQ_LOG_D("count=" << count << ", size=" << size);
+#endif
     for (const auto& b : blobs) {
         PQ_LOG_D("request key " << b.Key.ToString() << ", size " << b.Size);
     }

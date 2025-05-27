@@ -323,7 +323,6 @@ private:
 
     TAutoPtr<IDestructable> Finish(EStatus status) override
     {
-        Y_ENSURE(!exc, exc->what());
         Y_ENSURE((int)Status == (int)status);
 
         auto ctx = ActorContext();
@@ -3629,7 +3628,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
             Y_TABLET_ERROR("unreachable");
         }
 
-        TAutoPtr<IDestructable> Finish(EStatus, const std::exception*) override {
+        TAutoPtr<IDestructable> Finish(EStatus) override {
             delete this;
             return nullptr;
         }

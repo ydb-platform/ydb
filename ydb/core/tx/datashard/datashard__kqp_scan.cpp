@@ -355,9 +355,9 @@ private:
                     ? Ydb::StatusIds::INTERNAL_ERROR
                     : Ydb::StatusIds::ABORTED);
                 TStringBuilder error;
-                error << "Table " << TablePath << " scan failed, reason: " << status;
                 auto issueId = status == NTable::EStatus::Exception ? NYql::TIssuesIds::DEFAULT_ERROR : NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED;
-                auto issue = NYql::YqlIssue({}, issueId, error);
+                auto issue = NYql::YqlIssue({}, issueId, TStringBuilder()
+                    << "Table " << TablePath << " scan failed, reason: " << status);
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             }
 

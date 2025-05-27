@@ -701,7 +701,7 @@ private:
 
         if (!SchemaChanged) {
             if (status != EStatus::Done) {
-                Error = TStringBuilder() << "Scan finished with status " << status;
+                Error = TStringBuilder() << "Scan finished unsuccessfully with status " << status;
             }
 
             TAutoPtr<TEvTxProcessing::TEvStreamQuotaRelease> request

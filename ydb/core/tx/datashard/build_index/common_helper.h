@@ -143,7 +143,6 @@ public:
         response.SetUploadBytes(UploadBytes);
         if (status == NTable::EStatus::Exception) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
         } else if (status != NTable::EStatus::Done) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else if (UploadStatus.IsNone() || UploadStatus.IsSuccess()) {
@@ -151,11 +150,11 @@ public:
             if (UploadStatus.IsNone()) {
                 UploadStatus.Issues.AddIssue(NYql::TIssue("Shard or requested range is empty"));
             }
-            NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
         } else {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
         }
+
+        NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
     }
 
     const TUploadStatus& GetUploadStatus() const {

@@ -25,7 +25,7 @@ public:
         LastScan = scan;
     }
 
-    void Fail(const std::exception& exc) override {
+    void Throw(const std::exception& exc) override {
         Y_ENSURE(false, exc.what());
     }
 };

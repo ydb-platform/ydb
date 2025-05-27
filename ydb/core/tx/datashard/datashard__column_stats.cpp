@@ -63,7 +63,9 @@ public:
         record.SetShardTabletId(ShardTabletId);
 
         if (status != EStatus::Done) {
-            record.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ABORTED);
+            record.SetStatus(status == EStatus::Exception
+                ? NKikimrStat::TEvStatisticsResponse::STATUS_ERROR
+                : NKikimrStat::TEvStatisticsResponse::STATUS_ABORTED);
             TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), response.release(), 0, Cookie));
             delete this;
             return nullptr;

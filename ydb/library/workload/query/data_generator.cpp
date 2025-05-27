@@ -10,7 +10,7 @@ namespace NYdbWorkload {
 namespace NQuery {
 
     TQueryWorkloadDataInitializer::TQueryWorkloadDataInitializer(const TQueryWorkloadParams& params)
-        : TWorkloadDataInitializerBase("", "Upload external dataset from directory", params)
+        : TWorkloadDataInitializerBase("", "Upload data from directory", params)
     {}
 
     void TQueryWorkloadDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {

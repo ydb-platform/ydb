@@ -178,6 +178,9 @@ public:
         return {};
     }
     virtual TString GetWorkloadName() const = 0;
+    virtual TString GetDescription() const {
+        return TString();
+    }
 
     virtual void Validate(const ECommandType /*commandType*/, int /*workloadType*/) {};
 public:

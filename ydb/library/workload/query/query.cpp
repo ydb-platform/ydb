@@ -36,6 +36,27 @@ TString TQueryWorkloadParams::GetWorkloadName() const {
     return "Query";
 }
 
+TString TQueryWorkloadParams::GetDescription() const {
+    return R"(Workload defined by the user.
+The load testing cycle consists of stages.
+The user creates a directory with subdirectories corresponding to each stage. Let's call this directory suite. The path to the suite is passed through the "--suite-path" parameter of each command.
+
+There can be four stages in total:
+1. init
+Initialization of tables, their configuration, etc. All files with the "sql" and "yql" extensions will be used in this directory, including those in nested directories. It is assumed that they contain DDL queries. It is also possible to specify such queries directly from the command line, using the "--query" parameter of the "init" command.
+
+2. import
+Filling tables with data. This folder is expected to contain subfolders whose names correspond to the names of the tables. They already contain files with data. The following formats are supported: csv (coma separated values), tsv (tab separated values), csv.gz (compressed csv) and tsv.gz (compressed tsv).
+
+3. run
+Run load testing. In this directory, all files with the extensions "sql" and "yql" will be used, including those in nested directories. It is also possible to specify queries directly from the command line, using the "--query" parameter of the "run" command.
+
+4. clean
+Cleaning, deleting tables used for load testing. This step does not require any data from the user, only the path to the database.
+
+Details can be found in the description of the commands, using the "--help" option.)";
+}
+
 TQueryInfo TQueryGenerator::MakeQuery(const TString& queryText, const TString& queryName) const {
     TQueryInfo result;
     TStringBuilder query;
@@ -102,7 +123,7 @@ TQueryInfoList TQueryGenerator::GetWorkload(int /*type*/) {
 
 TVector<IWorkloadQueryGenerator::TWorkloadType> TQueryGenerator::GetSupportedWorkloadTypes() const {
     return {
-        IWorkloadQueryGenerator::TWorkloadType(0, "olap", "Hard analitics queries from external source. One thread, more stats for every query.", IWorkloadQueryGenerator::TWorkloadType::EKind::Benchmark),
+        IWorkloadQueryGenerator::TWorkloadType(0, "olap", "Perform load testing.", IWorkloadQueryGenerator::TWorkloadType::EKind::Benchmark),
     };
 }
 
@@ -111,7 +132,7 @@ std::string TQueryGenerator::GetDDLQueries() const {
     for (const auto& cq: Params.GetCustomQueries()) {
         result << cq.c_str() << ";" << std::endl;
     }
-    result << GetDDLQueriesFromDir(Params.GetSuitePath() / "create");
+    result << GetDDLQueriesFromDir(Params.GetSuitePath() / "init");
     return result.str();
 }
 

@@ -431,6 +431,9 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
       )
     , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
 {
+    if (const auto desc = Params->GetDescription()) {
+        Description = desc;
+    }
     AddCommand(std::make_unique<TWorkloadCommandInit>(*Params));
     if (auto import = TWorkloadCommandImport::Create(*Params)) {
         AddCommand(std::move(import));

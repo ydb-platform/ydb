@@ -12,6 +12,7 @@ public:
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     TString GetWorkloadName() const override;
+    TString GetDescription() const override;
 
     YDB_READONLY_DEF(TFsPath, SuitePath);
     YDB_READONLY_DEF(TVector<TString>, CustomQueries);

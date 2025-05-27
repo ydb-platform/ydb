@@ -23,7 +23,7 @@ FROM column_table
 
 ## Импорт данных из S3 в колоночную таблицу {#import-from-s3-to-olap}
 
-Загрузка данных из S3 в колоночную таблицу {{ ydb-short-name }} производится с помощью команды [CRATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). В результате будет создана [колоночная таблица](../../datamodel/table.md#column-oriented-tables) со схемой, соответствующей использованной для импорта [внешней таблицы](../../datamodel/external_table.md):
+Загрузка данных из S3 в колоночную таблицу {{ ydb-short-name }} производится с помощью команды [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). В результате будет создана [колоночная таблица](../../datamodel/table.md#column-oriented-tables) со схемой, соответствующей использованной для импорта [внешней таблицы](../../datamodel/external_table.md):
 
 ```yql
 CREATE TABLE column_table (

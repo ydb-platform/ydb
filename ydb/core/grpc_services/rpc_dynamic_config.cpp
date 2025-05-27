@@ -66,13 +66,6 @@ public:
     {
         TBase::Bootstrap(TActivationContext::AsActorContext());
 
-        if constexpr (std::is_same_v<TRequest, TEvGetConfigurationVersionRequest>) {
-            if (!AppData()->FeatureFlags.GetEnableGetConfigurationVersion()) {
-                Cerr << "GetConfigurationVersion feature is disabled" << Endl;
-                return Disabled();
-            }
-        }
-
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
             .RetryLimitCount = 10,
@@ -152,7 +145,11 @@ private:
     }
 
     void Handle(TEvConsole::TEvDisabled::TPtr&) {
-        return Disabled();
+        ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage> issues;
+        auto issue = issues.Add();
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        issue->set_message("Feature is disabled");
+        return TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
     }
 
     void Handle(TEvConsole::TEvGenericError::TPtr& ev) {
@@ -193,14 +190,6 @@ private:
         this->Request_->RaiseIssue(NYql::TIssue("Console is unavailable"));
         this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
         PassAway();
-    }
-
-    void Disabled() {
-        ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage> issues;
-        auto issue = issues.Add();
-        issue->set_severity(NYql::TSeverityIds::S_ERROR);
-        issue->set_message("Feature is disabled");
-        return TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) noexcept

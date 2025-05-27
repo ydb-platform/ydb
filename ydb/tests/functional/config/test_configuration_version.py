@@ -25,7 +25,6 @@ def get_configuration_version(dynamic_client, list_nodes=False):
 
 class AbstractTestConfigurationVersion(object):
     erasure = Erasure.BLOCK_4_2
-    extra_feature_flags = ["enable_get_configuration_version"]
 
     @classmethod
     def setup_class(cls):
@@ -34,7 +33,6 @@ class AbstractTestConfigurationVersion(object):
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
                                              separate_node_configs=True,
-                                             extra_feature_flags=cls.extra_feature_flags,
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
@@ -97,11 +95,3 @@ class TestConfigurationVersion(AbstractTestConfigurationVersion):
         self.check_nodes_list(result.v1_nodes_list, [4, 6, 7, 8])
         self.check_nodes_list(result.v2_nodes_list, [1, 3, 5])
         self.check_nodes_list(result.unknown_nodes_list, [2])
-
-
-class TestConfigurationVersionDisabled(AbstractTestConfigurationVersion):
-    extra_feature_flags = []
-
-    def test_configuration_version_disabled(self):
-        response = self.dynconfig_client.get_configuration_version(list_nodes=False)
-        assert_that(response.operation.status == StatusIds.BAD_REQUEST)

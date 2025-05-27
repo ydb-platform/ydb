@@ -2066,5 +2066,51 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         UNIT_ASSERT(HasTabletIssue(result));
     }
+
+    Y_UNIT_TEST(TestSystemStateRetriesAfterReceivingResponse) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        std::optional<TActorId> targetActor;
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvWhiteboard::EvSystemStateResponse: {
+                    if (ev->Cookie == 1) {
+                        if (!targetActor) {
+                            targetActor = ev->Recipient;
+                            runtime.Send(ev.Release());
+                            runtime.Send(new IEventHandle(
+                                *targetActor,
+                                sender,
+                                new NHealthCheck::TEvPrivate::TEvRetryNodeWhiteboard(1, TEvWhiteboard::TEvSystemStateRequest::EventType)
+                            ));
+
+                        }
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+
+        auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+    }
 }
 }

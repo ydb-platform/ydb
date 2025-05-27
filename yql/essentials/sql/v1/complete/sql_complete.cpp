@@ -26,10 +26,10 @@ namespace NSQLComplete {
         }
 
         TCompletion Complete(TCompletionInput input) override {
-            return CompleteAsync(std::move(input)).ExtractValueSync();
+            return CompleteAsync(std::move(input), {}).ExtractValueSync();
         }
 
-        virtual NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input) override {
+        virtual NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input, TEnvironment env) override {
             if (
                 input.CursorPosition < input.Text.length() &&
                     IsUTF8ContinuationByte(input.Text.at(input.CursorPosition)) ||
@@ -42,7 +42,7 @@ namespace NSQLComplete {
             TLocalSyntaxContext context = SyntaxAnalysis_->Analyze(input);
             auto keywords = context.Keywords;
 
-            TGlobalContext global = GlobalAnalysis_->Analyze(input);
+            TGlobalContext global = GlobalAnalysis_->Analyze(input, std::move(env));
 
             TNameRequest request = NameRequestFrom(input, context, global);
             if (request.IsEmpty()) {

@@ -60,7 +60,21 @@ class YdbCluster:
         def is_local(self) -> bool:
             """Определяет, является ли нода локальной"""
             local_hostname = YdbCluster.get_local_hostname()
-            return self.host in ['localhost', '127.0.0.1'] or self.host == local_hostname
+            
+            # Проверяем точное совпадение
+            if self.host in ['localhost', '127.0.0.1'] or self.host == local_hostname:
+                return True
+            
+            # Проверяем совпадение короткого имени хоста (без домена)
+            # Например: ghrun-ihc5wgt3dq.auto.internal -> ghrun-ihc5wgt3dq
+            host_short = self.host.split('.')[0]
+            local_short = local_hostname.split('.')[0]
+            
+            if host_short == local_short:
+                LOGGER.debug(f"Host {self.host} is local (short name match: {host_short} == {local_short})")
+                return True
+            
+            return False
         
         def execute_command(self, cmd: Union[str, list], raise_on_error: bool = True, timeout: Optional[float] = None, raise_on_timeout: bool = True) -> str:
             """

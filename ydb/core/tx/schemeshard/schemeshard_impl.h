@@ -270,6 +270,7 @@ public:
     THashMap<TPathId, TViewInfo::TPtr> Views;
     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
     THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
+    THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
 
     TTempDirsState TempDirsState;
 
@@ -869,6 +870,10 @@ public:
     void PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection);
     void PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId);
 
+    // SysView
+    void PersistSysView(NIceDb::TNiceDb &db, TPathId pathId);
+    void PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId);
+
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 
     enum class EHiveSelection : uint8_t {
@@ -1262,13 +1267,14 @@ public:
     // This set is needed to kill all the running scheme uploaders on SchemeShard death.
     THashSet<TActorId> RunningExportSchemeUploaders;
 
-    void FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo::TPtr exportInfo);
+    void FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo& exportInfo);
 
-    static void PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo);
-    static void PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo);
-    static void PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo);
-    static void PersistExportState(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo);
-    static void PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo, ui32 targetIdx);
+    static void PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
+    static void PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
+    static void PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
+    static void PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
+    static void PersistExportMetadata(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
+    static void PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo, ui32 targetIdx);
 
     struct TExport {
         struct TTxCreate;
@@ -1314,16 +1320,16 @@ public:
     THashSet<TActorId> RunningImportSchemeGetters;
     THashSet<TActorId> RunningImportSchemeQueryExecutors;
 
-    void FromXxportInfo(NKikimrImport::TImport& exprt, const TImportInfo::TPtr importInfo);
+    void FromXxportInfo(NKikimrImport::TImport& exprt, const TImportInfo& importInfo);
 
-    static void PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo);
-    static void PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo);
-    static void PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo);
-    static void PersistImportState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo);
-    static void PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
-    static void PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
-    static void PersistImportItemPreparedCreationQuery(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
-    static void PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx);
+    static void PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
+    static void PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
+    static void PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
+    static void PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
+    static void PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
+    static void PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
+    static void PersistImportItemPreparedCreationQuery(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
+    static void PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
 
     struct TImport {
         struct TTxCreate;
@@ -1358,6 +1364,7 @@ public:
     void Handle(TEvImport::TEvCancelImportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImport::TEvForgetImportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvImport::TEvListObjectsInS3ExportRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx);

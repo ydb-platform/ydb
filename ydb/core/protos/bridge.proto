@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package NKikimrBridge;
+
+message TClusterState {
+    // each realm state in relation to primary one
+    enum EPileState {
+        DISCONNECTED = 0; // disconnected from the cluster (no other node connects to this realm)
+        NOT_SYNCHRONIZED = 1; // not synchronized with primary, may not be promoted -- synchronization needs to complete first
+        SYNCHRONIZED = 2; // fully synchronized with primary, may be promoted
+    }
+    repeated EPileState PerPileState = 1; // a state for every realm, including primary
+    uint32 PrimaryPile = 2; // the current primary (must be SYNCHRONIZED)
+    uint32 PromotedPile = 3; // realm we are going to promote (must also be SYNCHRONIZED), or primary one
+}

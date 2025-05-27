@@ -87,12 +87,12 @@ bool TSparsedMerger::TSparsedChunkCursor::AddIndexTo(TWriter& writer) {
     return writer.AddRecord(*GetCurrentDataChunk().GetSparsedChunk().GetColValue(), ScanIndex, GetGlobalResultIndexVerified());
 }
 
-void TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<ui32> sourceLowerBound) {
+bool TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<ui32> sourceLowerBound) {
     if (ScanIndex < GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length()) {
-        MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex)));
+        AFL_VERIFY(MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))));
         if (GetGlobalResultIndexImpl().value_or(0) >= 0) {
             if (!sourceLowerBound || *sourceLowerBound <= GetGlobalPosition()) {
-                return;
+                return true;
             }
         }
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_record")("idx", ScanIndex)("cursor_idx", CursorIdx)(
@@ -101,10 +101,10 @@ void TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<
         while (ScanIndex < GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length()) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_record")("idx", ScanIndex)("cursor_idx", CursorIdx)(
                 "record_idx", GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))("lb", sourceLowerBound);
-            MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex)));
+            AFL_VERIFY(MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))));
             if (GetGlobalResultIndexImpl().value_or(0) >= 0) {
                 if (!sourceLowerBound || *sourceLowerBound <= GetGlobalPosition()) {
-                    return;
+                    return true;
                 }
             }
             ++ScanIndex;
@@ -112,11 +112,13 @@ void TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<
     }
     AFL_VERIFY(ScanIndex == GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length());
     while (TBase::IsValid() && ScanIndex == GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length()) {
-        TBase::MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetRecordsCount()));
+        Y_UNUSED(TBase::MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetRecordsCount())));
         ScanIndex = 0;
     }
     if (TBase::IsValid()) {
-        MoveToSignificant(sourceLowerBound);
+        return MoveToSignificant(sourceLowerBound);
+    } else {
+        return false;
     }
 }
 
@@ -144,11 +146,15 @@ bool TSparsedMerger::TSparsedChunkCursor::InitGlobalRemapping(
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("reason", "too_early")("idx", GetCursorIdx());
         return false;
     }
+    AFL_VERIFY(IsValid());
     GlobalResultOffset = globalResultOffset;
     RemapToGlobalResult = &remapToGlobalResult;
-    if (GetGlobalPosition() <= RemapToGlobalResult->GetMinSourceIndex()) {
-        MoveToSignificant(RemapToGlobalResult->GetMinSourceIndex());
+    {
+        Y_UNUSED(MoveToSignificant(RemapToGlobalResult->GetMinSourceIndex()));
         AFL_VERIFY(RemapToGlobalResult->GetMinSourceIndex() <= GetGlobalPosition());
+        if (!IsValid()) {
+            return false;
+        }
     }
     if (!GetGlobalResultIndexImpl()) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("reason", "not_index")("idx", GetCursorIdx())(

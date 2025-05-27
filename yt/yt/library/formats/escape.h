@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
 #   include <nmmintrin.h>
 #endif
 
@@ -65,7 +65,7 @@ public:
 
 private:
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
 #   ifdef _MSC_VER
 #       define DECL_PREFIX __declspec(align(16))
 #       define DECL_SUFFIX

@@ -101,7 +101,7 @@ TEST(TParseCookiesTest, ParseCookie)
 
 std::vector<std::string> ToVector(const auto& v)
 {
-    return std::vector<std::string>(v.begin(), v.end());
+    return {v.begin(), v.end()};
 }
 
 TEST(THeadersTest, Simple)
@@ -111,8 +111,8 @@ TEST(THeadersTest, Simple)
     headers->Set("X-Test", "F");
 
     ASSERT_EQ(std::vector<std::string>{{"F"}}, ToVector(headers->GetAll("X-Test")));
-    ASSERT_EQ(std::string{"F"}, headers->GetOrThrow("X-Test"));
-    ASSERT_EQ(std::string{"F"}, *headers->Find("X-Test"));
+    ASSERT_EQ(std::string("F"), headers->GetOrThrow("X-Test"));
+    ASSERT_EQ(std::string("F"), *headers->Find("X-Test"));
 
     ASSERT_THROW(headers->GetAll("X-Test2"), TErrorException);
     ASSERT_THROW(headers->GetOrThrow("X-Test2"), TErrorException);
@@ -1035,7 +1035,7 @@ TEST_P(THttpServerTest, ResponseStreaming)
     Sleep(TDuration::MilliSeconds(10));
 }
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 class TCancelingHandler
     : public IHttpHandler

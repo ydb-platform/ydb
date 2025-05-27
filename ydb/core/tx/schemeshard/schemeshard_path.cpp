@@ -16,6 +16,8 @@ TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation loca
 {
 }
 
+bool isSysDirCreateAllowed = false;  // TODO(n00bcracker): remove after giving permissions only for metadata@system
+
 TPath::TChecker::operator bool() const {
     return !Failed;
 }
@@ -575,6 +577,19 @@ const TPath::TChecker& TPath::TChecker::IsDirectory(EStatus status) const {
     }
 
     return Fail(status, TStringBuilder() << "path is not a directory"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
+const TPath::TChecker& TPath::TChecker::IsSysViewDirectory(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsDirectory() && Path.Base()->Name == NSysView::SysPathName) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a .sys directory"
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
@@ -1138,6 +1153,20 @@ const TPath::TChecker& TPath::TChecker::IsNameUniqGrandParentLevel(EStatus statu
     }
 
     return *this;
+}
+
+const TPath::TChecker& TPath::TChecker::IsSysView(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsSysView()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a system view"
+        << " (" << BasicPathInfo(Path.Base()) << ")"
+    );
 }
 
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
@@ -1804,7 +1833,8 @@ bool TPath::IsValidLeafName(TString& explain) const {
         return false;
     }
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews() && leaf == NSysView::SysPathName) {
+    if (AppData()->FeatureFlags.GetEnableSystemViews() && !isSysDirCreateAllowed &&
+        leaf == NSysView::SysPathName) {
         explain += TStringBuilder()
             << "path part '" << NSysView::SysPathName << "' is reserved by the system";
         return false;

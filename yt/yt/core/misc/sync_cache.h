@@ -2,10 +2,9 @@
 
 #include "public.h"
 #include "cache_config.h"
+#include "memory_usage_tracker.h"
 
 #include <yt/yt/library/profiling/sensor.h>
-
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 

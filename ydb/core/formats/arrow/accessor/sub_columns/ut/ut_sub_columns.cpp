@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 ++idx;
             }
             auto bJsonArr = arrBuilder.Finish(jsons.size());
-            auto arrData = TSubColumnsArray::Make(bJsonArr, settings).DetachResult();
+            auto arrData = TSubColumnsArray::Make(bJsonArr, settings, bJsonArr->GetDataType()).DetachResult();
             Cerr << arrData->DebugJson() << Endl;
             AFL_VERIFY(PrintBinaryJsons(arrData->GetChunkedArray()) == R"([[{"a":"1","b":"1","c":"111"},null,{"a1":"2","b":"2","c":"222"},{"a":"3","b":"3","c":"333"},null,{"a":"5","b1":"5"}]])")(
                     "string", PrintBinaryJsons(arrData->GetChunkedArray()));
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 ++idx;
             }
             auto bJsonArr = arrBuilder.Finish(jsons.size());
-            auto arrData = TSubColumnsArray::Make(bJsonArr, settings).DetachResult();
+            auto arrData = TSubColumnsArray::Make(bJsonArr, settings, bJsonArr->GetDataType()).DetachResult();
             Cerr << arrData->DebugJson() << Endl;
             AFL_VERIFY(PrintBinaryJsons(arrData->GetChunkedArray()) == R"([[{"a":"1","b":"1","c":"111"},null,{"a1":"2","b":"2","c":"222"},{"a":"3","b":"3","c":"333"},null,{"a":"5","b1":"5"}]])")(
                     "string", PrintBinaryJsons(arrData->GetChunkedArray()));

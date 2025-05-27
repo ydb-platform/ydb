@@ -50,9 +50,9 @@ bootstrap_config: {}
 channel_profile_config:
   profile:
   - channel:
-    - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default}
-    - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default}
-    - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default}
+    - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default, storage_pool_kind: nvme}
+    - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default, storage_pool_kind: nvme}
+    - {erasure_species: block-4-2, pdisk_category: '2', vdisk_category: Default, storage_pool_kind: nvme}
     profile_id: 0
 security_config:
   disable_builtin_security: false

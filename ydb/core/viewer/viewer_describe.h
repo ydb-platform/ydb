@@ -295,7 +295,7 @@ public:
             return;
         }
 
-        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, NYql::GetAllExternalDataSourceTypes())};
+        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, true, NYql::GetAllExternalDataSourceTypes())};
         const auto& sourceType = DescribeResult->GetPathDescription().GetExternalTableDescription().GetSourceType();
         try {
             json["PathDescription"]["ExternalTableDescription"].EraseValue("Content");

@@ -13,6 +13,7 @@ RECURSE_FOR_TESTS(
     opt
     perf
     pg
+    rbo
     query
     scan
     scheme

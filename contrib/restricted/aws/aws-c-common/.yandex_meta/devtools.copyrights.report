@@ -38,7 +38,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        generated/include/aws/common/config.h [5:5]
+        generated/include/aws/common/config-linux.h [5:5]
         include/aws/common/allocator.h [4:4]
         include/aws/common/array_list.h [5:5]
         include/aws/common/array_list.inl [5:5]

@@ -94,7 +94,7 @@ public:
                 ++count;
             }
             Cerr << "WAIT_COMPACTION: " << GetCompactionStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
+            Sleep(std::min(TDuration::Seconds(1), d));
         }
         return count > 0;
     }

@@ -271,29 +271,29 @@ private:
 
     void FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowMain2Build(*PostingBuf, Child + pos, key, row);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowMainToBuild(*PostingBuf, Child + *pos, key, row);
         }
     }
 
     void FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowMain2Posting(*PostingBuf, Child + pos, key, row, DataPos);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowMainToPosting(*PostingBuf, Child + *pos, key, row, DataPos);
         }
     }
 
     void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Build(*PostingBuf, Child + pos, key, row);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuildToBuild(*PostingBuf, Child + *pos, key, row);
         }
     }
 
     void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Posting(*PostingBuf, Child + pos, key, row, DataPos);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuildToPosting(*PostingBuf, Child + *pos, key, row, DataPos);
         }
     }
 };

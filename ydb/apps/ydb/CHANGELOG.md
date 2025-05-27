@@ -1,3 +1,12 @@
+* Added object names completion in interactive mode
+
+* Added `--threads` option to `ydb workload clickbench run`, `ydb workload tpch run` and `ydb workload tpcds run`. It allows to send workload queries by multiple threads.
+## 2.21.0 ##
+
+* Fixed a bug where ydb cli was trying to read parameters from stdin even if it had no data.
+* Add `--replace` option to `ydb tools restore` command. If enabled, scheme objects present in the backup would be dropped before restoring.
+* Added date range parameters (--date-to, --date-from to support uniform PK distribution) for ydb workload log run operations including bulk_upsert, insert, and upsert
+* Do not save to local backups destination tables of `ASYNC REPLICATION` and its changefeeds. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
 * Fix `ydb operation get` not working for running operations.
 * Improved `ydb import file` commands to support files with BOM (Byte Order Mark).
 * Brackets are now inserted in pairs in YDB CLI interactive mode
@@ -293,7 +302,7 @@ Also now you can load test YDB topics, using wide transactions that span over al
 * You can now save the IAM service URL in a profile.
 * Added support for username and password-based authentication without specifying the password.
 * Added support for AWS profiles in the [ydb export s3](reference/ydb-cli/export-import/auth-s3.md#auth) command.
-* You can now create profiles using `stdin`. For example, you can pass the [YC CLI](https://cloud.yandex.ru/docs/cli/) `yc ydb database get information` command output to the `ydb config profile create` command input.
+* You can now create profiles using `stdin`. For example, you can pass the [YC CLI](https://yandex.cloud/docs/cli/) `yc ydb database get information` command output to the `ydb config profile create` command input.
 
 ### Bug fixes
 

@@ -256,11 +256,11 @@ public:
         YDB_READONLY(ui32, LocalPosition, 0);
         YDB_READONLY(ui32, GlobalPosition, 0);
 
-        void InitArray(const ui32 globalPosition) {
+        bool InitArray(const ui32 globalPosition) {
             if (Input) {
                 if (globalPosition == Input->GetRecordsCount()) {
                     GlobalPosition = globalPosition;
-                    return;
+                    return false;
                 }
                 AFL_VERIFY(globalPosition < Input->GetRecordsCount())("pos", globalPosition)("size", Input->GetRecordsCount());
                 CurrentChunk = Input->GetArray(CurrentChunk, globalPosition, Input);
@@ -273,13 +273,22 @@ public:
                 }
                 LocalPosition = CurrentChunk->GetAddress().GetLocalIndex(globalPosition);
                 GlobalPosition = globalPosition;
+                OnInitArray(CurrentArray);
+                return true;
             } else {
                 AFL_VERIFY(globalPosition == 0);
                 GlobalPosition = globalPosition;
+                return false;
             }
         }
 
+        virtual void OnInitArray(const std::shared_ptr<TArrayImpl>& /*arr*/) {
+        
+        }
+
     public:
+        virtual ~TBaseIterator() = default;
+
         ui32 GetGlobalPosition(const ui32 localPosition) const {
             AFL_VERIFY(CurrentChunk);
             return CurrentChunk->GetAddress().GetGlobalIndex(localPosition);
@@ -289,8 +298,8 @@ public:
             return !Input;
         }
 
-        void MoveFurther(const ui32 delta) {
-            MoveToPosition(GlobalPosition + delta);
+        [[nodiscard]] bool MoveFurther(const ui32 delta) {
+            return MoveToPosition(GlobalPosition + delta);
         }
 
         bool IsValid() const {
@@ -313,17 +322,18 @@ public:
             return *CurrentArray;
         }
 
-        void MoveToPosition(const ui32 globalPosition) {
+        [[nodiscard]] bool MoveToPosition(const ui32 globalPosition) {
             if (GlobalPosition == globalPosition) {
-                return;
+                return GlobalPosition < Input->GetRecordsCount();
             }
             AFL_VERIFY(Input);
             AFL_VERIFY(GlobalPosition < globalPosition)("old", GlobalPosition)("new", globalPosition)("count", Input->GetRecordsCount());
             if (CurrentChunk->GetAddress().Contains(globalPosition)) {
                 LocalPosition = CurrentChunk->GetAddress().GetLocalIndex(globalPosition);
                 GlobalPosition = globalPosition;
+                return true;
             } else {
-                InitArray(globalPosition);
+                return InitArray(globalPosition);
             }
         }
     };

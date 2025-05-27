@@ -18,6 +18,7 @@
 
 #include <yt/yt/core/yson/protobuf_interop.h>
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/object_pool.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 #include <yt/yt/core/misc/ring_queue.h>
@@ -38,8 +39,6 @@
 #include <library/cpp/yt/memory/ref.h>
 
 #include <library/cpp/containers/concurrent_hash/concurrent_hash.h>
-
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -570,7 +569,7 @@ protected:
     {
         // Defaults.
         TMethodDescriptor(
-            TString method,
+            std::string method,
             TLiteHandler liteHandler,
             THeavyHandler heavyHandler);
 
@@ -589,7 +588,7 @@ protected:
         TInvokerProvider InvokerProvider;
 
         //! Service method name.
-        TString Method;
+        std::string Method;
 
         //! A handler that will serve lite requests.
         TLiteHandler LiteHandler;
@@ -893,7 +892,7 @@ protected:
      *  \note
      *  Thread affinity: any
      */
-    virtual std::vector<TString> SuggestAddresses();
+    virtual std::vector<std::string> SuggestAddresses();
 
     //! Part of #DoConfigure
     //! #DoConfigure configures already registered methods.
@@ -912,7 +911,7 @@ protected:
 protected:
     virtual void OnMethodError(
         TError* error,
-        const TString& method);
+        const std::string& method);
 
 private:
     friend class TRequestQueue;
@@ -1087,7 +1086,7 @@ private:
 
     void OnDiscoverRequestReplyDelayReached(TCtxDiscoverPtr context);
 
-    static TString GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
+    static std::string GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
 
     void OnServiceLivenessCheck();
 };

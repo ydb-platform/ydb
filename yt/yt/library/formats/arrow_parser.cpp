@@ -386,6 +386,13 @@ void CheckArrowTypeMatch(
             break;
 
         case ESimpleLogicalValueType::Interval64:
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            // TODO(nadya02): YT-15805: Support tz types.
             THROW_ERROR_EXCEPTION("Unexpected column type %Qv",
                 columnType);
     }
@@ -1539,7 +1546,6 @@ public:
 
         auto bufferForStringLikeValues = std::make_shared<TChunkedOutputStream>(
             GetRefCountedTypeCookie<TArrowParserTag>(),
-            GetNullMemoryUsageTracker(),
             256_KB,
             1_MB);
 

@@ -1,5 +1,6 @@
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/fwd.h>
@@ -31,7 +32,7 @@ namespace {
             }
 
             THolder<NKafka::TEvKafka::TEvSaveTxnProducerResponse> SaveTxnProducer(const TString& txnId, i64 producerId, i16 producerEpoch) {
-                auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, NKafka::TEvKafka::TProducerInstanceId{producerId, producerEpoch});
+                auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, NKafka::TProducerInstanceId{producerId, producerEpoch});
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, request.Release()));
                 auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvSaveTxnProducerResponse>();
                 UNIT_ASSERT(response != nullptr);
@@ -229,6 +230,39 @@ namespace {
 
             SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
             SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&seenEvent]() {
+                return seenEvent;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+        }
+
+        Y_UNIT_TEST(OnSecondInitProducerId_ShouldSendPoisonPillToTxnActor) {
+            // send valid message
+            ui64 correlationId = 123;
+            TString txnId = "my-tx-id";
+            i64 producerId = 1;
+            i16 producerEpoch = 0;
+            SaveTxnProducer(txnId, producerId, producerEpoch);
+            bool seenEvent = false;
+            TActorId txnActorId;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
+                    txnActorId = input->Recipient;
+                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                    UNIT_ASSERT_VALUES_EQUAL(txnActorId, input->Recipient);
+                    seenEvent = true;
+                }
+
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            // first request registers actor
+            SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
+            // request to save producer with newer epoch should trigger poison pill to current txn actor
+            SaveTxnProducer(txnId, producerId, producerEpoch + 1);
 
             TDispatchOptions options;
             options.CustomFinalCondition = [&seenEvent]() {

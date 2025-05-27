@@ -7,6 +7,8 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #endif
 
+#include <yql/essentials/minikql/mkql_node_builder.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -14,7 +16,11 @@ using namespace NMiniKQL;
 using namespace NYql;
 using namespace NYql::NNodes;
 
-NUdf::TUnboxedValue MakeDefaultValueByType(const NKikimr::NMiniKQL::TType* type) {
+NUdf::TUnboxedValue MakeDefaultValueByType(NKikimr::NMiniKQL::TType* type) {
+    bool isOptional;
+    type = UnpackOptional(type, isOptional);
+    Y_ABORT_UNLESS(type->IsData(), "%s", type->GetKindAsStr());
+
     auto dataType = static_cast<const NKikimr::NMiniKQL::TDataType*>(type);
     switch (dataType->GetSchemeType()) {
         case NUdf::TDataType<bool>::Id:

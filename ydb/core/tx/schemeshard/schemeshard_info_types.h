@@ -37,6 +37,7 @@
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -55,6 +56,7 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+using namespace NTableIndex;
 
 class TSchemeShard;
 
@@ -398,7 +400,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
         ui32 NextColumnId = 1;
         ui64 AlterVersion = 0;
-        THashMap<ui32, TColumn> Columns;
+        TMap<ui32, TColumn> Columns;
         TVector<ui32> KeyColumnIds;
         bool IsBackup = false;
         bool IsRestore = false;
@@ -442,7 +444,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     ui32 NextColumnId = 1;          // Next unallocated column id
     ui64 AlterVersion = 0;
     ui64 PartitioningVersion = 0;
-    THashMap<ui32, TColumn> Columns;
+    TMap<ui32, TColumn> Columns;
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
     bool IsRestore = false;
@@ -2884,7 +2886,8 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TPathId DstPathId;
         TString SrcPrefix;
         TString SrcPath; // Src path from schema mapping
-        Ydb::Table::CreateTableRequest Scheme;
+        TMaybe<Ydb::Table::CreateTableRequest> Table;
+        TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -3457,7 +3460,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             State = EState::Collect;
         }
 
-        void Set(ui64 probability, TString data) {
+        void Add(ui64 probability, TString data) {
             Rows.emplace_back(probability, std::move(data));
             MaxProbability = std::max(probability + 1, MaxProbability + 1) - 1;
         }
@@ -3869,9 +3872,16 @@ struct TBackupCollectionInfo : TSimpleRefCount<TBackupCollectionInfo> {
     NKikimrSchemeOp::TBackupCollectionDescription Description;
 };
 
+struct TSysViewInfo : TSimpleRefCount<TSysViewInfo> {
+    using TPtr = TIntrusivePtr<TSysViewInfo>;
+
+    ui64 AlterVersion = 0;
+    NKikimrSysView::ESysViewType Type;
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
-    const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
-    const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
+    const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
+    const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
 

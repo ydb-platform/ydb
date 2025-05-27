@@ -11,9 +11,11 @@ TTransaction::TImpl::TImpl(const TSession& session, const std::string& txId)
 
 TAsyncStatus TTransaction::TImpl::Precommit() const
 {
+    auto self = shared_from_this();
+
     TStatus status(EStatus::SUCCESS, {});
 
-    for (auto& callback : PrecommitCallbacks) {
+    for (auto& callback : self->PrecommitCallbacks) {
         if (!callback) {
             continue;
         }
@@ -35,7 +37,9 @@ TAsyncStatus TTransaction::TImpl::Precommit() const
 
 NThreading::TFuture<void> TTransaction::TImpl::ProcessFailure() const
 {
-    for (auto& callback : OnFailureCallbacks) {
+    auto self = shared_from_this();
+
+    for (auto& callback : self->OnFailureCallbacks) {
         if (!callback) {
             continue;
         }

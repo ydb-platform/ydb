@@ -161,6 +161,8 @@ message TStaticNameserviceConfig {
         repeated TEndpoint Endpoint = 7;
 
         optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
+
+        optional string BridgePileName = 9; // realm name for bridged installations (starting from 0)
     }
 
     repeated TNode Node = 1;
@@ -191,12 +193,16 @@ message TDomainsConfig {
             optional bool UseSingleNodeActorId = 4;
             optional bool UseRingSpecificNodeSelection = 5;
             optional bool IsDisabled = 6 [default = false]; // used in the intermediate reconfiguration step
+            optional bool WriteOnly = 7 [default = false]; // used for ring groups
+            optional uint32 RingGroupActorIdOffset = 8 [default = 0]; // used for ActorId difference for multiple replicas on one node
         }
 
         optional uint32 SSId = 1 [default = 1];
-        optional TRing Ring = 2;
+        optional TRing Ring = 2; // for compatibility, use RingGroups
         optional uint32 StateStorageVersion = 3 [default = 0];
         repeated uint32 CompatibleVersions = 4;
+        repeated TRing RingGroups = 5;
+
     }
 
     message TStoragePoolType {
@@ -330,6 +336,8 @@ message TBlobStorageConfig {
     // filled in by config parser, not by user; required for correct distconf operation
     repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
+
+    optional NKikimrBlobStorage.TUpdateSettings BscSettings = 12;
  }
 
 message TSelfManagementConfig {
@@ -648,6 +656,28 @@ message TConveyorConfig {
     optional uint32 QueueSizeLimit = 3;
     optional double DefaultFractionOfThreadsCount = 4;
     optional double WorkersCountDouble = 5;
+}
+
+message TCompositeConveyorConfig {
+    message TCategory {
+        optional string Name = 1;
+        optional uint64 QueueSizeLimit = 2;
+    }
+
+    message TWorkerPoolCategoryLink {
+        optional string Category = 1;
+        optional double Weight = 2;
+    }
+
+    message TWorkersPool {
+        optional double WorkersCount = 1;
+        optional double DefaultFractionOfThreadsCount = 2;
+        repeated TWorkerPoolCategoryLink Links = 3;
+    }
+
+    optional bool Enabled = 1 [default = true];
+    repeated TWorkersPool WorkerPools = 2;
+    repeated TCategory Categories = 3;
 }
 
 message TPrioritiesQueueConfig {
@@ -1111,7 +1141,8 @@ message TQueryServiceConfig {
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
     optional bool EnableMatchRecognize = 20 [default = false];
-    repeated string AvailableExternalDataSources = 22;
+    repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
+    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
 }
 
 // Config describes immediate controls and allows
@@ -1837,6 +1868,7 @@ message THiveConfig {
     optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
     optional double DryRunTargetTrackingCPU = 84; // percent
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
+    optional bool UseTabletUsageEstimate = 86 [default = true];
 }
 
 message THealthCheckConfig {
@@ -2259,6 +2291,13 @@ message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
 }
 
+message TBridgeConfig {
+    message TPile {
+        optional string Name = 1; // name (to be matched with node's BridgePileName)
+    }
+    repeated TPile Piles = 1; // order of realms must not change during config updates
+}
+
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
@@ -2350,6 +2389,7 @@ message TAppConfig {
     optional TDataErasureConfig DataErasureConfig = 88;
     optional THealthCheckConfig HealthCheckConfig = 89;
     optional TWorkloadManagerConfig WorkloadManagerConfig = 90;
+    optional TBridgeConfig BridgeConfig = 91;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
@@ -2361,6 +2401,7 @@ message TAppConfig {
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
     optional string StartupConfigYaml = 107;
     optional string StartupStorageYaml = 108;
+    optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
 }
 
 message TYdbVersion {

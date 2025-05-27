@@ -466,6 +466,15 @@ using TUUComparerSignature = int(const TUnversionedValue*, const TUnversionedVal
 struct TVersionedReadOptions;
 struct TVersionedWriteOptions;
 
+template <ESimpleLogicalValueType type>
+struct TUnderlyingTzTypeImpl;
+
+template <ESimpleLogicalValueType type>
+struct TUnderlyingTimestampIntegerTypeImpl;
+
+template <ESimpleLogicalValueType type>
+using TUnderlyingTimestampIntegerType = TUnderlyingTimestampIntegerTypeImpl<type>::TValue;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 YT_DEFINE_STRONG_TYPEDEF(TSignedDistributedWriteSessionPtr, NSignature::TSignaturePtr);

@@ -608,8 +608,7 @@ TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerSelectGroupsRes
     return MakeRequestToPipe<TEvBlobStorage::TEvControllerSelectGroupsResult>(pipeClient, request.Release(), cookie);
 }
 
-void TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force) {
-    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force) {
     THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* restartPDisk = request->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
     restartPDisk->MutableTargetPDiskId()->SetNodeId(nodeId);
@@ -617,11 +616,16 @@ void TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskI
     if (force) {
         request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
     }
-    SendRequestToPipe(pipeClient, request.Release());
+    auto response = MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
+    if (response.Span) {
+        response.Span.Attribute("node_id", nodeId);
+        response.Span.Attribute("pdisk_id", pdiskId);
+        response.Span.Attribute("force", force);
+    }
+    return response;
 }
 
-void TViewerPipeClient::RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force) {
-    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGeneration, ui32 failRealmIdx, ui32 failDomainIdx, ui32 vdiskIdx, bool force) {
     THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* evictVDisk = request->Record.MutableRequest()->AddCommand()->MutableReassignGroupDisk();
     evictVDisk->SetGroupId(groupId);
@@ -632,7 +636,11 @@ void TViewerPipeClient::RequestBSControllerVDiskEvict(ui32 groupId, ui32 groupGe
     if (force) {
         request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
     }
-    SendRequestToPipe(pipeClient, request.Release());
+    auto response = MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
+    if (response.Span) {
+        response.Span.Attribute("vdisk_id", TStringBuilder() << groupId << '-' << groupGeneration << '-' << failRealmIdx << '-' << failDomainIdx << '-' << vdiskIdx);
+    }
+    return response;
 }
 
 TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> TViewerPipeClient::RequestBSControllerPDiskInfo(ui32 nodeId, ui32 pdiskId) {
@@ -760,15 +768,14 @@ TViewerPipeClient::TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResp
     return RequestBSControllerStorageStats();
 }
 
-void TViewerPipeClient::RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force) {
-    TActorId pipeClient = ConnectTabletPipe(GetBSControllerId());
+TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force) {
     THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* updateDriveStatus = request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
     updateDriveStatus->CopyFrom(driveStatus);
     if (force) {
         request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
     }
-    SendRequestToPipe(pipeClient, request.Release());
+    return MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
 }
 
 THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNavigateRequestBuilder (

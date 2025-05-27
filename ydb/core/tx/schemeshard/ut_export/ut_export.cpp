@@ -9,6 +9,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/ut_backup_restore_common.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -656,132 +657,41 @@ namespace {
           EnvOptions().EnablePermissionsExport(enablePermissions);
           Env();
           ui64 txId = 100;
-
-          const char* topicScheme = R"(
-              Name: "Topic_%d"
-              TotalGroupCount: 2
-              PartitionPerTablet: 1
-              PQTabletConfig {
-                PartitionConfig {
-                    LifetimeSeconds: 10
-                }
-                %s
-              }
-          )";
-
-          const char* consumerScheme = R"(
-              Consumers {
-                Name: "Consumer_%d"
-                Important: %s
-              }
-          )";
-
-          const char* requestItem = R"(
-              items {
-                source_path: "/MyRoot/Topic_%d"
-                destination_prefix: "/Topic_%d"
-              }
-          )";
-
-          TString requestItems = Sprintf(requestItem, 0, 0) + "\n";
-
-          {
-            auto topic = Sprintf(topicScheme, topicsCount == 1 ? consumersCount : 0, "");
-            Cerr << topic << Endl;
-            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic);
-            Env().TestWaitNotification(Runtime(), txId);
-            Cerr << "TOPIC_0 is created" << Endl;
-          }
           
-          for (ui64 i = 1; i < topicsCount; ++i) {
-            TString consumers = "";
-            
-            for (ui64 j = 0; j < consumersCount; ++j) {
-              auto consumer = Sprintf(consumerScheme, j, j % 2 == 0 ? "true" : "false");
-              consumers += consumer + "\n";
-            }
-
-            auto topic = Sprintf(topicScheme, i,  consumers.c_str());
-            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic);
+          TVector<TString> requestItems;
+          TVector<NDescUT::TTopic> expected;
+          
+          for (ui64 i = 0; i < topicsCount; ++i) {
+            auto topic = NDescUT::TTopic(i, (topicsCount == 1 || i > 0) ? consumersCount : 0);
+            Cerr << topic.GetPublic().c_str() << Endl;
+            TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetSheme());
             Env().TestWaitNotification(Runtime(), txId);
-
-            requestItems += Sprintf(requestItem, i, i) + "\n";
+            requestItems.push_back(topic.GetRequestItem());
+            expected.push_back(topic);
           }
-    
-          auto request = Sprintf(R"(
-              ExportToS3Settings {
-                endpoint: "localhost:%d"
-                scheme: HTTP
-                %s
-              }
-          )", S3Port(), requestItems.c_str());
+
+          auto exportRequest = NDescUT::TExportRequest(S3Port(), requestItems);
     
           auto schemeshardId = TTestTxConfig::SchemeShard;
-          TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::SUCCESS);
+          TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", exportRequest.GetRequest(), "", "", Ydb::StatusIds::SUCCESS);
           Env().TestWaitNotification(Runtime(), txId, schemeshardId);
 
           TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-          
-          const char* topicYdb = R"(partitioning_settings {
-  min_active_partitions: 2
-  max_active_partitions: 1
-  auto_partitioning_settings {
-    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-    partition_write_speed {
-      stabilization_window {
-        seconds: 300
-      }
-      up_utilization_percent: 80
-      down_utilization_percent: 20
-    }
-  }
-}
-retention_period {
-  seconds: 10
-}
-supported_codecs {
-}
-partition_write_speed_bytes_per_second: 50000000
-partition_write_burst_bytes: 50000000
-%s)";
-
-          const char* consumerYdb = R"(consumers {
-  name: "Consumer_%d"%s
-  read_from {
-  }
-  attributes {
-    key: "_service_type"
-    value: "data-streams"
-  }
-})";
 
           for (ui64 i = 0; i < topicsCount; ++i) {
-            TString dir = Sprintf("/Topic_%d", i);
-            auto file = dir + "/create_topic.pb";
-            UNIT_ASSERT(HasS3File(file));
-
-            TString consumers;
-            if (i == 0) {
-              consumers = "";
-            } else {
-              for (ui64 j = 0; j < consumersCount; ++j) {
-                auto consumer = Sprintf(consumerYdb, j, j % 2 == 0 ? "\n  important: true" : "");
-                consumers += consumer + "\n";
-              }
-            }
-            auto contnent = Sprintf(topicYdb, consumers.c_str());
-            UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent(file), contnent);
+            const auto& topicExpected = expected.at(i);
+            const auto& topicPath = topicExpected.GetCreateTopicPath();
+            UNIT_ASSERT(HasS3File(topicPath));
+            NDescUT::IDescriber::CompareStringsAsProto<Ydb::Topic::CreateTopicRequest>(GetS3FileContent(topicPath), topicExpected.GetPublic());
 
             if (enablePermissions) {
-              auto permissions = dir + "/permissions.pb";
-              UNIT_ASSERT(HasS3File(permissions));
-              UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent(permissions), R"(actions {
-  change_owner: "root@builtin"
-}
-)");
+              auto permissionsPath = topicExpected.GetParmissions().GetPath();
+              UNIT_ASSERT(HasS3File(permissionsPath));
+              NDescUT::IDescriber::CompareStringsAsProto<Ydb::Scheme::ModifyPermissionsRequest>(GetS3FileContent(permissionsPath), topicExpected.GetParmissions().GetContent());
+              UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent(permissionsPath), topicExpected.GetParmissions().GetContent());
             }
           }
-        };
+        }
 
     protected:
         TS3Mock::TSettings& S3Settings() {

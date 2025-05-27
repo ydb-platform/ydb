@@ -191,6 +191,16 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathId(const TSche
     }
 }
 
+THashSet<TInternalPathId> TTablesManager::ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const {
+    THashSet<TInternalPathId> result;
+    for (const auto& [schemeShardLocalPathId, internalPathId]: SchemeShardLocalToInternal) {
+        if (from.GetRawValue() <= schemeShardLocalPathId.GetRawValue() && schemeShardLocalPathId.GetRawValue() <= to.GetRawValue()) {
+            result.emplace(internalPathId);
+        }
+    }
+    return result;
+}
+
 bool TTablesManager::HasTable(const TInternalPathId pathId, const bool withDeleted, const std::optional<NOlap::TSnapshot> minReadSnapshot) const {
     auto it = Tables.find(pathId);
     if (it == Tables.end()) {

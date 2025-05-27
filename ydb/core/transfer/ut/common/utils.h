@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/string/join.h>
 #include <util/system/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -311,6 +312,7 @@ struct MainTestCase {
 
     struct CreateTransferSettings {
         std::optional<std::string> TopicName;
+        bool LocalTopic = false;
         std::optional<std::string> ConsumerName;
         std::optional<TDuration> FlushInterval = TDuration::Seconds(1);
         std::optional<ui64> BatchSizeBytes = 8_MB;
@@ -318,6 +320,12 @@ struct MainTestCase {
         std::optional<std::string> Username;
 
         CreateTransferSettings() {};
+
+        static CreateTransferSettings WithLocalTopic(bool local) {
+            CreateTransferSettings result;
+            result.LocalTopic = local;
+            return result;
+        }
 
         static CreateTransferSettings WithTopic(const std::string& topicName, std::optional<TString> consumerName = std::nullopt) {
             CreateTransferSettings result;
@@ -353,21 +361,25 @@ struct MainTestCase {
 };
 
     void CreateTransfer(const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
-        TStringBuilder sb;
+        std::vector<std::string> options;
+        if (!settings.LocalTopic) {
+            options.push_back(TStringBuilder() << "CONNECTION_STRING = 'grpc://" << ConnectionString << "'" << Endl);
+        }
         if (settings.ConsumerName) {
-            sb << ", CONSUMER = '" << *settings.ConsumerName << "'" << Endl;
+            options.push_back(TStringBuilder() <<  "CONSUMER = '" << *settings.ConsumerName << "'" << Endl);
         }
         if (settings.FlushInterval) {
-            sb << ", FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl;
+            options.push_back(TStringBuilder() <<  "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl);
         }
         if (settings.BatchSizeBytes) {
-            sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
+            options.push_back(TStringBuilder() <<  "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl);
         }
         if (settings.Username) {
-            sb << ", TOKEN = '" << *settings.Username << "@builtin'" << Endl;
+            options.push_back(TStringBuilder() <<  "TOKEN = '" << *settings.Username << "@builtin'" << Endl);
         }
 
-        TString topicName = settings.TopicName.value_or(TopicName);
+        std::string topicName = settings.TopicName.value_or(TopicName);
+        std::string optionsStr = JoinRange(",", options.begin(), options.end());
 
         auto ddl = Sprintf(R"(
             %s;
@@ -375,10 +387,9 @@ struct MainTestCase {
             CREATE TRANSFER `%s`
             FROM `%s` TO `%s` USING $l
             WITH (
-                CONNECTION_STRING = 'grpc://%s'
                 %s
             );
-        )", lambda.data(), TransferName.data(), topicName.data(), TableName.data(), ConnectionString.data(), sb.data());
+        )", lambda.data(), TransferName.data(), topicName.data(), TableName.data(), optionsStr.data());
 
         ExecuteDDL(ddl, true, settings.ExpectedError);
     }

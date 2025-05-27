@@ -141,22 +141,26 @@ public:
             const auto& database = params.GetDatabase();
             const bool ssl = params.GetEnableSsl();
 
-            switch (params.GetCredentialsCase()) {
-            case NKikimrReplication::TConnectionParams::kStaticCredentials:
-                if (!params.GetStaticCredentials().HasPassword()) {
-                    return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
+            if (endpoint.empty()) {
+                ydbProxy.Reset(CreateLocalYdbProxy(database));
+            } else {
+                switch (params.GetCredentialsCase()) {
+                case NKikimrReplication::TConnectionParams::kStaticCredentials:
+                    if (!params.GetStaticCredentials().HasPassword()) {
+                        return ResolveSecret(params.GetStaticCredentials().GetPasswordSecretName(), ctx);
+                    }
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetStaticCredentials()));
+                    break;
+                case NKikimrReplication::TConnectionParams::kOAuthToken:
+                    if (!params.GetOAuthToken().HasToken()) {
+                        return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
+                    }
+                    ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetOAuthToken().GetToken()));
+                    break;
+                default:
+                    ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
+                    break;
                 }
-                ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetStaticCredentials()));
-                break;
-            case NKikimrReplication::TConnectionParams::kOAuthToken:
-                if (!params.GetOAuthToken().HasToken()) {
-                    return ResolveSecret(params.GetOAuthToken().GetTokenSecretName(), ctx);
-                }
-                ydbProxy.Reset(CreateYdbProxy(endpoint, database, ssl, params.GetOAuthToken().GetToken()));
-                break;
-            default:
-                ErrorState(TStringBuilder() << "Unexpected credentials: " << params.GetCredentialsCase());
-                break;
             }
 
             if (ydbProxy) {

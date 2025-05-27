@@ -12,6 +12,7 @@ PEERDIR(
 )
 
 SRCS(
+    local_ydb_proxy.cpp
     topic_message.cpp
     ydb_proxy.cpp
 )

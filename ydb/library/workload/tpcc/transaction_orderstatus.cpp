@@ -113,10 +113,12 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(TTransactionContext& context,
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;
-    LOG_T("Terminal " << context.TerminalID << " started OrderStatus transaction");
 
     const int warehouseID = context.WarehouseID;
     const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
+
+    LOG_T("Terminal " << context.TerminalID << " started OrderStatus transaction in "
+        << warehouseID << ", " << districtID);
 
     // Determine lookup method (60% by name, 40% by id)
     bool lookupByName = RandomNumber(1, 100) <= 60;

@@ -180,7 +180,10 @@ class YdbCliHelper:
                         iter = int(self.result.stderr[begin_pos:end_pos])
                         begin_pos = end_pos + 1
                     end_pos = self.result.stderr.find(end_str, begin_pos)
-                    msg = (self.result.stderr[begin_pos:] if end_pos < 0 else self.result.stderr[begin_pos:end_pos]).strip()
+                    if end_pos < 0:
+                        msg = self.result.stderr[begin_pos:].strip()
+                    else:
+                        msg = self.result.stderr[begin_pos:end_pos].strip()
                     self._init_iter(iter)
                     self.result.iterations[iter].error_message = msg
                     self.result.add_error(f'Iteration {iter}: {msg}')
@@ -273,14 +276,17 @@ class YdbCliHelper:
 
         def process(self) -> YdbCliHelper.WorkloadRunResult:
             try:
-                wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), self.db_path)
+                timeout_env = int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))
+                wait_error = YdbCluster.wait_ydb_alive(timeout_env, self.db_path)
                 if wait_error is not None:
                     self.result.error_message = wait_error
                 else:
                     if os.getenv('SECRET_REQUESTS', '') == '1':
-                        with open(f'{self.query_name}.stdout', "wt") as sout, open(f'{self.query_name}.stderr', "wt") as serr:
+                        stdout_file = f'{self.query_name}.stdout'
+                        stderr_file = f'{self.query_name}.stderr'
+                        with open(stdout_file, "wt") as sout, open(stderr_file, "wt") as serr:
                             process = subprocess.run(self._get_cmd(), check=False, text=True, stdout=sout, stderr=serr)
-                        with open(f'{self.query_name}.stdout', "rt") as sout, open(f'{self.query_name}.stderr', "rt") as serr:
+                        with open(stdout_file, "rt") as sout, open(stderr_file, "rt") as serr:
                             self._parse_stderr(serr.read())
                             self._parse_stdout(sout.read())
                     else:
@@ -298,8 +304,10 @@ class YdbCliHelper:
 
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_name: str, iterations: int = 5,
-                     timeout: float = 100., check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO, query_syntax: str = '',
-                     scale: Optional[int] = None, query_prefix=None, external_path='') -> YdbCliHelper.WorkloadRunResult:
+                     timeout: float = 100.,
+                     check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO,
+                     query_syntax: str = '', scale: Optional[int] = None, query_prefix=None,
+                     external_path='') -> YdbCliHelper.WorkloadRunResult:
         return YdbCliHelper.WorkloadProcessor(
             workload_type,
             path,

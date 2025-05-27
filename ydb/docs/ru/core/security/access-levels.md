@@ -8,52 +8,40 @@
 
 - **Оператор** даёт дополнительные возможности просмотра и выполнения действий, изменяющих состояние системы:
 
-    - доступ к страницам Developer UI;
+    - доступ к страницам **Developer UI**;
     - рестарт или старт/стоп таблеток на странице таблетки в [Embedded UI](../reference/embedded-ui/index.md) или Developer UI;
     - [перемещение VDisk'ов](../maintenance/manual/moving_vdisks.md) на другие PDisk'и (evict) на странице VDisk'а в [Embedded UI](../reference/embedded-ui/index.md) или Developer UI;
     - рестарт или [декомиссия](../devops/deployment-options/manual/decommissioning.md) диска на странице PDisk'а в [Embedded UI](../reference/embedded-ui/index.md) или Developer UI;
-    - действия на вкладке с информацией по операциям;
-    - действия на вкладке с информацией по запросам.
+    - действия на вкладке с информацией по фоновым операциям ([Embedded UI](../reference/embedded-ui/index.md) > **Diagnostics** > **Operations**);
+    - действия на вкладке с информацией по запросам ([Embedded UI](../reference/embedded-ui/index.md) > **Diagnostics** > **Queries**).
 
 - **Администратор** даёт право на выполнение административных действий с базами данных или кластером:
 
     - управление кластером:
         - [изменение динамической конфигурации кластера](../devops/configuration-management/configuration-v2/update-config.md);
         - [управление пулами ресурсов](../dev/resource-consumption-management.md);
-
-       [//]: # (TODO: Удаляем?)
-        - управление конфигурацией тарификации (metering config);
-
-        [//]: # (TODO: Что за настройки?)
+        [//]: # (управление конфигурацией тарификации — metering config;)
         - изменение настроек таблетки [Console](../concepts/glossary.md#console);
-        - запросы к сервису [maintenance](../devops/deployment-options/manual/maintenance.md) (list cluster nodes, манипуляции maintenance-задачами);
-        - выполнение drain/fill узла {{ ydb-short-name }} через [YDB DSTool](../reference/ydb-dstool/index.md);
-        - изменение статуса таблеток с помощью [minikql](../concepts/glossary.md#minikql)-запросов через CLI;
+        - запросы к сервису [maintenance](../devops/deployment-options/manual/maintenance.md) (получение списка узлов кластера, управление maintenance-задачами);
+        - выполнение drain/fill узла {{ ydb-short-name }} в CLI (ydbd) и в Developer UI;
+        - изменение статуса таблеток с помощью [minikql](../concepts/glossary.md#minikql)-запросов через CLI (для продвинутой диагностики и решения проблем);
 
-    [//]: # (TODO: Что за проверка на деградацию и для чего её пропускать и как?)
-    - управление дисковой подсистемой кластера без проверки на деградацию групп:
+    - управление дисковой подсистемой кластера без проверки на деградацию групп (с нарушением модели отказа):
 
-        - перезапуск PDisk'а;
-
-        [//]: # (TODO: Что за статусы и как/для чего их менять?)
-        - изменение статуса PDisk'а;
-
-        [//]: # (TODO: В чем отличие от оператора?)
-        - [перемещение VDisk'ов](../maintenance/manual/moving_vdisks.md) на другие PDisk'и (evict);
+        - перезапуск PDisk'а в Developer UI;
+        - изменение статуса PDisk'а через [YDB DSTool](../reference/ydb-dstool/index.md);
+        - [перемещение VDisk'ов](../maintenance/manual/moving_vdisks.md) на другие PDisk'и (evict) через [YDB DSTool](../reference/ydb-dstool/index.md);
 
     - управление базами данных и таблицами:
         - управление базами данных в [CMS](../concepts/glossary.md#cms);
         - изменение динамической конфигурации базы данных;
         - выполнение `ALTER TABLE`-запросов на индексные таблицы без ограничений консистентности с основной таблицей;
-
-        [//]: # (TODO: не нашел как именно это можно делать)
-        - прямой split/merge партиций таблицы;
-
-        - прямое выполнение схемной операции по protobuf spec через CLI.
+        - прямой split/merge партиций таблицы (для продвинутой диагностики и решения проблем);
+        - прямое выполнение схемной операции по protobuf spec через CLI (для продвинутой диагностики и решения проблем).
 
 {% note info %}
 
-Существует еще четвёртый уровень, который даёт разрешение на регистрация узлов баз данных.
+Существует еще четвёртый уровень, который даёт разрешение на регистрацию узлов баз данных.
 
 {% endnote %}
 

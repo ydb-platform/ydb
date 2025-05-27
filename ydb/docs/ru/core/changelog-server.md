@@ -9,17 +9,17 @@
 
 #### Функциональность
 
-* [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка консистентной [асинхронной репликации](https://ydb.tech/docs/ru/concepts/async-replication).
+* [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка консистентной [асинхронной репликации](./concepts/async-replication).
 * Добавлена поддержка параметризованного типа Decimal.
-* Добавлена поддержка [автопартиционирования топиков в CDC](../concepts/cdc#topic-partitions) для строковых таблиц, которая может быть включена с помощью флага `enable_topic_autopartitioning_for_cdc` в [динамической конфигурации кластера](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
-* [Добавлена](https://github.com/ydb-platform/ydb/pull/8264) возможность [изменить время хранения данных](../concepts/cdc?version=main#topic-options) в CDC топике с использованием выражения `ALTER TOPIC`.
+* Добавлена поддержка [автопартиционирования топиков в CDC](./concepts/cdc#topic-partitions) для строковых таблиц, которая может быть включена с помощью флага `enable_topic_autopartitioning_for_cdc` в [динамической конфигурации кластера](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/8264) возможность [изменить время хранения данных](./concepts/cdc#topic-options) в CDC топике с использованием выражения `ALTER TOPIC`.
 * [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) формат `DEBEZIUM_JSON` для потоков изменений (changefeed), который может быть включена с помощью флага `enable_changefeed_ debezium_json_format`.
 * В операции резервного копирования и восстановления добавлена поддержка следующих объектов, которая может быть включена с помощью настроек в динамической конфигурации:
   * [поддержка](https://github.com/ydb-platform/ydb/issues/7054) потока изменений (changefeed) - `enable_changefeeds_export` и `enable_changefeeds_import`,
   * [поддержка](https://github.com/ydb-platform/ydb/issues/12724) представлений (VIEW) - `enable_view_export`.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, которая предотвращает восстановление из поврежденных бекапов и защищает от потери данных.
-* Добавлены системные представления, которые хранят информацию о [сущностях управления доступом](../dev/system-views#auth) и [партициях строковых таблиц](../dev/system-views#partitions).
-* Добавлены новые параметры в операторы [CREATE USER](../yql/reference/syntax/create-user) и [ALTER USER](../yql/reference/syntax/alter-user):
+* Добавлены системные представления, которые хранят информацию о [сущностях управления доступом](./dev/system-views#auth) и [партициях строковых таблиц](./dev/system-views#partitions).
+* Добавлены новые параметры в операторы [CREATE USER](./yql/reference/syntax/create-user) и [ALTER USER](./yql/reference/syntax/alter-user):
   * `HASH` - пароль в зашифрованном виде,
   * `LOGIN` и `NOLOGIN` - разрешение/запрет на логин пользователя (разблокировка/блокировка).
 * Улучшена безопасность учетных записей:
@@ -32,7 +32,7 @@
 * [Реализована](https://github.com/ydb-platform/ydb/pull/12689) отмена волатильных транзакций со статусом ABORTED в случае плавного перезапуска даташардов.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/6342) возможность удалить NOT NULL ограничения на столбец в таблице с помощью запроса `ALTER TABLE _ ALTER COLUMN _ DROP NOT NULL`.
 * [Добавлено](https://github.com/ydb-platform/ydb/pull/9168) ограничение в 100 тысяч на число одновременных запросов на создание сессий в сервисе координации.
-* [Увеличено](https://github.com/ydb-platform/ydb/pull/14219) максимальное [количество столбцов в первичном ключе](../concepts/limits-ydb?#schema-object) с 20 до 30.
+* [Увеличено](https://github.com/ydb-platform/ydb/pull/14219) максимальное [количество столбцов в первичном ключе](./concepts/limits-ydb?#schema-object) с 20 до 30.
 * [Реализована](https://github.com/ydb-platform/ydb/pull/14460) очистка удаленных или измененных записей с диска.
 * Добавлен вывод диагностики по запросу - Коля Шумков
 * **_(Экспериментально)_** [Добавлены](https://github.com/ydb-platform/ydb/pull/14075) строгие проверки прав доступа, которые могут быть включены в динамической конфигурации кластера с помощью настроек `enable_strict_acl_check` и:

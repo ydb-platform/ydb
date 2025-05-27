@@ -112,7 +112,6 @@ public:
     virtual void Config(TConfig& config) override;
 
 private:
-    NTable::TSession GetSession();
     int DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) override;
     bool Clear = false;
 };

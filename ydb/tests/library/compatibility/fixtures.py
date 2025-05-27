@@ -196,6 +196,7 @@ class RollingUpgradeAndDowngradeFixture:
             erasure=Erasure.MIRROR_3_DC,
             binary_paths=[self.all_binary_paths[0]],
             use_in_memory_pdisks=False,
+            extra_feature_flags=extra_feature_flags,
             **kwargs,
         )
 

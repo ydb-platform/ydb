@@ -524,7 +524,7 @@ namespace NKikimr::NBsController {
 
                 auto descr = item.DomainDescription;
 
-                Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=](TGroupInfo& group, TConfigState&) {
+                Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=, this](TGroupInfo& group, TConfigState&) {
                     auto& config = GetConfig(&group);
                     if (hiveId != RootHiveId) {
                         config.SetTenantHiveId(hiveId);

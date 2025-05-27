@@ -51,7 +51,7 @@
 
 Открытие и закрытие логического соединения с {{ ydb-short-name }} является дорогостоящим и трудоемким процессом. Поэтому соединения с {{ ydb-short-name }} объединяются в пул. Закрытие или удаление соединения не проводит к закрытию основного логического соединения; скорее, она возвращается в пул, управляемый `Ydb.Sdk.Ado`. Когда соединение снова понадобится, будет возвращено соединение из пула. Это делает операции открытия и закрытия быстрыми. Не стесняйтесь часто открывать и закрывать соединения, если это необходимо, вместо того, чтобы без необходимости поддерживать соединение открытым в течении длительного периода времени.
 
-#### ClearPool
+### ClearPool
 
 Немедленно закрывает незанятые соединения. Активные соединения закрываются при возврате.
 
@@ -59,7 +59,7 @@
 YdbConnection.ClearPool(ydbConnection)
 ```
 
-#### ClearAllPools
+### ClearAllPools
 
 Закрывает все незанятые соединения во всех пулах. Активные соединения закрываются при возврате.
 
@@ -69,7 +69,7 @@ YdbConnection.ClearAllPools()
 
 ## Data Source
 
-Начиная с .NET 7.0, отправной точкой для любой операции с базой данных является [DbDataSource](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbdatasource). 
+Начиная с .NET 7.0, отправной точкой для любой операции с базой данных является [DbDataSource](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbdatasource).
 
 Самый простой способ создать источник данных заключается в следующем:
 
@@ -111,7 +111,7 @@ while (await reader.ReadAsync())
 
 1. [ExecuteNonQueryAsync](https://learn.microsoft.com/ru-ru/dotnet/api/system.data.common.dbcommand.executenonqueryasync): выполняет SQL, который не возвращает никаких результатов, обычно это инструкции `INSERT`, `UPDATE` или `DELETE`.
 
-   {% note warning %} 
+   {% note warning %}
 
    {{ ydb-short-name }} не возвращает количество затронутых строк.
 
@@ -140,7 +140,7 @@ ydbCommand.CommandText = """
                          DECLARE $series_id AS Uint64;
                          DECLARE $season_id AS Uint64;
                          DECLARE $limit_size AS Uint64;
-                         
+
                          SELECT series_id, season_id, episode_id, air_date, title
                          FROM episodes WHERE series_id = $series_id AND season_id > $season_id
                          ORDER BY series_id, season_id, episode_id
@@ -171,7 +171,7 @@ ydbCommand.CommandText = """
                          """;
 ydbCommand.Parameters.Add(new YdbParameter("series_id", DbType.UInt64, 1U));
 ydbCommand.Parameters.Add(new YdbParameter("season_id", DbType.UInt64, 1U));
-ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));                         
+ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));
 ```
 
 ADO.NET за вас подготовит запрос, чтобы переменные соответствовали [YQL](../../../yql/reference/index.md). А тип будет определен согласно [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) или .NET тип самого значения.

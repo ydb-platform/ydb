@@ -14,89 +14,55 @@ class TPDiskStatus : public TViewerPipeClient {
 protected:
     using TThis = TPDiskStatus;
     using TBase = TViewerPipeClient;
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
-    ui32 Timeout = 0;
+    using TBase::ReplyAndPassAway;
 
-    std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> Response;
+    TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> Response;
 
     NKikimrBlobStorage::TUpdateDriveStatus DriveStatus;
     bool Force = false;
 
 public:
     TPDiskStatus(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+        : TViewerPipeClient(viewer, ev)
     {}
 
     void Bootstrap() override {
-        if (Event->Get()->Request.GetMethod() != HTTP_METHOD_POST) {
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only POST method is allowed"),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+        if (!PostData.IsDefined()) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
         }
-        const auto& params(Event->Get()->Request.GetParams());
-        if (!params.Has("pdisk_id")) {
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'pdisk_id' is required"),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+        if (!Params.Has("pdisk_id")) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'pdisk_id' is required"));
         }
-        DriveStatus.MutableHostKey()->SetNodeId(FromStringWithDefault<ui32>(params.Get("node_id"), TlsActivationContext->ActorSystem()->NodeId));
-        DriveStatus.SetPDiskId(FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>()));
-        Force = FromStringWithDefault<bool>(params.Get("force"), false);
+        DriveStatus.MutableHostKey()->SetNodeId(FromStringWithDefault<ui32>(Params.Get("node_id"), TlsActivationContext->ActorSystem()->NodeId));
+        DriveStatus.SetPDiskId(FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>()));
+        Force = FromStringWithDefault<bool>(Params.Get("force"), false);
         if (Force && !Viewer->CheckAccessAdministration(Event->Get())) {
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+            return ReplyAndPassAway(GetHTTPFORBIDDEN());
         }
-        if (IsPostContent(Event)) {
-            NJson::TJsonValue contentData;
-            bool success = NJson::ReadJsonTree(Event->Get()->Request.GetPostContent(), &contentData);
-            if (success && contentData.IsMap()) {
-                if (contentData.Has("decommit_status")) {
-                    NKikimrBlobStorage::EDecommitStatus decommitStatus = NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET;
-                    if (EDecommitStatus_Parse(contentData["decommit_status"].GetStringRobust(), &decommitStatus)) {
-                        DriveStatus.SetDecommitStatus(decommitStatus);
-                    } else {
-                        TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                            Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Invalid 'decommit_status' received"),
-                            0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                        return PassAway();
-                    }
+        if (PostData.IsMap()) {
+            if (PostData.Has("decommit_status")) {
+                NKikimrBlobStorage::EDecommitStatus decommitStatus = NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET;
+                if (EDecommitStatus_Parse(PostData["decommit_status"].GetStringRobust(), &decommitStatus)) {
+                    DriveStatus.SetDecommitStatus(decommitStatus);
+                } else {
+                    return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Invalid 'decommit_status' received"));
                 }
-                if (contentData.Has("status")) {
-                    NKikimrBlobStorage::EDriveStatus status = NKikimrBlobStorage::EDriveStatus::UNKNOWN;
-                    if (EDriveStatus_Parse(contentData["status"].GetStringRobust(), &status)) {
-                        DriveStatus.SetStatus(status);
-                    } else {
-                        TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                            Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Invalid 'status' received"),
-                            0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                        return PassAway();
-                    }
-                }
-            } else {
-                TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                    Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Invalid json received"),
-                    0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                return PassAway();
             }
-
+            if (PostData.Has("status")) {
+                NKikimrBlobStorage::EDriveStatus status = NKikimrBlobStorage::EDriveStatus::UNKNOWN;
+                if (EDriveStatus_Parse(PostData["status"].GetStringRobust(), &status)) {
+                    DriveStatus.SetStatus(status);
+                } else {
+                    return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Invalid 'status' received"));
+                }
+            }
         } else {
-            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
-                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Content in json format is required for POST method"),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            return PassAway();
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Invalid json received"));
         }
 
-        TBase::InitConfig(params);
+        Response = RequestBSControllerPDiskUpdateStatus(DriveStatus, Force);
 
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-
-        RequestBSControllerPDiskUpdateStatus(DriveStatus, Force);
-
-        TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
     STATEFN(StateWork) {
@@ -107,24 +73,14 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& ev) {
-        Response.reset(ev->Release().Release());
-        ReplyAndPassAway();
-    }
-
-    void HandleTimeout() {
-        Send(Event->Sender, new NMon::TEvHttpInfoRes(
-            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from BSC"),
-            0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        PassAway();
-    }
-
-    void PassAway() override {
-        TBase::PassAway();
+        if (Response.Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void ReplyAndPassAway() override {
         NJson::TJsonValue json;
-        if (Response != nullptr) {
+        if (Response.IsOk()) {
             if (Response->Record.GetResponse().GetSuccess()) {
                 json["result"] = true;
             } else {
@@ -138,15 +94,10 @@ public:
                 }
             }
             json["debugMessage"] = Response->Record.ShortDebugString();
-            TBase::Send(Event->Sender,
-                new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json)),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            ReplyAndPassAway(GetHTTPOKJSON(json));
         } else {
-            TBase::Send(Event->Sender,
-                new NMon::TEvHttpInfoRes(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "No response was received from BSC"),
-                0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "No response was received from BSC"));
         }
-        PassAway();
     }
 
     static YAML::Node GetSwagger() {
@@ -154,8 +105,8 @@ public:
         post:
             tags:
               - pdisk
-            summary: Updates PDisk status
-            description: Updates PDisk status in BSC
+            summary: Changes current PDisk status
+            description: Changes current PDisk status
             parameters:
               - name: node_id
                 in: query
@@ -173,7 +124,7 @@ public:
                 type: integer
               - name: force
                 in: query
-                description: attempt forced operation, ignore warnings
+                description: attempt forced operation, ignore warnings, for admin only and only if previous call returned forceRetryPossible = true
                 required: false
                 type: boolean
             requestBody:

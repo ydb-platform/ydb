@@ -1153,7 +1153,7 @@ TStatus AnnotateOlapApplyColumnArg(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 2U, ctx)) {
+    if (!EnsureArgsCount(*node, 3U, ctx)) {
         return TStatus::Error;
     }
 
@@ -1175,6 +1175,10 @@ TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     if (!lambda->GetTypeAnn()) {
         return TStatus::Repeat;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqpOlapApply::idx_KernelName), ctx)) {
+        return TStatus::Error;
     }
 
     node->SetTypeAnn(lambda->GetTypeAnn());

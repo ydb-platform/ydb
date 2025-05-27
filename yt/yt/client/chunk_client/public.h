@@ -159,9 +159,9 @@ using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;
 using TChunkReplicaSlimList = TCompactVector<TChunkReplica, SlimTypicalReplicaCount>;
 
 extern const std::string DefaultStoreAccountName;
-extern const TString DefaultStoreMediumName;
-extern const TString DefaultCacheMediumName;
-extern const TString DefaultSlotsMediumName;
+extern const std::string DefaultStoreMediumName;
+extern const std::string DefaultCacheMediumName;
+extern const std::string DefaultSlotsMediumName;
 
 DECLARE_REFCOUNTED_STRUCT(IReaderBase)
 

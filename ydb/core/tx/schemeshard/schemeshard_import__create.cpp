@@ -267,8 +267,8 @@ private:
 
         importInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
-            const auto& dstPath = settings.items(itemIdx).destination_path();
-            if (!dstPaths.insert(dstPath).second) {
+            const TString& dstPath = settings.items(itemIdx).destination_path();
+            if (!dstPaths.insert(NBackup::NormalizeItemPath(dstPath)).second) {
                 explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
                 return false;
             }
@@ -278,8 +278,8 @@ private:
             }
 
             auto& item = importInfo.Items.emplace_back(dstPath);
-            item.SrcPrefix = settings.items(itemIdx).source_prefix();
-            item.SrcPath = settings.items(itemIdx).source_path();
+            item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
+            item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
         }
 
         return true;
@@ -409,6 +409,7 @@ private:
     void CreateTable(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
         auto& item = importInfo.Items.at(itemIdx);
+        Y_ABORT_UNLESS(item.Table);
 
         item.SubState = ESubState::Proposed;
 
@@ -519,7 +520,7 @@ private:
             << ", txId# " << txId);
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), RestorePropose(Self, txId, importInfo, itemIdx));
+        Send(Self->SelfId(), RestoreTableDataPropose(Self, txId, importInfo, itemIdx));
     }
 
     bool CancelTransferring(TImportInfo& importInfo, ui32 itemIdx) {
@@ -540,7 +541,7 @@ private:
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        Send(Self->SelfId(), CancelRestorePropose(importInfo, item.WaitTxId), 0, importInfo.Id);
+        Send(Self->SelfId(), CancelRestoreTableDataPropose(importInfo, item.WaitTxId), 0, importInfo.Id);
         return true;
     }
 
@@ -1009,12 +1010,8 @@ private:
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
         }
-        if (!IsCreatedByQuery(item)) {
-            TString error;
-            if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
-                return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid scheme");
-            }
-        } else {
+        
+        if (IsCreatedByQuery(item)) {
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
             const TString source = TStringBuilder()
@@ -1029,6 +1026,11 @@ private:
                 Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
             ));
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
+        } else if (item.Table) {
+            TString error;
+            if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
+                return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid table scheme");
+            }
         }
 
         Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
@@ -1079,8 +1081,8 @@ private:
         } else {
             dstRoot = CanonizePath(importInfo->Settings.destination_path());
         }
-        TString sourcePrefix = importInfo->Settings.source_prefix();
-        if (sourcePrefix && sourcePrefix.back() != '/') {
+        TString sourcePrefix = NBackup::NormalizeExportPrefix(importInfo->Settings.source_prefix());
+        if (sourcePrefix) {
             sourcePrefix.push_back('/');
         }
         auto combineDstPath = [&](const TString& path) -> TString {
@@ -1092,9 +1094,7 @@ private:
             }
         };
         auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {
-            TStringBuf exportPrefix(schemaMappingItem.ExportPrefix);
-            exportPrefix.SkipPrefix("/");
-            item.SrcPrefix = TStringBuilder() << sourcePrefix << exportPrefix;
+            item.SrcPrefix = TStringBuilder() << sourcePrefix << NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix);
             item.SrcPath = schemaMappingItem.ObjectPath;
             item.ExportItemIV = schemaMappingItem.IV;
         };
@@ -1115,19 +1115,18 @@ private:
             TMapping schemaMappingObjectPathIndex;
             for (size_t i = 0; i < importInfo->SchemaMapping->Items.size(); ++i) {
                 const auto& schemaMappingItem = importInfo->SchemaMapping->Items[i];
-                schemaMappingPrefixIndex[schemaMappingItem.ExportPrefix] = i;
-                schemaMappingObjectPathIndex[CanonizePath(schemaMappingItem.ObjectPath)] = i;
+                schemaMappingPrefixIndex[NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix)] = i;
+                schemaMappingObjectPathIndex[NBackup::NormalizeItemPath(schemaMappingItem.ObjectPath)] = i;
             }
             for (auto& item : importInfo->Items) {
-                TString dstPath = CanonizePath(item.DstPathName);
                 TMapping::iterator mappingIt;
                 if (item.SrcPrefix) {
-                    mappingIt = schemaMappingPrefixIndex.find(item.SrcPrefix);
+                    mappingIt = schemaMappingPrefixIndex.find(NBackup::NormalizeItemPrefix(item.SrcPrefix));
                     if (mappingIt == schemaMappingPrefixIndex.end()) {
                         return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find prefix \"" << item.SrcPrefix << "\" in schema mapping");
                     }
                 } else if (item.SrcPath) {
-                    mappingIt = schemaMappingObjectPathIndex.find(CanonizePath(item.SrcPath));
+                    mappingIt = schemaMappingObjectPathIndex.find(NBackup::NormalizeItemPath(item.SrcPath));
                     if (mappingIt == schemaMappingObjectPathIndex.end()) {
                         return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find source path \"" << item.SrcPath << "\" in schema mapping");
                     }
@@ -1260,7 +1259,7 @@ private:
                 }
                 if (!Self->TableProfilesLoaded) {
                     Self->WaitForTableProfiles(id, i);
-                } else {
+                } else if (item.Table){
                     CreateTable(*importInfo, i, txId);
                     itemIdx = i;
                 }
@@ -1512,6 +1511,9 @@ private:
                 item.State = EState::Done;
                 break;
             }
+            if (!item.Table) {
+                Y_ABORT("Create Scheme Object: schema objects are empty");
+            }
             item.State = EState::Transferring;
             AllocateTxId(*importInfo, itemIdx);
             break;
@@ -1521,7 +1523,8 @@ private:
                 item.Issue = *issue;
                 Cancel(*importInfo, itemIdx, "issues during restore");
             } else {
-                if (item.NextIndexIdx < item.Scheme.indexes_size()) {
+                Y_ABORT_UNLESS(item.Table);
+                if (item.NextIndexIdx < item.Table->indexes_size()) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
@@ -1539,7 +1542,8 @@ private:
                 item.Issue = *issue;
                 Cancel(*importInfo, itemIdx, "issues during index building");
             } else {
-                if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
+                Y_ABORT_UNLESS(item.Table);
+                if (++item.NextIndexIdx < item.Table->indexes_size()) {
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                            AppData()->FeatureFlags.GetEnableChangefeedsImport()) {

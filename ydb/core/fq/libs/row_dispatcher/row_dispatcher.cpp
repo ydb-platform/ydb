@@ -403,7 +403,7 @@ public:
     void Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&);
     void Handle(const NMon::TEvHttpInfo::TPtr&);
     
-    void DeleteConsumer(NActors::TActorId readActorId);
+    void DeleteConsumer(NActors::TActorId readActorId, TMaybe<NActors::TActorId> topicSessionId = {});
     void UpdateMetrics();
     TString GetInternalState();
     TString GetReadActorsInternalState();
@@ -940,7 +940,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     DeleteConsumer(ev->Sender);
 }
 
-void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
+void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId, TMaybe<NActors::TActorId> topicSessionId) {
     auto consumerIt = Consumers.find(readActorId);
     if (consumerIt == Consumers.end()) {
         LOG_ROW_DISPATCHER_ERROR("Ignore (no consumer) DeleteConsumer, " << " read actor id " << readActorId);
@@ -948,11 +948,11 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
     }
 
     const auto& consumer = consumerIt->second;
-    LOG_ROW_DISPATCHER_DEBUG("DeleteConsumer, readActorId " << readActorId << " query id " << consumer->QueryId);
+    LOG_ROW_DISPATCHER_DEBUG("DeleteConsumer, readActorId " << readActorId << " query id " << consumer->QueryId << ", partitions size " << consumer->Partitions.size());
     for (auto& [partitionId, partition] : consumer->Partitions) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         *event->Record.MutableSource() = consumer->SourceParams;
-        Send(new IEventHandle(partition.TopicSessionId, consumer->ReadActorId, event.release(), 0));
+        Send(new IEventHandle(partition.TopicSessionId, consumer->ReadActorId, event.release(), 0)); // TODO:  move up?
 
         TTopicSessionKey topicKey{
             consumer->SourceParams.GetReadGroup(),
@@ -960,17 +960,23 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
             consumer->SourceParams.GetDatabase(),
             consumer->SourceParams.GetTopicPath(),
             partitionId};
-        TTopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
-        TSessionInfo& sessionInfo = topicSessionInfo.Sessions[partition.TopicSessionId];
-        if (!sessionInfo.Consumers.erase(consumer->ReadActorId)) {
-            LOG_ROW_DISPATCHER_ERROR("Wrong readActorId " << consumer->ReadActorId << ", no such consumer");
-        }
-        if (sessionInfo.Consumers.empty()) {
-            LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill to " << partition.TopicSessionId);
-            topicSessionInfo.Sessions.erase(partition.TopicSessionId);
-            Send(partition.TopicSessionId, new NActors::TEvents::TEvPoisonPill());
-            if (topicSessionInfo.Sessions.empty()) {
-                TopicSessions.erase(topicKey);
+        auto sessionIt = TopicSessions.find(topicKey);
+        if (sessionIt != TopicSessions.end()) {
+            TTopicSessionInfo& topicSessionInfo = sessionIt->second;
+            auto sessionIt2 = topicSessionInfo.Sessions.find(topicSessionId.GetOrElse(partition.TopicSessionId));
+            if (sessionIt2 != topicSessionInfo.Sessions.end()) {
+                TSessionInfo& sessionInfo = topicSessionInfo.Sessions[topicSessionId.GetOrElse(partition.TopicSessionId)];
+                if (!sessionInfo.Consumers.erase(consumer->ReadActorId)) {
+                    LOG_ROW_DISPATCHER_ERROR("Wrong readActorId " << consumer->ReadActorId << ", no such consumer");
+                }
+                if (sessionInfo.Consumers.empty()) {
+                    LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill to " << partition.TopicSessionId);
+                    topicSessionInfo.Sessions.erase(partition.TopicSessionId);
+                    Send(partition.TopicSessionId, new NActors::TEvents::TEvPoisonPill());
+                    if (topicSessionInfo.Sessions.empty()) {
+                        TopicSessions.erase(topicKey);
+                    }
+                }
             }
         }
     }
@@ -1050,8 +1056,40 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
     LWPROBE(SessionError, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), it->second->QueryId, it->second->Generation, ev->Get()->Record.ByteSizeLong());
     ++*Metrics.ErrorsCount;
     LOG_ROW_DISPATCHER_TRACE("Forward TEvSessionError from " << ev->Sender << " to " << ev->Get()->ReadActorId << " query id " << it->second->QueryId);
+
+    if (ev->Get()->IsFatalError) {
+        auto consumerIt = Consumers.find(ev->Get()->ReadActorId);
+        if (consumerIt == Consumers.end()) {
+            LOG_ROW_DISPATCHER_ERROR("Ignore (no consumer) DeleteConsumer, " << " read actor id " << ev->Get()->ReadActorId);
+            return;
+        }
+        const auto& consumer = consumerIt->second;
+        TTopicSessionKey topicKey{
+            consumer->SourceParams.GetReadGroup(),
+            consumer->SourceParams.GetEndpoint(),
+            consumer->SourceParams.GetDatabase(),
+            consumer->SourceParams.GetTopicPath(),
+            ev->Get()->Record.GetPartitionId()};
+
+        auto sessionIt = TopicSessions.find(topicKey);
+        if (sessionIt != TopicSessions.end()) {
+            
+            TTopicSessionInfo& topicSessionInfo = sessionIt->second;
+            if (topicSessionInfo.Sessions.contains(ev->Sender)) {
+                LOG_ROW_DISPATCHER_WARN("Fatal session error, remove session " << ev->Sender);
+                Send(ev->Sender, new NActors::TEvents::TEvPoisonPill());
+
+                topicSessionInfo.Sessions.erase(ev->Sender);
+                if (topicSessionInfo.Sessions.empty()) {
+                    TopicSessions.erase(topicKey);
+                }
+            }
+        }
+
+    }
+    auto readActorId = ev->Get()->ReadActorId;
     it->second->EventsQueue.Send(ev->Release().Release(), it->second->Generation);
-    DeleteConsumer(ev->Get()->ReadActorId);
+    DeleteConsumer(readActorId, ev->Sender);
 }
 
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&) {

@@ -155,6 +155,7 @@ struct TEvRowDispatcher {
         NFq::NRowDispatcherProto::TEvSessionError, EEv::EvSessionError> {
         TEvSessionError() = default;
         NActors::TActorId ReadActorId;
+        bool IsFatalError = false;      // session is no longer valid if true 
     };
 
     struct TEvSessionStatistic : public NActors::TEventLocal<TEvSessionStatistic, EEv::EvSessionStatistic> {

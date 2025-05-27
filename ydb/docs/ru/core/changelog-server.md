@@ -10,6 +10,7 @@
 #### Функциональность
 
 * [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка консистентной [асинхронной репликации](https://ydb.tech/docs/ru/concepts/async-replication).
+* Добавлена поддержка параметризованного типа Decimal.
 * Добавлена поддержка [автопартиционирования топиков в CDC](../concepts/cdc#topic-partitions) для строковых таблиц, которая может быть включена с помощью флага `enable_topic_autopartitioning_for_cdc` в [динамической конфигурации кластера](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/8264) возможность [изменить время хранения данных](../concepts/cdc?version=main#topic-options) в CDC топике с использованием выражения `ALTER TOPIC`.
 * [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) формат `DEBEZIUM_JSON` для потоков изменений (changefeed), который может быть включена с помощью флага `enable_changefeed_ debezium_json_format`.
@@ -19,8 +20,8 @@
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, которая предотвращает восстановление из поврежденных бекапов и защищает от потери данных.
 * Добавлены системные представления, которые хранят информацию о [сущностях управления доступом](../dev/system-views#auth) и [партициях строковых таблиц](../dev/system-views#partitions).
 * Добавлены новые параметры в операторы [CREATE USER](../yql/reference/syntax/create-user) и [ALTER USER](../yql/reference/syntax/alter-user):
-  * 'HASH' -  
-  * 'LOGIN' и 'NOLOGIN' - разрешение/запрет на логин пользователя (разблокировка/блокировка).
+  * `HASH` - пароль в зашифрованном виде,
+  * `LOGIN` и `NOLOGIN` - разрешение/запрет на логин пользователя (разблокировка/блокировка).
 * Улучшена безопасность учетных записей:
   * [Добавлена](https://github.com/ydb-platform/ydb/pull/11963) проверка сложности пароля пользователя.
   * [Реализована](https://github.com/ydb-platform/ydb/pull/12578) автоматическая блокировка пользователя после нескольких попыток ввода неправильного пароля.
@@ -32,12 +33,9 @@
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/6342) возможность удалить NOT NULL ограничения на столбец в таблице с помощью запроса `ALTER TABLE _ ALTER COLUMN _ DROP NOT NULL`.
 * [Добавлено](https://github.com/ydb-platform/ydb/pull/9168) ограничение в 100 тысяч на число одновременных запросов на создание сессий в сервисе координации.
 * [Увеличено](https://github.com/ydb-platform/ydb/pull/14219) максимальное [количество столбцов в первичном ключе](../concepts/limits-ydb?#schema-object) с 20 до 30.
-* #14460 Clean up deleted database records from disk. / Очистка удаленных или измененных записей с диска.
+* [Реализована](https://github.com/ydb-platform/ydb/pull/14460) очистка удаленных или измененных записей с диска.
 * Добавлен вывод диагностики по запросу - Коля Шумков
-* Добавлена поддержка параметризованного типа Decimal.
-* https://github.com/ydb-platform/ydb/pull/8318 Если DataShard обнаружит, что в поддомене недостаточно места, он должен вернуть ошибку DISK_SPACE_EXHAUSTED
-* https://github.com/ydb-platform/ydb/pull/10752 Во внутреннем средстве просмотра поддерживаются типы Decimal и PG
-* **_(Экспериментально)_** [Добавлены](https://github.com/ydb-platform/ydb/pull/14075) строгие проверки прав доступа, которые могут быть включены с помощью настройки `enable_strict_acl_check` в динамической конфигурации кластера:
+* **_(Экспериментально)_** [Добавлены](https://github.com/ydb-platform/ydb/pull/14075) строгие проверки прав доступа, которые могут быть включены в динамической конфигурации кластера с помощью настроек `enable_strict_acl_check` и:
   * `enable_strict_user_management` включает строгие проверки для локальных пользователей,
   * `enable_database_admin` включает функции администратора базы данных,
   * `enable_data_erasure` включает стирания удаленных данных с дисковых устройств.
@@ -54,8 +52,9 @@
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/6561) очередь этапов в репликации, которая сократила количество вычислений.
 * [Поддержан](https://github.com/ydb-platform/ydb/issues/12510) троттлинг входящей нагрузки на запись на VDisk, чтобы предотвратить аварийную ситуацию его 100% заполнения.
 * [Отключен](https://github.com/ydb-platform/ydb/pull/9491) заголовок больших двоичных объектов в VDisk.
-* Улучшена диагностика и интроспекциа ошибок с памятью, уменьшено потребления памяти за счет очистки страниц аллокатора.
-* Реализовано использование TEvWrite при записи для ускорения запросов - Никита Васильев
+* Улучшена диагностика и интроспекция ошибок с памятью.
+* Уменьшено потребления памяти за счет очистки страниц аллокатора.
+* Реализовано использование TEvWrite при записи для ускорения запросов.
 
 #### Исправления ошибок
 
@@ -88,7 +87,7 @@
 * [Устранена](https://github.com/ydb-platform/ydb/pull/18621) проблема зависания процесса обработки новых таблеток в Hive.
 * [Устранена](https://github.com/ydb-platform/ydb/pull/18614) редкая проблема перезагрузок PQ tablet.
 * 18504:Avoid expensive table merge checks when operation inflight limits have already been exceeded. Fixes #18473. [#18504](https://github.com/ydb-platform/ydb/pull/18504) ([Aleksei Borzenkov](https://github.com/snaury))
-* [Устранена](https://github.com/ydb-platform/ydb/pull/18378) проблема, при которой после обновления версии кластера Hive запускал подписчиков в дата-центрах без работающих узлов баз данных. ([vporyadke](https://github.com/vporyadke))
+* [Устранена](https://github.com/ydb-platform/ydb/pull/18378) проблема, при которой после обновления версии кластера Hive запускал подписчиков в дата-центрах без работающих узлов баз данных.
 
 
 ## Версия 24.4 {#24-4}

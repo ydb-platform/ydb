@@ -1,5 +1,5 @@
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 
 namespace NKikimr::NPersQueueTests {
 
@@ -184,6 +184,54 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             UNIT_ASSERT_VALUES_EQUAL(consumer2.GetReadFromTimestampsMs(), 0);
         }
         //1609462861
+    }
+
+    Y_UNIT_TEST(AlterAutopartitioning) {
+        NKikimrConfig::TFeatureFlags ff;
+        ff.SetEnableTopicSplitMerge(true);
+        auto settings = NKikimr::NPersQueueTests::PQSettings();
+        settings.SetFeatureFlags(ff);
+
+        NPersQueue::TTestServer server(settings);
+
+        {
+            const char *query = R"(
+                CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+            )";
+
+            server.AnnoyingClient->RunYqlSchemeQuery(query);
+        }
+
+        {
+            const char *query = R"__(
+                ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+                SET (
+                    min_active_partitions = 7,
+                    max_active_partitions = 100,
+                    auto_partitioning_stabilization_window = Interval('PT1S'),
+                    auto_partitioning_up_utilization_percent = 2,
+                    auto_partitioning_down_utilization_percent = 1,
+                    partition_write_speed_bytes_per_second = 3,
+                    auto_partitioning_strategy = 'up'
+                );
+            )__";
+
+            server.AnnoyingClient->RunYqlSchemeQuery(query);
+        }
+
+        {
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription().GetPersQueueGroup();
+            const auto& describe = pqGroup.GetPQTabletConfig();
+
+            Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionStrategy().GetMinPartitionCount(), 7);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionStrategy().GetMaxPartitionCount(), 100);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionStrategy().GetScaleThresholdSeconds(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(describe.GetPartitionStrategy().GetPartitionStrategyType()), static_cast<int>(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT));
+        }
     }
 
     Y_UNIT_TEST(BadRequests) {

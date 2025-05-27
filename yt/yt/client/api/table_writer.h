@@ -18,4 +18,15 @@ DEFINE_REFCOUNTED_TYPE(ITableWriter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct ITableFragmentWriter
+    : public ITableWriter
+{
+    //! Returns signed write result. Only safe to use after |Close|.
+    virtual TSignedWriteFragmentResultPtr GetWriteFragmentResult() const = 0;
+};
+
+DEFINE_REFCOUNTED_TYPE(ITableFragmentWriter)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NApi

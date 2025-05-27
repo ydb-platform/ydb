@@ -1,13 +1,13 @@
 /* syntax version 1 */
 /* postgres can not */
 SELECT
-    EvaluateCode(FuncCode("Int32", AtomCode("1")))
+    EvaluateCode(FuncCode('Int32', AtomCode('1')))
 ;
 
 $inc = EvaluateCode(
     LambdaCode(
         ($x) -> {
-            RETURN FuncCode("+", $x, FuncCode("Int32", AtomCode("1")));
+            RETURN FuncCode('+', $x, FuncCode('Int32', AtomCode('1')));
         }
     )
 );
@@ -23,10 +23,10 @@ $addPrefixForMembers = ($strValue) -> {
                 $members = StructTypeComponents(TypeHandle(TypeOf($strValue)));
                 $list = ListMap(
                     $members, ($x) -> {
-                        RETURN ListCode(AtomCode("prefix" || $x.Name), FuncCode("Member", $str, AtomCode($x.Name)));
+                        RETURN ListCode(AtomCode('prefix' || $x.Name), FuncCode('Member', $str, AtomCode($x.Name)));
                     }
                 );
-                RETURN FuncCode("AsStruct", $list);
+                RETURN FuncCode('AsStruct', $list);
             }
         )
     );
@@ -34,5 +34,5 @@ $addPrefixForMembers = ($strValue) -> {
 };
 
 SELECT
-    $addPrefixForMembers(AsStruct(1 AS foo, "2" AS bar))
+    $addPrefixForMembers(AsStruct(1 AS foo, '2' AS bar))
 ;

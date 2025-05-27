@@ -85,7 +85,7 @@ def libevent_post_install(self):
 
 
 libevent = GNUMakeNixProject(
-    owners=["g:cpp-contrib", "kikht", "dldmitry", "efmv"],
+    owners=["g:cpp-contrib", "dldmitry"],
     arcdir="contrib/libs/libevent",
     nixattr="libevent",
     ignore_commands=["bash", "sed"],

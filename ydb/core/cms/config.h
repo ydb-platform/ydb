@@ -32,6 +32,7 @@ struct TCmsSentinelConfig {
     ui32 DataCenterRatio;
     ui32 RoomRatio;
     ui32 RackRatio;
+    ui32 FaultyPDisksThresholdPerNode;
 
     TMaybeFail<EPDiskStatus> EvictVDisksStatus;
 
@@ -49,6 +50,7 @@ struct TCmsSentinelConfig {
         config.SetDataCenterRatio(DataCenterRatio);
         config.SetRoomRatio(RoomRatio);
         config.SetRackRatio(RackRatio);
+        config.SetFaultyPDisksThresholdPerNode(FaultyPDisksThresholdPerNode);
 
         SaveStateLimits(config);
         SaveEvictVDisksStatus(config);
@@ -68,6 +70,7 @@ struct TCmsSentinelConfig {
         DataCenterRatio = config.GetDataCenterRatio();
         RoomRatio = config.GetRoomRatio();
         RackRatio = config.GetRackRatio();
+        FaultyPDisksThresholdPerNode = config.GetFaultyPDisksThresholdPerNode();
 
         auto newStateLimits = LoadStateLimits(config);
         StateLimits.swap(newStateLimits);
@@ -124,10 +127,11 @@ struct TCmsSentinelConfig {
         stateLimits[NKikimrBlobStorage::TPDiskState::OpenFileError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::ChunkQuotaError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::DeviceIoError] = 60;
+        stateLimits[NKikimrBlobStorage::TPDiskState::Stopped] = 60;
 
-        stateLimits[NKikimrBlobStorage::TPDiskState::Reserved14] = 0;
         stateLimits[NKikimrBlobStorage::TPDiskState::Reserved15] = 0;
         stateLimits[NKikimrBlobStorage::TPDiskState::Reserved16] = 0;
+        stateLimits[NKikimrBlobStorage::TPDiskState::Reserved17] = 0;
         // node online, pdisk missing
         stateLimits[NKikimrBlobStorage::TPDiskState::Missing] = 60;
         // node timeout

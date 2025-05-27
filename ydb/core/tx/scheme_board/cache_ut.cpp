@@ -31,17 +31,13 @@ public:
         SchemeCache = Context->Register(CreateSchemeBoardSchemeCache(config.Get()));
         Context->EnableScheduleForActor(SchemeCache, true);
 
-        TestAlterSubDomain(*Context, 1, "/",
-                             "StoragePools { "
-                             "  Name: \"pool-1\" "
-                             "  Kind: \"pool-kind-1\" "
-                             "} "
-                             " Name: \"Root\" ");
-
-        // Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NLog::PRI_DEBUG);
-        // Context->SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NLog::PRI_DEBUG);
-        // Context->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
-        // Context->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        TestAlterSubDomain(*Context, 1, "/", R"(
+            Name: "Root"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+        )");
     }
 
     UNIT_TEST_SUITE(TCacheTest);
@@ -63,6 +59,7 @@ public:
     UNIT_TEST(MigrationDeletedPathNavigate);
     UNIT_TEST(WatchRoot);
     UNIT_TEST(PathBelongsToDomain);
+    UNIT_TEST(CookiesArePreserved);
     UNIT_TEST_SUITE_END();
 
     void Navigate();
@@ -83,10 +80,11 @@ public:
     void MigrationDeletedPathNavigate();
     void WatchRoot();
     void PathBelongsToDomain();
+    void CookiesArePreserved();
 
 protected:
     TNavigate::TEntry TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
-        const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired);
+        const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired, ui64 cookie = 0);
 
     TNavigate::TEntry TestNavigate(const TString& path, TNavigate::EStatus expectedStatus = TNavigate::EStatus::Ok,
         const TString& sid = TString(), TNavigate::EOp op = TNavigate::EOp::OpPath,
@@ -374,7 +372,7 @@ void TCacheTest::TableSchemaVersion() {
 }
 
 TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
-    const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired)
+    const TString& sid, TNavigate::EOp op, bool showPrivatePath, bool redirectRequired, ui64 cookie)
 {
     auto& entry = request->ResultSet.back();
     entry.Operation = op;
@@ -386,10 +384,11 @@ TNavigate::TEntry TCacheTest::TestNavigateImpl(THolder<TNavigate> request, TNavi
     }
 
     const TActorId edge = Context->AllocateEdgeActor();
-    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, 0, 0, true);
+    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0, cookie, 0, true);
     auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
 
     UNIT_ASSERT(ev->Get());
+    UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, cookie);
     UNIT_ASSERT(!ev->Get()->Request->ResultSet.empty());
 
     const TNavigate::TEntry result = ev->Get()->Request->ResultSet[0];
@@ -994,6 +993,25 @@ void TCacheTest::PathBelongsToDomain() {
         entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
         auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
             "", TNavigate::EOp::OpPath, false, true);
+    }
+}
+
+void TCacheTest::CookiesArePreserved() {
+    ui64 txId = 100;
+    TestCreateSubDomain(*Context, ++txId, "/Root", R"(Name: "SubDomain")");
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
+    TestMkDir(*Context, ++txId, "/Root/SubDomain", "DirA");
+
+    ui64 cookie = 1;
+    // first request will run db resolver
+    for (int i = 0; i < 2; ++i) {
+        auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = "/Root/SubDomain";
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Path = SplitPath("/Root/SubDomain/DirA");
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+        auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::Ok,
+            "", TNavigate::EOp::OpPath, false, true, ++cookie);
     }
 }
 

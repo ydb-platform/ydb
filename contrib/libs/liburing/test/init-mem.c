@@ -42,6 +42,8 @@ static int setup_ctx(struct ctx *ctx, struct q_entries *q)
 	if (posix_memalign(&ctx->mem, 4096, 2*1024*1024))
 		return T_EXIT_FAIL;
 
+	memset(ctx->mem, 0, 2*1024*1024);
+
 	ctx->pre = ctx->mem + 4096 - sizeof(unsigned long long);
 	*ctx->pre = PRE_RED;
 

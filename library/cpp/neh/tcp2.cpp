@@ -332,35 +332,6 @@ namespace {
             char MemPool_[MemPoolSize_ + MemPoolReserve_];
         };
 
-        //protector for limit usage tcp connection output (and used data) only from one thread at same time
-        class TOutputLock {
-        public:
-            TOutputLock() noexcept
-                : Lock_(0)
-            {
-            }
-
-            bool TryAquire() noexcept {
-                do {
-                    if (AtomicTryLock(&Lock_)) {
-                        return true;
-                    }
-                } while (!AtomicGet(Lock_)); //without magic loop atomic lock some unreliable
-                return false;
-            }
-
-            void Release() noexcept {
-                AtomicUnlock(&Lock_);
-            }
-
-            bool IsFree() const noexcept {
-                return !AtomicGet(Lock_);
-            }
-
-        private:
-            TAtomic Lock_;
-        };
-
         class TClient {
             class TRequest;
             class TConnection;
@@ -650,8 +621,8 @@ namespace {
                     , State_(Init)
                     , BuffSize_(TTcp2Options::InputBufferSize)
                     , Buff_(new char[BuffSize_])
-                    , NeedCheckReqsQueue_(0)
-                    , NeedCheckCancelsQueue_(0)
+                    , NeedCheckReqsQueue_(false)
+                    , NeedCheckCancelsQueue_(false)
                     , GenReqId_(0)
                     , LastSendedReqId_(0)
                 {
@@ -680,7 +651,7 @@ namespace {
                         throw;
                     }
 
-                    AtomicSet(NeedCheckReqsQueue_, 1);
+                    NeedCheckReqsQueue_.store(true);
                     req->SetConnection(this);
                     TAtomicBase state = AtomicGet(State_);
                     if (Y_LIKELY(state == Connected)) {
@@ -711,20 +682,20 @@ namespace {
                 //called from client thread
                 void Cancel(TRequestId id) {
                     Cancels_.Enqueue(id);
-                    AtomicSet(NeedCheckCancelsQueue_, 1);
+                    NeedCheckCancelsQueue_.store(true);
                     if (Y_LIKELY(AtomicGet(State_) == Connected)) {
                         ProcessOutputCancelsQueue();
                     }
                 }
 
                 void ProcessOutputReqsQueue() {
-                    if (OutputLock_.TryAquire()) {
+                    if (OutputLock_.TryAcquire()) {
                         SendMessages(false);
                     }
                 }
 
                 void ProcessOutputCancelsQueue() {
-                    if (OutputLock_.TryAquire()) {
+                    if (OutputLock_.TryAcquire()) {
                         AS_.GetIOService().Post(std::bind(&TConnection::SendMessages, TConnectionRef(this), true));
                         return;
                     }
@@ -763,7 +734,7 @@ namespace {
                             PrepareSocket(AS_.Native());
                             AtomicSet(State_, Connected);
                             AS_.AsyncPollRead(std::bind(&TConnection::OnCanRead, TConnectionRef(this), _1, _2));
-                            if (OutputLock_.TryAquire()) {
+                            if (OutputLock_.TryAcquire()) {
                                 SendMessages(true);
                                 return;
                             }
@@ -787,7 +758,7 @@ namespace {
 
                     do {
                         if (asioThread) {
-                            AtomicSet(NeedCheckCancelsQueue_, 0);
+                            NeedCheckCancelsQueue_.store(false);
                             TRequestId reqId;
 
                             ProcessReqsInFlyQueue();
@@ -805,14 +776,14 @@ namespace {
                                     }
                                 }
                             }
-                        } else if (AtomicGet(NeedCheckCancelsQueue_)) {
+                        } else if (NeedCheckCancelsQueue_.load()) {
                             AS_.GetIOService().Post(std::bind(&TConnection::SendMessages, TConnectionRef(this), true));
                             return;
                         }
 
                         TRequestId lastReqId = 0;
                         {
-                            AtomicSet(NeedCheckReqsQueue_, 0);
+                            NeedCheckReqsQueue_.store(false);
                             TRequest* reqPtr;
 
                             while (Reqs_.Dequeue(&reqPtr)) {
@@ -853,11 +824,11 @@ namespace {
 
                         OutputLock_.Release();
 
-                        if (!AtomicGet(NeedCheckReqsQueue_) && !AtomicGet(NeedCheckCancelsQueue_)) {
+                        if (!NeedCheckReqsQueue_.load() && !NeedCheckCancelsQueue_.load()) {
                             DBGOUT("TClient::SendMessages(exit2)");
                             return;
                         }
-                    } while (OutputLock_.TryAquire());
+                    } while (OutputLock_.TryAcquire());
                     DBGOUT("TClient::SendMessages(exit1)");
                 }
 
@@ -1058,10 +1029,11 @@ namespace {
                 TTcp2Message Msg_;
 
                 //output
-                TOutputLock OutputLock_;
-                TAtomic NeedCheckReqsQueue_;
+
+                TSpinLock OutputLock_;  //protect socket/buffers from simultaneous access from few threads
+                std::atomic<bool> NeedCheckReqsQueue_;
                 TLockFreeQueue<TRequest*> Reqs_;
-                TAtomic NeedCheckCancelsQueue_;
+                std::atomic<bool> NeedCheckCancelsQueue_;
                 TLockFreeQueue<TRequestId> Cancels_;
                 TAdaptiveLock GenReqIdLock_;
                 std::atomic<TRequestId> GenReqId_;
@@ -1210,7 +1182,7 @@ namespace {
                     , RemoteHost_(NNeh::PrintHostByRfc(*AS_->RemoteEndpoint().Addr()))
                     , BuffSize_(TTcp2Options::InputBufferSize)
                     , Buff_(new char[BuffSize_])
-                    , NeedCheckOutputQueue_(0)
+                    , NeedCheckOutputQueue_(false)
                 {
                     DBGOUT("TServer::TConnection()");
                 }
@@ -1411,12 +1383,12 @@ namespace {
                 }
 
                 void ProcessOutputQueue() {
-                    AtomicSet(NeedCheckOutputQueue_, 1);
-                    if (OutputLock_.TryAquire()) {
+                    NeedCheckOutputQueue_.store(true);
+                    if (OutputLock_.TryAcquire()) {
                         SendMessages(false);
                         return;
                     }
-                    DBGOUT("ProcessOutputQueue: !AquireOutputOwnership: " << (int)OutputLock_.IsFree());
+                    DBGOUT("ProcessOutputQueue: !AquireOutputOwnership: " << (int)!OutputLock_.IsLocked());
                 }
 
                 //must be called only after success aquiring output
@@ -1424,7 +1396,7 @@ namespace {
                     DBGOUT("TServer::SendMessages(enter)");
                     try {
                         do {
-                            AtomicUnlock(&NeedCheckOutputQueue_);
+                            NeedCheckOutputQueue_.store(false);
                             TAutoPtr<TOutputData> d;
                             while (OutputData_.Dequeue(&d)) {
                                 d->MoveTo(OutputBuffers_);
@@ -1443,11 +1415,11 @@ namespace {
 
                             OutputLock_.Release();
 
-                            if (!AtomicGet(NeedCheckOutputQueue_)) {
-                                DBGOUT("Server::SendMessages(exit2): " << (int)OutputLock_.IsFree());
+                            if (!NeedCheckOutputQueue_.load()) {
+                                DBGOUT("Server::SendMessages(exit2): " << (int)!OutputLock_.IsLocked());
                                 return;
                             }
-                        } while (OutputLock_.TryAquire());
+                        } while (OutputLock_.TryAcquire());
                         DBGOUT("Server::SendMessages(exit1)");
                     } catch (...) {
                         OnError();
@@ -1518,8 +1490,8 @@ namespace {
                 TLockFreeQueue<TRequestId> FinReqs_;
 
                 //output
-                TOutputLock OutputLock_; //protect socket/buffers from simultaneous access from few threads
-                TAtomic NeedCheckOutputQueue_;
+                TSpinLock OutputLock_; //protect socket/buffers from simultaneous access from few threads
+                std::atomic<bool> NeedCheckOutputQueue_;
                 NNeh::TAutoLockFreeQueue<TOutputData> OutputData_;
                 TOutputBuffers OutputBuffers_;
             };

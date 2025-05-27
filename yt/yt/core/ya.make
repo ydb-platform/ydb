@@ -27,8 +27,10 @@ SRCS(
     bus/tcp/dispatcher.cpp
     bus/tcp/dispatcher_impl.cpp
     bus/tcp/config.cpp
+    GLOBAL bus/tcp/configure_dispatcher.cpp
     bus/tcp/packet.cpp
     bus/tcp/client.cpp
+    bus/tcp/local_bypass.cpp
     bus/tcp/server.cpp
     bus/tcp/ssl_context.cpp
     bus/tcp/ssl_helpers.cpp
@@ -53,6 +55,7 @@ SRCS(
     concurrency/async_stream_pipe.cpp
     concurrency/async_stream.cpp
     concurrency/config.cpp
+    GLOBAL concurrency/configure_fiber_manager.cpp
     concurrency/coroutine.cpp
     concurrency/delayed_executor.cpp
     concurrency/execution_stack.cpp
@@ -69,7 +72,6 @@ SRCS(
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
     concurrency/lease_manager.cpp
-    concurrency/new_fair_share_thread_pool.cpp
     concurrency/nonblocking_batcher.cpp
     concurrency/notify_manager.cpp
     concurrency/periodic_executor.cpp
@@ -97,6 +99,7 @@ SRCS(
 
     logging/compression.cpp
     logging/config.cpp
+    GLOBAL logging/configure_log_manager.cpp
     logging/formatter.cpp
     logging/fluent_log.cpp
     GLOBAL logging/log.cpp
@@ -112,7 +115,6 @@ SRCS(
     logging/zstd_compression.cpp
 
     misc/arithmetic_formula.cpp
-    GLOBAL misc/assert.cpp
     misc/backoff_strategy.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
@@ -123,12 +125,11 @@ SRCS(
     misc/codicil.cpp
     misc/config.cpp
     misc/coro_pipe.cpp
-    misc/crash_handler.cpp
+    GLOBAL misc/crash_handler.cpp
     misc/digest.cpp
     misc/error.cpp
-    misc/error_code.cpp
     misc/fs.cpp
-    # NB: it is necessary to prevent linker optimization of
+    # NB: It is necessary to prevent linker optimization of
     # REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION macros for TGuid.
     GLOBAL misc/guid.cpp
     misc/hazard_ptr.cpp
@@ -136,13 +137,11 @@ SRCS(
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
     misc/id_generator.cpp
+    misc/fair_share_hierarchical_queue.cpp
     misc/linear_probe.cpp
-    misc/memory_usage_tracker.cpp
     misc/relaxed_mpsc_queue.cpp
-    misc/origin_attributes.cpp
     misc/parser_helpers.cpp
     misc/pattern_formatter.cpp
-    misc/phoenix.cpp
     misc/pool_allocator.cpp
     misc/proc.cpp
     misc/process_exit_profiler.cpp
@@ -154,20 +153,21 @@ SRCS(
     misc/ref_counted_tracker_profiler.cpp
     GLOBAL misc/ref_tracked.cpp
     misc/serialize.cpp
+    misc/serialize_dump.cpp
     misc/shutdown.cpp
-    misc/signal_registry.cpp
     misc/slab_allocator.cpp
     misc/statistic_path.cpp
     misc/statistics.cpp
-    misc/string_helpers.cpp
-    misc/stripped_error.cpp
     misc/cache_config.cpp
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp
+    misc/configurable_singleton_def.cpp
+    misc/memory_usage_tracker.cpp
 
     net/address.cpp
     net/connection.cpp
     net/config.cpp
+    GLOBAL net/configure_address_resolver.cpp
     net/dialer.cpp
     net/helpers.cpp
     net/listener.cpp
@@ -195,6 +195,7 @@ SRCS(
     rpc/channel_detail.cpp
     rpc/client.cpp
     rpc/config.cpp
+    GLOBAL rpc/configure_dispatcher.cpp
     rpc/dispatcher.cpp
     rpc/dynamic_channel_pool.cpp
     rpc/hedging_channel.cpp
@@ -244,6 +245,7 @@ SRCS(
     yson/async_writer.cpp
     yson/attribute_consumer.cpp
     yson/config.cpp
+    GLOBAL yson/configure_protobuf_interop.cpp
     yson/consumer.cpp
     yson/forwarding_consumer.cpp
     yson/lexer.cpp
@@ -267,6 +269,7 @@ SRCS(
     yson/string_merger.cpp
     yson/ypath_designated_consumer.cpp
     yson/ypath_filtering_consumer.cpp
+    yson/yson_builder.cpp
     yson/depth_limiting_yson_consumer.cpp
     yson/list_verb_lazy_yson_consumer.cpp
     yson/attributes_stripper.cpp
@@ -286,6 +289,7 @@ SRCS(
     ytree/request_complexity_limiter.cpp
     ytree/request_complexity_limits.cpp
     ytree/serialize.cpp
+    ytree/size.cpp
     ytree/static_service_dispatcher.cpp
     ytree/system_attribute_provider.cpp
     ytree/tree_builder.cpp
@@ -298,6 +302,7 @@ SRCS(
     ytree/ypath_service.cpp
     ytree/yson_struct.cpp
     ytree/yson_struct_detail.cpp
+    ytree/yson_struct_update.cpp
 
     json/config.cpp
     json/json_callbacks.cpp
@@ -359,7 +364,7 @@ PEERDIR(
     library/cpp/yt/backtrace
     library/cpp/yt/coding
     library/cpp/yt/malloc
-    library/cpp/yt/small_containers
+    library/cpp/yt/compact_containers
     library/cpp/yt/system
     library/cpp/yt/threading
 
@@ -367,10 +372,13 @@ PEERDIR(
     yt/yt/library/undumpable
     yt/yt/library/ytprof/api
 
+    yt/yt/library/signals
+
     # TODO(prime@): remove this, once yt/core is split into separate libraries.
     yt/yt/library/profiling
     yt/yt/library/profiling/resource_tracker
     yt/yt/library/tracing
+    yt/yt/library/numeric
 )
 
 IF (OS_WINDOWS)

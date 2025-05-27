@@ -110,6 +110,7 @@ public:
         auto& program = *task.MutableProgram();
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(lambda);
+        program.SetLangVer(State->TypeCtx->LangVer);
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();
@@ -335,7 +336,7 @@ TExprNode::TPtr DqMarkBlockStage(const TDqStatePtr& state, const TPublicIds::TPt
             return false;
         }
 
-        if (node->IsCallable("WideToBlocks") && node->Head().IsCallable("ToFlow") && node->Head().Head().IsArgument()) {
+        if (node->IsCallable("WideToBlocks") && node->Head().IsArgument()) {
             // scalar channel as input
             return false;
         }
@@ -949,7 +950,7 @@ private:
                     && !fillSettings.Discard
                     && State->DqGateway
                     && integration
-                    && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams);
+                    && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams, TColumnOrder(columns));
                 settings->EnableFullResultWrite = enableFullResultWrite;
             }
 
@@ -990,7 +991,8 @@ private:
                     new TDqsSingleExecutionPlanner(
                         lambda, NActors::TActorId(),
                         NActors::TActorId(1, 0, 1, 0),
-                        result.Input().Ref().GetTypeAnn()));
+                        result.Input().Ref().GetTypeAnn(),
+                        State->TypeCtx->LangVer));
                 auto& tasks = executionPlanner->GetTasks();
                 Yql::DqsProto::TTaskMeta taskMeta;
                 tasks[0].MutableMeta()->UnpackTo(&taskMeta);
@@ -1401,6 +1403,7 @@ private:
                 TString lambda = t.GetProgram().GetRaw();
                 fallbackFlag |= BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files);
                 t.MutableProgram()->SetRaw(lambda);
+                t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
 
                 Yql::DqsProto::TTaskMeta taskMeta;
                 t.MutableMeta()->UnpackTo(&taskMeta);
@@ -1437,7 +1440,7 @@ private:
             enableFullResultWrite = (ref || autoRef)
                 && !fillSettings.Discard
                 && integration
-                && integration->PrepareFullResultTableParams(pull.Ref(), ctx, graphParams, secureParams);
+                && integration->PrepareFullResultTableParams(pull.Ref(), ctx, graphParams, secureParams, TColumnOrder(columns));
             settings->EnableFullResultWrite = enableFullResultWrite;
         }
 
@@ -1946,6 +1949,7 @@ private:
                     TString lambda = t.GetProgram().GetRaw();
                     fallbackFlag |= BuildUploadList(&uploadList, false, &lambda, typeEnv, files);
                     t.MutableProgram()->SetRaw(lambda);
+                    t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
 
                     Yql::DqsProto::TTaskMeta taskMeta;
                     t.MutableMeta()->UnpackTo(&taskMeta);

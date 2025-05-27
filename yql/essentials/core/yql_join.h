@@ -60,7 +60,6 @@ struct TJoinOptions {
 
     bool Flatten = false;
     bool StrictKeys = false;
-    bool Compact = false;
 };
 
 IGraphTransformer::TStatus ValidateEquiJoinOptions(
@@ -92,6 +91,7 @@ THashMap<TStringBuf, THashSet<TStringBuf>> CollectEquiJoinKeyColumnsByLabel(cons
 
 bool IsLeftJoinSideOptional(const TStringBuf& joinType);
 bool IsRightJoinSideOptional(const TStringBuf& joinType);
+THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const NNodes::TCoEquiJoinTuple& joinTree);
 
 TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
     const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx);
@@ -148,6 +148,10 @@ struct TEquiJoinLinkSettings {
     // JOIN implementation may ignore this flags if SortedMerge strategy is not supported
     bool ForceSortedMerge = false;
     bool Compact = false;
+    TVector<TString> JoinAlgoOptions;
+
+    TVector<NDq::TJoinColumn> ShuffleLhsBy;
+    TVector<NDq::TJoinColumn> ShuffleRhsBy;
 };
 
 TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings);
@@ -173,5 +177,9 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
     const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields);
 
+bool IsCachedJoinOption(TStringBuf name);
+bool IsCachedJoinLinkOption(TStringBuf name);
+
+void GetPruneKeysColumnsForJoinLeaves(const NNodes::TCoEquiJoinTuple& joinTree, THashMap<TStringBuf, THashSet<TStringBuf>>& columnsForPruneKeysExtractor);
 
 }

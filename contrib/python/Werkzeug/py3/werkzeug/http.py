@@ -190,6 +190,15 @@ class COOP(Enum):
     SAME_ORIGIN = "same-origin"
 
 
+def _is_extended_parameter(key: str) -> bool:
+    """Per RFC 5987/8187, "extended" values may *not* be quoted.
+    This is in keeping with browser implementations. So we test
+    using this function to see if the key indicates this parameter
+    follows the `ext-parameter` syntax (using a trailing '*').
+    """
+    return key.strip().endswith("*")
+
+
 def quote_header_value(
     value: t.Union[str, int], extra_chars: str = "", allow_token: bool = True
 ) -> str:
@@ -254,6 +263,8 @@ def dump_options_header(
     for key, value in options.items():
         if value is None:
             segments.append(key)
+        elif _is_extended_parameter(key):
+            segments.append(f"{key}={value}")
         else:
             segments.append(f"{key}={quote_header_value(value)}")
     return "; ".join(segments)
@@ -282,6 +293,8 @@ def dump_header(
         for key, value in iterable.items():
             if value is None:
                 items.append(key)
+            elif _is_extended_parameter(key):
+                items.append(f"{key}={value}")
             else:
                 items.append(
                     f"{key}={quote_header_value(value, allow_token=allow_token)}"
@@ -818,6 +831,9 @@ def parse_content_range_header(
             return None
 
     if rng == "*":
+        if not is_byte_range_valid(None, None, length):
+            return None
+
         return ds.ContentRange(units, None, None, length, on_update=on_update)
     elif "-" not in rng:
         return None

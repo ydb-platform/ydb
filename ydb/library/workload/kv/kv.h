@@ -30,6 +30,11 @@ enum KvWorkloadConstants : ui64 {
 
 class TKvWorkloadParams : public TWorkloadParams {
 public:
+    enum class EStoreType {
+        Row     /* "row"    */,
+        Column  /* "column" */,
+    };
+
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
@@ -49,17 +54,18 @@ public:
     ui64 MixedDoReadRows = KvWorkloadConstants::MIXED_DO_READ_ROWS;
     ui64 MixedDoSelect = KvWorkloadConstants::MIXED_DO_SELECT;
 
-    const std::string TableName = "kv_test";
+    std::string TableName = "kv_test";
 
     bool StaleRO = KvWorkloadConstants::STALE_RO;
+    YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
 };
 
 class TKvWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TKvWorkloadParams> {
 public:
     using TBase = TWorkloadQueryGeneratorBase<TKvWorkloadParams>;
     struct TRow {
-        TVector<ui64> Ints;
-        TVector<TString> Strings;
+        std::vector<ui64> Ints;
+        std::vector<std::string> Strings;
 
         TString ToString() const {
             std::stringstream ss;

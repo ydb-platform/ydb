@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -12,11 +12,11 @@ concept SupportsPersist = requires(T* value, TContext& context) {
 };
 
 template<typename T>
-concept SupportsPhoenix2 = std::same_as<typename T::TPhoenix2SupportTag, T>;
+concept SupportsPhoenix = std::same_as<typename T::TPhoenixSupportTag, T>;
 
 template<typename T>
-concept DerivedFromPhoenix2 = std::derived_from<T, typename T::TPhoenix2SupportTag>;
+concept DerivedFromPhoenix = std::derived_from<T, typename T::TPhoenixSupportTag>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix

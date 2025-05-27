@@ -42,7 +42,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
                                            const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     const auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasCreateTable())
@@ -52,7 +52,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
 
     TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
     if (createTableTx.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
         tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
     }
 
@@ -80,14 +80,8 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-    if (DataShard.GetState() == TShardState::WaitScheme) {
-        txc.DB.NoMoreReadsForTx();
-        DataShard.SetPersistState(TShardState::Ready, txc);
-        // We could perform snapshot reads after becoming ready
-        // Make sure older versions restore mediator state in that case
-        DataShard.PersistUnprotectedReadsEnabled(txc);
-        DataShard.SendRegistrationRequestTimeCast(ctx);
-    }
+    txc.DB.NoMoreReadsForTx();
+    DataShard.OnTableCreated(txc, ctx);
 
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }

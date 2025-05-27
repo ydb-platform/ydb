@@ -30,7 +30,7 @@ $default = ($result_type) -> {
 };
 
 $udaf_factory = AGGREGATION_FACTORY(
-    "UDAF",
+    'UDAF',
     $create,
     $add,
     $merge,

@@ -136,11 +136,11 @@ public:
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
         bool hasMemTotalHardLimit = false;
         ui64 hardLimitBytes = GetHardLimitBytes(Config, processMemoryInfo, hasMemTotalHardLimit);
+        ui64 softLimitBytes = GetSoftLimitBytes(Config, hardLimitBytes);
 
-        tcmalloc::MallocExtension::MemoryLimit limit;
-        limit.hard = false;
-        limit.limit = GetSoftLimitBytes(Config, hardLimitBytes);
-        tcmalloc::MallocExtension::SetMemoryLimit(limit);
+        tcmalloc::MallocExtension::SetMemoryLimit(softLimitBytes, tcmalloc::MallocExtension::LimitKind::kSoft);
+
+        LOG_NOTICE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Set tcmalloc soft limit " << softLimitBytes);
 #endif
 
         HandleWakeup(ctx);
@@ -230,6 +230,7 @@ private:
         Counters->GetCounter("Stats/CGroupLimit")->Set(processMemoryInfo.CGroupLimit.value_or(0));
         Counters->GetCounter("Stats/MemTotal")->Set(processMemoryInfo.MemTotal.value_or(0));
         Counters->GetCounter("Stats/MemAvailable")->Set(processMemoryInfo.MemAvailable.value_or(0));
+        Counters->GetCounter("Stats/MemMapsCount")->Set(GetMemoryMapsCount());
         Counters->GetCounter("Stats/AllocatedMemory")->Set(processMemoryInfo.AllocatedMemory);
         Counters->GetCounter("Stats/AllocatorCachesMemory")->Set(processMemoryInfo.AllocatorCachesMemory);
         Counters->GetCounter("Stats/HardLimit")->Set(hardLimitBytes);

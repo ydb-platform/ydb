@@ -7,6 +7,8 @@
 #include <aws/cal/cal.h>
 #include <aws/common/byte_buf.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #define AWS_AES_256_CIPHER_BLOCK_SIZE 16
 #define AWS_AES_256_KEY_BIT_LEN 256
 #define AWS_AES_256_KEY_BYTE_LEN (AWS_AES_256_KEY_BIT_LEN / 8)
@@ -204,7 +206,7 @@ AWS_CAL_API int aws_symmetric_cipher_reset(struct aws_symmetric_cipher *cipher);
 AWS_CAL_API struct aws_byte_cursor aws_symmetric_cipher_get_tag(const struct aws_symmetric_cipher *cipher);
 
 /**
- * Gets the original intialization vector as a cursor.
+ * Gets the original initialization vector as a cursor.
  * The memory in this cursor is unsafe as it refers to the internal buffer.
  * This was done because the use case doesn't require fetching these during an
  * encryption or decryption operation and it dramatically simplifies the API.
@@ -235,4 +237,6 @@ AWS_CAL_API struct aws_byte_cursor aws_symmetric_cipher_get_key(const struct aws
 AWS_CAL_API bool aws_symmetric_cipher_is_good(const struct aws_symmetric_cipher *cipher);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
+
 #endif /* AWS_CAL_SYMMETRIC_CIPHER_H */

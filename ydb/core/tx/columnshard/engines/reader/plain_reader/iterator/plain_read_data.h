@@ -45,11 +45,16 @@ protected:
     }
 
 public:
-    virtual void OnSentDataFromInterval(const ui32 intervalIdx) const override {
-        Scanner->OnSentDataFromInterval(intervalIdx);
+    virtual void OnSentDataFromInterval(const TPartialSourceAddress& address) override {
+        Scanner->OnSentDataFromInterval(address);
     }
 
-    const TReadMetadata::TConstPtr& GetReadMetadata() const {
+    template <class T>
+    std::shared_ptr<T> GetReadMetadataVerifiedAs() const {
+        return SpecialReadContext->GetReadMetadataVerifiedAs<T>();
+    }
+
+    const NCommon::TReadMetadata::TConstPtr& GetReadMetadata() const {
         return SpecialReadContext->GetReadMetadata();
     }
 

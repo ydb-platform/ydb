@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     scanner.cpp
-    constructor.cpp
     source.cpp
     interval.cpp
     fetched_data.cpp

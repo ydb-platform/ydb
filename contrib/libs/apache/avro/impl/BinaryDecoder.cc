@@ -74,14 +74,13 @@ bool BinaryDecoder::decodeBool() {
     } else if (v == 1) {
         return true;
     }
-    throw Exception(boost::format("Invalid value for bool: %1%") % v);
+    throw Exception("Invalid value for bool: {}", v);
 }
 
 int32_t BinaryDecoder::decodeInt() {
     auto val = doDecodeLong();
     if (val < INT32_MIN || val > INT32_MAX) {
-        throw Exception(
-            boost::format("Value out of range for Avro int: %1%") % val);
+        throw Exception("Value out of range for Avro int: {}", val);
     }
     return static_cast<int32_t>(val);
 }
@@ -105,8 +104,7 @@ double BinaryDecoder::decodeDouble() {
 size_t BinaryDecoder::doDecodeLength() {
     ssize_t len = decodeInt();
     if (len < 0) {
-        throw Exception(
-            boost::format("Cannot have negative length: %1%") % len);
+        throw Exception("Cannot have negative length: {}", len);
     }
     return len;
 }

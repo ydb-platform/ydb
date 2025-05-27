@@ -55,5 +55,31 @@ namespace NTable {
         ui64 MemDataWaste = 0;
     };
 
+    struct TTableRuntimeStats {
+        ui64 OpenTxCount = 0;
+        ui64 TxsWithDataCount = 0;
+        ui64 CommittedTxCount = 0;
+        ui64 RemovedTxCount = 0;
+        ui64 RemovedCommittedTxs = 0;
+
+        TTableRuntimeStats& operator+=(const TTableRuntimeStats& s) noexcept {
+            OpenTxCount += s.OpenTxCount;
+            TxsWithDataCount += s.TxsWithDataCount;
+            CommittedTxCount += s.CommittedTxCount;
+            RemovedTxCount += s.RemovedTxCount;
+            RemovedCommittedTxs += s.RemovedCommittedTxs;
+            return *this;
+        }
+
+        TTableRuntimeStats& operator-=(const TTableRuntimeStats& s) noexcept {
+            OpenTxCount -= s.OpenTxCount;
+            TxsWithDataCount -= s.TxsWithDataCount;
+            CommittedTxCount -= s.CommittedTxCount;
+            RemovedTxCount -= s.RemovedTxCount;
+            RemovedCommittedTxs -= s.RemovedCommittedTxs;
+            return *this;
+        }
+    };
+
 }
 }

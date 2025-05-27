@@ -26,12 +26,15 @@ namespace NKikimr {
         DEFINE_TRACING_LEVELS(TDistributedTransactions, 2, 7, 11, 14, 15)
         DEFINE_TRACING_LEVELS(TTablet, 3, 8, 12, 14, 15)
         DEFINE_TRACING_LEVELS(TDistributedStorage, 4, 9, 13, 14, 15)
+        DEFINE_TRACING_LEVELS(TTopic, 4, 9, 13, 14, 15)
 
 #undef DEFINE_TRACING_LEVELS
 
         enum : ui8 {
             // The most verbose detalisation level used in production
             ProductionVerbose = 13,
+            // The most verbose detalisation level
+            MostVerbose = 15,
         };
     };
 
@@ -44,7 +47,7 @@ namespace NKikimr {
             VDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
             PDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
             PDiskBasic = TComponentTracingLevels::TDistributedStorage::Detailed,
-            PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Detailed,
+            PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Diagnostic,
         };
     };
 
@@ -79,14 +82,11 @@ namespace NKikimr {
                 LookupActor = TComponentTracingLevels::TQueryProcessor::Basic,
                     LookupActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
 
-                TableWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
-                    TableWriteActorTableNavigate = TComponentTracingLevels::TQueryProcessor::Detailed,
-
-                DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
                 ForwardWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
-
+                DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
                 BufferWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
-                    BufferWriteActorState = TComponentTracingLevels::TQueryProcessor::Basic,
+                    BufferWriteActorState = TComponentTracingLevels::TQueryProcessor::Detailed,
+                    TableWriteActor = TComponentTracingLevels::TQueryProcessor::Detailed,
 
             BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::TopLevel,
         };
@@ -105,6 +105,15 @@ namespace NKikimr {
             RequestProxy = TComponentTracingLevels::TGrpcProxy::TopLevel,
             RequestActor = TComponentTracingLevels::TGrpcProxy::TopLevel,
             RequestCheckActor = TComponentTracingLevels::TGrpcProxy::Basic,
+        };
+    };
+
+    struct TWilsonTopic {
+        enum {
+            TopicTopLevel = TComponentTracingLevels::TTopic::TopLevel,
+            TopicBasic = TComponentTracingLevels::TTopic::Basic,
+            TopicDetailed = TComponentTracingLevels::TTopic::Detailed,
+            TopicTrace = TComponentTracingLevels::TTopic::Trace,
         };
     };
 

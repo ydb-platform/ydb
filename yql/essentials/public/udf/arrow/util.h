@@ -12,6 +12,9 @@
 
 #include <functional>
 
+#include <yql/essentials/public/udf/udf_type_inspection.h>
+#include <yql/essentials/public/udf/udf_types.h>
+
 namespace NYql {
 namespace NUdf {
 
@@ -25,6 +28,9 @@ enum class EPgStringType {
 std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool);
 std::shared_ptr<arrow::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool);
 std::shared_ptr<arrow::Buffer> MakeDenseBitmapNegate(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool);
+std::shared_ptr<arrow::Buffer> MakeDenseBitmapCopy(const ui8* src, size_t len, size_t offset, arrow::MemoryPool* pool);
+
+std::shared_ptr<arrow::Buffer> MakeDenseFalseBitmap(int64_t len, arrow::MemoryPool* pool);
 
 /// \brief Recursive version of ArrayData::Slice() method
 std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayData>& data, size_t offset, size_t len);
@@ -42,6 +48,7 @@ inline bool IsNull(const arrow::ArrayData& data, size_t index) {
     return data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset);
 }
 
+ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data);
 ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch);
 ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch);
 
@@ -231,6 +238,22 @@ inline void SetMemoryContext(void* ptr, void* ctx) {
 
 inline void ZeroMemoryContext(void* ptr) {
     SetMemoryContext(ptr, nullptr);
+}
+
+inline bool IsSingularType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    auto kind = typeInfoHelper.GetTypeKind(type);
+    return kind == ETypeKind::Null ||
+           kind == ETypeKind::Void ||
+           kind == ETypeKind::EmptyDict ||
+           kind == ETypeKind::EmptyList;
+}
+
+const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* type);
+
+inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    type = SkipTaggedType(typeInfoHelper, type);
+
+    return TPgTypeInspector(typeInfoHelper, type) || IsSingularType(typeInfoHelper, type);
 }
 
 } // namespace NUdf

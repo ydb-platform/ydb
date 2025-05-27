@@ -4,7 +4,7 @@
 
 #include <util/system/getpid.h>
 #include <ydb/core/sys_view/service/query_history.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -276,7 +276,10 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             [[72057594046644480u];[0u];["/Root/Join1"];[10u]];
             [[72057594046644480u];[1u];["/Root/Join1"];[10u]];
             [[72057594046644480u];[0u];["/Root/Join2"];[11u]];
-            [[72057594046644480u];[1u];["/Root/Join2"];[11u]]
+            [[72057594046644480u];[1u];["/Root/Join2"];[11u]];
+            [[72057594046644480u];[0u];["/Root/TuplePrimaryDescending"];[12u]];
+            [[72057594046644480u];[1u];["/Root/TuplePrimaryDescending"];[12u]];
+            [[72057594046644480u];[2u];["/Root/TuplePrimaryDescending"];[12u]]
         ])", StreamResultToYson(it));
     }
 

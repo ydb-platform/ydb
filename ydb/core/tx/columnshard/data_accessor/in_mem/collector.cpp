@@ -2,15 +2,21 @@
 
 namespace NKikimr::NOlap::NDataAccessorControl::NInMem {
 
-THashMap<ui64, TPortionDataAccessor> TCollector::DoAskData(
-    const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& /*callback*/, const TString& /*consumer*/) {
-    THashMap<ui64, TPortionDataAccessor> accessors;
-    for (auto&& i : portions) {
-        auto it = Accessors.find(i->GetPortionId());
-        AFL_VERIFY(it != Accessors.end());
-        accessors.emplace(i->GetPortionId(), it->second);
+void TCollector::DoAskData(
+    THashMap<TInternalPathId, TPortionsByConsumer>&& /*portions*/, const std::shared_ptr<IAccessorCallback>& /*callback*/) {
+    AFL_VERIFY(false);
+}
+
+TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) {
+    TDataCategorized result;
+    for (auto&& c : portions.GetConsumers()) {
+        for (auto&& p : c.second.GetPortions()) {
+            auto it = Accessors.find(p->GetPortionId());
+            AFL_VERIFY(it != Accessors.end());
+            result.AddFromCache(it->second);
+        }
     }
-    return accessors;
+    return result;
 }
 
 void TCollector::DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {
@@ -22,4 +28,4 @@ void TCollector::DoModifyPortions(const std::vector<TPortionDataAccessor>& add, 
     }
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataAccessorControl::NInMem

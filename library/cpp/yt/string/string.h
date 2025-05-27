@@ -148,8 +148,8 @@ TString UnderscoreCaseToCamelCase(TStringBuf str);
 void CamelCaseToUnderscoreCase(TStringBuilderBase* builder, TStringBuf str);
 TString CamelCaseToUnderscoreCase(TStringBuf str);
 
-TString TrimLeadingWhitespaces(const TString& str);
-TString Trim(const TString& str, const TString& whitespaces);
+TString TrimLeadingWhitespaces(TStringBuf str);
+TString Trim(TStringBuf str, TStringBuf whitespaces);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -178,6 +178,13 @@ struct TCaseInsensitiveStringEqualityComparer
 bool TryParseBool(TStringBuf value, bool* result);
 bool ParseBool(TStringBuf value);
 TStringBuf FormatBool(bool value);
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline constexpr TStringBuf DefaultTruncatedMessage = "...<truncated>";
+
+void TruncateStringInplace(std::string* string, int lengthLimit, TStringBuf truncatedSuffix = DefaultTruncatedMessage);
+std::string TruncateString(std::string string, int lengthLimit, TStringBuf truncatedSuffix = DefaultTruncatedMessage);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -40,6 +40,8 @@ struct TKikimrData {
         DataSourceNames.insert(TKiReadTableScheme::CallableName());
         DataSourceNames.insert(TKiReadTableList::CallableName());
 
+        DataSinkNames.insert(TKiAlterDatabase::CallableName());
+
         DataSinkNames.insert(TKiWriteTable::CallableName());
         DataSinkNames.insert(TKiUpdateTable::CallableName());
         DataSinkNames.insert(TKiDeleteTable::CallableName());
@@ -52,6 +54,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateReplication::CallableName());
         DataSinkNames.insert(TKiAlterReplication::CallableName());
         DataSinkNames.insert(TKiDropReplication::CallableName());
+        DataSinkNames.insert(TKiCreateTransfer::CallableName());
+        DataSinkNames.insert(TKiAlterTransfer::CallableName());
+        DataSinkNames.insert(TKiDropTransfer::CallableName());
         DataSinkNames.insert(TKiCreateUser::CallableName());
         DataSinkNames.insert(TKiModifyPermissions::CallableName());
         DataSinkNames.insert(TKiAlterUser::CallableName());
@@ -110,6 +115,7 @@ struct TKikimrData {
         DataOps = ModifyOps | ReadOps;
 
         SchemeOps =
+            TYdbOperation::AlterDatabase |
             TYdbOperation::CreateTable |
             TYdbOperation::DropTable |
             TYdbOperation::AlterTable |
@@ -119,6 +125,9 @@ struct TKikimrData {
             TYdbOperation::CreateReplication |
             TYdbOperation::AlterReplication |
             TYdbOperation::DropReplication |
+            TYdbOperation::CreateTransfer |
+            TYdbOperation::AlterTransfer |
+            TYdbOperation::DropTransfer |
             TYdbOperation::CreateUser |
             TYdbOperation::AlterUser |
             TYdbOperation::DropUser |
@@ -166,7 +175,8 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
     return nullptr;
 }
 
-TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database, const TString& table, ETableType tableType) {
+TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database,
+        const TString& table, ETableType tableType, bool sysViewRewritten) {
     auto tablePath = table;
     if (TempTablesState) {
         auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
@@ -186,11 +196,15 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
         }
         desc.SetTableType(tableType);
 
+        desc.SetSysViewRewritten(sysViewRewritten);
+
         return desc;
     }
 
     return Tables[std::make_pair(cluster, tablePath)];
 }
+
+
 
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
     auto tablePath = table;
@@ -206,6 +220,26 @@ TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, con
     YQL_ENSURE(desc, "Unexpected empty metadata, cluster '" << cluster << "', table '" << table << "'");
 
     return *desc;
+}
+
+bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStringBuf& path) {
+    auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
+    if (mainTableImpl) {
+
+        for(const auto& index: mainTableImpl->Metadata->Indexes) {
+            if (index.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                continue;
+            }
+
+            for(const auto& implTable: index.GetImplTables()) {
+                TString implTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << implTable;
+                if (path == implTablePath)
+                    return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf& cluster,
@@ -225,6 +259,19 @@ const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf
     YQL_ENSURE(desc->DoesExist());
 
     return *desc;
+}
+
+std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& table) const {
+    if (!TempTablesState) {
+        return std::nullopt;
+    }
+
+    auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
+
+    if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+    }
+    return std::nullopt;
 }
 
 bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
@@ -437,6 +484,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
             return false;
         }
         Target = nameNode->Child(0)->Content();
+    } else if (tagName == "transfer") {
+        KeyType = Type::Transfer;
+        const TExprNode* nameNode = key.Child(0)->Child(1);
+        if (!nameNode->IsCallable("String")) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as transfer key."));
+            return false;
+        }
+        Target = nameNode->Child(0)->Content();
     } else if(tagName == "permission") {
         KeyType = Type::Permission;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
@@ -451,6 +506,9 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         KeyType = Type::BackupCollection;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ExplicitPrefix = key.Child(0)->Child(2)->Child(0)->Content();
+    } else if (tagName == "databasePath") {
+        KeyType = Type::Database;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;
@@ -843,13 +901,14 @@ void TableDescriptionToTableInfoImpl(const TKikimrTableDescription& desc, TYdbOp
                 continue;
             }
 
-            const auto& idxTableDesc = desc.Metadata->SecondaryGlobalIndexMetadata[idxNo];
+            const auto& implTable = *desc.Metadata->ImplTables[idxNo];
+            YQL_ENSURE(!implTable.Next);
 
             auto info = NKqpProto::TKqpTableInfo();
-            info.SetTableName(idxTableDesc->Name);
-            info.MutableTableId()->SetOwnerId(idxTableDesc->PathId.OwnerId());
-            info.MutableTableId()->SetTableId(idxTableDesc->PathId.TableId());
-            info.SetSchemaVersion(idxTableDesc->SchemaVersion);
+            info.SetTableName(implTable.Name);
+            info.MutableTableId()->SetOwnerId(implTable.PathId.OwnerId());
+            info.MutableTableId()->SetTableId(implTable.PathId.TableId());
+            info.SetSchemaVersion(implTable.SchemaVersion);
 
             back_inserter = std::move(info);
             ++back_inserter;

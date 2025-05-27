@@ -73,8 +73,31 @@ struct TFakeDatabaseResolver: public IDatabaseAsyncResolver {
     }
 };
 
+
+class TListSplitsIteratorMock: public NConnector::IListSplitsStreamIterator {
+public:
+    TListSplitsIteratorMock() {}
+
+    NConnector::TAsyncResult<NConnector::NApi::TListSplitsResponse> ReadNext() override {
+        NConnector::TResult<NConnector::NApi::TListSplitsResponse> result;
+
+        if (!Responded_) {
+            result.Status = NYdbGrpc::TGrpcStatus(); // OK
+            result.Response = NConnector::NApi::TListSplitsResponse(); 
+            result.Response->add_splits();
+            Responded_ = true;  
+        } else {
+            result.Status = NYdbGrpc::TGrpcStatus(grpc::StatusCode::OUT_OF_RANGE, "Read EOF");
+        }
+
+        return NThreading::MakeFuture<NConnector::TResult<NConnector::NApi::TListSplitsResponse>>(std::move(result));
+    }
+private:
+    bool Responded_ = false;
+};
+
 struct TFakeGenericClient: public NConnector::IClient {
-    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request) {
+    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request, TDuration) override {
         UNIT_ASSERT_VALUES_EQUAL(request.table(), "test_table");
         NConnector::TResult<NConnector::NApi::TDescribeTableResponse> result;
         auto& resp = result.Response.emplace();
@@ -123,16 +146,18 @@ struct TFakeGenericClient: public NConnector::IClient {
         return NThreading::MakeFuture<NConnector::TDescribeTableAsyncResult::value_type>(std::move(result));
     }
 
-    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request) {
+    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
-        try {
-            throw std::runtime_error("ListSplits unimplemented");
-        } catch (...) {
-            return NThreading::MakeErrorFuture<NConnector::TListSplitsStreamIteratorAsyncResult::value_type>(std::current_exception());
-        }
+
+        NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator> iteratorResult{
+            NYdbGrpc::TGrpcStatus(),
+            std::make_shared<TListSplitsIteratorMock>(),
+        };
+
+        return NThreading::MakeFuture<NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator>>(std::move(iteratorResult));
     }
 
-    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request) {
+    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
         try {
             throw std::runtime_error("ReadSplits unimplemented");
@@ -327,7 +352,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
     void AssertFilter(const TString& lambdaText, const TString& filterText) {
         const auto& filter = BuildProtoFilterFromLambda(lambdaText);
         NConnector::NApi::TPredicate expectedFilter;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(filterText, &expectedFilter));
+        UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(filterText, &expectedFilter), expectedFilter.InitializationErrorString());
         UNIT_ASSERT_STRINGS_EQUAL(filter.Utf8DebugString(), expectedFilter.Utf8DebugString());
     }
 
@@ -632,7 +657,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
     }
 
     Y_UNIT_TEST(StringFieldsNotSupported) {
-        AssertNoPush(
+        AssertFilter(
             // Note that R"ast()ast" is empty string!
             R"ast(
                 (Coalesce
@@ -642,17 +667,48 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     )
                     (Bool '"false")
                 )
-                )ast");
+                )ast",
+            R"proto(
+                comparison {
+                    operation: EQ
+                    left_value {
+                        column: "col_utf8"
+                    }
+                    right_value {
+                        column: "col_optional_utf8"
+                    }
+                }
+            )proto"
+        );
     }
 
     Y_UNIT_TEST(StringFieldsNotSupported2) {
-        AssertNoPush(
+        AssertFilter(
             // Note that R"ast()ast" is empty string!
             R"ast(
                 (!=
                     (Member $row '"col_string")
                     (String '"value")
                 )
-                )ast");
+                )ast",
+            R"proto(
+                comparison {
+                    operation: NE
+                    left_value {
+                        column: "col_string"
+                    }
+                    right_value {
+                        typed_value {
+                            type {
+                                type_id: STRING
+                            }
+                            value {
+                                bytes_value: "value"
+                            }
+                        }
+                    }
+                }
+            )proto"
+        );
     }
 }

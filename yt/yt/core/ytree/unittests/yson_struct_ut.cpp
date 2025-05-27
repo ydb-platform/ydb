@@ -5,10 +5,13 @@
 #include <yt/yt/core/ytree/ephemeral_node_factory.h>
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/polymorphic_yson_struct.h>
+#include <yt/yt/core/ytree/size.h>
 #include <yt/yt/core/ytree/tree_builder.h>
 #include <yt/yt/core/ytree/tree_visitor.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 #include <yt/yt/core/ytree/yson_struct.h>
+
+#include <yt/yt/core/ytree/unittests/proto/test.pb.h>
 
 #include <util/stream/buffer.h>
 
@@ -42,6 +45,8 @@ struct TTestSubconfig
     bool MyBool;
     std::vector<TString> MyStringList;
     ETestEnum MyEnum;
+    TDuration MyDuration;
+    TSize MySize;
 
     REGISTER_YSON_STRUCT(TTestSubconfig);
 
@@ -59,6 +64,10 @@ struct TTestSubconfig
             .Default();
         registrar.Parameter("my_enum", &TThis::MyEnum)
             .Default(ETestEnum::Value1);
+        registrar.Parameter("my_duration", &TThis::MyDuration)
+            .Default(TDuration::Seconds(1));
+        registrar.Parameter("my_size", &TThis::MySize)
+            .Default(TSize::FromString("8K"));
     }
 };
 
@@ -66,10 +75,9 @@ using TTestSubconfigPtr = TIntrusivePtr<TTestSubconfig>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTestConfig
+struct TTestConfig
     : public TYsonStruct
 {
-public:
     TString MyString;
     TTestSubconfigPtr Subconfig;
     std::vector<TTestSubconfigPtr> SubconfigList;
@@ -136,6 +144,8 @@ auto GetCompleteConfigNode(int offset = 0)
                     .Item().Value("ListItem1")
                     .Item().Value("ListItem2")
                 .EndList()
+                .Item("my_duration").Value("2h")
+                .Item("my_size").Value("2M")
             .EndMap()
             .Item("sub_list").BeginList()
                 .Item().BeginMap()
@@ -148,6 +158,8 @@ auto GetCompleteConfigNode(int offset = 0)
                         .Item().Value("ListItem1")
                         .Item().Value("ListItem2")
                     .EndList()
+                    .Item("my_duration").Value("2h")
+                    .Item("my_size").Value(2'000'000)
                 .EndMap()
                 .Item().BeginMap()
                     .Item("my_int").Value(99 + offset)
@@ -159,6 +171,8 @@ auto GetCompleteConfigNode(int offset = 0)
                         .Item().Value("ListItem1")
                         .Item().Value("ListItem2")
                     .EndList()
+                    .Item("my_duration").Value("2h")
+                    .Item("my_size").Value("2000K")
                 .EndMap()
             .EndList()
             .Item("sub_map").BeginMap()
@@ -172,6 +186,8 @@ auto GetCompleteConfigNode(int offset = 0)
                         .Item().Value("ListItem1")
                         .Item().Value("ListItem2")
                     .EndList()
+                    .Item("my_duration").Value("2h")
+                    .Item("my_size").Value(2'000'000)
                 .EndMap()
                 .Item("sub2").BeginMap()
                     .Item("my_int").Value(99 + offset)
@@ -183,6 +199,8 @@ auto GetCompleteConfigNode(int offset = 0)
                         .Item().Value("ListItem1")
                         .Item().Value("ListItem2")
                     .EndList()
+                    .Item("my_duration").Value(2 * 60 * 60 * 1000)
+                    .Item("my_size").Value(2'000'000)
                 .EndMap()
             .EndMap()
         .EndMap();
@@ -190,7 +208,7 @@ auto GetCompleteConfigNode(int offset = 0)
 
 void TestCompleteSubconfig(TTestSubconfig* subconfig, int offset = 0)
 {
-    for (auto field : {"my_int", "my_uint", "my_bool", "my_enum", "my_string_list"}) {
+    for (auto field : {"my_int", "my_uint", "my_bool", "my_enum", "my_string_list", "my_duration", "my_size"}) {
         EXPECT_TRUE(subconfig->IsSet(field));
     }
 
@@ -202,6 +220,8 @@ void TestCompleteSubconfig(TTestSubconfig* subconfig, int offset = 0)
     EXPECT_EQ("ListItem1", subconfig->MyStringList[1]);
     EXPECT_EQ("ListItem2", subconfig->MyStringList[2]);
     EXPECT_EQ(ETestEnum::Value2, subconfig->MyEnum);
+    EXPECT_EQ(TDuration::Hours(2), subconfig->MyDuration);
+    EXPECT_EQ(2'000'000, subconfig->MySize);
 }
 
 void TestCompleteConfig(TIntrusivePtr<TTestConfig> config, int offset = 0)
@@ -356,6 +376,59 @@ TEST_P(TYsonStructParseTest, UnrecognizedSimple)
     auto deserializedConfig = ConvertTo<TTestConfigPtr>(output);
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(config), ConvertToNode(deserializedConfig)));
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSimpleStructKeepUnrecognized
+    : public TYsonStruct
+{
+public:
+    int Value;
+
+    REGISTER_YSON_STRUCT(TSimpleStructKeepUnrecognized);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.UnrecognizedStrategy(EUnrecognizedStrategy::KeepRecursive);
+
+        registrar.Parameter("value", &TSimpleStructKeepUnrecognized::Value)
+            .Default(1);
+    }
+};
+
+TEST_P(TYsonStructParseTest, UnrecognizedSorted)
+{
+    auto configNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("value_unrecognized").Value(42)
+            .Item("unrecognized").Value("TestString")
+            .Item("value").Value(1337)
+            .Item("a_unrecognized").Value("TestString")
+        .EndMap();
+
+    auto config = Load<TSimpleStructKeepUnrecognized>(configNode->AsMap());
+
+    auto unrecognizedNode = config->GetLocalUnrecognized();
+    auto unrecognizedRecursivelyNode = config->GetRecursiveUnrecognized();
+    EXPECT_TRUE(AreNodesEqual(unrecognizedNode, unrecognizedRecursivelyNode));
+    EXPECT_EQ(3, unrecognizedNode->GetChildCount());
+
+    TString expectedYson;
+    expectedYson += "{\"a_unrecognized\"=\"TestString\";";
+    expectedYson += "\"value\"=1337;";
+    expectedYson += "\"value_unrecognized\"=42;";
+    expectedYson += "\"unrecognized\"=\"TestString\";}";
+
+    auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
+
+    EXPECT_TRUE(AreNodesEqual(
+        ConvertToNode(TYsonString(expectedYson)),
+        ConvertToNode(TYsonString(output.AsStringBuf()))))
+        << "Expected: " << expectedYson
+        << ", got: " << output.AsStringBuf();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <EUnrecognizedStrategy strategy>
 class TThrowOnUnrecognized
@@ -696,14 +769,18 @@ TEST(TYsonStructTest, Save)
         "\"my_enum\"=\"value1\";"
         "\"my_int\"=200;"
         "\"my_uint\"=50u;"
-        "\"my_string_list\"=[]}";
+        "\"my_string_list\"=[];"
+        "\"my_duration\"=1000;"
+        "\"my_size\"=8000}";
 
     TString subconfigYsonOrigin =
         "{\"my_bool\"=%false;"
         "\"my_enum\"=\"value1\";"
         "\"my_int\"=100;"
         "\"my_uint\"=50u;"
-        "\"my_string_list\"=[]}";
+        "\"my_string_list\"=[];"
+        "\"my_duration\"=1000;"
+        "\"my_size\"=8000}";
 
     TString expectedYson;
     expectedYson += "{\"my_string\"=\"hello!\";";
@@ -714,7 +791,9 @@ TEST(TYsonStructTest, Save)
 
     EXPECT_TRUE(AreNodesEqual(
         ConvertToNode(TYsonString(expectedYson)),
-        ConvertToNode(TYsonString(output.AsStringBuf()))));
+        ConvertToNode(TYsonString(output.AsStringBuf()))))
+        << "Expected: " << expectedYson
+        << ", got: " << output.AsStringBuf();
 }
 
 TEST(TYsonStructTest, TestConfigUpdate)
@@ -1685,10 +1764,9 @@ TEST(TYsonStructTest, Aliases5)
     EXPECT_FALSE(config->IsSet("key"));
 }
 
-class TTestConfigWithContainers
+struct TTestConfigWithContainers
     : public NYTree::TYsonStructLite
 {
-public:
     std::vector<TString> Vector;
     std::array<TString, 3> Array;
     std::pair<size_t, TString> Pair;
@@ -1896,10 +1974,9 @@ TEST(TYsonStructTest, UniversalParameterAccessor)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TVirtualInheritanceConfig
+struct TVirtualInheritanceConfig
     : public virtual TYsonStruct
 {
-public:
     int Value;
 
     REGISTER_YSON_STRUCT(TVirtualInheritanceConfig);
@@ -1965,10 +2042,9 @@ TEST(TYsonStructTest, RegisterBaseFieldInDerived)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TClassLevelPostprocessConfig
+struct TClassLevelPostprocessConfig
     : public TYsonStruct
 {
-public:
     int Value;
 
     REGISTER_YSON_STRUCT(TClassLevelPostprocessConfig);
@@ -2003,10 +2079,9 @@ TEST(TYsonStructTest, ClassLevelPostprocess)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRecursiveConfig
+struct TRecursiveConfig
     : public TYsonStruct
 {
-public:
     TIntrusivePtr<TRecursiveConfig> Subconfig;
 
     int Value;
@@ -3472,6 +3547,7 @@ struct TComparableYsonStruct
     std::vector<int> Values;
     TIntrusivePtr<TSimpleYsonStruct> SimpleSubStruct;
     THashMap<int, TIntrusivePtr<TSimpleYsonStruct>> Mapping;
+    IMapNodePtr MapNode;
 
     bool UnregisteredValue = false;
 
@@ -3496,6 +3572,9 @@ struct TComparableYsonStruct
 
         registrar.Parameter("values", &TThis::Values)
             .Default({1, 2, 3});
+
+        registrar.Parameter("map_node", &TThis::MapNode)
+            .Default();
     }
 };
 
@@ -3714,6 +3793,64 @@ TEST(TYsonStructTest, DefaultUnrecognizedStrategy3)
     THasFieldWithDefaultedStrategyAndOwnRecursiveStrategy yson = {};
     EXPECT_ANY_THROW(Deserialize(yson, source->AsMap()));
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestYsonStructWithProto
+    : public virtual TYsonStruct
+{
+    NProto::TTestMessage DefaultProto;
+    TProtoSerializedAsYson<NProto::TTestMessage> YsonProto;
+    TProtoSerializedAsString<NProto::TTestMessage> StringProto;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructWithProto);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("default_proto", &TThis::DefaultProto)
+            .Default();
+        registrar.Parameter("yson_proto", &TThis::YsonProto)
+            .Default();
+        registrar.Parameter("string_proto", &TThis::StringProto)
+            .Default();
+    }
+};
+
+using TTestYsonStructWithProtoPtr = TIntrusivePtr<TTestYsonStructWithProto>;
+
+TEST(TYsonStructTest, ProtoSerialize)
+{
+    NProto::TTestMessage proto;
+    proto.set_int32_field(532);
+    proto.set_string_field("abcdef");
+    auto serialized = proto.SerializeAsString();
+
+    auto ysonStruct = New<TTestYsonStructWithProto>();
+    ysonStruct->DefaultProto.CopyFrom(proto);
+    ysonStruct->YsonProto.CopyFrom(proto);
+    ysonStruct->StringProto.CopyFrom(proto);
+
+    auto node = ConvertToNode(ysonStruct);
+    const auto expectedNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("default_proto")
+                .BeginMap()
+                    .Item("int32_field").Value(532)
+                    .Item("string_field").Value("abcdef")
+                .EndMap()
+            .Item("yson_proto")
+                .BeginMap()
+                    .Item("int32_field").Value(532)
+                    .Item("string_field").Value("abcdef")
+                .EndMap()
+            .Item("string_proto").Value(serialized)
+        .EndMap();
+    EXPECT_TRUE(AreNodesEqual(node, expectedNode));
+    auto otherStruct = ConvertTo<TTestYsonStructWithProtoPtr>(node);
+    EXPECT_EQ(*otherStruct, *ysonStruct);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYTree

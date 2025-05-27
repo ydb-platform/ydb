@@ -167,8 +167,12 @@ typedef void *(*ngtcp2_realloc)(void *ptr, size_t size, void *user_data);
  *     }
  *
  *     void conn_new() {
- *       ngtcp2_mem mem = {NULL, my_malloc_cb, my_free_cb, my_calloc_cb,
- *                         my_realloc_cb};
+ *       ngtcp2_mem mem = {
+ *         .malloc = my_malloc_cb,
+ *         .free = my_free_cb,
+ *         .calloc = my_calloc_cb,
+ *         .realloc = my_realloc_cb,
+ *       };
  *
  *       ...
  *     }
@@ -210,18 +214,10 @@ typedef struct ngtcp2_mem {
 /**
  * @macro
  *
- * :macro:`NGTCP2_SECONDS` is a count of tick which corresponds to 1
- * second.
+ * :macro:`NGTCP2_NANOSECONDS` is a count of tick which corresponds to
+ * 1 nanosecond.
  */
-#define NGTCP2_SECONDS ((ngtcp2_duration)1000000000ULL)
-
-/**
- * @macro
- *
- * :macro:`NGTCP2_MILLISECONDS` is a count of tick which corresponds
- * to 1 millisecond.
- */
-#define NGTCP2_MILLISECONDS ((ngtcp2_duration)1000000ULL)
+#define NGTCP2_NANOSECONDS ((ngtcp2_duration)1ULL)
 
 /**
  * @macro
@@ -229,15 +225,31 @@ typedef struct ngtcp2_mem {
  * :macro:`NGTCP2_MICROSECONDS` is a count of tick which corresponds
  * to 1 microsecond.
  */
-#define NGTCP2_MICROSECONDS ((ngtcp2_duration)1000ULL)
+#define NGTCP2_MICROSECONDS ((ngtcp2_duration)(1000ULL * NGTCP2_NANOSECONDS))
 
 /**
  * @macro
  *
- * :macro:`NGTCP2_NANOSECONDS` is a count of tick which corresponds to
- * 1 nanosecond.
+ * :macro:`NGTCP2_MILLISECONDS` is a count of tick which corresponds
+ * to 1 millisecond.
  */
-#define NGTCP2_NANOSECONDS ((ngtcp2_duration)1ULL)
+#define NGTCP2_MILLISECONDS ((ngtcp2_duration)(1000ULL * NGTCP2_MICROSECONDS))
+
+/**
+ * @macro
+ *
+ * :macro:`NGTCP2_SECONDS` is a count of tick which corresponds to 1
+ * second.
+ */
+#define NGTCP2_SECONDS ((ngtcp2_duration)(1000ULL * NGTCP2_MILLISECONDS))
+
+/**
+ * @macro
+ *
+ * :macro:`NGTCP2_MINUTES` is a count of tick which corresponds to 1
+ * minute.
+ */
+#define NGTCP2_MINUTES ((ngtcp2_duration)(60ULL * NGTCP2_SECONDS))
 
 /**
  * @macrosection
@@ -1471,7 +1483,9 @@ typedef struct ngtcp2_transport_params {
   uint64_t max_udp_payload_size;
   /**
    * :member:`active_connection_id_limit` is the maximum number of
-   * Connection ID that sender can store.
+   * Connection ID that sender can store.  If specified, it must be in
+   * the range of [:macro:`NGTCP2_DEFAULT_ACTIVE_CONNECTION_ID_LIMIT`,
+   * 8], inclusive.
    */
   uint64_t active_connection_id_limit;
   /**
@@ -1777,6 +1791,13 @@ typedef struct ngtcp2_settings {
    * or :member:`ngtcp2_transport_params.initial_max_stream_data_uni`,
    * depending on the type of stream.  The window size is scaled up to
    * the value specified in this field.
+   *
+   * Please note that the auto-tuning is done per stream.  Even if the
+   * previous stream gets larger window as a result of auto-tuning,
+   * the new stream still starts with the initial value set in
+   * transport parameters.  This might become a bottleneck if
+   * congestion window of a remote server is wide open.  If this
+   * causes an issue, do not enable auto-tuning.
    */
   uint64_t max_stream_window;
   /**
@@ -2845,7 +2866,8 @@ typedef int (*ngtcp2_extend_max_stream_data)(ngtcp2_conn *conn,
  * :type:`ngtcp2_rand` is a callback function to get random data of
  * length |destlen|.  Application must fill random |destlen| bytes to
  * the buffer pointed by |dest|.  The generated data is used only in
- * non-cryptographic context.
+ * non-cryptographic context.  But it is strongly recommended to use a
+ * secure random number generator.
  */
 typedef void (*ngtcp2_rand)(uint8_t *dest, size_t destlen,
                             const ngtcp2_rand_ctx *rand_ctx);
@@ -4386,6 +4408,17 @@ NGTCP2_EXTERN int ngtcp2_conn_shutdown_stream_read(ngtcp2_conn *conn,
 #define NGTCP2_WRITE_STREAM_FLAG_FIN 0x02u
 
 /**
+ * @macro
+ *
+ * :macro:`NGTCP2_WRITE_STREAM_FLAG_PADDING` indicates that a
+ * non-empty 0 RTT or 1 RTT packet is padded to the minimum length of
+ * a sending path MTU or a given packet buffer when finalizing it.
+ * ACK, PATH_CHALLENGE, PATH_RESPONSE, CONNECTION_CLOSE only packets
+ * and PMTUD packets are excluded.
+ */
+#define NGTCP2_WRITE_STREAM_FLAG_PADDING 0x04u
+
+/**
  * @function
  *
  * `ngtcp2_conn_write_stream` is just like
@@ -4509,6 +4542,11 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_stream_versioned(
  * include, call this function with |stream_id| as -1 to stop
  * coalescing and write a packet.
  *
+ * If :macro:`NGTCP2_WRITE_STREAM_FLAG_PADDING` is set in |flags| when
+ * finalizing a non-empty 0 RTT or 1 RTT packet, the packet is padded
+ * to the minimum length of a sending path MTU or a given packet
+ * buffer.
+ *
  * This function returns 0 if it cannot write any frame because buffer
  * is too small, or packet is congestion limited.  Application should
  * keep reading and wait for congestion window to grow.
@@ -4572,6 +4610,17 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_writev_stream_versioned(
  * may come, and should be coalesced into the same packet if possible.
  */
 #define NGTCP2_WRITE_DATAGRAM_FLAG_MORE 0x01u
+
+/**
+ * @macro
+ *
+ * :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_PADDING` indicates that a
+ * non-empty 0 RTT or 1 RTT packet is padded to the minimum length of
+ * a sending path MTU or a given packet buffer when finalizing it.
+ * ACK, PATH_CHALLENGE, PATH_RESPONSE, CONNECTION_CLOSE only packets
+ * and PMTUD packets are excluded.
+ */
+#define NGTCP2_WRITE_DATAGRAM_FLAG_PADDING 0x02u
 
 /**
  * @function
@@ -4653,6 +4702,11 @@ NGTCP2_EXTERN ngtcp2_ssize ngtcp2_conn_write_datagram_versioned(
  * `ngtcp2_conn_shutdown_stream`).  Just keep calling this function
  * (or `ngtcp2_conn_writev_stream`) until it returns a positive number
  * (which indicates a complete packet is ready).
+ *
+ * If :macro:`NGTCP2_WRITE_DATAGRAM_FLAG_PADDING` is set in |flags|
+ * when finalizing a non-empty 0 RTT or 1 RTT packet, the packet is
+ * padded to the minimum length of a sending path MTU or a given
+ * packet buffer.
  *
  * This function returns the number of bytes written in |dest| if it
  * succeeds, or one of the following negative error codes:

@@ -8,16 +8,13 @@ RECURSE(
     canonical
     clickbench
     cms
-    compatibility
     config
-    dynumber
     encryption
     hive
     kqp
-    kv_workload
     large_serializable
     limits
-    open_source
+    minidumps
     postgresql
     query_cache
     rename

@@ -36,36 +36,36 @@ namespace NBoot {
         static_assert(MaskType ^ MaskIdx ^ MaskSub == 0xffffff, "");
         static_assert((MaskIdx >> OffIdx) == ui32(EIdx::End), "");
 
-        TCookie(ui32 raw) : Raw(raw) { }
+        TCookie(ui32 raw) noexcept : Raw(raw) { }
 
         TCookie(EType type, EIdx index, ui32 sub)
             : Raw((ui32(type) << OffType) | (ui32(index) << OffIdx) | sub)
         {
-            Y_ABORT_UNLESS(sub <= MaskSub, "TCookue sub value is out of capacity");
+            Y_ENSURE(sub <= MaskSub, "TCookue sub value is out of capacity");
         }
 
         EType Type() const { return EType((Raw & MaskType) >> OffType); }
         EIdx Index() const { return EIdx((Raw & MaskIdx) >> OffIdx); }
         ui32 Sub() const { return (Raw & MaskSub); }
 
-        static NPageCollection::TCookieRange CookieRange(EIdx index) noexcept
+        static NPageCollection::TCookieRange CookieRange(EIdx index)
         {
             return { RawFor(index, 0), RawFor(index, Max<ui32>()) };
         }
 
-        static NPageCollection::TCookieRange CookieRangeRaw() noexcept
+        static NPageCollection::TCookieRange CookieRangeRaw()
         {
             return { RawFor(EIdx::Raw, 0), RawFor(EIdx::End, Max<ui32>()) };
         }
 
-        static ui32 RawFor(EIdx type, ui32 offset) noexcept
+        static ui32 RawFor(EIdx type, ui32 offset)
         {
             offset = Min(offset, ui32(MaskSub));
 
             return TCookie(EType::Log, type, offset).Raw;
         }
 
-        const ui32 Raw = 0; /* only lower 24 bits are used */
+        const ui32 Raw; /* only lower 24 bits are used */
     };
 
     enum class ELogCommitMeta : ui32 {

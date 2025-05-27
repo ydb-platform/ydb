@@ -29,6 +29,16 @@ using namespace NApi;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGetCurrentUserCommand::DoExecute(ICommandContextPtr context)
+{
+    auto userInfo = WaitFor(context->GetClient()->GetCurrentUser())
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(ConvertToYsonString(userInfo));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TAddMemberCommand::DoExecute(ICommandContextPtr context)
 {
     WaitFor(context->GetClient()->AddMember(
@@ -408,26 +418,37 @@ void TExecuteBatchCommand::DoExecute(ICommandContextPtr context)
 
 void TDiscoverProxiesCommand::Register(TRegistrar registrar)
 {
-    registrar.Parameter("type", &TThis::Type)
-        .Default(EProxyType::Rpc);
+    registrar.Parameter("kind", &TThis::Kind)
+        .Alias("type")
+        .Default(EProxyKind::Rpc);
     registrar.Parameter("role", &TThis::Role)
-        .Default(DefaultRpcProxyRole);
+        .Optional();
     registrar.Parameter("address_type", &TThis::AddressType)
-        .Default(NApi::NRpcProxy::DefaultAddressType);
+        .Optional();
     registrar.Parameter("network_name", &TThis::NetworkName)
-        .Default(NApi::NRpcProxy::DefaultNetworkName);
+        .Default(NRpcProxy::DefaultNetworkName);
     registrar.Parameter("ignore_balancers", &TThis::IgnoreBalancers)
         .Default(false);
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->Kind == EProxyKind::Http) {
+            config->Role = config->Role.value_or(DefaultHttpProxyRole);
+            config->AddressType = config->AddressType.value_or(NRpcProxy::EAddressType::Http);
+        } else {
+            config->Role = config->Role.value_or(DefaultRpcProxyRole);
+            config->AddressType = config->AddressType.value_or(NRpcProxy::DefaultAddressType);
+        }
+    });
 }
 
 void TDiscoverProxiesCommand::DoExecute(ICommandContextPtr context)
 {
     TProxyDiscoveryRequest request{
-        .Type = Type,
-        .Role = Role,
-        .AddressType = AddressType,
+        .Kind = Kind,
+        .Role = Role.value_or(DefaultRpcProxyRole),
+        .AddressType = AddressType.value_or(NRpcProxy::DefaultAddressType),
         .NetworkName = NetworkName,
-        .IgnoreBalancers = IgnoreBalancers
+        .IgnoreBalancers = IgnoreBalancers,
     };
 
     const auto& proxyDiscoveryCache = context->GetDriver()->GetProxyDiscoveryCache();

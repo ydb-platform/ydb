@@ -18,7 +18,17 @@ Dynamic nodes are not known in advance and are added to the system as new proces
 
 ## Tablets {#tablets}
 
-Special microservices called *tablets* run on each node. Each tablet has a specific type and ID and is a singleton, meaning that only one tablet with a specific ID can be running in the entire cluster at any given time. A tablet can launch on any suitable node. *Generation* is an important property of a tablet that increases with each subsequent launch. Please note that the distributed nature of the system and various issues, such as network partitioning problems, may result in a situation where the same tablet is actually running on two different nodes simultaneously. However, distributed storage guarantees that only one of them will successfully complete operations that change its state and that the generation in which each successful operation runs will not decrease over time.
+Special microservices called [tablets](../concepts/glossary.md#tablet) run on each node. Each tablet is a singleton that has a specific type and ID. It means that only one tablet with a specific ID can run in the cluster at any given time. A tablet can launch on any suitable node. A [generation](../concepts/glossary.md#tablet-generation) is an important property of a tablet that increases with each subsequent launch.
+
+{% note info %}
+
+The distributed nature of the system and various issues, such as network partitioning problems, may result in a situation when the same tablet is actually running on two different nodes simultaneously. However, the distributed storage guarantees that only one of the duplicate tablets will successfully complete operations that change its state, and that the generation in which each successful operation runs will not decrease over time.
+
+{% endnote %}
+
+
+For cluster-level [system tablets](../concepts/glossary.md#tablet-types), the node on which the tablet runs is chosen by a Bootstrapper, which implements [distributed consensus](https://en.wikipedia.org/wiki/Consensus_(computer_science)). User tablets are managed by a special tablet called [Hive](hive.md). Hive ensures that all tablets are running, distributes tablets across nodes, and manages [tablet channels](../concepts/glossary.md#channel) between storage groups.
+
 
 You can find out on which node the tablet in the current generation is running through the *StateStorage* service. To send messages to tablets, use a special set of libraries named *tablet pipe*. With this, knowing the ID of the target tablet, you can easily send the desired message to it.
 
@@ -44,7 +54,7 @@ The tablet writes blobs of different types to different *channels*. A channel sp
 
 ### Tablet channel history {#history}
 
-As mentioned previously, each group has a constant amount of data that fits into it and shares the bandwidth's throughput and the number of operations per second among all consumers. The load on tablets may vary. As a result, a group may become overloaded. To address this, the concept of history is introduced, which allows you to determine the group that a blob is written to based on its channel and generation.
+As mentioned previously, each group has a constant amount of data that fits into it and shares the bandwidth's throughput and the number of operations per second among all consumers. The load on tablets may vary. As a result, a group may become overloaded and it will be necessary to switch writes to another group. To address this, the concept of history is introduced, which allows you to determine the group that a blob is written to based on its channel and generation.
 
 This mechanism works as follows:
 

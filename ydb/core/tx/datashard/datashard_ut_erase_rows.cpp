@@ -648,7 +648,7 @@ key = 4, value = 1902441600
 key = 5, value = (empty maybe)
         )", true);
     }
-    
+
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnTimestamp64) {
         ConditionalEraseShouldSuccess("Timestamp64", TUnit::AUTO, R"(
 UPSERT INTO `/Root/table-1` (key, value) VALUES
@@ -788,12 +788,11 @@ key = 5, value = (pg null)
         }
     }
 
-    Y_UNIT_TEST_TWIN(ConditionalEraseRowsShouldBreakLocks, StreamLookup) {
+    Y_UNIT_TEST(ConditionalEraseRowsShouldBreakLocks) {
         using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
 
         TPortManager pm;
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(StreamLookup);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetAppConfig(appConfig)

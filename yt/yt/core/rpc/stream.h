@@ -5,7 +5,6 @@
 #include <yt/yt/core/concurrency/async_stream.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
 
-#include <yt/yt/core/misc/range.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/sliding_window.h>
 
@@ -14,6 +13,7 @@
 
 #include <yt/yt/core/compression/public.h>
 
+#include <library/cpp/yt/memory/range.h>
 #include <library/cpp/yt/memory/ref.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -266,6 +266,9 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
     TCallback<void(TSharedRef)> metaHandler);
 
 //! This variant additionally allows non-trivial response of streaming request to be handled.
+//! TODO(arkady-e1ppa): Introduce IAsyncZeroCopyOutputStream<TRet> which |Close| returns
+//! TFuture<TRet> instead of TFuture<void> as a way to transfer data via rsp
+//! use it here.
 template <class TRequestMessage, class TResponse>
 TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream(
     TIntrusivePtr<TTypedClientRequest<TRequestMessage, TResponse>> request,

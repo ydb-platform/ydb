@@ -1,9 +1,11 @@
 #pragma once
 #include <ydb/core/formats/arrow/process_columns.h>
-#include <ydb/library/formats/arrow/replace_key.h>
+#include <ydb/core/formats/arrow/rows/view.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash.h>
 
@@ -185,8 +187,8 @@ public:
         return StartTxIds.empty() && FinishTxIds.empty() && IntervalTxIds.empty();
     }
 
-    void ProvideTxIdsFrom(const TPointInfo& previouse) {
-        for (auto&& i : previouse.IntervalTxIds) {
+    void ProvideTxIdsFrom(const TPointInfo& previous) {
+        for (auto&& i : previous.IntervalTxIds) {
             auto provided = i.second;
             {
                 auto it = StartTxIds.find(i.first);
@@ -210,14 +212,14 @@ public:
 class TIntervalPoint {
 private:
     i32 IncludeState = 0;
-    std::optional<NArrow::TReplaceKey> PrimaryKey;
+    std::optional<NArrow::TSimpleRow> PrimaryKey;
 
-    TIntervalPoint(const NArrow::TReplaceKey& primaryKey, const int includeState)
+    TIntervalPoint(const NArrow::TSimpleRow& primaryKey, const int includeState)
         : IncludeState(includeState)
         , PrimaryKey(primaryKey) {
     }
 
-    TIntervalPoint(const std::shared_ptr<NArrow::TReplaceKey>& primaryKey, const int includeState)
+    TIntervalPoint(const std::shared_ptr<NArrow::TSimpleRow>& primaryKey, const int includeState)
         : IncludeState(includeState) {
         if (primaryKey) {
             PrimaryKey = *primaryKey;
@@ -225,7 +227,7 @@ private:
     }
 
 public:
-    static TIntervalPoint Equal(const NArrow::TReplaceKey& replaceKey) {
+    static TIntervalPoint Equal(const NArrow::TSimpleRow& replaceKey) {
         return TIntervalPoint(replaceKey, 0);
     }
     static TIntervalPoint From(const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema);
@@ -252,10 +254,10 @@ public:
         } else if (PrimaryKey && !item.PrimaryKey) {
             return false;
         } else if (IncludeState == item.IncludeState) {
-            if (PrimaryKey->Size() != item.PrimaryKey->Size()) {
+            if (PrimaryKey->GetColumnsCount() != item.PrimaryKey->GetColumnsCount()) {
                 return false;
             }
-            return *PrimaryKey == *item.PrimaryKey;
+            return PrimaryKey->CompareNotNull(*item.PrimaryKey) == std::partial_ordering::equivalent;
         } else {
             return false;
         }
@@ -273,7 +275,7 @@ public:
         } else if (PrimaryKey && !point.PrimaryKey) {
             return 0 < point.IncludeState;
         } else {
-            const ui32 sizeMin = std::min<ui32>(PrimaryKey->Size(), point.PrimaryKey->Size());
+            const ui32 sizeMin = std::min<ui32>(PrimaryKey->GetColumnsCount(), point.PrimaryKey->GetColumnsCount());
             const std::partial_ordering compareResult = PrimaryKey->ComparePartNotNull(*point.PrimaryKey, sizeMin);
             if (compareResult == std::partial_ordering::less) {
                 return true;
@@ -281,9 +283,9 @@ public:
                 return false;
             } else {
                 AFL_VERIFY(compareResult == std::partial_ordering::equivalent);
-                if (PrimaryKey->Size() == point.PrimaryKey->Size()) {
+                if (PrimaryKey->GetColumnsCount() == point.PrimaryKey->GetColumnsCount()) {
                     return IncludeState < point.IncludeState;
-                } else if (PrimaryKey->Size() < point.PrimaryKey->Size()) {
+                } else if (PrimaryKey->GetColumnsCount() < point.PrimaryKey->GetColumnsCount()) {
                     if (IncludeState <= 1) {
                         return true;
                     } else {
@@ -350,12 +352,12 @@ public:
         AFL_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("batch", writtenPrimaryKeys->ToString())("info", DebugJson().GetStringRobust());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("batch", writtenPrimaryKeys->ToString())("info", DebugJson().GetStringRobust());
         for (ui32 i = 0; i < writtenPrimaryKeys->num_rows();) {
             if (it == IntervalsInfo.end()) {
                 return affectedTxIds;
             }
-            auto rKey = NArrow::TReplaceKey::FromBatch(writtenPrimaryKeys, writtenPrimaryKeys->schema(), i);
+            NArrow::TSimpleRow rKey(writtenPrimaryKeys, i);
             auto pkIntervalPoint = TIntervalPoint::Equal(rKey);
             while (it != IntervalsInfo.end() && it->first < pkIntervalPoint) {
                 ++it;
@@ -383,7 +385,7 @@ public:
                 return affectedTxIds;
             }
             while (i < writtenPrimaryKeys->num_rows()) {
-                auto rKey = NArrow::TReplaceKey::FromBatch(writtenPrimaryKeys, writtenPrimaryKeys->schema(), i);
+                NArrow::TSimpleRow rKey(writtenPrimaryKeys, i);
                 if (TIntervalPoint::Equal(rKey) < it->first) {
                     ++i;
                 } else {
@@ -397,10 +399,10 @@ public:
 
 class TInteractionsContext {
 private:
-    THashMap<ui64, TReadIntervals> ReadIntervalsByPathId;
+    THashMap<TInternalPathId, TReadIntervals> ReadIntervalsByPathId;
 
 public:
-    bool HasReadIntervals(const ui64 pathId) const {
+    bool HasReadIntervals(const TInternalPathId pathId) const {
         return ReadIntervalsByPathId.contains(pathId);
     }
 
@@ -412,7 +414,7 @@ public:
         return result;
     }
 
-    THashSet<ui64> GetAffectedTxIds(const ui64 pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    THashSet<ui64> GetAffectedTxIds(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
         auto it = ReadIntervalsByPathId.find(pathId);
         if (it == ReadIntervalsByPathId.end()) {
             return {};
@@ -420,7 +422,7 @@ public:
         return it->second.GetAffectedTxIds(batch);
     }
 
-    void AddInterval(const ui64 txId, const ui64 pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
+    void AddInterval(const ui64 txId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto& intervals = ReadIntervalsByPathId[pathId];
         auto itFrom = intervals.InsertPoint(from);
         auto itTo = intervals.InsertPoint(to);
@@ -432,7 +434,7 @@ public:
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
     }
 
-    void RemoveInterval(const ui64 txId, const ui64 pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
+    void RemoveInterval(const ui64 txId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto itIntervals = ReadIntervalsByPathId.find(pathId);
         AFL_VERIFY(itIntervals != ReadIntervalsByPathId.end())("path_id", pathId);
         auto& intervals = itIntervals->second;

@@ -3,23 +3,28 @@
 #include <ydb/core/tx/columnshard/data_accessor/events.h>
 namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB {
 
-THashMap<ui64, TPortionDataAccessor> TCollector::DoAskData(
-    const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) {
-    THashMap<ui64, TPortionDataAccessor> accessors;
-    THashMap<ui64, TPortionInfo::TConstPtr> portionsToDirectAsk;
-    for (auto&& p : portions) {
-        auto it = AccessorsCache.Find(p->GetPortionId());
-        if (it != AccessorsCache.End() && it.Key() == p->GetPortionId()) {
-            accessors.emplace(p->GetPortionId(), it.Value());
-        } else {
-            portionsToDirectAsk.emplace(p->GetPortionId(), p);
+void TCollector::DoAskData(THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback) {
+    NActors::TActivationContext::Send(
+        TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(std::move(portions), callback));
+}
+
+TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) {
+    TDataCategorized result;
+    for (auto&& c : portions.GetConsumers()) {
+        TConsumerPortions* cPortions = nullptr;
+        for (auto&& p : c.second.GetPortions()) {
+            auto it = AccessorsCache.Find(p->GetPortionId());
+            if (it != AccessorsCache.End() && it.Key() == p->GetPortionId()) {
+                result.AddFromCache(it.Value());
+            } else {
+                if (!cPortions) {
+                    cPortions = &result.MutablePortionsToAsk().UpsertConsumer(c.first);
+                }
+                cPortions->AddPortion(p);
+            }
         }
     }
-    if (portionsToDirectAsk.size()) {
-        NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(portionsToDirectAsk, callback, consumer));
-    }
-    return accessors;
+    return result;
 }
 
 void TCollector::DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {

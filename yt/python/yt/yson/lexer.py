@@ -255,14 +255,20 @@ class YsonLexer(object):
                 raise_yson_error(
                     "Premature end-of-stream while reading string literal in Yson",
                     self.get_position_info())
-            if ch == b'"' and not pending_next_char:
-                break
-            if self._output_buffer is None:
-                result.append(ch)
+
             if pending_next_char:
                 pending_next_char = False
-            elif ch == b"\\":
-                pending_next_char = True
+                if ch not in b"abfnrtvuUx01234567\\":
+                    # invalid escape sequence support (pass to "unicode_escape")
+                    result.pop()
+            else:
+                if ch == b'"':
+                    break
+                if ch == b"\\":
+                    pending_next_char = True
+
+            if self._output_buffer is None:
+                result.append(ch)
         if self._output_buffer is None:
             return self._decode_string(self._unescape(b"".join(result)))
 

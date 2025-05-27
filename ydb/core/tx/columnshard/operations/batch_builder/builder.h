@@ -9,28 +9,26 @@
 
 namespace NKikimr::NOlap {
 
-class TBuildBatchesTask: public NConveyor::ITask {
+class TBuildBatchesTask: public NConveyor::ITask, public NColumnShard::TMonitoringObjectsCounter<TBuildBatchesTask> {
 private:
     NEvWrite::TWriteData WriteData;
-    const NActors::TActorId BufferActorId;
     const TSnapshot ActualSnapshot;
     const TWritingContext Context;
     void ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
 
 protected:
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
+    virtual void DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
 
 public:
     virtual TString GetTaskClassIdentifier() const override {
         return "Write::ConstructBatches";
     }
 
-    TBuildBatchesTask(
-        const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const TWritingContext& context)
+    TBuildBatchesTask(NEvWrite::TWriteData&& writeData, const TWritingContext& context)
         : WriteData(std::move(writeData))
-        , BufferActorId(bufferActorId)
         , ActualSnapshot(context.GetApplyToSnapshot())
         , Context(context) {
+        WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildBatch);
     }
 };
 }   // namespace NKikimr::NOlap

@@ -1,5 +1,5 @@
-libpng 1.6.40 - June 21, 2023
-=============================
+libpng 1.6.47 - February 18, 2025
+=================================
 
 This is a public release of libpng, intended for use in production code.
 
@@ -9,13 +9,13 @@ Files available for download
 
 Source files with LF line endings (for Unix/Linux):
 
- * libpng-1.6.40.tar.xz (LZMA-compressed, recommended)
- * libpng-1.6.40.tar.gz
+ * libpng-1.6.47.tar.xz (LZMA-compressed, recommended)
+ * libpng-1.6.47.tar.gz (deflate-compressed)
 
 Source files with CRLF line endings (for Windows):
 
- * lpng1640.7z (LZMA-compressed, recommended)
- * lpng1640.zip
+ * lpng1647.7z (LZMA-compressed, recommended)
+ * lpng1647.zip (deflate-compressed)
 
 Other information:
 
@@ -25,15 +25,19 @@ Other information:
  * TRADEMARK.md
 
 
-Changes from version 1.6.39 to version 1.6.40
+Changes from version 1.6.46 to version 1.6.47
 ---------------------------------------------
 
- * Fixed the eXIf chunk multiplicity checks.
- * Fixed a memory leak in pCAL processing.
- * Corrected the validity report about tRNS inside png_get_valid().
- * Fixed various build issues on *BSD, Mac and Windows.
- * Updated the configurations and the scripts for continuous integration.
- * Cleaned up the code, the build scripts, and the documentation.
+ * Modified the behaviour of colorspace chunks in order to adhere
+   to the new precedence rules formulated in the latest draft of
+   the PNG Specification.
+   (Contributed by John Bowler)
+ * Fixed a latent bug in `png_write_iCCP`.
+   This would have been a read-beyond-end-of-malloc vulnerability,
+   introduced early in the libpng-1.6.0 development, yet (fortunately!)
+   it was inaccessible before the above-mentioned modification of the
+   colorspace precedence rules, due to pre-existing colorspace checks.
+   (Reported by Bob Friesenhahn; fixed by John Bowler)
 
 
 Send comments/corrections/commendations to png-mng-implement at lists.sf.net.

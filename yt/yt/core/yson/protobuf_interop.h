@@ -4,9 +4,13 @@
 
 #include "protobuf_interop_options.h"
 
+#include <yt/yt/core/misc/mpl.h>
+
 #include <yt/yt/core/ypath/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/misc/variant.h>
 
 #include <variant>
 
@@ -59,6 +63,15 @@ using TProtobufElement = std::variant<
     std::unique_ptr<TProtobufAnyElement>
 >;
 
+template <class T>
+concept CProtobufElement = NMpl::COneOf<T,
+    TProtobufMessageElement,
+    TProtobufScalarElement,
+    TProtobufAttributeDictionaryElement,
+    TProtobufRepeatedElement,
+    TProtobufMapElement,
+    TProtobufAnyElement>;
+
 struct TProtobufMessageElement
 {
     const TProtobufMessageType* Type;
@@ -66,11 +79,12 @@ struct TProtobufMessageElement
 
 struct TProtobufScalarElement
 {
-    YT_DEFINE_STRONG_TYPEDEF(TType, int);
-    TType Type;
+    TProtobufElementType Type;
 
     // Meaningful only when TYPE == TYPE_ENUM.
     EEnumYsonStorageType EnumStorageType;
+    const TProtobufEnumType* EnumType;
+    bool StrictEnumChecks;
 };
 
 struct TProtobufAttributeDictionaryElement
@@ -109,6 +123,24 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
     const TProtobufMessageType* rootType,
     const NYPath::TYPathBuf path,
     const TResolveProtobufElementByYPathOptions& options = {});
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CProtobufElement TElementType>
+consteval std::string_view GetProtobufElementTypeName();
+
+std::string_view GetProtobufElementTypeName(const TProtobufElement& element);
+
+// Version of `NYT::Visit` for `TProtobufElement` which skips `std::unique_ptr` wrappers.
+template <class... U>
+auto VisitProtobufElement(const TProtobufElement& element, U&&... visitorOverloads);
+
+TProtobufElementType GetProtobufElementType(const TProtobufElement& protobufElement);
+
+NYTree::ENodeType GetNodeTypeByProtobufScalarElement(const TProtobufScalarElement& scalarElement);
+
+template <CProtobufElement TElementType>
+const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -196,13 +228,11 @@ void RegisterCustomProtobufConverter(
     const google::protobuf::Descriptor* descriptor,
     const TProtobufMessageConverter& converter);
 
-#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(ProtoType, Type)                        \
-    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterIntermediateProtoInteropRepresentation) = \
-        NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, false>();
+#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(ProtoType, Type) \
+    YT_STATIC_INITIALIZER(::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, false>());
 
-#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(ProtoType, Type)            \
-    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterIntermediateProtoInteropRepresentationWithOptions) =  \
-        NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, true>();
+#define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(ProtoType, Type) \
+    YT_STATIC_INITIALIZER(::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, true>());
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -219,10 +249,10 @@ void RegisterCustomProtobufBytesFieldConverter(
     const TProtobufMessageBytesFieldConverter& converter);
 
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(ProtoType, FieldNumber, Type)             \
-    static const void* PP_ANONYMOUS_VARIABLE(RegisterIntermediateProtoInterpBytesFieldRepresentation) = [] {     \
-        NYT::NYson::AddProtobufConverterRegisterAction([] {                                                      \
+    YT_STATIC_INITIALIZER(                                                                                       \
+        ::NYT::NYson::AddProtobufConverterRegisterAction([] {                                                    \
             const auto* descriptor = ProtoType::default_instance().GetDescriptor();                              \
-            NYT::NYson::TProtobufMessageBytesFieldConverter converter;                                           \
+            ::NYT::NYson::TProtobufMessageBytesFieldConverter converter;                                         \
             converter.Serializer = [] (NYT::NYson::IYsonConsumer* consumer, TStringBuf bytes) {                  \
                 Type value;                                                                                      \
                 FromBytes(&value, bytes);                                                                        \
@@ -233,10 +263,8 @@ void RegisterCustomProtobufBytesFieldConverter(
                 Deserialize(value, node);                                                                        \
                 ToBytes(bytes, value);                                                                           \
             };                                                                                                   \
-            NYT::NYson::RegisterCustomProtobufBytesFieldConverter(descriptor, FieldNumber, converter);           \
-        });                                                                                                      \
-        return nullptr;                                                                                          \
-    } ();
+            ::NYT::NYson::RegisterCustomProtobufBytesFieldConverter(descriptor, FieldNumber, converter);         \
+        }));
 
 ////////////////////////////////////////////////////////////////////////////////
 

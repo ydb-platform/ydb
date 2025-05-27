@@ -171,6 +171,7 @@ TExprBase KqpDeleteOverLookup(const TExprBase& node, TExprContext& ctx, const TK
     return Build<TKqlDeleteRows>(ctx, deleteRows.Pos())
         .Table(deleteRows.Table())
         .Input(deleteInput.Cast())
+        .IsBatch(deleteRows.IsBatch())
         .ReturningColumns(deleteRows.ReturningColumns())
         .Done();
 }

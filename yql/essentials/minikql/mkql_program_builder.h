@@ -4,6 +4,7 @@
 #include "mkql_node.h"
 #include "mkql_node_builder.h"
 #include "mkql_type_builder.h"
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/core/sql_types/match_recognize.h>
 
@@ -17,6 +18,9 @@ class TBuiltinFunctionRegistry;
 
 constexpr std::string_view RandomMTResource = "MTRand";
 constexpr std::string_view ResourceQueuePrefix = "TResourceQueue:";
+constexpr std::string_view BlockStorageResourcePrefix = "TBlockStorage:";
+constexpr std::string_view BlockMapJoinIndexResourcePrefix = "TBlockMapJoinIndex:";
+constexpr std::string_view BlockMapJoinIndexResourceSeparator = ":$YqlKeyColumns:";
 
 enum class EJoinKind {
     Min = 1,
@@ -133,12 +137,14 @@ struct TAggInfo {
     std::vector<ui32> ArgsColumns;
 };
 
+std::vector<TType*> ValidateBlockType(const TType* type, bool unwrap = true);
 std::vector<TType*> ValidateBlockStreamType(const TType* streamType, bool unwrap = true);
 std::vector<TType*> ValidateBlockFlowType(const TType* flowType, bool unwrap = true);
 
 class TProgramBuilder : public TTypeBuilder {
 public:
-    TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false);
+    TProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry, bool voidWithEffects = false,
+        NYql::TLangVersion langver = NYql::UnknownLangVersion);
 
     const TTypeEnvironment& GetTypeEnvironment() const;
     const IFunctionRegistry& GetFunctionRegistry() const;
@@ -237,8 +243,10 @@ public:
 
     TRuntimeNode ToBlocks(TRuntimeNode flow);
     TRuntimeNode WideToBlocks(TRuntimeNode flow);
+    TRuntimeNode ListToBlocks(TRuntimeNode list);
     TRuntimeNode FromBlocks(TRuntimeNode flow);
     TRuntimeNode WideFromBlocks(TRuntimeNode flow);
+    TRuntimeNode ListFromBlocks(TRuntimeNode list);
     TRuntimeNode WideSkipBlocks(TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode WideTakeBlocks(TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode WideTopBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
@@ -258,9 +266,12 @@ public:
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
-    TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
+    TRuntimeNode BlockStorage(TRuntimeNode list, TType* returnType);
+    TRuntimeNode BlockMapJoinIndex(TRuntimeNode blockStorage, TType* listItemType, const TArrayRef<const ui32>& keyColumns, bool any, TType* returnType);
+    TRuntimeNode BlockMapJoinCore(TRuntimeNode leftStream, TRuntimeNode rightBlockStorage, TType* rightListItemType, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
-        const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, bool rightAny, TType* returnType);
+        const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, TType* returnType
+    );
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);
@@ -272,7 +283,6 @@ public:
     TRuntimeNode BlockJust(TRuntimeNode data);
 
     TRuntimeNode BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args);
-    TRuntimeNode BlockBitCast(TRuntimeNode value, TType* targetType);
     TRuntimeNode BlockCombineAll(TRuntimeNode flow, std::optional<ui32> filterColumn,
         const TArrayRef<const TAggInfo>& aggs, TType* returnType);
     TRuntimeNode BlockCombineHashed(TRuntimeNode flow, std::optional<ui32> filterColumn, const TArrayRef<ui32>& keys,
@@ -633,6 +643,7 @@ public:
     TRuntimeNode VisitAll(TRuntimeNode variant, std::function<TRuntimeNode(ui32, TRuntimeNode)> handler);
     TRuntimeNode Way(TRuntimeNode variant);
     TRuntimeNode VariantItem(TRuntimeNode variant);
+    TRuntimeNode DynamicVariant(TRuntimeNode item, TRuntimeNode index, TType* variantType);
 
     //-- random functions
     // expects ui64 seed, returns resource
@@ -712,12 +723,15 @@ public:
     TRuntimeNode MatchRecognizeCore(
         TRuntimeNode inputStream,
         const TUnaryLambda& getPartitionKeySelectorNode,
-        const TArrayRef<TStringBuf>& partitionColumns,
-        const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
+        const TArrayRef<TStringBuf>& partitionColumnNames,
+        const TVector<TStringBuf>& measureColumnNames,
+        const TVector<TBinaryLambda>& getMeasures,
         const NYql::NMatchRecognize::TRowPattern& pattern,
-        const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
+        const TVector<TStringBuf>& defineVarNames,
+        const TVector<TTernaryLambda>& getDefines,
         bool streamingMode,
-        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo
+        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo,
+        NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch
     );
 
     TRuntimeNode TimeOrderRecover(
@@ -850,11 +864,13 @@ private:
 
     TType* ChooseCommonType(TType* type1, TType* type2);
     TType* BuildArithmeticCommonType(TType* type1, TType* type2);
+    TType* BuildWideBlockType(const TArrayRef<TType* const>& wideComponents);
 
     bool IsNull(TRuntimeNode arg);
 protected:
     const IFunctionRegistry& FunctionRegistry;
     const bool VoidWithEffects;
+    const NYql::TLangVersion LangVer;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
 };
 

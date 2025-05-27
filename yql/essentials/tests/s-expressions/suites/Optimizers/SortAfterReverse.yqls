@@ -1,0 +1,12 @@
+(
+#comment
+(let config (DataSource 'config))
+
+(let res_sink (DataSink 'result))
+(let data (AsList (String 'c) (String 'e) (String 'a)))
+(let data (Reverse data))
+(let data (Sort data (Bool 'true) (lambda '(x) x)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

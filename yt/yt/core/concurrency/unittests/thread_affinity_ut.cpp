@@ -19,17 +19,17 @@ class TMyObject
 public:
     void A()
     {
-        VERIFY_THREAD_AFFINITY(FirstThread);
+        YT_ASSERT_THREAD_AFFINITY(FirstThread);
     }
 
     void B()
     {
-        VERIFY_THREAD_AFFINITY(SecondThread);
+        YT_ASSERT_THREAD_AFFINITY(SecondThread);
     }
 
     void C()
     {
-        VERIFY_THREAD_AFFINITY(FirstThread);
+        YT_ASSERT_THREAD_AFFINITY(FirstThread);
     }
 };
 

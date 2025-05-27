@@ -25,7 +25,7 @@ from itertools import (
 from math import comb, e, exp, factorial, floor, fsum, log, log1p, perm, tau
 from queue import Empty, Queue
 from random import random, randrange, shuffle, uniform
-from operator import itemgetter, mul, sub, gt, lt, le
+from operator import itemgetter, mul, sub, gt, lt
 from sys import hexversion, maxsize
 from time import monotonic
 
@@ -35,7 +35,9 @@ from .recipes import (
     UnequalIterablesError,
     consume,
     flatten,
+    nth,
     powerset,
+    sieve,
     take,
     unique_everseen,
     all_equal,
@@ -104,6 +106,7 @@ __all__ = [
     'minmax',
     'nth_or_last',
     'nth_permutation',
+    'nth_prime',
     'nth_product',
     'nth_combination_with_replacement',
     'numeric_range',
@@ -156,7 +159,34 @@ __all__ = [
 ]
 
 # math.sumprod is available for Python 3.12+
-_fsumprod = getattr(math, 'sumprod', lambda x, y: fsum(map(mul, x, y)))
+try:
+    from math import sumprod as _fsumprod
+
+except ImportError:  # pragma: no cover
+    # Extended precision algorithms from T. J. Dekker,
+    # "A Floating-Point Technique for Extending the Available Precision"
+    # https://csclub.uwaterloo.ca/~pbarfuss/dekker1971.pdf
+    # Formulas: (5.5) (5.6) and (5.8).  Code: mul12()
+
+    def dl_split(x: float):
+        "Split a float into two half-precision components."
+        t = x * 134217729.0  # Veltkamp constant = 2.0 ** 27 + 1
+        hi = t - (t - x)
+        lo = x - hi
+        return hi, lo
+
+    def dl_mul(x, y):
+        "Lossless multiplication."
+        xx_hi, xx_lo = dl_split(x)
+        yy_hi, yy_lo = dl_split(y)
+        p = xx_hi * yy_hi
+        q = xx_hi * yy_lo + xx_lo * yy_hi
+        z = p + q
+        zz = p - z + q + xx_lo * yy_lo
+        return z, zz
+
+    def _fsumprod(p, q):
+        return fsum(chain.from_iterable(map(dl_mul, p, q)))
 
 
 def chunked(iterable, n, strict=False):
@@ -215,8 +245,8 @@ def first(iterable, default=_marker):
         return item
     if default is _marker:
         raise ValueError(
-            'first() was called on an empty iterable, and no '
-            'default value was provided.'
+            'first() was called on an empty iterable, '
+            'and no default value was provided.'
         )
     return default
 
@@ -237,15 +267,14 @@ def last(iterable, default=_marker):
         if isinstance(iterable, Sequence):
             return iterable[-1]
         # Work around https://bugs.python.org/issue38525
-        elif hasattr(iterable, '__reversed__') and (hexversion != 0x030800F0):
+        if hasattr(iterable, '__reversed__'):
             return next(reversed(iterable))
-        else:
-            return deque(iterable, maxlen=1)[-1]
+        return deque(iterable, maxlen=1)[-1]
     except (IndexError, TypeError, StopIteration):
         if default is _marker:
             raise ValueError(
-                'last() was called on an empty iterable, and no default was '
-                'provided.'
+                'last() was called on an empty iterable, '
+                'and no default value was provided.'
             )
         return default
 
@@ -467,10 +496,20 @@ def consumer(func):
 def ilen(iterable):
     """Return the number of items in *iterable*.
 
-        >>> ilen(x for x in range(1000000) if x % 3 == 0)
-        333334
+    For example, there are 168 prime numbers below 1,000:
 
-    This consumes the iterable, so handle with care.
+        >>> ilen(sieve(1000))
+        168
+
+    Equivalent to, but faster than::
+
+        def ilen(iterable):
+            count = 0
+            for _ in iterable:
+                count += 1
+            return count
+
+    This fully consumes the iterable, so handle with care.
 
     """
     # This is the "most beautiful of the fast variants" of this function.
@@ -482,17 +521,21 @@ def ilen(iterable):
 def iterate(func, start):
     """Return ``start``, ``func(start)``, ``func(func(start))``, ...
 
-    >>> from itertools import islice
-    >>> list(islice(iterate(lambda x: 2*x, 1), 10))
+    Produces an infinite iterator. To add a stopping condition,
+    use :func:`take`, ``takewhile``, or :func:`takewhile_inclusive`:.
+
+    >>> take(10, iterate(lambda x: 2*x, 1))
     [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
 
+    >>> collatz = lambda x: 3*x + 1 if x%2==1 else x // 2
+    >>> list(takewhile_inclusive(lambda x: x!=1, iterate(collatz, 10)))
+    [10, 5, 16, 8, 4, 2, 1]
+
     """
-    while True:
-        yield start
-        try:
+    with suppress(StopIteration):
+        while True:
+            yield start
             start = func(start)
-        except StopIteration:
-            break
 
 
 def with_iter(context_manager):
@@ -526,7 +569,7 @@ def one(iterable, too_short=None, too_long=None):
         >>> one(it)  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
-        ValueError: too many items in iterable (expected 1)'
+        ValueError: too few items in iterable (expected 1)'
         >>> too_short = IndexError('too few items')
         >>> one(it, too_short=too_short)  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
@@ -554,27 +597,16 @@ def one(iterable, too_short=None, too_long=None):
     contents less destructively.
 
     """
-    it = iter(iterable)
-
-    try:
-        first_value = next(it)
-    except StopIteration as exc:
-        raise (
-            too_short or ValueError('too few items in iterable (expected 1)')
-        ) from exc
-
-    try:
-        second_value = next(it)
-    except StopIteration:
-        pass
-    else:
-        msg = (
-            'Expected exactly one item in iterable, but got {!r}, {!r}, '
-            'and perhaps more.'.format(first_value, second_value)
-        )
-        raise too_long or ValueError(msg)
-
-    return first_value
+    iterator = iter(iterable)
+    for first in iterator:
+        for second in iterator:
+            msg = (
+                f'Expected exactly one item in iterable, but got {first!r}, '
+                f'{second!r}, and perhaps more.'
+            )
+            raise too_long or ValueError(msg)
+        return first
+    raise too_short or ValueError('too few items in iterable (expected 1)')
 
 
 def raise_(exception, *args):
@@ -631,31 +663,29 @@ def strictly_n(iterable, n, too_short=None, too_long=None):
     if too_short is None:
         too_short = lambda item_count: raise_(
             ValueError,
-            'Too few items in iterable (got {})'.format(item_count),
+            f'Too few items in iterable (got {item_count})',
         )
 
     if too_long is None:
         too_long = lambda item_count: raise_(
             ValueError,
-            'Too many items in iterable (got at least {})'.format(item_count),
+            f'Too many items in iterable (got at least {item_count})',
         )
 
     it = iter(iterable)
-    for i in range(n):
-        try:
-            item = next(it)
-        except StopIteration:
-            too_short(i)
-            return
-        else:
-            yield item
 
-    try:
-        next(it)
-    except StopIteration:
-        pass
-    else:
+    sent = 0
+    for item in islice(it, n):
+        yield item
+        sent += 1
+
+    if sent < n:
+        too_short(sent)
+        return
+
+    for item in it:
         too_long(n + 1)
+        return
 
 
 def distinct_permutations(iterable, r=None):
@@ -672,7 +702,7 @@ def distinct_permutations(iterable, r=None):
     input iterable. The number of items returned is
     `n! / (x_1! * x_2! * ... * x_n!)`, where `n` is the total number of
     items input, and each `x_i` is the count of a distinct item in the input
-    sequence.
+    sequence. The function :func:`multinomial` computes this directly.
 
     If *r* is given, only the *r*-length permutations are yielded.
 
@@ -1072,7 +1102,7 @@ class bucket:
             if self._validator(item_value):
                 self._cache[item_value].append(item)
 
-        yield from self._cache.keys()
+        return iter(self._cache)
 
     def __getitem__(self, value):
         if not self._validator(value):
@@ -1118,10 +1148,8 @@ def spy(iterable, n=1):
         [1, 2, 3, 4, 5]
 
     """
-    it = iter(iterable)
-    head = take(n, it)
-
-    return head.copy(), chain(head, it)
+    p, q = tee(iterable)
+    return take(n, q), p
 
 
 def interleave(*iterables):
@@ -1558,8 +1586,8 @@ def split_into(iterable, sizes):
         [[1], [2, 3], [4], []]
 
     When a ``None`` object is encountered in *sizes*, the returned list will
-    contain items up to the end of *iterable* the same way that itertools.slice
-    does:
+    contain items up to the end of *iterable* the same way that
+    :func:`itertools.slice` does:
 
         >>> list(split_into([1,2,3,4,5,6,7,8,9,0], [2,3,None]))
         [[1, 2], [3, 4, 5], [6, 7, 8, 9, 0]]
@@ -2167,13 +2195,11 @@ class numeric_range(abc.Sequence, abc.Hashable):
             self._start, self._stop, self._step = args
         elif argc == 0:
             raise TypeError(
-                'numeric_range expected at least '
-                '1 argument, got {}'.format(argc)
+                f'numeric_range expected at least 1 argument, got {argc}'
             )
         else:
             raise TypeError(
-                'numeric_range expected at most '
-                '3 arguments, got {}'.format(argc)
+                f'numeric_range expected at most 3 arguments, got {argc}'
             )
 
         self._zero = type(self._step)(0)
@@ -2236,7 +2262,7 @@ class numeric_range(abc.Sequence, abc.Hashable):
         else:
             raise TypeError(
                 'numeric range indices must be '
-                'integers or slices, not {}'.format(type(key).__name__)
+                f'integers or slices, not {type(key).__name__}'
             )
 
     def __hash__(self):
@@ -2277,13 +2303,10 @@ class numeric_range(abc.Sequence, abc.Hashable):
 
     def __repr__(self):
         if self._step == 1:
-            return "numeric_range({}, {})".format(
-                repr(self._start), repr(self._stop)
-            )
-        else:
-            return "numeric_range({}, {}, {})".format(
-                repr(self._start), repr(self._stop), repr(self._step)
-            )
+            return f"numeric_range({self._start!r}, {self._stop!r})"
+        return (
+            f"numeric_range({self._start!r}, {self._stop!r}, {self._step!r})"
+        )
 
     def __reversed__(self):
         return iter(
@@ -2307,7 +2330,7 @@ class numeric_range(abc.Sequence, abc.Hashable):
                 if r == self._zero:
                     return int(q)
 
-        raise ValueError("{} is not in numeric range".format(value))
+        raise ValueError(f"{value} is not in numeric range")
 
     def _get_by_index(self, i):
         if i < 0:
@@ -2781,7 +2804,7 @@ class SequenceView(Sequence):
         return len(self._target)
 
     def __repr__(self):
-        return '{}({})'.format(self.__class__.__name__, repr(self._target))
+        return f'{self.__class__.__name__}({self._target!r})'
 
 
 class seekable:
@@ -2989,7 +3012,7 @@ def exactly_n(iterable, n, predicate=bool):
     so avoid calling it on infinite iterables.
 
     """
-    return len(take(n + 1, filter(predicate, iterable))) == n
+    return ilen(islice(filter(predicate, iterable), n + 1)) == n
 
 
 def circular_shifts(iterable, steps=1):
@@ -3433,22 +3456,18 @@ def only(iterable, default=None, too_long=None):
     Note that :func:`only` attempts to advance *iterable* twice to ensure there
     is only one item.  See :func:`spy` or :func:`peekable` to check
     iterable contents less destructively.
+
     """
-    it = iter(iterable)
-    first_value = next(it, default)
-
-    try:
-        second_value = next(it)
-    except StopIteration:
-        pass
-    else:
-        msg = (
-            'Expected exactly one item in iterable, but got {!r}, {!r}, '
-            'and perhaps more.'.format(first_value, second_value)
-        )
-        raise too_long or ValueError(msg)
-
-    return first_value
+    iterator = iter(iterable)
+    for first in iterator:
+        for second in iterator:
+            msg = (
+                f'Expected exactly one item in iterable, but got {first!r}, '
+                f'{second!r}, and perhaps more.'
+            )
+            raise too_long or ValueError(msg)
+        return first
+    return default
 
 
 def _ichunk(iterable, n):
@@ -3456,16 +3475,12 @@ def _ichunk(iterable, n):
     chunk = islice(iterable, n)
 
     def generator():
-        while True:
-            if cache:
-                yield cache.popleft()
-            else:
-                try:
-                    item = next(chunk)
-                except StopIteration:
-                    return
+        with suppress(StopIteration):
+            while True:
+                if cache:
+                    yield cache.popleft()
                 else:
-                    yield item
+                    yield next(chunk)
 
     def materialize_next(n=1):
         # if n not specified materialize everything
@@ -3726,9 +3741,11 @@ def _sample_counted(population, k, counts, strict):
         reservoir = []
         for _ in range(k):
             reservoir.append(feed(0))
-        if strict and len(reservoir) < k:
-            raise ValueError('Sample larger than population')
 
+    if strict and len(reservoir) < k:
+        raise ValueError('Sample larger than population')
+
+    with suppress(StopIteration):
         W = 1.0
         while True:
             W *= exp(log(random()) / k)
@@ -3787,7 +3804,7 @@ def sample(iterable, k, weights=None, *, counts=None, strict=False):
         return []
 
     if weights is not None and counts is not None:
-        raise TypeError('weights and counts are mutally exclusive')
+        raise TypeError('weights and counts are mutually exclusive')
 
     elif weights is not None:
         weights = iter(weights)
@@ -3821,15 +3838,16 @@ def is_sorted(iterable, key=None, reverse=False, strict=False):
 
     The function returns ``False`` after encountering the first out-of-order
     item, which means it may produce results that differ from the built-in
-    :func:`sorted` function for objects with unusual comparison dynamics.
-    If there are no out-of-order items, the iterable is exhausted.
+    :func:`sorted` function for objects with unusual comparison dynamics
+    (like ``math.nan``). If there are no out-of-order items, the iterable is
+    exhausted.
     """
-    compare = le if strict else lt
     it = iterable if (key is None) else map(key, iterable)
-    it_1, it_2 = tee(it)
-    next(it_2 if reverse else it_1, None)
-
-    return not any(map(compare, it_1, it_2))
+    a, b = tee(it)
+    next(b, None)
+    if reverse:
+        b, a = a, b
+    return all(map(lt, a, b)) if strict else not any(map(lt, b, a))
 
 
 class AbortThread(BaseException):
@@ -4093,7 +4111,7 @@ def nth_permutation(iterable, r, index):
         raise ValueError
     else:
         c = perm(n, r)
-    assert c > 0  # factortial(n)>0, and r<n so perm(n,r) is never zero
+    assert c > 0  # factorial(n)>0, and r<n so perm(n,r) is never zero
 
     if index < 0:
         index += c
@@ -4822,8 +4840,8 @@ def outer_product(func, xs, ys, *args, **kwargs):
 
     >>> xs = ['A', 'B', 'A', 'A', 'B', 'B', 'A', 'A', 'B', 'B']
     >>> ys = ['X', 'X', 'X', 'Y', 'Z', 'Z', 'Y', 'Y', 'Z', 'Z']
-    >>> rows = list(zip(xs, ys))
-    >>> count_rows = lambda x, y: rows.count((x, y))
+    >>> pair_counts = Counter(zip(xs, ys))
+    >>> count_rows = lambda x, y: pair_counts[x, y]
     >>> list(outer_product(count_rows, sorted(set(xs)), sorted(set(ys))))
     [(2, 3, 0), (1, 0, 4)]
 
@@ -4888,9 +4906,11 @@ def powerset_of_sets(iterable):
     :func:`powerset_of_sets` takes care to minimize the number
     of hash operations performed.
     """
-    sets = tuple(map(set, dict.fromkeys(map(frozenset, zip(iterable)))))
-    for r in range(len(sets) + 1):
-        yield from starmap(set().union, combinations(sets, r))
+    sets = tuple(dict.fromkeys(map(frozenset, zip(iterable))))
+    return chain.from_iterable(
+        starmap(set().union, combinations(sets, r))
+        for r in range(len(sets) + 1)
+    )
 
 
 def join_mappings(**field_to_map):
@@ -4924,7 +4944,7 @@ def _complex_sumprod(v1, v2):
 
 
 def dft(xarr):
-    """Discrete Fourier Tranform. *xarr* is a sequence of complex numbers.
+    """Discrete Fourier Transform. *xarr* is a sequence of complex numbers.
     Yields the components of the corresponding transformed output vector.
 
     >>> import cmath
@@ -4943,7 +4963,7 @@ def dft(xarr):
 
 
 def idft(Xarr):
-    """Inverse Discrete Fourier Tranform. *Xarr* is a sequence of
+    """Inverse Discrete Fourier Transform. *Xarr* is a sequence of
     complex numbers. Yields the components of the corresponding
     inverse-transformed output vector.
 
@@ -4978,3 +4998,23 @@ def doublestarmap(func, iterable):
     """
     for item in iterable:
         yield func(**item)
+
+
+def _nth_prime_ub(n):
+    "Upper bound for the nth prime (counting from 1)."
+    # https://en.wikipedia.org/wiki/Prime-counting_function#Inequalities
+    return n * log(n * log(n)) if n >= 6 else 11.1
+
+
+def nth_prime(n):
+    """Return the nth prime (counting from 0).
+
+    >>> nth_prime(0)
+    2
+    >>> nth_prime(100)
+    547
+    """
+    if n < 0:
+        raise ValueError
+    limit = math.ceil(_nth_prime_ub(n + 1))
+    return nth(sieve(limit), n)

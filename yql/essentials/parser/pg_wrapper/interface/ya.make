@@ -20,6 +20,7 @@ PEERDIR(
     yql/essentials/public/udf/arrow
     yql/essentials/core/cbo
     library/cpp/disjoint_sets
+    yql/essentials/providers/common/codec/yt_arrow_converter_interface
 )
 
 YQL_LAST_ABI_VERSION()

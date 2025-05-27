@@ -12,6 +12,7 @@
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/misc/finally.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/public.h>
 
 #include <yt/yt/core/ytree/convert.h>
@@ -26,7 +27,7 @@ using namespace NConcurrency;
 using namespace NProfiling;
 using namespace NNet;
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -518,13 +519,30 @@ IServerPtr CreateServer(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/*!
+ *  Path matching semantic is copied from go standard library.
+ *  See https://golang.org/pkg/net/http/#ServeMux
+ *
+ *  Supported features:
+ *  - matching path exactly: "/path/name"
+ *  - matching path prefix: "/path/" matches all with prefix "/path/"
+ *  - trailing-slash redirection: matching "/path/" implies "/path"
+ *  - end of path wildcard: "/path/{$}" matches only "/path/" and "/path"
+ */
 void TRequestPathMatcher::Add(const TString& pattern, const IHttpHandlerPtr& handler)
 {
     if (pattern.empty()) {
         THROW_ERROR_EXCEPTION("Empty pattern is invalid");
     }
 
-    if (pattern.back() == '/') {
+    if (pattern.EndsWith("/{$}")) {
+        auto withoutWildcard = pattern.substr(0, pattern.size() - 3);
+
+        Exact_[withoutWildcard] = handler;
+        if (withoutWildcard.size() > 1) {
+            Exact_[withoutWildcard.substr(0, withoutWildcard.size() - 1)] = handler;
+        }
+    } else if (pattern.back() == '/') {
         Subtrees_[pattern] = handler;
 
         auto withoutSlash = pattern.substr(0, pattern.size() - 1);

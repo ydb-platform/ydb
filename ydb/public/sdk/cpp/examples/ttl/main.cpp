@@ -1,10 +1,10 @@
 #include "ttl.h"
 
 #include <library/cpp/getopt/last_getopt.h>
-#include <util/system/env.h>
 
 using namespace NLastGetopt;
 using namespace NYdb;
+using namespace NYdb::NStatusHelpers;
 
 void StopHandler(int) {
     exit(1);
@@ -13,9 +13,9 @@ void StopHandler(int) {
 int main(int argc, char** argv) {
     TOpts opts = TOpts::Default();
 
-    TString endpoint;
-    TString database;
-    TString path;
+    std::string endpoint;
+    std::string database;
+    std::string path;
     opts.AddLongOption('e', "endpoint", "YDB endpoint").Required().RequiredArgument("HOST:PORT")
         .StoreResult(&endpoint);
     opts.AddLongOption('d', "database", "YDB database name").Required().RequiredArgument("PATH")
@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
     auto driverConfig = TDriverConfig()
         .SetEndpoint(endpoint)
         .SetDatabase(database)
-        .SetAuthToken(GetEnv("YDB_TOKEN"));
+        .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "");
     TDriver driver(driverConfig);
 
     if (!Run(driver, path)) {

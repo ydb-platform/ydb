@@ -231,8 +231,6 @@ public:
     virtual NBus::EMessageStatus ExecuteRequest(NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request) override {
         const ui32 type = request->GetHeader()->Type;
         switch(type) {
-        case NMsgBusProxy::MTYPE_CLIENT_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusRequest>(&NGRpcProxy::TGRpcClient::Request, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_FLAT_TX_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusSchemeOperation>(&NGRpcProxy::TGRpcClient::SchemeOperation, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST:
@@ -247,16 +245,6 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusBlobStorageConfigRequest>(&NGRpcProxy::TGRpcClient::BlobStorageConfig, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_HIVE_CREATE_TABLET:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusHiveCreateTablet>(&NGRpcProxy::TGRpcClient::HiveCreateTablet, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusLocalEnumerateTablets>(&NGRpcProxy::TGRpcClient::LocalEnumerateTablets, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_KEYVALUE:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusKeyValue>(&NGRpcProxy::TGRpcClient::KeyValue, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_LOCAL_MINIKQL:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusTabletLocalMKQL>(&NGRpcProxy::TGRpcClient::LocalMKQL, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_LOCAL_SCHEME_TX:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusTabletLocalSchemeTx>(&NGRpcProxy::TGRpcClient::LocalSchemeTx, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_TABLET_KILL_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusTabletKillRequest>(&NGRpcProxy::TGRpcClient::TabletKillRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_TABLET_STATE_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusTabletStateRequest>(&NGRpcProxy::TGRpcClient::TabletStateRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST:
@@ -265,11 +253,12 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusCmsRequest, NMsgBusProxy::TBusCmsResponse>(&NGRpcProxy::TGRpcClient::CmsRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CHOOSE_PROXY:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusChooseProxy>(&NGRpcProxy::TGRpcClient::ChooseProxy, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusSqsRequest, NMsgBusProxy::TBusSqsResponse>(&NGRpcProxy::TGRpcClient::SqsRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusInterconnectDebug>(&NGRpcProxy::TGRpcClient::InterconnectDebug, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST:
+            if (const auto timeout = GRpcClient->GetConfig().Timeout; timeout != TDuration::Max()) {
+                static_cast<NMsgBusProxy::TBusConsoleRequest*>(request.Get())->Record.SetTimeoutMs(timeout.MilliSeconds());
+            }
             return ExecuteGRpcRequest<NMsgBusProxy::TBusConsoleRequest, NMsgBusProxy::TBusConsoleResponse>(&NGRpcProxy::TGRpcClient::ConsoleRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_RESOLVE_NODE:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusResolveNode, NMsgBusProxy::TBusResponse>(&NGRpcProxy::TGRpcClient::ResolveNode, promise, request);
@@ -285,7 +274,7 @@ public:
     virtual TString GetCurrentLocation() const override {
         TString host;
         ui32 port;
-        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(GRpcClient->GetConfig().Locator, host, port);
+        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(TString{GRpcClient->GetConfig().Locator}, host, port);
         return host;
     }
 
@@ -305,7 +294,7 @@ public:
         NGRpcProxy::TGRpcClientConfig config(GRpcClient->GetConfig());
         TString hostname;
         ui32 port;
-        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(config.Locator, hostname, port);
+        NMsgBusProxy::TMsgBusClientConfig::CrackAddress(TString{config.Locator}, hostname, port);
         TString newLocation = TStringBuilder() << EscapeIPv6(location) << ':' << port;
         if (newLocation == config.Locator) {
             return TCleanupCallback();

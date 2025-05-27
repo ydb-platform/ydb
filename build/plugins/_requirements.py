@@ -4,6 +4,7 @@ import lib._metric_resolvers as mr
 
 CANON_SB_VAULT_REGEX = re.compile(r"\w+=(value|file):[-\w]+:\w+")
 CANON_YAV_REGEX = re.compile(r"\w+=(value|file):sec-[a-z0-9]+:\w+")
+PORTO_LAYERS_REGEX = re.compile(r"^\d+(,\d+)*$")
 VALID_DNS_REQUIREMENTS = ("default", "local", "dns64")
 VALID_NETWORK_REQUIREMENTS = ("full", "restricted")
 
@@ -87,6 +88,11 @@ def validate_yav_vault(name, value):
         return "yav value '{}' should follow pattern <ENV_NAME>=<value|file>:<sec-id>:<key>".format(value)
 
 
+def validate_porto_layers(name, value):
+    if not PORTO_LAYERS_REGEX.match(value):
+        return "porto layers '{}' should follow pattern porto_layers=<layerId1>[,<layerIdN>]*".format(value)
+
+
 def validate_numerical_requirement(name, value):
     if mr.resolve_value(value) is None:
         return "Cannot convert [[imp]]{}[[rst]] to the proper [[imp]]{}[[rst]] requirement value".format(value, name)
@@ -133,6 +139,7 @@ def validate_requirement(
 ):
     req_checks = {
         'container': validate_numerical_requirement,
+        'porto_layers': validate_porto_layers,
         'cpu': lambda n, v: validate_force_sandbox_requirement(
             n, v, test_size, is_force_sandbox, in_autocheck, is_fuzzing, is_kvm, is_ytexec_run, check_cpu
         ),
@@ -166,7 +173,7 @@ def validate_requirement(
             req_name, ", ".join(sorted(req_checks))
         )
 
-    if req_name in ('container', 'disk') and not is_force_sandbox:
+    if req_name in ('container', 'disk', 'porto_layers') and not is_force_sandbox:
         return "Only [[imp]]LARGE[[rst]] tests without [[imp]]ya:force_distbuild[[rst]] tag can have [[imp]]{}[[rst]] requirement".format(
             req_name
         )

@@ -1,18 +1,25 @@
-from typing import Callable, Type
+from collections.abc import Callable
+from typing import TypeVar, Union
 
 import pytest
 
-from multidict import MultiMapping
+from multidict import CIMultiDict, CIMultiDictProxy, MultiDict, MultiDictProxy
+
+_T = TypeVar("_T")
+_MD_Types = Union[
+    MultiDict[_T], CIMultiDict[_T], MultiDictProxy[_T], CIMultiDictProxy[_T]
+]
+GetVersion = Callable[[_MD_Types[_T]], int]
 
 
-def test_getversion_bad_param(multidict_getversion_callable):
+def test_getversion_bad_param(multidict_getversion_callable: GetVersion[str]) -> None:
     with pytest.raises(TypeError):
-        multidict_getversion_callable(1)
+        multidict_getversion_callable(1)  # type: ignore[arg-type]
 
 
 def test_ctor(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m1 = any_multidict_class()
     v1 = multidict_getversion_callable(m1)
@@ -22,8 +29,8 @@ def test_ctor(
 
 
 def test_add(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     v = multidict_getversion_callable(m)
@@ -32,8 +39,8 @@ def test_add(
 
 
 def test_delitem(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -43,8 +50,8 @@ def test_delitem(
 
 
 def test_delitem_not_found(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -55,8 +62,8 @@ def test_delitem_not_found(
 
 
 def test_setitem(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -66,8 +73,8 @@ def test_setitem(
 
 
 def test_setitem_not_found(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -77,8 +84,8 @@ def test_setitem_not_found(
 
 
 def test_clear(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -88,8 +95,8 @@ def test_clear(
 
 
 def test_setdefault(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -99,8 +106,8 @@ def test_setdefault(
 
 
 def test_popone(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -110,8 +117,8 @@ def test_popone(
 
 
 def test_popone_default(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -121,8 +128,8 @@ def test_popone_default(
 
 
 def test_popone_key_error(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -133,8 +140,8 @@ def test_popone_key_error(
 
 
 def test_pop(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -144,8 +151,8 @@ def test_pop(
 
 
 def test_pop_default(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -155,8 +162,8 @@ def test_pop_default(
 
 
 def test_pop_key_error(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -167,8 +174,8 @@ def test_pop_key_error(
 
 
 def test_popall(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -178,8 +185,8 @@ def test_popall(
 
 
 def test_popall_default(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -189,8 +196,8 @@ def test_popall_default(
 
 
 def test_popall_key_error(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -201,8 +208,8 @@ def test_popall_key_error(
 
 
 def test_popitem(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     m.add("key", "val")
@@ -212,8 +219,8 @@ def test_popitem(
 
 
 def test_popitem_key_error(
-    any_multidict_class: Type[MultiMapping[str]],
-    multidict_getversion_callable: Callable,
+    any_multidict_class: type[MultiDict[str]],
+    multidict_getversion_callable: GetVersion[str],
 ) -> None:
     m = any_multidict_class()
     v = multidict_getversion_callable(m)

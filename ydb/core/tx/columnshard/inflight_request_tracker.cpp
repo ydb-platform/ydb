@@ -1,8 +1,7 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
 #include "inflight_request_tracker.h"
-
-#include "data_sharing/common/transactions/tx_extension.h"
+#include "tablet/ext_tx_base.h"
 #include "engines/column_engine.h"
 #include "engines/reader/plain_reader/constructor/read_metadata.h"
 #include "hooks/abstract/abstract.h"
@@ -13,6 +12,7 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
     ui64 cookie, const NOlap::TVersionedIndex* /*index*/, const TInstant now) {
     auto it = RequestsMeta.find(cookie);
     AFL_VERIFY(it != RequestsMeta.end())("cookie", cookie);
+    AFL_VERIFY(ActorIds.erase(cookie));
     const NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase = it->second;
 
     {
@@ -59,9 +59,9 @@ void TInFlightReadsTracker::AddToInFlightRequest(
 }
 
 namespace {
-class TTransactionSavePersistentSnapshots: public NOlap::NDataSharing::TExtendedTransactionBase<NColumnShard::TColumnShard> {
+class TTransactionSavePersistentSnapshots: public TExtendedTransactionBase {
 private:
-    using TBase = NOlap::NDataSharing::TExtendedTransactionBase<NColumnShard::TColumnShard>;
+    using TBase = TExtendedTransactionBase;
     const std::set<NOlap::TSnapshot> SaveSnapshots;
     const std::set<NOlap::TSnapshot> RemoveSnapshots;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {

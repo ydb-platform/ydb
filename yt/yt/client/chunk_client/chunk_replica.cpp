@@ -21,7 +21,7 @@ using namespace NObjectClient;
 
 void TChunkReplica::RegisterMetadata(auto&& registrar)
 {
-    PHOENIX_REGISTER_FIELD(1, Value_)();
+    PHOENIX_REGISTER_FIELD(1, Value_);
 }
 
 PHOENIX_DEFINE_TYPE(TChunkReplica);
@@ -79,7 +79,7 @@ void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaI
     using NYT::FromProto;
 
     replica->Value_ = value.replica();
-    replica->ChunkLocationUuid_ = FromProto<TGuid>(value.location_uuid());
+    replica->ChunkLocationUuid_ = FromProto<TChunkLocationUuid>(value.location_uuid());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,7 +173,7 @@ void TChunkReplicaAddressFormatter::operator()(TStringBuilderBase* builder, TChu
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TChunkReplicaList TChunkReplicaWithMedium::ToChunkReplicas(const TChunkReplicaWithMediumList& replicasWithMedia)
+TChunkReplicaList TChunkReplicaWithMedium::ToChunkReplicas(TRange<TChunkReplicaWithMedium> replicasWithMedia)
 {
     TChunkReplicaList replicas;
     replicas.reserve(replicasWithMedia.size());

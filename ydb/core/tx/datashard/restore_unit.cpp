@@ -26,13 +26,13 @@ protected:
 
     bool Run(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        Y_ABORT_UNLESS(tx->GetSchemeTx().HasRestore());
+        Y_ENSURE(tx->GetSchemeTx().HasRestore());
         const auto& restore = tx->GetSchemeTx().GetRestore();
 
         const ui64 tableId = restore.GetTableId();
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
         const TTableInfo tableInfo = TTableInfo(tableId, DataShard.GetUserTables().at(tableId));
 
@@ -62,7 +62,7 @@ protected:
 
     bool ProcessResult(TOperation::TPtr op, const TActorContext&) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto* result = CheckedCast<TImportJobProduct*>(op->AsyncJobResult().Get());
         auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());

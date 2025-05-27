@@ -11,10 +11,10 @@ namespace NMiniKQL {
 namespace GraceJoin {
 
 class TTableBucketSpiller;
-#define GRACEJOIN_DEBUG DEBUG
-#define GRACEJOIN_TRACE TRACE
+#define GRACEJOIN_DEBUG NUdf::ELogLevel::Debug
+#define GRACEJOIN_TRACE NUdf::ELogLevel::Trace
 
-const ui64 BitsForNumberOfBuckets = 5; // 2^5 = 32
+const ui64 BitsForNumberOfBuckets = 6; // 2^6 = 64
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets)  - 1;
 const ui64 NumberOfBuckets = (0x00000001 << BitsForNumberOfBuckets);  // Number of hashed keys buckets to distribute incoming tables tuples
 const ui64 DefaultTuplesNum = 101; // Default initial number of tuples in one bucket to allocate memory
@@ -43,18 +43,23 @@ class TBloomfilter {
         Resize(size);
     }
 
-    void Resize(ui64 size) {
+    void Reserve(ui64 size) {
         size = std::max(size, CachelineSize);
         Bits_ = 6;
 
-        for (; (ui64(1)<<Bits_) < size; ++Bits_)
+        for (; (ui64(1) << Bits_) < size; ++Bits_)
             ;
 
         Bits_ += 3; // -> multiply by 8
-        size = 1u<<(Bits_ - 6);
 
+        Storage_.reserve(ComputeStorageSize());
+    }
+
+    void Resize(ui64 size) {
         Storage_.clear();
-        Storage_.resize(size + CachelineSize/sizeof(ui64) - 1);
+
+        Reserve(size);
+        Storage_.resize(ComputeStorageSize());
 
         // align Ptr_ up to BlockSize
         Ptr_ = (ui64 *)((uintptr_t(Storage_.data()) + BlockSize - 1) & ~(BlockSize - 1));
@@ -103,6 +108,12 @@ class TBloomfilter {
         Storage_.resize(1, ~ui64(0));
         Storage_.shrink_to_fit();
         Ptr_ = Storage_.data();
+    }
+
+private:
+    ui64 ComputeStorageSize() const {
+        MKQL_ENSURE(Bits_ >= 6, "Internal logic error");
+        return (1u << (Bits_ - 6))  + CachelineSize / sizeof(ui64) - 1;
     }
 };
 
@@ -337,6 +348,9 @@ class TTable {
 
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
 
+    const NUdf::TLoggerPtr Logger_ = nullptr; // Logger instance
+    const NUdf::TLogComponentId LogComponent_ = 0; // Unique component id. GraceJoin here.
+
 public:
 
 
@@ -406,10 +420,12 @@ public:
     void Clear();
 
     // Creates new table with key columns and data columns
-    TTable(ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
-            ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
-            ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0,
-            ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr, bool isAny = false);
+    TTable(NUdf::TLoggerPtr logger = nullptr, NUdf::TLogComponentId logComponent = 0,
+           ui64 numberOfKeyIntColumns = 0, ui64 numberOfKeyStringColumns = 0,
+           ui64 numberOfDataIntColumns = 0, ui64 numberOfDataStringColumns = 0,
+           ui64 numberOfKeyIColumns = 0, ui64 numberOfDataIColumns = 0,
+           ui64 nullsBitmapSize = 1, TColTypeInterface * colInterfaces = nullptr,
+           bool isAny = false);
 
     enum class EAddTupleResult { Added, Unmatched, AnyMatch };
     // Adds new tuple to the table.  intColumns, stringColumns - data of columns,

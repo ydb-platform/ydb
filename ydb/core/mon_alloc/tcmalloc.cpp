@@ -582,17 +582,14 @@ class TTcMallocMonitor : public IAllocMonitor {
 
         TControlWrapper ProfileSamplingRate;
         TControlWrapper GuardedSamplingRate;
-        TControlWrapper MemoryLimit;
         TControlWrapper PageCacheTargetSize;
         TControlWrapper PageCacheReleaseRate;
 
         TControls()
-            : ProfileSamplingRate(tcmalloc::MallocExtension::GetProfileSamplingRate(),
+            : ProfileSamplingRate(tcmalloc::MallocExtension::GetProfileSamplingInterval(),
                 64 << 10, MaxSamplingRate)
             , GuardedSamplingRate(MaxSamplingRate,
                 64 << 10, MaxSamplingRate)
-            , MemoryLimit(0,
-                0, std::numeric_limits<i64>::max())
             , PageCacheTargetSize(DefaultPageCacheTargetSize,
                 0, MaxPageCacheTargetSize)
             , PageCacheReleaseRate(DefaultPageCacheReleaseRate,
@@ -602,7 +599,6 @@ class TTcMallocMonitor : public IAllocMonitor {
         void Register(TIntrusivePtr<TControlBoard> icb) {
             icb->RegisterSharedControl(ProfileSamplingRate, "TCMallocControls.ProfileSamplingRate");
             icb->RegisterSharedControl(GuardedSamplingRate, "TCMallocControls.GuardedSamplingRate");
-            icb->RegisterSharedControl(MemoryLimit, "TCMallocControls.MemoryLimit");
             icb->RegisterSharedControl(PageCacheTargetSize, "TCMallocControls.PageCacheTargetSize");
             icb->RegisterSharedControl(PageCacheReleaseRate, "TCMallocControls.PageCacheReleaseRate");
         }
@@ -654,18 +650,12 @@ private:
     }
 
     void UpdateControls() {
-        tcmalloc::MallocExtension::SetProfileSamplingRate(Controls.ProfileSamplingRate);
+        tcmalloc::MallocExtension::SetProfileSamplingInterval(Controls.ProfileSamplingRate);
 
         if (Controls.GuardedSamplingRate != TControls::MaxSamplingRate) {
             tcmalloc::MallocExtension::ActivateGuardedSampling();
         }
-        tcmalloc::MallocExtension::SetGuardedSamplingRate(Controls.GuardedSamplingRate);
-
-        tcmalloc::MallocExtension::MemoryLimit limit;
-        limit.hard = false;
-        limit.limit = Controls.MemoryLimit ?
-            (size_t)Controls.MemoryLimit : std::numeric_limits<size_t>::max();
-        tcmalloc::MallocExtension::SetMemoryLimit(limit);
+        tcmalloc::MallocExtension::SetGuardedSamplingInterval(Controls.GuardedSamplingRate);
     }
 
     void ReleaseMemoryIfNecessary(TDuration interval) {

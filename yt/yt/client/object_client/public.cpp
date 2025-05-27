@@ -44,12 +44,12 @@ void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStr
 
 bool operator == (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)
 {
-    return memcmp(&lhs, &rhs, sizeof (TVersionedObjectId)) == 0;
+    return memcmp(&lhs, &rhs, sizeof(TVersionedObjectId)) == 0;
 }
 
 bool operator < (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)
 {
-    return memcmp(&lhs, &rhs, sizeof (TVersionedObjectId)) < 0;
+    return memcmp(&lhs, &rhs, sizeof(TVersionedObjectId)) < 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

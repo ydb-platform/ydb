@@ -502,7 +502,11 @@ public:
             if (TJoinLinkSettings::EStrategy::SortedMerge == descr.LinkSettings.Strategy) {
                 linkOptions = L(linkOptions, Q(Y(Q("forceSortedMerge"))));
             } else if (TJoinLinkSettings::EStrategy::StreamLookup == descr.LinkSettings.Strategy) {
-                linkOptions = L(linkOptions, Q(Y(Q("forceStreamLookup"))));
+                auto streamlookup = Y(Q("forceStreamLookup"));
+                for (auto&& option: descr.LinkSettings.Values) {
+                    streamlookup = L(streamlookup, Q(option));
+                }
+                linkOptions = L(linkOptions, Q(streamlookup));
             } else if (TJoinLinkSettings::EStrategy::ForceMap == descr.LinkSettings.Strategy) {
                 linkOptions = L(linkOptions, Q(Y(Q("join_algo"), Q("MapJoin"))));
             } else if (TJoinLinkSettings::EStrategy::ForceGrace == descr.LinkSettings.Strategy) {

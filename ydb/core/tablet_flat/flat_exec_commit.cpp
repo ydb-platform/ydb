@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    void TLogCommit::PushTx(TSeat* seat) noexcept {
+    void TLogCommit::PushTx(TSeat* seat) {
         Y_DEBUG_ABORT_UNLESS(!seat->NextCommitTx);
         if (LastTx) {
             Y_DEBUG_ABORT_UNLESS(!LastTx->NextCommitTx);
@@ -17,7 +17,7 @@ namespace NTabletFlatExecutor {
         }
     }
 
-    TSeat* TLogCommit::PopTx() noexcept {
+    TSeat* TLogCommit::PopTx() {
         TSeat* seat = FirstTx;
         if (seat) {
             FirstTx = seat->NextCommitTx;

@@ -45,8 +45,8 @@ namespace NKikimr {
 
             TString ToString() const;
             TString Serialize() const;
-            void ParseFromString(const TString &serialized);
-            void ParseFromArray(const char* data, size_t size);
+            void ParseFromString(const TString& prefix, const TString &serialized);
+            void ParseFromArray(const TString& prefix, const char* data, size_t size);
             static bool CheckEntryPoint(const TString &serialized);
         };
 

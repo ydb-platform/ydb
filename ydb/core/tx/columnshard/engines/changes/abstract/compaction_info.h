@@ -1,8 +1,12 @@
 #pragma once
-#include <util/generic/string.h>
-#include <util/system/yassert.h>
-#include <util/stream/output.h>
+#include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/monotonic.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <util/generic/string.h>
+#include <util/stream/output.h>
+#include <util/system/yassert.h>
+
 #include <memory>
 
 namespace NKikimr::NOlap {
@@ -10,9 +14,9 @@ class TGranuleMeta;
 
 class TPlanCompactionInfo {
 private:
-    ui64 PathId = 0;
+    TInternalPathId PathId;
     TMonotonic StartTime = TMonotonic::Now();
-    ui32 Count = 0;
+    TPositiveControlInteger Count;
 
 public:
     void Start() {
@@ -26,14 +30,13 @@ public:
         return StartTime;
     }
 
-    TPlanCompactionInfo(const ui64 pathId)
+    explicit TPlanCompactionInfo(const TInternalPathId pathId)
         : PathId(pathId) {
-
     }
 
-    ui64 GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

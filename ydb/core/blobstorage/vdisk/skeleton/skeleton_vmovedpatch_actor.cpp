@@ -49,25 +49,26 @@ namespace NKikimr {
                 , VCtx(vCtx)
             {
                 NKikimrBlobStorage::TEvVMovedPatch &record = Event->Get()->Record;
-                Y_ABORT_UNLESS(record.HasOriginalGroupId());
+                Y_VERIFY_S(record.HasOriginalGroupId(), VCtx->VDiskLogPrefix);
                 OriginalGroupId = record.GetOriginalGroupId();
-                Y_ABORT_UNLESS(record.HasPatchedGroupId());
+                Y_VERIFY_S(record.HasPatchedGroupId(), VCtx->VDiskLogPrefix);
                 PatchedGroupId = record.GetPatchedGroupId();
-                Y_ABORT_UNLESS(record.HasOriginalBlobId());
+                Y_VERIFY_S(record.HasOriginalBlobId(), VCtx->VDiskLogPrefix);
                 OriginalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
-                Y_ABORT_UNLESS(record.HasPatchedBlobId());
+                Y_VERIFY_S(record.HasPatchedBlobId(), VCtx->VDiskLogPrefix);
                 PatchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
+                Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
                 if (record.HasMsgQoS() && record.GetMsgQoS().HasDeadlineSeconds()) {
-                    Deadline = TInstant::Seconds(record.GetMsgQoS().GetDeadlineSeconds());
+                    Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
                 }
 
                 DiffCount = record.DiffsSize();
                 Diffs.reset(new TEvBlobStorage::TEvPatch::TDiff[DiffCount]);
                 for (ui32 idx = 0; idx < DiffCount; ++idx) {
                     const NKikimrBlobStorage::TDiffBlock &diff = record.GetDiffs(idx);
-                    Y_ABORT_UNLESS(diff.HasOffset());
+                    Y_VERIFY_S(diff.HasOffset(), VCtx->VDiskLogPrefix);
                     Diffs[idx].Offset = diff.GetOffset();
-                    Y_ABORT_UNLESS(diff.HasBuffer());
+                    Y_VERIFY_S(diff.HasBuffer(), VCtx->VDiskLogPrefix);
                     Diffs[idx].Buffer = TRcBuf(diff.GetBuffer());
                 }
             }
@@ -103,8 +104,8 @@ namespace NKikimr {
                         << " OriginalBlobId# " << OriginalId
                         << " PatchedBlobId# " << PatchedId
                         << " ErrorReason# " << ErrorReason
-                        << " Marker# BSVSP01");
-                SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), Event->Cookie, VCtx);
+                        << " Marker# BSVSP00");
+                SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), Event->Cookie, VCtx, {});
                 PassAway();
             }
 

@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/versions
     ydb/core/tx/columnshard/engines/scheme/tiering
     ydb/core/tx/columnshard/engines/scheme/column
+    ydb/core/tx/columnshard/engines/scheme/common
     ydb/core/tx/columnshard/engines/scheme/defaults
     ydb/core/formats/arrow/accessor
     ydb/core/tx/columnshard/blobs_action/abstract

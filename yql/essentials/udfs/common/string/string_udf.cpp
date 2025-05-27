@@ -1,8 +1,8 @@
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
-#include <library/cpp/charset/codepage.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/string_utils/base32/base32.h>
@@ -25,32 +25,50 @@
 #include <util/string/subst.h>
 #include <util/string/util.h>
 #include <util/string/vector.h>
+#include <util/generic/bitops.h>
+
+#include <bit>
 
 using namespace NKikimr;
 using namespace NUdf;
 
 namespace {
 
-#define STRING_UDF(udfName, function)                                                    \
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##udfName, char*(TAutoMap<char*>)) {                 \
-        const TString input(args[0].AsStringRef());                                     \
-        const auto& result = function(input);                                           \
-        return valueBuilder->NewString(result);                                         \
-    }                                                                                   \
-                                                                                        \
-    struct T##udfName##KernelExec                                                       \
-        : public TUnaryKernelExec<T##udfName##KernelExec>                               \
-    {                                                                                   \
-        template <typename TSink>                                                       \
-        static void Process(const IValueBuilder*, TBlockItem arg1, const TSink& sink) { \
-            const TString input(arg1.AsStringRef());                                    \
-            const auto& result = function(input);                                       \
-            sink(TBlockItem(result));                                                   \
-        }                                                                               \
-    };                                                                                  \
-                                                                                        \
-    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do) \
+TString ReverseBytes(const TStringRef input) {
+    TString result;
+    result.ReserveAndResize(input.Size());
+    for (size_t i = 0; i < input.Size(); ++i) {
+        result[i] = input.Data()[input.Size() - 1 - i];
+    }
+    return result;
+}
 
+TString ReverseBits(const TStringRef input) {
+    TString result;
+    result.ReserveAndResize(input.Size());
+    for (size_t i = 0; i < input.Size(); ++i) {
+        result[i] = std::bit_cast<char>(::ReverseBits(std::bit_cast<ui8>(input.Data()[input.Size() - 1 - i])));
+    }
+    return result;
+}
+
+#define STRING_UDF(udfName, function, minVersion)                                                                  \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(T##udfName, char*(TAutoMap<char*>), builder.SetMinLangVer(minVersion)) { \
+        const TString input(args[0].AsStringRef());                                                                \
+        const auto& result = function(input);                                                                      \
+        return valueBuilder->NewString(result);                                                                    \
+    }                                                                                                              \
+                                                                                                                   \
+    struct T##udfName##KernelExec: public TUnaryKernelExec<T##udfName##KernelExec> {                               \
+        template <typename TSink>                                                                                  \
+        static void Process(const IValueBuilder*, TBlockItem arg1, const TSink& sink) {                            \
+            const TString input(arg1.AsStringRef());                                                               \
+            const auto& result = function(input);                                                                  \
+            sink(TBlockItem(result));                                                                              \
+        }                                                                                                          \
+    };                                                                                                             \
+                                                                                                                   \
+    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
 // 'unsafe' udf is actually strict - it returns null on any exception
 #define STRING_UNSAFE_UDF(udfName, function)                                             \
@@ -86,18 +104,20 @@ namespace {
                                                                                         \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
-#define STROKA_UDF(udfName, function)                                   \
-    SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
-        EMPTY_RESULT_ON_EMPTY_ARG(0)                                    \
-        const TString input(args[0].AsStringRef());                     \
-        try {                                                           \
-            TUtf16String wide = UTF8ToWide(input);                      \
-            function(wide);                                             \
-            return valueBuilder->NewString(WideToUTF8(wide));           \
-        } catch (yexception&) {                                         \
-            return TUnboxedValue();                                     \
-        }                                                               \
+// NOTE: The functions below are marked as deprecated, so block implementation
+// is not required for them
+SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
+    builder.SetMaxLangVer(NYql::MakeLangVersion(2025, 1))) {
+    EMPTY_RESULT_ON_EMPTY_ARG(0)
+    const TString input(args[0].AsStringRef());
+    try {
+        TUtf16String wide = UTF8ToWide(input);
+        ReverseInPlace(wide);
+        return valueBuilder->NewString(WideToUTF8(wide));
+    } catch (yexception&) {
+        return TUnboxedValue();
     }
+}
 
 #define STROKA_CASE_UDF(udfName, function)                              \
     SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
@@ -151,17 +171,53 @@ namespace {
         }                                                              \
     }
 
-#define STRING_TWO_ARGS_UDF(udfName, function)                          \
-    SIMPLE_STRICT_UDF(T##udfName, bool(TOptional<char*>, char*)) {      \
-        Y_UNUSED(valueBuilder);                                         \
-        if (args[0]) {                                                  \
-            const TString haystack(args[0].AsStringRef());              \
-            const TString needle(args[1].AsStringRef());                \
-            return TUnboxedValuePod(function(haystack, needle));        \
-        } else {                                                        \
-            return TUnboxedValuePod(false);                             \
-        }                                                               \
+#define STRING_TWO_ARGS_UDF_DEPRECATED_2025_02(udfName, function)        \
+    SIMPLE_STRICT_UDF_OPTIONS(T##udfName, bool(TOptional<char*>, char*), \
+        builder.SetMaxLangVer(NYql::MakeLangVersion(2025, 1)))           \
+    {                                                                    \
+        Y_UNUSED(valueBuilder);                                          \
+        if (args[0]) {                                                   \
+            const TString haystack(args[0].AsStringRef());               \
+            const TString needle(args[1].AsStringRef());                 \
+            return TUnboxedValuePod(function(haystack, needle));         \
+        } else {                                                         \
+            return TUnboxedValuePod(false);                              \
+        }                                                                \
     }
+
+#define STRING_ASCII_CMP_IGNORE_CASE_UDF(udfName, function)                    \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(T##udfName,                          \
+        bool(TOptional<char*>, char*),                                         \
+        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))                 \
+    {                                                                          \
+        Y_UNUSED(valueBuilder);                                                \
+        if (args[0]) {                                                         \
+            const TString haystack(args[0].AsStringRef());                     \
+            const TString needle(args[1].AsStringRef());                       \
+            return TUnboxedValuePod(function(haystack, needle));               \
+        } else {                                                               \
+            return TUnboxedValuePod(false);                                    \
+        }                                                                      \
+    }                                                                          \
+                                                                               \
+    struct T##udfName##KernelExec                                              \
+        : public TBinaryKernelExec<T##udfName##KernelExec>                     \
+    {                                                                          \
+        template <typename TSink>                                              \
+        static void Process(const IValueBuilder*, TBlockItem arg1,             \
+                            TBlockItem arg2, const TSink& sink)                \
+        {                                                                      \
+            if (arg1) {                                                        \
+                const TString haystack(arg1.AsStringRef());                    \
+                const TString needle(arg2.AsStringRef());                      \
+                sink(TBlockItem(function(haystack, needle)));                  \
+            } else {                                                           \
+                sink(TBlockItem(false));                                       \
+            }                                                                  \
+        }                                                                      \
+    };                                                                         \
+                                                                               \
+    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
 #define IS_ASCII_UDF(function)                                                           \
     BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, bool(TOptional<char*>)) {                \
@@ -316,19 +372,21 @@ namespace {
                                                                                         \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
-#define STRING_UDF_MAP(XX)           \
-    XX(Base32Encode, Base32Encode)   \
-    XX(Base64Encode, Base64Encode)   \
-    XX(Base64EncodeUrl, Base64EncodeUrl)   \
-    XX(EscapeC, EscapeC)             \
-    XX(UnescapeC, UnescapeC)         \
-    XX(HexEncode, HexEncode)         \
-    XX(EncodeHtml, EncodeHtmlPcdata) \
-    XX(DecodeHtml, DecodeHtmlPcdata) \
-    XX(CgiEscape, CGIEscapeRet)      \
-    XX(CgiUnescape, CGIUnescapeRet)  \
-    XX(Strip, Strip)                 \
-    XX(Collapse, Collapse)
+#define STRING_UDF_MAP(XX)                                         \
+    XX(Base32Encode, Base32Encode, NYql::UnknownLangVersion)       \
+    XX(Base64Encode, Base64Encode, NYql::UnknownLangVersion)       \
+    XX(Base64EncodeUrl, Base64EncodeUrl, NYql::UnknownLangVersion) \
+    XX(EscapeC, EscapeC, NYql::UnknownLangVersion)                 \
+    XX(UnescapeC, UnescapeC, NYql::UnknownLangVersion)             \
+    XX(HexEncode, HexEncode, NYql::UnknownLangVersion)             \
+    XX(EncodeHtml, EncodeHtmlPcdata, NYql::UnknownLangVersion)     \
+    XX(DecodeHtml, DecodeHtmlPcdata, NYql::UnknownLangVersion)     \
+    XX(CgiEscape, CGIEscapeRet, NYql::UnknownLangVersion)          \
+    XX(CgiUnescape, CGIUnescapeRet, NYql::UnknownLangVersion)      \
+    XX(Strip, Strip, NYql::UnknownLangVersion)                     \
+    XX(Collapse, Collapse, NYql::UnknownLangVersion)               \
+    XX(ReverseBytes, ReverseBytes, NYql::MakeLangVersion(2025, 2)) \
+    XX(ReverseBits, ReverseBits, NYql::MakeLangVersion(2025, 2))
 
 #define STRING_UNSAFE_UDF_MAP(XX)  \
     XX(Base32Decode, Base32Decode)         \
@@ -360,13 +418,18 @@ namespace {
     XX(HasSuffix, EndsWith)
 
 // NOTE: The functions below are marked as deprecated, so block implementation
-// is not required for them. Hence, STRING_TWO_ARGS_UDF provides only the
-// scalar one at the moment.
-#define STRING_TWO_ARGS_UDF_MAP(XX)                    \
+// is not required for them. Hence, STRING_TWO_ARGS_UDF_DEPRECATED_2025_02
+// provides only the scalar one at the moment.
+#define STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(XX) \
     XX(StartsWithIgnoreCase, AsciiHasPrefixIgnoreCase) \
     XX(EndsWithIgnoreCase, AsciiHasSuffixIgnoreCase)   \
     XX(HasPrefixIgnoreCase, AsciiHasPrefixIgnoreCase)  \
     XX(HasSuffixIgnoreCase, AsciiHasSuffixIgnoreCase)
+
+#define STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(XX)            \
+    XX(AsciiStartsWithIgnoreCase, AsciiHasPrefixIgnoreCase) \
+    XX(AsciiEndsWithIgnoreCase, AsciiHasSuffixIgnoreCase)   \
+    XX(AsciiEqualsIgnoreCase, AsciiEqualsIgnoreCase)
 
 // NOTE: The functions below are marked as deprecated, so block implementation
 // is not required for them. Hence, STROKA_UDF provides only the scalar one at
@@ -448,6 +511,50 @@ namespace {
     };
 
     END_SIMPLE_ARROW_UDF(TContains, TContainsKernelExec::Do);
+
+    static bool IgnoreCaseComparator(char a, char b) {
+        return AsciiToUpper(a) == AsciiToUpper(b);
+    }
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(TAsciiContainsIgnoreCase, bool(TOptional<char*>, char*),
+        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))
+    {
+        Y_UNUSED(valueBuilder);
+        if (!args[0]) {
+            return TUnboxedValuePod(false);
+        }
+
+        const TString haystack(args[0].AsStringRef());
+        const TString needle(args[1].AsStringRef());
+        if (haystack.empty()) {
+            return TUnboxedValuePod(needle.empty());
+        }
+        const auto found = std::search(haystack.cbegin(), haystack.cend(),
+                                       needle.cbegin(), needle.cend(), IgnoreCaseComparator);
+        return TUnboxedValuePod(found != haystack.cend());
+    }
+
+    struct TAsciiContainsIgnoreCaseKernelExec
+        : public TBinaryKernelExec<TAsciiContainsIgnoreCaseKernelExec>
+    {
+        template <typename TSink>
+        static void Process(const IValueBuilder*, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
+            if (!arg1) {
+                return sink(TBlockItem(arg2 ? false : true));
+            }
+
+            const TString haystack(arg1.AsStringRef());
+            const TString needle(arg2.AsStringRef());
+            if (haystack.empty()) {
+                return sink(TBlockItem((needle.empty())));
+            }
+            const auto found = std::search(haystack.cbegin(), haystack.cend(),
+                                           needle.cbegin(), needle.cend(), IgnoreCaseComparator);
+            sink(TBlockItem(found != haystack.cend()));
+        }
+    };
+
+    END_SIMPLE_ARROW_UDF(TAsciiContainsIgnoreCase, TAsciiContainsIgnoreCaseKernelExec::Do);
 
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TReplaceAll, char*(TAutoMap<char*>, char*, char*)) {
@@ -877,11 +984,11 @@ namespace {
 
     STRING_UDF_MAP(STRING_UDF)
     STRING_UNSAFE_UDF_MAP(STRING_UNSAFE_UDF)
-    STROKA_UDF_MAP(STROKA_UDF)
     STROKA_CASE_UDF_MAP(STROKA_CASE_UDF)
     STROKA_ASCII_CASE_UDF_MAP(STROKA_ASCII_CASE_UDF)
     STROKA_FIND_UDF_MAP(STROKA_FIND_UDF)
-    STRING_TWO_ARGS_UDF_MAP(STRING_TWO_ARGS_UDF)
+    STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(STRING_TWO_ARGS_UDF_DEPRECATED_2025_02)
+    STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_ASCII_CMP_IGNORE_CASE_UDF)
     IS_ASCII_UDF_MAP(IS_ASCII_UDF)
 
     static constexpr ui64 padLim = 1000000;
@@ -897,12 +1004,14 @@ namespace {
         STROKA_CASE_UDF_MAP(STRING_REGISTER_UDF)
         STROKA_ASCII_CASE_UDF_MAP(STRING_REGISTER_UDF)
         STROKA_FIND_UDF_MAP(STRING_REGISTER_UDF)
-        STRING_TWO_ARGS_UDF_MAP(STRING_REGISTER_UDF)
+        STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(STRING_REGISTER_UDF)
+        STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_REGISTER_UDF)
         IS_ASCII_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_PAD_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_NUM_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_TEXT_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_HRSZ_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
+        TReverse,
         TCollapseText,
         TReplaceAll,
         TReplaceFirst,
@@ -911,6 +1020,7 @@ namespace {
         TRemoveFirst,
         TRemoveLast,
         TContains,
+        TAsciiContainsIgnoreCase,
         TFind,
         TReverseFind,
         TSubstring,
@@ -921,6 +1031,6 @@ namespace {
         TPrec,
         TToByteList,
         TFromByteList)
-}
+    } // namespace
 
 REGISTER_MODULES(TStringModule)

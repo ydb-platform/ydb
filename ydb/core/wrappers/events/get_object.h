@@ -36,6 +36,26 @@ public:
         }
     }
 
+    static bool TryParseRange(const TString& str, std::pair<ui64, ui64>& range) {
+        TStringBuf buf(str);
+        if (!buf.SkipPrefix("bytes=")) {
+            return false;
+        }
+
+        ui64 start;
+        if (!TryFromString(buf.NextTok('-'), start)) {
+            return false;
+        }
+
+        ui64 end;
+        if (!TryFromString(buf, end)) {
+            return false;
+        }
+
+        range = std::make_pair(start, end);
+        return true;
+    }
+
     explicit TEvGetObjectResponse(const TBase::TKey& key, const typename TBase::TOutcome& outcome)
         : TBase(key, outcome)
     {

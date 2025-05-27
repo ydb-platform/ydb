@@ -43,6 +43,7 @@ enum EObjectType {
     ExternalDataSource = 25;
     View = 26;
     ResourcePool = 27;
+    SysView = 28;
 }
 
 message TBrowseInfo {
@@ -319,6 +320,7 @@ message TClusterInfo {
     string Name = 2;
     string Domain = 3;
     EFlag Overall = 5;
+    optional uint64 CachedDataMaxAge = 8;
     repeated string Problems = 9;
     uint32 NodesTotal = 10;
     uint32 NodesAlive = 11;
@@ -343,6 +345,8 @@ message TClusterInfo {
     repeated NKikimrSysView.TStorageStatsEntry StorageStats = 51;
     uint64 Hosts = 60;
     uint64 Tenants = 61;
+    double NetworkUtilization = 62;
+    uint64 NetworkWriteThroughput = 63;
 }
 
 enum ETenantType {
@@ -398,6 +402,8 @@ message TTenant {
     repeated TStorageUsage DatabaseStorage = 45;
     uint32 CoresTotal = 50;
     optional NKikimrMemory.TMemoryStats MemoryStats = 51;
+    float NetworkUtilization = 52;
+    uint64 NetworkWriteThroughput = 53;
 }
 
 message TTenants {
@@ -512,9 +518,10 @@ message TStorageGroupsInfo {
     optional bool NeedGroup = 7;
     optional bool NeedSort = 8;
     optional bool NeedLimit = 9;
-    repeated string Problems = 10;
-    repeated TStorageGroupInfo StorageGroups = 11;
-    repeated TStorageGroupGroup StorageGroupGroups = 12;
+    optional uint64 CachedDataMaxAge = 10;
+    repeated string Problems = 11;
+    repeated TStorageGroupInfo StorageGroups = 12;
+    repeated TStorageGroupGroup StorageGroupGroups = 13;
 }
 
 message TStorageUsageStats {
@@ -557,6 +564,12 @@ message TNodeInfo {
     repeated NKikimrWhiteboard.TNodeStateInfo ReversePeers = 55;
 }
 
+message TNodeBatch {
+    repeated uint32 NodesToAskFor = 1;
+    repeated uint32 NodesToAskAbout = 2;
+    optional bool HasStaticNodes = 3;
+}
+
 message TNodesInfo {
     uint32 Version = 1;
     optional uint64 TotalNodes = 2;
@@ -568,12 +581,14 @@ message TNodesInfo {
     optional bool NeedSort = 8;
     optional bool NeedLimit = 9;
     repeated string Problems = 10;
+    optional uint64 CachedDataMaxAge = 11;
     repeated TNodeInfo Nodes = 20;
     repeated TNodeGroup NodeGroups = 30;
     optional uint64 MaximumDisksPerNode = 50;
     optional uint64 MaximumSlotsPerDisk = 51;
     optional bool NoDC = 60;
     optional bool NoRack = 61;
+    repeated TNodeBatch OriginalNodeBatches = 62;
 }
 
 enum ENodeType {
@@ -824,5 +839,31 @@ message TFeatureFlagsConfig {
 
     uint32 Version = 1;
     repeated TDatabase Databases = 2;
+}
+
+message TTopicDataResponse {
+    message TMessage {
+        uint64 Offset = 1;
+        uint64 CreateTimestamp = 2;
+        uint64 WriteTimestamp = 3;
+        uint64 TimestampDiff = 4;
+        string Message = 5;
+        uint32 StorageSize = 6;
+        uint32 OriginalSize = 7;
+        uint32 Codec = 8;
+        string ProducerId = 9;
+        uint64 SeqNo = 10;
+
+        message TMetadataItem {
+            string Key = 1;
+            string Value = 2;
+        }
+        repeated TMetadataItem MessageMetadata = 11;
+    }
+
+    uint64 StartOffset = 1;
+    uint64 EndOffset = 2;
+    repeated TMessage Messages = 3;
+    bool Truncated = 4;
 }
 

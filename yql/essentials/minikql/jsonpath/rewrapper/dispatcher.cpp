@@ -13,7 +13,7 @@ namespace NReWrapper {
 namespace NRegistrator {
 
 struct TLib {
-    ui64 Id;
+    ui64 Id = 0;
     TCompiler Compiler;
     TDeserializer Deserializer;
 };
@@ -42,6 +42,14 @@ void ThrowOnOutOfRange(ui32 id) {
             << "Libs with id: " << id
             << " was not found. Total added libs: " << NRegistrator::GetModules()->size();
     }
+}
+
+bool Has(ui32 id) {
+    if (id == 0 || id > NRegistrator::GetModules()->size()) {
+        return false;
+    }
+
+    return NRegistrator::GetModules()->at(id).Id == id;
 }
 
 IRePtr Deserialize(const TStringBuf& serializedRegex) {

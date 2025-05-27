@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <yt/yt/core/misc/jitter.h>
+
 namespace NYT::NConcurrency {
 
 using namespace NYTree;
@@ -12,6 +14,20 @@ TPeriodicExecutorOptions TPeriodicExecutorOptions::WithJitter(TDuration period)
         .Period = period,
         .Jitter = DefaultJitter
     };
+}
+
+TDuration TPeriodicExecutorOptions::GenerateDelay() const
+{
+    if (!Period) {
+        return TDuration::Max();
+    }
+
+    auto randomGenerator = [] {
+        return 2.0 * RandomNumber<double>() - 1.0;
+    };
+
+    // Jitter is divided by 2 for historical reasons.
+    return ApplyJitter(*Period, Jitter / 2.0, randomGenerator);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -140,6 +156,7 @@ TFiberManagerConfigPtr TFiberManagerConfig::ApplyDynamic(const TFiberManagerDyna
         result->FiberStackPoolSizes[key] = value;
     }
     UpdateYsonStructField(result->MaxIdleFibers, dynamicConfig->MaxIdleFibers);
+    result->Postprocess();
     return result;
 }
 

@@ -6,13 +6,13 @@
 
 namespace NYtTools {
     class TTimeStat;
-    using TTimeStatHolder = THolder<TTimeStat>;
+    using TTimeStatHolder = std::unique_ptr<TTimeStat>;
 
     class TUserJobStatsProxy {
     public:
         static const FHANDLE JobStatisticsHandle;
     private:
-        THolder<IOutputStream> FetchedOut;
+        std::unique_ptr<IOutputStream> FetchedOut;
         IOutputStream* UsingStream = &Cerr;
     public:
         // TODO: add inheritance

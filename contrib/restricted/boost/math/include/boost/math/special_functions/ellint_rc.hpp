@@ -1,4 +1,5 @@
 //  Copyright (c) 2006 Xiaogang Zhang, 2015 John Maddock
+//  Copyright (c) 2024 Matt Borland
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -18,12 +19,11 @@
 #pragma once
 #endif
 
-#include <boost/math/policies/error_handling.hpp>
 #include <boost/math/tools/config.hpp>
+#include <boost/math/policies/error_handling.hpp>
 #include <boost/math/special_functions/math_fwd.hpp>
 #include <boost/math/special_functions/log1p.hpp>
 #include <boost/math/constants/constants.hpp>
-#include <iostream>
 
 // Carlson's degenerate elliptic integral
 // R_C(x, y) = R_F(x, y, y) = 0.5 * \int_{0}^{\infty} (t+x)^{-1/2} (t+y)^{-1} dt
@@ -32,11 +32,11 @@
 namespace boost { namespace math { namespace detail{
 
 template <typename T, typename Policy>
-T ellint_rc_imp(T x, T y, const Policy& pol)
+BOOST_MATH_GPU_ENABLED T ellint_rc_imp(T x, T y, const Policy& pol)
 {
     BOOST_MATH_STD_USING
 
-    static const char* function = "boost::math::ellint_rc<%1%>(%1%,%1%)";
+    constexpr auto function = "boost::math::ellint_rc<%1%>(%1%,%1%)";
 
     if(x < 0)
     {
@@ -88,7 +88,7 @@ T ellint_rc_imp(T x, T y, const Policy& pol)
 } // namespace detail
 
 template <class T1, class T2, class Policy>
-inline typename tools::promote_args<T1, T2>::type 
+BOOST_MATH_GPU_ENABLED inline typename tools::promote_args<T1, T2>::type 
    ellint_rc(T1 x, T2 y, const Policy& pol)
 {
    typedef typename tools::promote_args<T1, T2>::type result_type;
@@ -100,7 +100,7 @@ inline typename tools::promote_args<T1, T2>::type
 }
 
 template <class T1, class T2>
-inline typename tools::promote_args<T1, T2>::type 
+BOOST_MATH_GPU_ENABLED inline typename tools::promote_args<T1, T2>::type 
    ellint_rc(T1 x, T2 y)
 {
    return ellint_rc(x, y, policies::policy<>());

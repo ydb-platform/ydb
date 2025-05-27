@@ -1,9 +1,3 @@
-USE plato;
+$data = [<|x:nothing(int32?)|>,<|x:just(1)|>];
 
-SELECT
-    key,
-    maybe_null is NULL as is_maybe_null,
-    always_null is NULL as is_always_null,
-    never_null is NULL as is_never_null,
-FROM Input
-ORDER BY key;
+select x is not null from as_table($data);

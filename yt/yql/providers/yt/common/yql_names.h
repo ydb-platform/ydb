@@ -22,6 +22,7 @@ const TStringBuf RowSpecAttrUseNativeYtTypes = "UseNativeYtTypes";
 const TStringBuf RowSpecAttrNativeYtTypeFlags = "NativeYtTypeFlags";
 const TStringBuf RowSpecAttrExplicitYson = "ExplicitYson";
 const TStringBuf RowSpecAttrConstraints = "Constraints";
+const TStringBuf RowSpecAttrColumnOrder = "ColumnOrder";
 
 const TStringBuf YqlReadUdfAttribute = "_yql_read_udf";
 const TStringBuf YqlReadUdfTypeConfigAttribute = "_yql_read_udf_type_config";

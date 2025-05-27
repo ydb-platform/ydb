@@ -6,9 +6,9 @@
 
 #include <ydb/core/base/events.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 
 
@@ -51,6 +51,7 @@ namespace NKikimr::NHttpProxy {
         struct TEvGrpcRequestResult : public TEventLocal<TEvGrpcRequestResult, EvGrpcRequestResult> {
             THolder<google::protobuf::Message> Message;
             THolder<NYdb::TStatus> Status;
+            THolder<THashMap<TString, TString>> QueueTags;
         };
 
         struct TEvDiscoverDatabaseEndpointRequest : public TEventLocal<TEvDiscoverDatabaseEndpointRequest, EvDiscoverDatabaseEndpointRequest> {

@@ -14,7 +14,7 @@ void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxData
     Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
     auto table = context.SS->Tables.at(pathId);
 
-    PathIdFromPathId(pathId, notice.MutablePathId());
+    pathId.ToProto(notice.MutablePathId());
     notice.SetTableSchemaVersion(table->AlterVersion + 1);
 
     bool found = false;
@@ -34,7 +34,7 @@ void FillNotice(const TPathId& pathId, TOperationContext& context, NKikimrTxData
         }
 
         Y_VERIFY_S(!found, "Too many cdc streams are planned to create"
-            << ": found# " << PathIdFromPathId(notice.GetStreamDescription().GetPathId())
+            << ": found# " << TPathId::FromProto(notice.GetStreamDescription().GetPathId())
             << ", another# " << childPathId);
         found = true;
 

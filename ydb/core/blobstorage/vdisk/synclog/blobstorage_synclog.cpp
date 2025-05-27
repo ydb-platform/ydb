@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncLog;
@@ -105,7 +106,7 @@ namespace NKikimr {
             friend class TActorBootstrapped<TSyncLogActor>;
 
             ui64 GetDbBirthLsn() {
-                Y_ABORT_UNLESS(DbBirthLsn.Defined());
+                Y_VERIFY_S(DbBirthLsn.Defined(), SlCtx->VCtx->VDiskLogPrefix);
                 return *DbBirthLsn;
             }
 
@@ -113,7 +114,7 @@ namespace NKikimr {
                 NeighborsPtr = MakeIntrusive<TSyncLogNeighbors>(SlCtx->VCtx->ShortSelfVDisk,
                                                                 SlCtx->VCtx->Top,
                                                                 SlCtx->VCtx->VDiskLogPrefix,
-                                                                ctx.ExecutorThread.ActorSystem);
+                                                                ctx.ActorSystem());
                 KeeperId = ctx.Register(CreateSyncLogKeeperActor(SlCtx, std::move(Repaired)));
                 ActiveActors.Insert(KeeperId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 TThis::Become(&TThis::StateFunc);
@@ -141,7 +142,7 @@ namespace NKikimr {
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::RACE, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
                         SlCtx->CountersMonGroup.VDiskCheckFailedPtr(), nullptr, ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx);
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx, {});
                     return;
                 }
 
@@ -160,7 +161,7 @@ namespace NKikimr {
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::BLOCKED, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
                         SlCtx->CountersMonGroup.DiskLockedPtr(), nullptr, ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx);
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx, {});
                     return;
                 }
 
@@ -180,7 +181,7 @@ namespace NKikimr {
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId, syncState,
                         true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
                         SlCtx->CountersMonGroup.UnequalGuidPtr(), nullptr, ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx);
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx, {});
                     return;
                 }
 
@@ -229,12 +230,10 @@ namespace NKikimr {
                     NeighborsPtr->UpdateSyncedLsn(vdisk, syncedLsn);
                     // get current min value
                     ui64 curMinLsn = NeighborsPtr->GlobalSyncedLsn();
-                    Y_ABORT_UNLESS(prevMinLsn <= curMinLsn,
-                             "TSyncLogActor::CutLog: currentSyncedLsn# %" PRIu64
-                             " syncedLsn# %" PRIu64 " vdisk# %s prevMinLsn# %" PRIu64
-                             " curMinLsn# %" PRIu64,
-                             currentSyncedLsn, syncedLsn, vdisk.ToString().data(),
-                             prevMinLsn, curMinLsn);
+                    Y_VERIFY_S(prevMinLsn <= curMinLsn, SlCtx->VCtx->VDiskLogPrefix
+                            << "TSyncLogActor::CutLog: currentSyncedLsn# " << currentSyncedLsn
+                            << " syncedLsn# " << syncedLsn << " vdisk# " << vdisk.ToString()
+                            << " prevMinLsn# " << prevMinLsn << " curMinLsn# " << curMinLsn);
                     if (prevMinLsn < curMinLsn) {
                         ctx.Send(KeeperId, new TEvSyncLogTrim(curMinLsn));
                     }
@@ -268,7 +267,8 @@ namespace NKikimr {
                 Y_UNUSED(ctx);
                 auto *msg = ev->Get();
                 GInfo = msg->NewInfo;
-                Y_ABORT_UNLESS(msg->NewVDiskId == msg->NewInfo->GetVDiskId(SlCtx->VCtx->ShortSelfVDisk));
+                Y_VERIFY_S(msg->NewVDiskId == msg->NewInfo->GetVDiskId(SlCtx->VCtx->ShortSelfVDisk),
+                    SlCtx->VCtx->VDiskLogPrefix);
                 SelfVDiskId = msg->NewVDiskId;
             }
 
@@ -286,6 +286,10 @@ namespace NKikimr {
                 Die(ctx);
             }
 
+            void Handle(TEvListChunks::TPtr ev, const TActorContext& ctx) {
+                ctx.Send(ev->Forward(KeeperId));
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -299,6 +303,7 @@ namespace NKikimr {
                 HFunc(TEvVGenerationChange, Handle)
                 HFunc(TEvents::TEvCompleted, HandleActorCompletion)
                 HFunc(TEvents::TEvPoisonPill, HandlePoison)
+                HFunc(TEvListChunks, Handle)
             )
 
         public:
@@ -333,4 +338,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

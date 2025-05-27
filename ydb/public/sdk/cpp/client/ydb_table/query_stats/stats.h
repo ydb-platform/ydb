@@ -19,7 +19,7 @@ namespace Ydb {
     }
 }
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TProtoAccessor;
 

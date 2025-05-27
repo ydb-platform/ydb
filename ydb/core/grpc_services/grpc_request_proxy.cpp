@@ -77,7 +77,8 @@ private:
     void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
     void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
-    void MaybeStartTracing(IRequestProxyCtx& ctx);
+    template<class TEvent>
+    void MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& event);
 
     static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
@@ -153,7 +154,7 @@ private:
             return;
         }
 
-        MaybeStartTracing(*requestBaseCtx);
+        MaybeStartTracing(event);
 
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
@@ -226,6 +227,25 @@ private:
         }
 
         if (database) {
+            TVector<std::pair<TString, TString>> rootAttributes;
+            auto rootIt = Databases.find(RootDatabase);
+            if (rootIt == Databases.end() || !rootIt->second.IsDatabaseReady() || !rootIt->second.SchemeBoardResult) {
+                Counters->IncDatabaseUnavailableCounter();
+                const TString error = "Grpc proxy is not ready to accept request, root database unknown";
+                LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
+                const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
+                requestBaseCtx->RaiseIssue(issue);
+                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+                requestBaseCtx->FinishSpan();
+                return;
+            }
+
+            const auto& schemeData = rootIt->second.SchemeBoardResult->DescribeSchemeResult;
+            rootAttributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
+            for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
+                rootAttributes.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
+            }
+
             if (database->SchemeBoardResult) {
                 const auto& domain = database->SchemeBoardResult->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
                 if (domain.HasResourcesDomainKey() && !skipResourceCheck && DynamicNode) {
@@ -271,6 +291,7 @@ private:
                 event.Release(),
                 Counters,
                 skipCheckConnectRigths,
+                rootAttributes,
                 this));
             return;
         }
@@ -436,7 +457,9 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     return false;
 }
 
-void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
+template<class TEvent>
+void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& event) {
+    IRequestProxyCtx& ctx = *event->Get();
     auto isTracingDecided = ctx.IsTracingDecided();
     if (!isTracingDecided) {
         return;
@@ -445,11 +468,12 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
         return;
     }
 
-    NWilson::TTraceId traceId;
-    if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef(), TComponentTracingLevels::ProductionVerbose);
+    NWilson::TTraceId traceId = NWilson::TTraceId(event->TraceId); // Can be not empty in case of internal subrequests // In this case it is part of the big request
+    if (!traceId) {
+        TMaybe<TString> traceparentHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER);
+        traceId = NJaegerTracing::HandleTracing(ctx.GetRequestDiscriminator(), traceparentHeader);
     }
-    NJaegerTracing::HandleTracing(traceId, ctx.GetRequestDiscriminator());
+
     if (traceId) {
         NWilson::TSpan grpcRequestProxySpan(TWilsonGrpc::RequestProxy, std::move(traceId), "GrpcRequestProxy");
         if (auto database = ctx.GetDatabaseName()) {

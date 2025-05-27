@@ -34,7 +34,7 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
                 return TConclusionStatus::Fail("Undefined operation for RESOURCE_POOL_CLASSIFIER object");
         }
     } catch (...) {
-        return TConclusionStatus::Fail(CurrentExceptionMessage());
+        return TConclusionStatus::Fail(TStringBuilder() << "Internal error. Got unexpected exception during preparation of RESOURCE_POOL_CLASSIFIER modification operation: " << CurrentExceptionMessage());
     }
 }
 
@@ -42,7 +42,9 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
     NMetadata::NInternal::TTableRecord result = GetResourcePoolClassifierRecord(settings, context);
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
-    featuresExtractor.ValidateResetFeatures();
+    if (auto error = featuresExtractor.ValidateResetFeatures()) {
+        return TConclusionStatus::Fail(TStringBuilder() << "Invalid reset properties: " << *error);
+    }
 
     NJson::TJsonValue configJson = NJson::JSON_MAP;
     TClassifierSettings resourcePoolClassifierSettings;
@@ -50,12 +52,12 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
         if (std::optional<TString> value = featuresExtractor.Extract(property)) {
             try {
                 std::visit(TClassifierSettings::TParser{*value}, setting);
-            } catch (...) {
-                throw yexception() << "Failed to parse property " << property << ": " << CurrentExceptionMessage();
+            } catch (const yexception& error) {
+                return TConclusionStatus::Fail(TStringBuilder() << "Failed to parse property " << property << ": " << error.what());
             }
         } else if (featuresExtractor.ExtractResetFeature(property)) {
             if (property == "resource_pool") {
-                ythrow yexception() << "Cannot reset required property resource_pool";
+                return TConclusionStatus::Fail("Cannot reset required property resource_pool");
             }
         } else {
             continue;
@@ -71,23 +73,25 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
 
     if (context.GetActivityType() == EActivityType::Create) {
         if (!configJson.GetMap().contains("resource_pool")) {
-            ythrow yexception() << "Missing required property resource_pool";
+            return TConclusionStatus::Fail("Missing required property resource_pool");
         }
 
         static const TString extraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
         const auto& name = settings.GetObjectId();
         if (const auto brokenAt = PathPartBrokenAt(name, extraPathSymbolsAllowed); brokenAt != name.end()) {
-            ythrow yexception() << "Symbol '" << *brokenAt << "'" << " is not allowed in the resource pool classifier name '" << name << "'";
+            return TConclusionStatus::Fail(TStringBuilder()<< "Symbol '" << *brokenAt << "' is not allowed in the resource pool classifier name '" << name << "'");
         }
     }
-    resourcePoolClassifierSettings.Validate();
+    if (auto error = resourcePoolClassifierSettings.Validate()) {
+        return TConclusionStatus::Fail(TStringBuilder() << "Invalid resource pool classifier settings: " << *error);
+    }
 
     NJsonWriter::TBuf writer;
     writer.WriteJsonValue(&configJson);
     result.SetColumn(TResourcePoolClassifierConfig::TDecoder::ConfigJson, NMetadata::NInternal::TYDBValue::Utf8(writer.Str()));
 
     if (!featuresExtractor.IsFinished()) {
-        ythrow yexception() << "Unknown property: " << featuresExtractor.GetRemainedParamsString();
+        return TConclusionStatus::Fail(TStringBuilder() << "Unknown property: " << featuresExtractor.GetRemainedParamsString());
     }
 
     return result;

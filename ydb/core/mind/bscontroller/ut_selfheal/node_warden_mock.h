@@ -5,6 +5,12 @@
 #include "vdisk_mock.h"
 #include "events.h"
 
+namespace NKikimr {
+namespace NPDisk {
+extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
+}
+}
+
 enum class EState {
     INITIAL,
     CONNECTED,
@@ -174,7 +180,8 @@ public:
     }
 
     void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-        Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig(), nullptr));
+        Send(ev->Sender, new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(),
+            nullptr, false, nullptr));
     }
 
     STRICT_STFUNC(StateFunc, {

@@ -42,7 +42,7 @@ jobs:
           git clean -fd > /dev/null
           if [ -s $conflicts_file ];then
             echo "Conflicts detected, trying to remove referenced CMakeLists* files"
-            grep -E -o '\s\S*CMakeLists\S*\s' $conflicts_file | xargs rm
+            grep -E -o '\s\S*CMakeLists\S*\s' $conflicts_file | xargs rm -f
             git add .
             git commit -m "Remove conflicted CMakeLists"
           else

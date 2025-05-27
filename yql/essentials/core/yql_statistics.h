@@ -1,11 +1,15 @@
 #pragma once
 
+#include "yql_cost_function.h"
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/histogram/eq_width_histogram.h>
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 
 #include <library/cpp/json/json_reader.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 #include <util/generic/string.h>
 #include <optional>
@@ -35,6 +39,7 @@ struct TColumnStatistics {
     std::optional<double> NumUniqueVals;
     std::optional<double> HyperLogLog;
     std::shared_ptr<NKikimr::TCountMinSketch> CountMinSketch;
+    std::shared_ptr<NKikimr::TEqWidthHistogramEstimator> EqWidthHistogramEstimator;
     TString Type;
 
     TColumnStatistics() {}
@@ -50,7 +55,7 @@ struct TColumnStatistics {
 struct TOptimizerStatistics {
     struct TKeyColumns : public TSimpleRefCount<TKeyColumns> {
         TVector<TString> Data;
-        TKeyColumns(const TVector<TString>& vec) : Data(vec) {}
+        TKeyColumns(TVector<TString> data) : Data(std::move(data)) {}
     };
 
     struct TSortColumns : public TSimpleRefCount<TSortColumns> {
@@ -65,7 +70,25 @@ struct TOptimizerStatistics {
     struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
         THashMap<TString,TColumnStatistics> Data;
         TColumnStatMap() {}
-        TColumnStatMap(const THashMap<TString,TColumnStatistics>& map) : Data(map) {}
+        TColumnStatMap(THashMap<TString,TColumnStatistics> data) : Data(std::move(data)) {}
+    };
+
+    struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {
+        TVector<NDq::TJoinColumn> Data;
+        TShuffledByColumns(TVector<NDq::TJoinColumn> data) : Data(std::move(data)) {}
+        TString ToString() {
+            TString result;
+
+            for (const auto& column: Data) {
+                result.append(column.RelName).append(".").append(column.AttributeName).append(", ");
+            }
+            if (!result.empty()) {
+                result.pop_back();
+                result.pop_back();
+            }
+
+            return result;
+        }
     };
 
     EStatisticsType Type = BaseTable;
@@ -76,10 +99,17 @@ struct TOptimizerStatistics {
     double Selectivity = 1.0;
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
-    EStorageType StorageType = EStorageType::NA;
+    TIntrusivePtr<TShuffledByColumns> ShuffledByColumns;
     TIntrusivePtr<TSortColumns> SortColumns;
+    EStorageType StorageType = EStorageType::NA;
     std::shared_ptr<IProviderStatistics> Specific;
     std::shared_ptr<TVector<TString>> Labels = {};
+
+    TString SourceTableName;
+    TSimpleSharedPtr<THashSet<TString>> Aliases;
+    TIntrusivePtr<NDq::TTableAliasMap> TableAliases;
+    NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
+    std::optional<std::size_t> ShuffleOrderingIdx;
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics& operator=(TOptimizerStatistics&&) = default;
@@ -96,7 +126,8 @@ struct TOptimizerStatistics {
         TIntrusivePtr<TKeyColumns> keyColumns = {},
         TIntrusivePtr<TColumnStatMap> columnMap = {},
         EStorageType storageType = EStorageType::NA,
-        std::shared_ptr<IProviderStatistics> specific = nullptr);
+        std::shared_ptr<IProviderStatistics> specific = nullptr
+    );
 
     TOptimizerStatistics& operator+=(const TOptimizerStatistics& other);
     bool Empty() const;

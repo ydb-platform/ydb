@@ -7,7 +7,6 @@
 #include <util/generic/vector.h>
 
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/executor_thread.h>
 
 #define AUDIT_LOG_S(sys, expr)                                                                                                  \
     do {                                                                                                                        \
@@ -18,7 +17,7 @@
         }                                                                                                                       \
     } while (0) /**/
 
-#define AUDIT_LOG(expr) AUDIT_LOG_S((::NActors::TlsActivationContext->ExecutorThread.ActorSystem), expr)
+#define AUDIT_LOG(expr) AUDIT_LOG_S((::NActors::TActivationContext::ActorSystem()), expr)
 
 #define AUDIT_PART_NO_COND(key, value) AUDIT_PART_COND(key, value, true)
 #define AUDIT_PART_COND(key, value, condition)                                                                                    \

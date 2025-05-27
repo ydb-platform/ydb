@@ -1,15 +1,15 @@
 #pragma once
 
+#include <yt/yt/client/election/public.h>
+
+#include <yt/yt/client/job_tracker_client/public.h>
+
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/guid.h>
 #include <library/cpp/yt/misc/hash.h>
-
-#include <yt/yt/client/election/public.h>
-#include <yt/yt/client/job_tracker_client/public.h>
-
 #include <library/cpp/yt/misc/strong_typedef.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h>
+#include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <library/cpp/yt/string/string_builder.h>
 
@@ -35,6 +35,8 @@ YT_DEFINE_ERROR_ENUM(
     ((InvalidObjectType)                         (1006))
     ((RequestInvolvesSequoia)                    (1007))
     ((RequestInvolvesCypress)                    (1008))
+    ((BeginCopyDeprecated)                       (1009))
+    ((PrerequisitePathDifferFromExecutionPaths)  (1010))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,6 +148,7 @@ DEFINE_ENUM(EObjectType,
     ((ChunkMap)                                     (402))
     ((LostChunkMap)                                 (403))
     ((LostVitalChunkMap)                            (413))
+    ((LostVitalChunksSampleMap)                     (464))
     ((PrecariousChunkMap)                           (410))
     ((PrecariousVitalChunkMap)                      (411))
     ((OverreplicatedChunkMap)                       (404))
@@ -199,6 +202,7 @@ DEFINE_ENUM(EObjectType,
     ((ErasureJournalChunkPart_15)                   (140))
     ((ChunkLocation)                                (141))
     ((ChunkLocationMap)                             (142))
+    ((NbdChunk)                                     (143))
 
     // The following represent versioned objects (AKA Cypress nodes).
     // These must be created by calling TCypressYPathProxy::Create.
@@ -339,12 +343,15 @@ DEFINE_ENUM(EObjectType,
     ((ChaosReplicatedTable)                        (1206))
     ((ReplicationCardCollocation)                  (1207))
     ((VirtualChaosCellMap)                         (1208))
+    ((ChaosLease)                                  (1209))
 
-    // Maintenance tracker stuff
+    // Other cluster components stuff
     ((ClusterProxyNode)                            (1500))
+    ((CypressProxyObject)                          (1501))
+    ((CypressProxyMap)                              (465))
 
     // Zookeeper stuff
-    ((ZookeeperShard)                              (1400))
+    // COMPAT(babenko): drop completely
     ((ZookeeperShardMap)                           (1401))
 
     // Flow stuff

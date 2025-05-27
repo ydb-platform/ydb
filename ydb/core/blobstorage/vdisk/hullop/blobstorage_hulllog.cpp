@@ -37,7 +37,7 @@ namespace NKikimr {
             }
 
             if (HugeKeeperNotice) {
-                Y_ABORT_UNLESS(HugeKeeperId);
+                Y_VERIFY_S(HugeKeeperId, VCtx->VDiskLogPrefix);
                 actorSystem->Send(HugeKeeperId, HugeKeeperNotice.release());
             }
         }

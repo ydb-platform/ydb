@@ -1,6 +1,7 @@
 # mypy: ignore-errors
 from __future__ import annotations
 
+import itertools
 import railroad
 import pyparsing
 import dataclasses
@@ -40,7 +41,7 @@ jinja2_template_source = """\
 {{ body | safe }}
 {% for diagram in diagrams %}
     <div class="railroad-group">
-        <h1 class="railroad-heading">{{ diagram.title }}</h1>
+        <h1 class="railroad-heading" id="{{ diagram.bookmark }}">{{ diagram.title }}</h1>
         <div class="railroad-description">{{ diagram.text }}</div>
         <div class="railroad-svg">
             {{ diagram.svg }}
@@ -56,8 +57,35 @@ jinja2_template_source = """\
 template = Template(jinja2_template_source)
 
 
+_bookmark_lookup = {}
+_bookmark_ids = itertools.count(start=1)
+
+def _make_bookmark(s: str) -> str:
+    """
+    Converts a string into a valid HTML bookmark (ID or anchor name).
+    """
+    if s in _bookmark_lookup:
+        return _bookmark_lookup[s]
+
+    # Replace invalid characters with hyphens and ensure only valid characters
+    bookmark = re.sub(r'[^a-zA-Z0-9-]+', '-', s)
+
+    # Ensure it starts with a letter by adding 'z' if necessary
+    if not bookmark[:1].isalpha():
+        bookmark = f"z{bookmark}"
+
+    # Convert to lowercase and strip hyphens
+    bookmark = bookmark.lower().strip('-')
+
+    _bookmark_lookup[s] = bookmark = f"{bookmark}-{next(_bookmark_ids):04d}"
+
+    return bookmark
+
+
 def _collapse_verbose_regex(regex_str: str) -> str:
-    collapsed = pyparsing.Regex(r"#.*").suppress().transform_string(regex_str)
+    if "\n" not in regex_str:
+        return regex_str
+    collapsed = pyparsing.Regex(r"#.*$").suppress().transform_string(regex_str)
     collapsed = re.sub(r"\s*\n\s*", "", collapsed)
     return collapsed
 
@@ -71,6 +99,11 @@ class NamedDiagram:
     name: str
     index: int
     diagram: railroad.DiagramItem = None
+
+    @property
+    def bookmark(self):
+        bookmark = _make_bookmark(self.name)
+        return bookmark
 
 
 T = TypeVar("T")
@@ -87,7 +120,7 @@ class EachItem(railroad.Group):
 
     all_label = "[ALL]"
 
-    def __init__(self, *items):
+    def __init__(self, *items) -> None:
         choice_item = railroad.Choice(len(items) - 1, *items)
         one_or_more_item = railroad.OneOrMore(item=choice_item)
         super().__init__(one_or_more_item, label=self.all_label)
@@ -98,8 +131,8 @@ class AnnotatedItem(railroad.Group):
     Simple subclass of Group that creates an annotation label
     """
 
-    def __init__(self, label: str, item):
-        super().__init__(item=item, label=f"[{label}]")
+    def __init__(self, label: str, item) -> None:
+        super().__init__(item=item, label=f"[{label}]" if label else "")
 
 
 class EditablePartial(Generic[T]):
@@ -111,7 +144,7 @@ class EditablePartial(Generic[T]):
     # We need this here because the railroad constructors actually transform the data, so can't be called until the
     # entire tree is assembled
 
-    def __init__(self, func: Callable[..., T], args: list, kwargs: dict):
+    def __init__(self, func: Callable[..., T], args: list, kwargs: dict) -> None:
         self.func = func
         self.args = args
         self.kwargs = kwargs
@@ -162,7 +195,11 @@ def railroad_to_html(diagrams: list[NamedDiagram], embed=False, **kwargs) -> str
         title = diagram.name
         if diagram.index == 0:
             title += " (root)"
-        data.append({"title": title, "text": "", "svg": io.getvalue()})
+        data.append(
+            {
+                "title": title, "text": "", "svg": io.getvalue(), "bookmark": diagram.bookmark
+            }
+        )
 
     return template.render(diagrams=data, embed=embed, **kwargs)
 
@@ -189,6 +226,7 @@ def to_railroad(
     vertical: int = 3,
     show_results_names: bool = False,
     show_groups: bool = False,
+    show_hidden: bool = False,
 ) -> list[NamedDiagram]:
     """
     Convert a pyparsing element tree into a list of diagrams. This is the recommended entrypoint to diagram
@@ -201,6 +239,8 @@ def to_railroad(
        included in the diagram
     :param show_groups - bool to indicate whether groups should be highlighted with an unlabeled
        surrounding box
+    :param show_hidden - bool to indicate whether internal elements that are typically hidden
+       should be shown
     """
     # Convert the whole tree underneath the root
     lookup = ConverterState(diagram_kwargs=diagram_kwargs or {})
@@ -211,6 +251,7 @@ def to_railroad(
         vertical=vertical,
         show_results_names=show_results_names,
         show_groups=show_groups,
+        show_hidden=show_hidden,
     )
 
     root_id = id(element)
@@ -311,7 +352,7 @@ class ConverterState:
     Stores some state that persists between recursions into the element tree
     """
 
-    def __init__(self, diagram_kwargs: typing.Optional[dict] = None):
+    def __init__(self, diagram_kwargs: typing.Optional[dict] = None) -> None:
         #: A dictionary mapping ParserElements to state relating to them
         self._element_diagram_states: dict[int, ElementState] = {}
         #: A dictionary mapping ParserElement IDs to subdiagrams generated from them
@@ -335,6 +376,12 @@ class ConverterState:
 
     def __contains__(self, key: int):
         return key in self._element_diagram_states
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
 
     def generate_unnamed(self) -> int:
         """
@@ -360,7 +407,8 @@ class ConverterState:
 
         # Replace the original definition of this element with a regular block
         if position.parent:
-            ret = EditablePartial.from_call(railroad.NonTerminal, text=position.name)
+            href = f"#{_make_bookmark(position.name)}"
+            ret = EditablePartial.from_call(railroad.NonTerminal, text=position.name, href=href)
             if "item" in position.parent.kwargs:
                 position.parent.kwargs["item"] = ret
             elif "items" in position.parent.kwargs:
@@ -409,6 +457,7 @@ def _apply_diagram_item_enhancements(fn):
         name_hint: str = None,
         show_results_names: bool = False,
         show_groups: bool = False,
+        show_hidden: bool = False,
     ) -> typing.Optional[EditablePartial]:
         ret = fn(
             element,
@@ -419,6 +468,7 @@ def _apply_diagram_item_enhancements(fn):
             name_hint,
             show_results_names,
             show_groups,
+            show_hidden,
         )
 
         # apply annotation for results name, if present
@@ -447,7 +497,7 @@ def _visible_exprs(exprs: Iterable[pyparsing.ParserElement]):
     return [
         e
         for e in exprs
-        if not (e.customName or e.resultsName or isinstance(e, non_diagramming_exprs))
+        if not isinstance(e, non_diagramming_exprs)
     ]
 
 
@@ -461,6 +511,7 @@ def _to_diagram_element(
     name_hint: str = None,
     show_results_names: bool = False,
     show_groups: bool = False,
+    show_hidden: bool = False,
 ) -> typing.Optional[EditablePartial]:
     """
     Recursively converts a PyParsing Element to a railroad Element
@@ -472,8 +523,9 @@ def _to_diagram_element(
     do so
     :param name_hint: If provided, this will override the generated name
     :param show_results_names: bool flag indicating whether to add annotations for results names
-    :returns: The converted version of the input element, but as a Partial that hasn't yet been constructed
     :param show_groups: bool flag indicating whether to show groups using bounding box
+    :param show_hidden: bool flag indicating whether to show elements that are typically hidden
+    :returns: The converted version of the input element, but as a Partial that hasn't yet been constructed
     """
     exprs = element.recurse()
     name = name_hint or element.customName or type(element).__name__
@@ -489,7 +541,7 @@ def _to_diagram_element(
             element,
             (
                 # pyparsing.TokenConverter,
-                # pyparsing.Forward,
+                pyparsing.Forward,
                 pyparsing.Located,
             ),
         ):
@@ -509,29 +561,38 @@ def _to_diagram_element(
                     name_hint=propagated_name,
                     show_results_names=show_results_names,
                     show_groups=show_groups,
+                    show_hidden=show_hidden,
                 )
 
     # If the element isn't worth extracting, we always treat it as the first time we say it
     if _worth_extracting(element):
-        if el_id in lookup and lookup[el_id].name is not None:
+        looked_up = lookup.get(el_id)
+        if looked_up and looked_up.name is not None:
             # If we've seen this element exactly once before, we are only just now finding out that it's a duplicate,
             # so we have to extract it into a new diagram.
-            looked_up = lookup[el_id]
             looked_up.mark_for_extraction(el_id, lookup, name=name_hint)
-            ret = EditablePartial.from_call(railroad.NonTerminal, text=looked_up.name)
+            href = f"#{_make_bookmark(looked_up.name)}"
+            ret = EditablePartial.from_call(railroad.NonTerminal, text=looked_up.name, href=href)
             return ret
 
         elif el_id in lookup.diagrams:
             # If we have seen the element at least twice before, and have already extracted it into a subdiagram, we
             # just put in a marker element that refers to the sub-diagram
+            text = lookup.diagrams[el_id].kwargs["name"]
             ret = EditablePartial.from_call(
-                railroad.NonTerminal, text=lookup.diagrams[el_id].kwargs["name"]
+                railroad.NonTerminal, text=text, href=f"#{_make_bookmark(text)}"
             )
             return ret
 
     # Recursively convert child elements
     # Here we find the most relevant Railroad element for matching pyparsing Element
     # We use ``items=[]`` here to hold the place for where the child elements will go once created
+
+    # see if this element is normally hidden, and whether hidden elements are desired
+    # if not, just return None
+    if not element.show_in_diagram and not show_hidden:
+        return None
+
     if isinstance(element, pyparsing.And):
         # detect And's created with ``expr*N`` notation - for these use a OneOrMore with a repeat
         # (all will have the same name, and resultsName)
@@ -566,7 +627,9 @@ def _to_diagram_element(
         if show_groups:
             ret = EditablePartial.from_call(AnnotatedItem, label="", item="")
         else:
-            ret = EditablePartial.from_call(railroad.Sequence, items=[])
+            ret = EditablePartial.from_call(
+                railroad.Group, item=None, label=element_results_name
+            )
     elif isinstance(element, pyparsing.TokenConverter):
         label = type(element).__name__.lower()
         if label == "tokenconverter":
@@ -585,6 +648,7 @@ def _to_diagram_element(
                 name_hint,
                 show_results_names,
                 show_groups,
+                show_hidden,
             ]
             return _to_diagram_element(
                 (~element.not_ender.expr + element.expr)[1, ...].set_name(element.name),
@@ -601,16 +665,13 @@ def _to_diagram_element(
                 name_hint,
                 show_results_names,
                 show_groups,
+                show_hidden,
             ]
             return _to_diagram_element(
                 (~element.not_ender.expr + element.expr)[...].set_name(element.name),
                 *args,
             )
         ret = EditablePartial.from_call(railroad.ZeroOrMore, item="")
-    elif isinstance(element, pyparsing.Group):
-        ret = EditablePartial.from_call(
-            railroad.Group, item=None, label=element_results_name
-        )
     elif isinstance(element, pyparsing.Empty) and not element.customName:
         # Skip unnamed "Empty" elements
         ret = None
@@ -619,10 +680,8 @@ def _to_diagram_element(
     elif len(exprs) > 0 and not element_results_name:
         ret = EditablePartial.from_call(railroad.Group, item="", label=name)
     elif isinstance(element, pyparsing.Regex):
-        patt = _collapse_verbose_regex(element.pattern)
-        element.pattern = patt
-        element._defaultName = None
-        ret = EditablePartial.from_call(railroad.Terminal, element.defaultName)
+        collapsed_patt = _collapse_verbose_regex(element.pattern)
+        ret = EditablePartial.from_call(railroad.Terminal, collapsed_patt)
     elif len(exprs) > 0:
         ret = EditablePartial.from_call(railroad.Sequence, items=[])
     else:
@@ -657,6 +716,7 @@ def _to_diagram_element(
             index=i,
             show_results_names=show_results_names,
             show_groups=show_groups,
+            show_hidden=show_hidden,
         )
 
         # Some elements don't need to be shown in the diagram
@@ -685,8 +745,10 @@ def _to_diagram_element(
     if el_id in lookup and lookup[el_id].extract and lookup[el_id].complete:
         lookup.extract_into_diagram(el_id)
         if ret is not None:
+            text = lookup.diagrams[el_id].kwargs["name"]
+            href = f"#{_make_bookmark(text)}"
             ret = EditablePartial.from_call(
-                railroad.NonTerminal, text=lookup.diagrams[el_id].kwargs["name"]
+                railroad.NonTerminal, text=text, href=href
             )
 
     return ret

@@ -20,6 +20,12 @@ void FormatValue(TStringBuilderBase* builder, const TSharedRange<T>& collection,
     NYT::FormatRange(builder, collection, TDefaultFormatter());
 }
 
+template <std::ranges::view T>
+void FormatValue(TStringBuilderBase* builder, const T& collection, TStringBuf /*spec*/)
+{
+    NYT::FormatRange(builder, collection, TDefaultFormatter());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

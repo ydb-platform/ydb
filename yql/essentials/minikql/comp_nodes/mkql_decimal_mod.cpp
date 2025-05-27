@@ -53,7 +53,7 @@ public:
                 IsLeftOptional ? left : right;
 
             result->addIncoming(zero, block);
-            BranchInst::Create(done, good, IsEmpty(test, block), block);
+            BranchInst::Create(done, good, IsEmpty(test, block, context), block);
 
             block = good;
 
@@ -156,7 +156,7 @@ public:
                 IsLeftOptional ? left : right;
 
             result->addIncoming(zero, block);
-            BranchInst::Create(done, good, IsEmpty(test, block), block);
+            BranchInst::Create(done, good, IsEmpty(test, block, context), block);
 
             block = good;
 

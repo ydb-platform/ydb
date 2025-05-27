@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/formats/arrow/serializer
+    ydb/core/tx/tiering/tier
 )
 
 END()

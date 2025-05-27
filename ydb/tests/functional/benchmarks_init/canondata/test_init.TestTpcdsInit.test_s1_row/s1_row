@@ -18,6 +18,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/customer_address` (
     PRIMARY KEY (ca_address_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -34,6 +36,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/customer_demographics` (
     PRIMARY KEY (cd_demo_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -69,6 +73,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/date_dim` (
     PRIMARY KEY (d_date_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -90,6 +96,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/warehouse` (
     PRIMARY KEY (w_warehouse_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -103,6 +111,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/ship_mode` (
     PRIMARY KEY (sm_ship_mode_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -120,6 +130,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/time_dim` (
     PRIMARY KEY (t_time_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -130,6 +142,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/reason` (
     PRIMARY KEY (r_reason_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -140,6 +154,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/income_band` (
     PRIMARY KEY (ib_income_band_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -169,6 +185,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/item` (
     PRIMARY KEY (i_item_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -205,6 +223,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/store` (
     PRIMARY KEY (s_store_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -243,6 +263,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/call_center` (
     PRIMARY KEY (cc_call_center_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -268,6 +290,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/customer` (
     PRIMARY KEY (c_customer_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -301,6 +325,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_site` (
     PRIMARY KEY (web_site_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -328,6 +354,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/store_returns` (
     PRIMARY KEY (sr_item_sk, sr_ticket_number)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -340,6 +368,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/household_demographics` (
     PRIMARY KEY (hd_demo_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -361,6 +391,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_page` (
     PRIMARY KEY (wp_web_page_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -387,6 +419,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/promotion` (
     PRIMARY KEY (p_promo_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -403,6 +437,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/catalog_page` (
     PRIMARY KEY (cp_catalog_page_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -414,6 +450,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/inventory` (
     PRIMARY KEY (inv_date_sk, inv_item_sk, inv_warehouse_sk)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -448,6 +486,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/catalog_returns` (
     PRIMARY KEY (cr_item_sk, cr_order_number)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -479,6 +519,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_returns` (
     PRIMARY KEY (wr_item_sk, wr_order_number)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -520,6 +562,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/web_sales` (
     PRIMARY KEY (ws_item_sk, ws_order_number)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -561,6 +605,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/catalog_sales` (
     PRIMARY KEY (cs_item_sk, cs_order_number)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -591,6 +637,8 @@ CREATE TABLE `/Root/db/Root/db/tpcds/s1/store_sales` (
     PRIMARY KEY (ss_item_sk, ss_ticket_number)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 

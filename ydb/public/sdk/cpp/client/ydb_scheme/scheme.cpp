@@ -11,7 +11,7 @@
 
 #include <util/string/join.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NScheme {
 
 using namespace NThreading;

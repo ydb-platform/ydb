@@ -38,7 +38,7 @@ public:
             const auto result = PHINode::Create(collection->getType(), 2U, "result", done);
 
             result->addIncoming(collection, block);
-            BranchInst::Create(done, good, IsEmpty(collection, block), block);
+            BranchInst::Create(done, good, IsEmpty(collection, block, context), block);
             block = good;
 
             const auto length = CallBoxedValueVirtualMethod<IsDict ? NUdf::TBoxedValueAccessor::EMethod::GetDictLength : NUdf::TBoxedValueAccessor::EMethod::GetListLength>(Type::getInt64Ty(context), collection, ctx.Codegen, block);

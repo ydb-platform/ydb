@@ -819,4 +819,54 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
+    template <typename T>
+    void PqTransactions(bool enable) {
+        T t;
+        t.GetTestEnvOptions()
+            .EnableChangefeedInitialScan(true)
+            .EnablePQConfigTransactionsAtSchemeShard(enable);
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                  State: ECdcStreamStateScan
+                }
+            )");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                NKikimrSchemeOp::ECdcStreamState state;
+                do {
+                    runtime.SimulateSleep(TDuration::Seconds(1));
+                    state = DescribePrivatePath(runtime, "/MyRoot/Table/Stream")
+                        .GetPathDescription().GetCdcStreamDescription().GetState();
+                } while (state != NKikimrSchemeOp::ECdcStreamStateReady);
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(WithoutPqTransactions) {
+        PqTransactions<T>(false);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS(WithPqTransactions) {
+        PqTransactions<T>(true);
+    }
+
 } // TCdcStreamWithRebootsTests

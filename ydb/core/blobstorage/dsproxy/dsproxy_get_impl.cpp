@@ -365,7 +365,7 @@ void TGetImpl::OnVPutResult(TLogContext &logCtx, TEvBlobStorage::TEvVPutResult &
         case NKikimrProto::ERROR:
         case NKikimrProto::VDISK_ERROR_STATE:
         case NKikimrProto::OUT_OF_SPACE:
-            Blackboard.AddErrorResponse(blob, orderNumber);
+            Blackboard.AddErrorResponse(blob, orderNumber, record.GetErrorReason());
             break;
         case NKikimrProto::OK:
         case NKikimrProto::ALREADY:

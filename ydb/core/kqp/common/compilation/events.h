@@ -126,16 +126,14 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {
-    TEvCompileResponse(const TKqpCompileResult::TConstPtr& compileResult, NLWTrace::TOrbit orbit = {}, const std::optional<TString>& replayMessage = std::nullopt)
+    TEvCompileResponse(const TKqpCompileResult::TConstPtr& compileResult, NLWTrace::TOrbit orbit = {})
         : CompileResult(compileResult)
-        , ReplayMessage(replayMessage)
         , Orbit(std::move(orbit)) {
     }
 
     TKqpCompileResult::TConstPtr CompileResult;
     TKqpStatsCompile Stats;
     std::optional<TString> ReplayMessage;
-    std::optional<TString> ReplayMessageUserView;
 
     NLWTrace::TOrbit Orbit;
 };

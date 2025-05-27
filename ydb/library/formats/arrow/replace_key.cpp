@@ -12,4 +12,8 @@ size_t TReplaceKeyHelper::LowerBound(const std::vector<TRawReplaceKey>& batchKey
     return it - batchKeys.begin();
 }
 
+TReplaceKeyView TReplaceKey::GetView() const {
+    return TReplaceKeyView(*GetColumns(), GetPosition());
+}
+
 }

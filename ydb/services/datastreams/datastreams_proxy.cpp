@@ -11,11 +11,13 @@
 #include <ydb/core/persqueue/partition.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/events/internal.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
+#include <ydb/core/persqueue/list_all_topics_actor.h>
 
 #include <util/folder/path.h>
 
@@ -914,13 +916,9 @@ namespace NKikimr::NDataStreams::V1 {
         void Bootstrap(const NActors::TActorContext& ctx);
 
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvPQ::TEvListAllTopicsResponse::TPtr& ev, const TActorContext& ctx);
 
     protected:
-        void SendNavigateRequest(const TActorContext& ctx, const TString& path);
-        void SendPendingRequests(const TActorContext& ctx);
-        void SendResponse(const TActorContext& ctx);
-
         void ReplyWithError(Ydb::StatusIds::StatusCode status, NYds::EErrorCodes errorCode,
                             const TString& messageText, const NActors::TActorContext& ctx) {
 
@@ -928,13 +926,6 @@ namespace NKikimr::NDataStreams::V1 {
             this->Request_->ReplyWithYdbStatus(status);
             this->Die(ctx);
         }
-
-    private:
-        static constexpr ui32 MAX_IN_FLIGHT = 100;
-
-        ui32 RequestsInFlight = 0;
-        std::vector<std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet>> WaitingList;
-        std::vector<TString> Topics;
     };
 
     TListStreamsActor::TListStreamsActor(NKikimr::NGRpcService::IRequestOpCtx* request)
@@ -950,33 +941,11 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         if (this->Request_->GetSerializedToken().empty()) {
-            if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+            if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                 return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, NYds::EErrorCodes::BAD_REQUEST,
                                           "Unauthenticated access is forbidden, please provide credentials", ctx);
             }
         }
-
-        SendNavigateRequest(ctx, *Request_->GetDatabaseName());
-        Become(&TListStreamsActor::StateWork);
-    }
-
-    void TListStreamsActor::SendPendingRequests(const TActorContext& ctx) {
-        if (RequestsInFlight < MAX_IN_FLIGHT && WaitingList.size() > 0) {
-            ctx.Send(MakeSchemeCacheID(), WaitingList.back().release());
-            WaitingList.pop_back();
-            RequestsInFlight++;
-        }
-    }
-
-    void TListStreamsActor::SendResponse(const TActorContext& ctx) {
-        Y_ENSURE(WaitingList.size() == 0 && RequestsInFlight == 0);
-
-        for (TString& topic : Topics) {
-            topic = TFsPath(topic).RelativePath(*Request_->GetDatabaseName()).GetPath();
-        }
-        Sort(Topics.begin(), Topics.end());
-        Ydb::DataStreams::V1::ListStreamsResult result;
-
         int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit();
 
         if (limit > 10000) {
@@ -984,86 +953,32 @@ namespace NKikimr::NDataStreams::V1 {
             Request_->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
             return Die(ctx);
         }
-
-        result.set_has_more_streams(false);
-        for (const auto& streamName : Topics) {
-            if (GetProtoRequest()->exclusive_start_stream_name().empty()
-                || GetProtoRequest()->exclusive_start_stream_name() < streamName)
-            {
-                if (result.stream_names().size() >= limit) {
-                    result.set_has_more_streams(true);
-                    break;
-                }
-                result.add_stream_names(streamName);
-            }
-        }
-
-        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
-        Die(ctx);
+        ctx.Register(NPersQueue::MakeListAllTopicsActor(SelfId(), Request_->GetDatabaseName().GetOrElse(""),
+                                                        this->Request_->GetSerializedToken(), GetProtoRequest()->recurse(),
+                                                        GetProtoRequest()->exclusive_start_stream_name(), limit));
+        Become(&TListStreamsActor::StateWork);
     }
 
-    void TListStreamsActor::SendNavigateRequest(const TActorContext& ctx, const TString &path) {
-        auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        schemeCacheRequest->DatabaseName = Request().GetDatabaseName().GetRef();
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-        entry.Path = NKikimr::SplitPath(path);
-
-        if (!this->Request_->GetSerializedToken().empty()) {
-            schemeCacheRequest->UserToken = new NACLib::TUserToken(this->Request_->GetSerializedToken());
-        }
-
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-        schemeCacheRequest->ResultSet.emplace_back(entry);
-        WaitingList.push_back(std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
-        SendPendingRequests(ctx);
-    }
 
     void TListStreamsActor::StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            HFunc(TEvPQ::TEvListAllTopicsResponse, Handle);
             default: TBase::StateWork(ev);
         }
     }
 
-    void TListStreamsActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
-        for (const auto& entry : navigate->ResultSet) {
+    void TListStreamsActor::Handle(TEvPQ::TEvListAllTopicsResponse::TPtr& ev, const TActorContext& ctx) {
+        auto topics = std::move(ev->Get()->Topics);
+        Sort(topics.begin(), topics.end());
+        Ydb::DataStreams::V1::ListStreamsResult result;
 
-
-            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindTable) {
-                for (const auto& stream : entry.CdcStreams) {
-                    TString childFullPath = JoinPath({JoinPath(entry.Path), stream.GetName()});
-                    Topics.push_back(childFullPath);
-                }
-            } else if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindPath
-                || entry.Kind == NSchemeCache::TSchemeCacheNavigate::EKind::KindSubdomain)
-            {
-                Y_ENSURE(entry.ListNodeEntry, "ListNodeEntry is zero");
-                for (const auto& child : entry.ListNodeEntry->Children) {
-                    TString childFullPath = JoinPath({JoinPath(entry.Path), child.Name});
-                    switch (child.Kind) {
-                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindPath:
-                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindTable:
-                            if (GetProtoRequest()->recurse()) {
-                                SendNavigateRequest(ctx, childFullPath);
-                            }
-                            break;
-                        case NSchemeCache::TSchemeCacheNavigate::EKind::KindTopic:
-                            Topics.push_back(childFullPath);
-                            break;
-
-                        default:
-                            break;
-                            // ignore all other types
-                    }
-                }
-            }
+        result.set_has_more_streams(ev->Get()->HaveMoreTopics);
+        for (const auto& streamName : topics) {
+            result.add_stream_names(streamName);
         }
-        RequestsInFlight--;
-        SendPendingRequests(ctx);
-        if (RequestsInFlight == 0) {
-            SendResponse(ctx);
-        }
+
+        Request_->SendResult(result, Ydb::StatusIds::SUCCESS);
+        Die(ctx);
     }
 
     //-----------------------------------------------------------------------------------
@@ -1434,7 +1349,7 @@ namespace NKikimr::NDataStreams::V1 {
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
         StreamName = NKikimr::CanonizePath(topicInfo->Path);
-        if (AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1601,7 +1516,7 @@ namespace NKikimr::NDataStreams::V1 {
         const auto &result = ev->Get()->Request.Get();
         const auto response = result->ResultSet.front();
 
-        if (AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ActorContext())->EnforceUserTokenRequirement || AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1637,8 +1552,8 @@ namespace NKikimr::NDataStreams::V1 {
         switch (record.GetStatus()) {
             case NMsgBusProxy::MSTATUS_ERROR:
                 switch (record.GetErrorCode()) {
-                    case NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
-                    case NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
+                    case ::NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET:
+                    case ::NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET:
                         Result.set_next_shard_iterator(TShardIterator(ShardIterator).Serialize());
                         Result.set_millis_behind_latest(0);
 
@@ -1861,7 +1776,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.front();
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,

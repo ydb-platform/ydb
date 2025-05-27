@@ -395,7 +395,7 @@ namespace NKikimr::NBsController {
 
                 static std::pair<TPDiskLayoutPosition, TPDiskLayoutPosition> MakeRange(const TPDiskLayoutPosition& x, TEntityId& scope) {
                     scope = x.Domain;
-                    return {x, x};
+                    return {{x.RealmGroup, x.Realm, x.Domain, TEntityId::Min()}, {x.RealmGroup, x.Realm, x.Domain, TEntityId::Max()}};
                 }
             };
 
@@ -405,7 +405,7 @@ namespace NKikimr::NBsController {
 
                 static std::pair<TPDiskLayoutPosition, TPDiskLayoutPosition> MakeRange(const TPDiskLayoutPosition& x, TEntityId& scope) {
                     scope = x.Realm;
-                    return {{x.RealmGroup, x.Realm, TEntityId::Min()}, {x.RealmGroup, x.Realm, TEntityId::Max()}};
+                    return {{x.RealmGroup, x.Realm, TEntityId::Min(), TEntityId::Min()}, {x.RealmGroup, x.Realm, TEntityId::Max(), TEntityId::Max()}};
                 }
             };
 
@@ -415,7 +415,7 @@ namespace NKikimr::NBsController {
 
                 static std::pair<TPDiskLayoutPosition, TPDiskLayoutPosition> MakeRange(const TPDiskLayoutPosition& x, TEntityId& scope) {
                     scope = x.RealmGroup;
-                    return {{x.RealmGroup, TEntityId::Min(), TEntityId::Min()}, {x.RealmGroup, TEntityId::Max(), TEntityId::Max()}};
+                    return {{x.RealmGroup, TEntityId::Min(), TEntityId::Min(), TEntityId::Min()}, {x.RealmGroup, TEntityId::Max(), TEntityId::Max(), TEntityId::Max()}};
                 }
             };
 
@@ -795,15 +795,17 @@ namespace NKikimr::NBsController {
                 }
 
                 for (ui32 orderNum = 0; orderNum < group.size(); ++orderNum) {
-                    const TVDiskIdShort vdisk = Topology.GetVDiskId(orderNum);
-                    ui32 pRealm = group[orderNum]->Position.Realm.Index();
-                    ui32 desiredPRealm = RealmNavigator[vdisk.FailRealm];
-                    if (pRealm != desiredPRealm) {
-                        if (realmOccupation[pRealm].size() > 1) {
-                            // disks from different fail realms in one Realm present
-                            failDetected(EFailLevel::REALM_FAIL, orderNum);
-                        } else {
-                            failDetected(EFailLevel::MULTIPLE_REALM_OCCUPATION, orderNum);
+                    if (group[orderNum]) {
+                        const TVDiskIdShort vdisk = Topology.GetVDiskId(orderNum);
+                        ui32 pRealm = group[orderNum]->Position.Realm.Index();
+                        ui32 desiredPRealm = RealmNavigator[vdisk.FailRealm];
+                        if (pRealm != desiredPRealm) {
+                            if (realmOccupation[pRealm].size() > 1) {
+                                // disks from different fail realms in one Realm present
+                                failDetected(EFailLevel::REALM_FAIL, orderNum);
+                            } else {
+                                failDetected(EFailLevel::MULTIPLE_REALM_OCCUPATION, orderNum);
+                            }
                         }
                     }
                 }

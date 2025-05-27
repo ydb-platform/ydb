@@ -1,7 +1,7 @@
 /* postgres can not */
 /* syntax version 1 */
 $f = AggregationFactory(
-    "UDAF",
+    'UDAF',
     ($item, $_) -> ($item),
     ($state, $item, $_) -> ($state),
     NULL,

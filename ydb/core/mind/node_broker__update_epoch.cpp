@@ -19,8 +19,9 @@ public:
     {
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateEpoch Execute");
 
-        Self->ComputeNextEpochDiff(Diff);
-        Self->DbApplyStateDiff(Diff, txc);
+        Self->Dirty.ComputeNextEpochDiff(Diff);
+        Self->Dirty.ApplyStateDiff(Diff);
+        Self->Dirty.DbApplyStateDiff(Diff, txc);
 
         return true;
     }
@@ -29,12 +30,12 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateEpoch Complete");
 
-        Self->ApplyStateDiff(Diff);
+        Self->Committed.ApplyStateDiff(Diff);
         Self->ScheduleEpochUpdate(ctx);
         Self->PrepareEpochCache();
+        Self->PrepareUpdateNodesLog();
         Self->ProcessDelayedListNodesRequests();
-
-        Self->TxCompleted(this, ctx);
+        Self->ScheduleProcessSubscribersQueue(ctx);
     }
 
 private:

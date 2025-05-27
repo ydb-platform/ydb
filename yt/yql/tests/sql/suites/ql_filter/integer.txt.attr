@@ -1,0 +1,12 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["a";["DataType";"Int32"]];
+            ["b";["DataType";"Int32"]];
+            ["c";["DataType";"Uint32"]];
+            ["d";["DataType";"Int64"]];
+            ["e";["DataType";"Uint64"]];
+            ["escaping []`";["DataType";"Int32"]]
+        ]]
+    }
+}

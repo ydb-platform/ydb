@@ -15,6 +15,23 @@
 
 namespace NYT {
 
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NLogLevel {
+    inline constexpr std::string_view Fatal = "fatal";
+    inline constexpr std::string_view Error = "error";
+    inline constexpr std::string_view Info = "info";
+    inline constexpr std::string_view Debug = "debug";
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+extern const TString DefaultHosts;
+extern const TString DefaultRemoteTempTablesDirectory;
+extern const TString DefaultRemoteTempFilesDirectory;
+
+////////////////////////////////////////////////////////////////////////////////
+
 enum EEncoding : int
 {
     E_IDENTITY  /* "identity" */,
@@ -80,6 +97,19 @@ struct TConfig
     TString ApiVersion;
     TString LogLevel;
     TString LogPath;
+    THashSet<TString> LogExcludeCategories = {"Bus", "Net", "Dns", "Concurrency"};
+
+    /// @brief Path to the structured log file for recording telemetry data in JSON format.
+    /// This allows later retrieval and analysis of these metrics.
+    TString StructuredLog;
+
+    /// @brief Represents the role involved in HTTP proxy configuration.
+    ///
+    /// @note If the "Hosts" configuration option is specified, it is given priority over the HTTP proxy role.
+    TString HttpProxyRole;
+
+    /// @brief Represents the role involved in RPC proxy configuration.
+    TString RpcProxyRole;
 
     ///
     /// For historical reasons mapreduce client uses its own logging system.
@@ -91,7 +121,7 @@ struct TConfig
     /// This is temporary option. In future it would be true by default, and then removed.
     ///
     /// https://st.yandex-team.ru/YT-23645
-    bool LogUseCore = false;
+    bool LogUseCore = true;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;

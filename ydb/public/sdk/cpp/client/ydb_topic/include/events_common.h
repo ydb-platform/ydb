@@ -7,7 +7,7 @@
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 template <typename TEvent>
 class TPrintable {

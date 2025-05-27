@@ -183,7 +183,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             auto maxKey = calcKey(primaryBuildResult, mainTableDesc.Metadata->KeyColumnNames.size(), false, mainTableDesc);
             for (auto& index : mainTableDesc.Metadata->Indexes) {
                 if (index.Type != TIndexDescription::EType::GlobalAsync && index.State == TIndexDescription::EIndexState::Ready) {
-                    auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(index.Name)).first->Name);
+                    auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(index.Name).first->Name);
 
                     bool uselessIndex = true;
                     for (size_t i = 0; i < mainTableDesc.Metadata->KeyColumnNames.size(); ++i) {
@@ -223,7 +223,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         }
     }
 
-    auto& tableDesc = indexName ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name) : mainTableDesc;
+    auto& tableDesc = indexName ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(indexName.Cast()).first->Name) : mainTableDesc;
 
     auto buildResult = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
 
@@ -280,46 +280,24 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     {
             auto buildLookup = [&] (TExprNode::TPtr keys, TMaybe<TExprBase>& result) {
                 if (indexName) {
-                    if (kqpCtx.IsScanQuery()) {
-                        if (kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
-                            TKqpStreamLookupSettings settings;
-                            settings.Strategy = EStreamLookupStrategyType::LookupRows;
-                            result = Build<TKqlStreamLookupIndex>(ctx, node.Pos())
-                                .Table(read.Table())
-                                .Columns(read.Columns())
-                                .LookupKeys(keys)
-                                .Index(indexName.Cast())
-                                .LookupKeys(keys)
-                                .Settings(settings.BuildNode(ctx, node.Pos()))
-                                .Done();
-                        }
-                    } else {
-                        result = Build<TKqlLookupIndex>(ctx, node.Pos())
-                            .Table(read.Table())
-                            .Columns(read.Columns())
-                            .LookupKeys(keys)
-                            .Index(indexName.Cast())
-                            .Done();
-                    }
+                    TKqpStreamLookupSettings settings;
+                    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+                    result = Build<TKqlStreamLookupIndex>(ctx, node.Pos())
+                        .Table(read.Table())
+                        .Columns(read.Columns())
+                        .LookupKeys(keys)
+                        .Index(indexName.Cast())
+                        .Settings(settings.BuildNode(ctx, node.Pos()))
+                        .Done();
                 } else {
-                    if (kqpCtx.IsScanQuery()) {
-                        if (kqpCtx.Config->EnableKqpScanQueryStreamLookup) {
-                            TKqpStreamLookupSettings settings;
-                            settings.Strategy = EStreamLookupStrategyType::LookupRows;
-                            result = Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                                .Table(read.Table())
-                                .Columns(read.Columns())
-                                .LookupKeys(keys)
-                                .Settings(settings.BuildNode(ctx, node.Pos()))
-                                .Done();
-                        }
-                    } else {
-                        result = Build<TKqlLookupTable>(ctx, node.Pos())
-                            .Table(read.Table())
-                            .Columns(read.Columns())
-                            .LookupKeys(keys)
-                            .Done();
-                    }
+                    TKqpStreamLookupSettings settings;
+                    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+                    result = Build<TKqlStreamLookupTable>(ctx, node.Pos())
+                        .Table(read.Table())
+                        .Columns(read.Columns())
+                        .LookupKeys(keys)
+                        .Settings(settings.BuildNode(ctx, node.Pos()))
+                        .Done();
                 }
             };
 
@@ -444,4 +422,3 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
 }
 
 } // namespace NKikimr::NKqp::NOpt
-

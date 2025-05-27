@@ -4,7 +4,7 @@ PEERDIR(
     library/cpp/http/io
     library/cpp/openssl/io
     library/cpp/string_utils/url
-    library/cpp/uri
+    library/cpp/threading/cancellation
 )
 
 SRCS(

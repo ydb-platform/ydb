@@ -149,7 +149,7 @@ namespace NYql::NDqs {
         auto value = expr.Maybe<TDqPhyPrecompute>();
         const auto maxTasksPerOperation = Settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
-        YQL_CLOG(DEBUG, ProviderDq) << "Execution Plan " << NCommon::ExprToPrettyString(ExprContext, *DqExprRoot);
+        YQL_CLOG(TRACE, ProviderDq) << "Execution Plan " << NCommon::ExprToPrettyString(ExprContext, *DqExprRoot);
 
         auto stages = GetStages(DqExprRoot);
         YQL_ENSURE(!stages.empty());
@@ -454,6 +454,7 @@ namespace NYql::NDqs {
             ui64 stageId, publicId;
             std::tie(programStr, stageId, publicId) = StagePrograms[task.StageId];
             program.SetRaw(programStr);
+            program.SetLangVer(TypeContext->LangVer);
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
@@ -608,7 +609,7 @@ namespace NYql::NDqs {
         settings.SetRightLabel(streamLookup.RightLabel().StringValue());
         settings.SetJoinType(streamLookup.JoinType().StringValue());
         for (const auto& k: streamLookup.LeftJoinKeyNames()) {
-            *settings.AddLeftJoinKeyNames() = RemoveAliases(k.StringValue());
+            *settings.AddLeftJoinKeyNames() = streamLookup.LeftLabel().StringValue().empty() ? k.StringValue() : RemoveAliases(k.StringValue());
         }
         for (const auto& k: streamLookup.RightJoinKeyNames()) {
             *settings.AddRightJoinKeyNames() = RemoveAliases(k.StringValue());
@@ -619,9 +620,12 @@ namespace NYql::NDqs {
         const auto narrowOutputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
         Y_ABORT_UNLESS(narrowOutputRowType->GetKind() == ETypeAnnotationKind::Struct);
         settings.SetNarrowOutputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowOutputRowType));
-        settings.SetMaxDelayedRows(1'000'000); //TODO configure me
-        settings.SetCacheLimit(1'000'000); //TODO configure me
-        settings.SetCacheTtlSeconds(60); //TODO configure me
+        settings.SetCacheLimit(FromString<ui64>(streamLookup.MaxCachedRows().StringValue()));
+        settings.SetCacheTtlSeconds(FromString<ui64>(streamLookup.TTL().StringValue()));
+        settings.SetMaxDelayedRows(FromString<ui64>(streamLookup.MaxDelayedRows().StringValue()));
+        if (auto maybeMultiget = streamLookup.IsMultiget()) {
+            settings.SetIsMultiget(FromString<bool>(maybeMultiget.Cast().StringValue()));
+        }
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());
@@ -823,11 +827,13 @@ namespace NYql::NDqs {
         const TString& program,
         NActors::TActorId executerID,
         NActors::TActorId resultID,
-        const TTypeAnnotationNode* typeAnn)
+        const TTypeAnnotationNode* typeAnn,
+        TLangVersion langver)
         : Program(program)
         , ExecuterID(executerID)
         , ResultID(resultID)
         , TypeAnn(typeAnn)
+        , LangVer(langver)
     { }
 
     TVector<TDqTask>& TDqsSingleExecutionPlanner::GetTasks()
@@ -855,6 +861,7 @@ namespace NYql::NDqs {
         auto& program = *task.MutableProgram();
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(Program);
+        program.SetLangVer(LangVer);
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();

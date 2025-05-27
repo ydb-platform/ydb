@@ -22,7 +22,9 @@ PEERDIR(
     yql/essentials/minikql/arrow
     yql/essentials/minikql/computation
     yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/public/langver
     yql/essentials/public/udf
+    yql/essentials/public/udf/arrow
     yql/essentials/utils
     library/cpp/threading/future
 )

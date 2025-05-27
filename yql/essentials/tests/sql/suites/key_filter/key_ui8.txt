@@ -1,3 +1,0 @@
-{"value"=0u};
-{"value"=10u};
-{"value"=255u};

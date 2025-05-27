@@ -39,7 +39,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = QueueClientLogger;
+constinit const auto Logger = QueueClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -389,7 +389,7 @@ private:
     bool DecrementOffset_ = false;
 
     std::vector<TPartitionInfo> DoCollectPartitions(
-        const TString& selectQuery,
+        const std::string& selectQuery,
         bool withLastConsumeTime) const
     {
         std::vector<TPartitionInfo> result;
@@ -445,7 +445,7 @@ private:
                 YT_ABORT();
             }
 
-            // NB: in BigRT offsets encode the last read row, while we operate with the first unread row.
+            // NB: In BigRT offsets encode the last read row, while we operate with the first unread row.
             auto partitionInfo = TPartitionInfo{
                 .PartitionIndex = FromUnversionedValue<i64>(partitionIndexValue),
                 .NextRowIndex = offset,
@@ -671,8 +671,14 @@ ISubConsumerClientPtr CreateSubConsumerClient(
     TRichYPath queuePath)
 {
     auto queueCluster = queuePath.GetCluster();
+    if (!queueCluster && queueClusterClient) {
+        // `CreateSubConsumerClient` function calls `WaitFor` already, it will be fixed later.
+        if (auto queueClusterFromClient = WaitFor(queueClusterClient->GetClusterName()).ValueOrThrow()) {
+            queueCluster = *queueClusterFromClient;
+        }
+    }
     if (!queueCluster) {
-        if (auto clientCluster = consumerClusterClient->GetClusterName()) {
+        if (auto clientCluster = WaitFor(consumerClusterClient->GetClusterName()).ValueOrThrow()) {
             queueCluster = *clientCluster;
         }
     }

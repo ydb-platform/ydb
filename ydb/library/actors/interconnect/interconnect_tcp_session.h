@@ -20,6 +20,7 @@
 #include <util/datetime/cputimer.h>
 
 #include "interconnect_impl.h"
+#include "interconnect_zc_processor.h"
 #include "poller_tcp.h"
 #include "poller_actor.h"
 #include "interconnect_channel.h"
@@ -31,6 +32,10 @@
 
 #include <unordered_set>
 #include <unordered_map>
+
+namespace NInterconnect {
+    class TInterconnectZcProcessor;
+}
 
 namespace NActors {
 
@@ -425,6 +430,8 @@ namespace NActors {
             return ReceiveContext->ClockSkew_us;
         }
 
+        std::optional<ui8> GetXDCFlags() const;
+
     private:
         friend class TInterconnectProxyTCP;
 
@@ -495,6 +502,7 @@ namespace NActors {
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
         void WriteData();
+        ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
         ui32 MakePacket(bool data, TMaybe<ui64> pingMask = {});
@@ -554,7 +562,7 @@ namespace NActors {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         const TSessionParams Params;
-        TMaybe<TEventHolderPool> Pool;
+        std::unique_ptr<TEventHolderPool> Pool;
         TMaybe<TChannelScheduler> ChannelScheduler;
         ui64 TotalOutputQueueSize;
         bool OutputStuckFlag;
@@ -654,6 +662,8 @@ namespace NActors {
         double Starving = 0;
         NHPTimer::STime PartUpdateTimestamp = 0;
 
+        NInterconnect::TInterconnectZcProcessor ZcProcessor;
+
         void UpdateState(std::optional<EState> newState = std::nullopt) {
             if (!newState || *newState != State) {
                 const NHPTimer::STime timestamp = GetCycleCountFast();
@@ -671,8 +681,10 @@ namespace NActors {
                 }
                 Total = UtilizedPart + WaitingCpuPart + IdlePart;
                 if (Total) {
-                    Utilized = (Utilized + WaitingCpuPart) / Total;
+                    Utilized = (UtilizedPart + WaitingCpuPart) / Total;
                     Starving = WaitingCpuPart / Total;
+                } else {
+                    Utilized = Starving = 0;
                 }
                 if (newState) {
                     State = *newState;
@@ -701,15 +713,7 @@ namespace NActors {
         {
         }
 
-        void Bootstrap() {
-            auto sender = SelfId();
-            const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
-                auto ev = new TEvSessionBufferSizeRequest();
-                return new IEventHandle(recp, sender, ev, IEventHandle::FlagTrackDelivery);
-            };
-            RepliesNumber = TlsActivationContext->ExecutorThread.ActorSystem->BroadcastToProxies(eventFabric);
-            Become(&TInterconnectSessionKiller::StateFunc);
-        }
+        void Bootstrap();
 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvSessionBufferSizeResponse, ProcessResponse)

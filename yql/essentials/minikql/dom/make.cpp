@@ -133,6 +133,7 @@ TUnboxedValuePod MakeVariant(const ITypeInfoHelper* typeHelper, const TType* sha
 TUnboxedValuePod MakeDom(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
     switch (const auto kind = typeHelper->GetTypeKind(shape)) {
         case ETypeKind::Null:
+        case ETypeKind::Void:
             return MakeEntity();
         case ETypeKind::EmptyList:
             return SetNodeType<ENodeType::List>(TUnboxedValuePod::Void());

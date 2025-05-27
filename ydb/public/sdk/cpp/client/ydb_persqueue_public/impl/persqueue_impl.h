@@ -11,7 +11,7 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 
-namespace NYdb::NPersQueue {
+namespace NYdb::inline V2::NPersQueue {
 
 class TPersQueueClient::TImpl : public TClientImplCommon<TPersQueueClient::TImpl> {
 public:

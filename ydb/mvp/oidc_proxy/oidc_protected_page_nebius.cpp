@@ -41,6 +41,7 @@ void THandlerSessionServiceCheckNebius::HandleExchange(NHttp::TEvHttpProxy::TEvH
     if (!event->Get()->Response) {
         BLOG_D("Getting access token: Bad Request");
         NHttp::THeadersBuilder responseHeaders;
+        SetCORS(Request, &responseHeaders);
         responseHeaders.Set("Content-Type", "text/plain");
         return ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error));
     }

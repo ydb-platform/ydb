@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/hash.h>
+#include <util/generic/utility.h>
 #include <util/system/spinlock.h>
 
 #include <array>
@@ -58,6 +59,16 @@ public:
             return r;
         }
 
+        bool TryRemoveUnsafe(const K& key, V& result) {
+            typename TActualMap::iterator it = Map.find(key);
+            if (it == Map.end()) {
+                return false;
+            }
+            result = std::move(it->second);
+            Map.erase(it);
+            return true;
+        }
+
         bool HasUnsafe(const K& key) const {
             typename TActualMap::const_iterator it = Map.find(key);
             return (it != Map.end());
@@ -91,6 +102,12 @@ public:
         TBucket& bucket = GetBucketForKey(key);
         TBucketGuard guard(bucket.Mutex);
         bucket.Map[key] = value;
+    }
+
+    void Exchange(const K& key, V& value) {
+        TBucket& bucket = GetBucketForKey(key);
+        TBucketGuard guard(bucket.Mutex);
+        DoSwap(bucket.Map[key], value);
     }
 
     void InsertUnique(const K& key, const V& value) {
@@ -152,6 +169,12 @@ public:
         TBucket& bucket = GetBucketForKey(key);
         TBucketGuard guard(bucket.Mutex);
         return bucket.RemoveUnsafe(key);
+    }
+
+    bool TryRemove(const K& key, V& result) {
+        TBucket& bucket = GetBucketForKey(key);
+        TBucketGuard guard(bucket.Mutex);
+        return bucket.TryRemoveUnsafe(key, result);
     }
 
     bool Has(const K& key) const {

@@ -56,7 +56,7 @@
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -64,7 +64,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -72,8 +82,8 @@
                                                 "ExternalPlanNodeId": 3
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 4,
@@ -92,7 +102,8 @@
                                                                 "ExternalPlanNodeId": 1
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
                                                     }
                                                 ],
                                                 "PlanNodeId": 2,
@@ -103,6 +114,7 @@
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
+                                                                "Path": "/local/base_explain_script_script/ScriptingTest",
                                                                 "ReadColumns": null,
                                                                 "ReadRanges": [
                                                                     "Key (-\u221e, +\u221e)"
@@ -175,7 +187,7 @@
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -183,7 +195,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -191,8 +213,8 @@
                                                 "ExternalPlanNodeId": 2
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 3,
@@ -211,11 +233,13 @@
                                                                 "InternalOperatorId": 1
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
                                                     },
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/base_explain_script_script/ScriptingTest",
                                                         "ReadColumns": null,
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
@@ -266,7 +290,7 @@
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -274,7 +298,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -282,8 +316,8 @@
                                                 "ExternalPlanNodeId": 3
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 4,
@@ -302,7 +336,8 @@
                                                                 "ExternalPlanNodeId": 1
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
                                                     }
                                                 ],
                                                 "PlanNodeId": 2,
@@ -313,6 +348,7 @@
                                                             {
                                                                 "Inputs": [],
                                                                 "Name": "TableFullScan",
+                                                                "Path": "/local/base_explain_script_script/ScriptingTest",
                                                                 "ReadColumns": null,
                                                                 "ReadRanges": [
                                                                     "Key (-\u221e, +\u221e)"
@@ -385,7 +421,7 @@
                         "PlanNodeType": "Materialize",
                         "Plans": [
                             {
-                                "Node Type": "Aggregate-Limit",
+                                "Node Type": "Aggregate-Limit-Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
@@ -393,7 +429,17 @@
                                                 "InternalOperatorId": 1
                                             }
                                         ],
-                                        "Name": "Aggregate"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
+                                    },
+                                    {
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 2
+                                            }
+                                        ],
+                                        "Limit": "1",
+                                        "Name": "Limit"
                                     },
                                     {
                                         "Inputs": [
@@ -401,8 +447,8 @@
                                                 "ExternalPlanNodeId": 2
                                             }
                                         ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
+                                        "Name": "Aggregate",
+                                        "Phase": "Final"
                                     }
                                 ],
                                 "PlanNodeId": 3,
@@ -421,11 +467,13 @@
                                                                 "InternalOperatorId": 1
                                                             }
                                                         ],
-                                                        "Name": "Aggregate"
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
                                                     },
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/base_explain_script_script/ScriptingTest",
                                                         "ReadColumns": null,
                                                         "ReadRanges": [
                                                             "Key (-\u221e, +\u221e)"
@@ -471,33 +519,32 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "Effect",
+                        "Node Type": "Sink",
+                        "Operators": [
+                            {
+                                "Inputs": [],
+                                "Name": "Replace",
+                                "Path": "/local/base_explain_script_script/ScriptingTest",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_explain_script_script/ScriptingTest"
+                            }
+                        ],
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "CTE Name": "precompute_0_0",
-                                "Node Type": "Upsert-ConstantExpr",
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
-                                        "Inputs": [
-                                            {
-                                                "InternalOperatorId": 1
-                                            }
-                                        ],
-                                        "Name": "Upsert",
-                                        "Table": "base_explain_script_script/ScriptingTest"
-                                    },
-                                    {
                                         "Inputs": [],
-                                        "Iterator": "precompute_0_0",
+                                        "Iterator": "[{Key: 3,Value: \"Three\"},{Key: 4,Value: \"Four\"}]",
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 1,
-                                "Tables": [
-                                    "base_explain_script_script/ScriptingTest"
-                                ]
+                                "PlanNodeId": 1
                             }
+                        ],
+                        "Tables": [
+                            "base_explain_script_script/ScriptingTest"
                         ]
                     }
                 ],
@@ -514,7 +561,7 @@
                                 "Key",
                                 "Value"
                             ],
-                            "type": "MultiUpsert"
+                            "type": "MultiReplace"
                         }
                     ]
                 }
@@ -526,33 +573,32 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "Effect",
+                        "Node Type": "Sink",
+                        "Operators": [
+                            {
+                                "Inputs": [],
+                                "Name": "Replace",
+                                "Path": "/local/base_explain_script_script/ScriptingTest",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_explain_script_script/ScriptingTest"
+                            }
+                        ],
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "CTE Name": "precompute_0_0",
-                                "Node Type": "Upsert-ConstantExpr",
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
-                                        "Inputs": [
-                                            {
-                                                "InternalOperatorId": 1
-                                            }
-                                        ],
-                                        "Name": "Upsert",
-                                        "Table": "base_explain_script_script/ScriptingTest"
-                                    },
-                                    {
                                         "Inputs": [],
-                                        "Iterator": "precompute_0_0",
+                                        "Iterator": "[{Key: 1,Value: \"One\"},{Key: 2,Value: \"Two\"}]",
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 1,
-                                "Tables": [
-                                    "base_explain_script_script/ScriptingTest"
-                                ]
+                                "PlanNodeId": 1
                             }
+                        ],
+                        "Tables": [
+                            "base_explain_script_script/ScriptingTest"
                         ]
                     }
                 ],
@@ -569,7 +615,7 @@
                                 "Key",
                                 "Value"
                             ],
-                            "type": "MultiUpsert"
+                            "type": "MultiReplace"
                         }
                     ]
                 }

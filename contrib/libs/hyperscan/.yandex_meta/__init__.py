@@ -61,7 +61,7 @@ def instantiate_runtime(self, *, runtime_name, runtime_yamake):
         # list of symbols that will be duplicated if compiled without proper wrapping.
         # It can be obtained with compiling runtime_* libraries and applying
         # nm --defined-only --extern-only --format=posix -o *.a | awk '{print $2}'
-        with open(P.join(self.meta_dir, 'symbols.json')) as f:
+        with open(P.join(self.meta_dir, "symbols.json")) as f:
             symbols_to_rename = json.load(f)
 
         # rename symbols that would be duplicated between runtimes otherwise

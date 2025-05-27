@@ -16,7 +16,7 @@ void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
 }
 
 void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
-    Y_ABORT_UNLESS(PortionsToEvict.size() || HasPortionsToRemove());
+    Y_ABORT_UNLESS(PortionsToEvict.size() || GetPortionsToRemove().HasPortions());
     self.GetIndexAs<TColumnEngineForLogs>().GetActualizationController()->StartActualization(RWAddress);
 }
 
@@ -24,11 +24,11 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
     auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
     engine.GetActualizationController()->FinishActualization(RWAddress);
     if (IsAborted()) {
-        THashMap<ui64, THashSet<ui64>> restoreIndexAddresses;
+        THashMap<TInternalPathId, THashSet<ui64>> restoreIndexAddresses;
         for (auto&& i : PortionsToEvict) {
             AFL_VERIFY(restoreIndexAddresses[i.GetPortionInfo()->GetPathId()].emplace(i.GetPortionInfo()->GetPortionId()).second);
         }
-        for (auto&& i : GetPortionsToRemove()) {
+        for (auto&& i : GetPortionsToRemove().GetPortions()) {
             AFL_VERIFY(restoreIndexAddresses[i.first.GetPathId()].emplace(i.first.GetPortionId()).second);
         }
         engine.ReturnToIndexes(restoreIndexAddresses);

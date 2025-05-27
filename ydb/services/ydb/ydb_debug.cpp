@@ -39,6 +39,8 @@ void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 [this](NYdbGrpc::IRequestContextBase* ctx) {
                     NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());
                     PlainGrpcResponse response;
+                    auto ts = TInstant::Now();
+                    response.SetCallBackTs(ts.MicroSeconds());
                     ctx->Reply(&response, 0);
                 }, &Ydb::Debug::V1::DebugService::AsyncService::RequestPingPlainGrpc,
                 "PingPlainGrpc", logger, getCounterBlock("ping", "PingPlainGrpc"))->Run();
@@ -70,6 +72,7 @@ void TGRpcYdbDebugService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     ADD_REQUEST(PingKqpProxy, KqpProxyRequest, KqpProxyResponse, DoKqpPing, KQP);
     ADD_REQUEST(PingSchemeCache, SchemeCacheRequest, SchemeCacheResponse, DoSchemeCachePing, SCHEME_CACHE);
     ADD_REQUEST(PingTxProxy, TxProxyRequest, TxProxyResponse, DoTxProxyPing, TX_PROXY);
+    ADD_REQUEST(PingActorChain, ActorChainRequest, ActorChainResponse, DoActorChainPing, ACTOR_CHAIN);
 
 #undef ADD_REQUEST
 

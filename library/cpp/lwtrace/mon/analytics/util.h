@@ -4,6 +4,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
 #include <util/string/vector.h>
+#include <cmath>
 
 namespace NAnalytics {
 

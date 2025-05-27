@@ -47,23 +47,23 @@ TString ColumnPrimitiveValueToString(NYdb::TValueParser& valueParser) {
         case NYdb::EPrimitiveType::Interval64:
             return TStringBuilder() << valueParser.GetInterval64();
         case NYdb::EPrimitiveType::TzDate:
-            return valueParser.GetTzDate();
+            return TString(valueParser.GetTzDate());
         case NYdb::EPrimitiveType::TzDatetime:
-            return valueParser.GetTzDatetime();
+            return TString(valueParser.GetTzDatetime());
         case NYdb::EPrimitiveType::TzTimestamp:
-            return valueParser.GetTzTimestamp();
+            return TString(valueParser.GetTzTimestamp());
         case NYdb::EPrimitiveType::String:
             return Base64Encode(valueParser.GetString());
         case NYdb::EPrimitiveType::Yson:
-            return valueParser.GetYson();
+            return TString(valueParser.GetYson());
         case NYdb::EPrimitiveType::Json:
-            return valueParser.GetJson();
+            return TString(valueParser.GetJson());
         case NYdb::EPrimitiveType::JsonDocument:
-            return valueParser.GetJsonDocument();
+            return TString(valueParser.GetJsonDocument());
         case NYdb::EPrimitiveType::DyNumber:
-            return valueParser.GetDyNumber();
+            return TString(valueParser.GetDyNumber());
         case NYdb::EPrimitiveType::Uuid:
-            return valueParser.GetUuid().ToString();
+            return TString(valueParser.GetUuid().ToString());
     }
     return {};
 }
@@ -133,10 +133,10 @@ NPG::TEvPGEvents::TRowValueField ColumnValueToRowValueField(NYdb::TValueParser& 
         if (!pg.IsNull()) {
             switch (format) {
                 case EFormatText:
-                    return {.Value = pg.Content_};
+                    return {.Value = TString(pg.Content_)};
                 case EFormatBinary: {
                     // HACK(xenoxeno)
-                    NKikimr::NPg::TConvertResult result = NKikimr::NPg::PgNativeBinaryFromNativeText(pg.Content_, pg.PgType_.Oid);
+                    NKikimr::NPg::TConvertResult result = NKikimr::NPg::PgNativeBinaryFromNativeText(TString{pg.Content_}, pg.PgType_.Oid);
                     if (result.Error.Empty()) {
                         auto begin(reinterpret_cast<const uint8_t*>(result.Str.data()));
                         auto end(begin + result.Str.size());
@@ -200,7 +200,7 @@ Ydb::TypedValue GetTypedValueFromParam(int16_t format, const std::vector<uint8_t
 
 NYdb::NScripting::TExecuteYqlResult ConvertProtoResponseToSdkResult(Ydb::Scripting::ExecuteYqlResponse&& proto) {
     TVector<NYdb::TResultSet> res;
-    TMaybe<NYdb::NTable::TQueryStats> queryStats;
+    std::optional<NYdb::NTable::TQueryStats> queryStats;
     {
         Ydb::Scripting::ExecuteYqlResult result;
         proto.mutable_operation()->mutable_result()->UnpackTo(&result);

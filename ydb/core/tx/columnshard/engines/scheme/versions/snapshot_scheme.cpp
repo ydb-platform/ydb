@@ -1,32 +1,32 @@
 #include "snapshot_scheme.h"
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
 
 namespace NKikimr::NOlap {
 
-TSnapshotSchema::TSnapshotSchema(TIndexInfo&& indexInfo, const TSnapshot& snapshot)
+TSnapshotSchema::TSnapshotSchema(TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo, const TSnapshot& snapshot)
     : IndexInfo(std::move(indexInfo))
-    , Schema(IndexInfo.ArrowSchemaWithSpecials())
-    , Snapshot(snapshot)
-{
+    , Schema(IndexInfo->ArrowSchemaWithSpecials())
+    , Snapshot(snapshot) {
 }
 
 TColumnSaver TSnapshotSchema::GetColumnSaver(const ui32 columnId) const {
-    return IndexInfo.GetColumnSaver(columnId);
+    return IndexInfo->GetColumnSaver(columnId);
 }
 
 std::shared_ptr<TColumnLoader> TSnapshotSchema::GetColumnLoaderOptional(const ui32 columnId) const {
-    return IndexInfo.GetColumnLoaderOptional(columnId);
+    return IndexInfo->GetColumnLoaderOptional(columnId);
 }
 
 std::optional<ui32> TSnapshotSchema::GetColumnIdOptional(const std::string& columnName) const {
-    return IndexInfo.GetColumnIdOptional(columnName);
+    return IndexInfo->GetColumnIdOptional(columnName);
 }
 
 ui32 TSnapshotSchema::GetColumnIdVerified(const std::string& columnName) const {
-    return IndexInfo.GetColumnIdVerified(columnName);
+    return IndexInfo->GetColumnIdVerified(columnName);
 }
 
 int TSnapshotSchema::GetFieldIndex(const ui32 columnId) const {
-    return IndexInfo.GetColumnIndexOptional(columnId).value_or(-1);
+    return IndexInfo->GetColumnIndexOptional(columnId).value_or(-1);
 }
 
 const std::shared_ptr<NArrow::TSchemaLite>& TSnapshotSchema::GetSchema() const {
@@ -34,7 +34,7 @@ const std::shared_ptr<NArrow::TSchemaLite>& TSnapshotSchema::GetSchema() const {
 }
 
 const TIndexInfo& TSnapshotSchema::GetIndexInfo() const {
-    return IndexInfo;
+    return *IndexInfo;
 }
 
 const TSnapshot& TSnapshotSchema::GetSnapshot() const {
@@ -46,7 +46,7 @@ ui32 TSnapshotSchema::GetColumnsCount() const {
 }
 
 ui64 TSnapshotSchema::GetVersion() const {
-    return IndexInfo.GetVersion();
+    return IndexInfo->GetVersion();
 }
 
 }

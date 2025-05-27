@@ -6,18 +6,13 @@
     "tables": [
         {
             "name": "/local/base_dynumber_insert_params_sql_plan/ResultParamsDyNumber",
-            "reads": [
-                {
-                    "type": "Lookup"
-                }
-            ],
             "writes": [
                 {
                     "columns": [
                         "Key",
                         "Value"
                     ],
-                    "type": "MultiUpsert"
+                    "type": "MultiInsert"
                 }
             ]
         }

@@ -40,7 +40,7 @@ public:
         const auto item = GetNodeValue(Flow, ctx, block);
 
         const auto resultType = Type::getInt32Ty(context);
-        const auto outres = SelectInst::Create(IsYield(item, block), ConstantInt::get(resultType, 0), ConstantInt::get(resultType, -1), "outres", block);
+        const auto outres = SelectInst::Create(IsYield(item, block, context), ConstantInt::get(resultType, 0), ConstantInt::get(resultType, -1), "outres", block);
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
@@ -48,7 +48,7 @@ public:
 
         result->addIncoming(outres, block);
 
-        BranchInst::Create(pass, work, IsSpecial(item, block), block);
+        BranchInst::Create(pass, work, IsSpecial(item, block, context), block);
 
         block = work;
         codegenItem->CreateSetValue(ctx, block, item);

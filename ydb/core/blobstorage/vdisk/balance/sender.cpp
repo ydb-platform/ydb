@@ -19,7 +19,7 @@ namespace {
     class TReader {
     private:
         TPDiskCtxPtr PDiskCtx;
-        TConstArrayRef<TPartInfo> Parts;
+        TVector<TPartInfo> Parts;
         TReplQuoter::TPtr Quoter;
         const TBlobStorageGroupType GType;
         NMonGroup::TBalancingGroup& MonGroup;
@@ -28,27 +28,27 @@ namespace {
         ui32 Responses = 0;
     public:
 
-        TReader(TPDiskCtxPtr pDiskCtx, TConstArrayRef<TPartInfo> parts, TReplQuoter::TPtr replPDiskReadQuoter, TBlobStorageGroupType gType, NMonGroup::TBalancingGroup& monGroup)
+        TReader(TPDiskCtxPtr pDiskCtx, TVector<TPartInfo>&& parts, TReplQuoter::TPtr replPDiskReadQuoter, TBlobStorageGroupType gType, NMonGroup::TBalancingGroup& monGroup)
             : PDiskCtx(pDiskCtx)
-            , Parts(parts)
+            , Parts(std::move(parts))
             , Quoter(replPDiskReadQuoter)
             , GType(gType)
             , MonGroup(monGroup)
-            , Result(parts.size())
+            , Result(Parts.size())
         {}
 
         void SendReadRequests(const TActorId& selfId) {
             for (ui32 i = 0; i < Parts.size(); ++i) {
-                const auto& item = Parts[i];
+                auto& item = Parts[i];
                 Result[i] = TPart{.Key=item.Key, .PartsMask=item.PartsMask};
                 std::visit(TOverloaded{
-                    [&](const TRope& data) {
+                    [&](TRope&& data) {
                         // part is already in memory, no need to read it from disk
                         Y_DEBUG_ABORT_UNLESS(item.PartsMask.CountBits() == 1);
-                        Result[i].PartsData = {data};
+                        Result[i].PartsData.emplace_back(std::move(data));
                         ++Responses;
                     },
-                    [&](const TDiskPart& diskPart) {
+                    [&](TDiskPart&& diskPart) {
                         auto ev = std::make_unique<NPDisk::TEvChunkRead>(
                             PDiskCtx->Dsk->Owner,
                             PDiskCtx->Dsk->OwnerRound,
@@ -66,7 +66,7 @@ namespace {
                         );
                         MonGroup.ReadFromHandoffBytes() += diskPart.Size;
                     }
-                }, item.PartData);
+                }, std::move(item.PartData));
             }
         }
 
@@ -82,6 +82,8 @@ namespace {
             auto localParts = Result[i].PartsMask;
             auto diskBlob = TDiskBlob(&data, localParts, GType, key);
             ui32 readSize = 0;
+
+            Result[i].PartsData.reserve(localParts.CountBits());
 
             for (ui8 partIdx = localParts.FirstPosition(); partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx)) {
                 TRope result;
@@ -150,26 +152,27 @@ namespace {
                 auto localParts = part.PartsMask;
                 for (ui8 partIdx = localParts.FirstPosition(), i = 0; partIdx < localParts.GetSize(); partIdx = localParts.NextPosition(partIdx), ++i) {
                     auto key = TLogoBlobID(part.Key, partIdx + 1);
-                    auto& data = part.PartsData[i];
+                    auto&& data = std::move(part.PartsData[i]);
+                    size_t dataSize = data.size();
                     auto vDiskId = GetMainReplicaVDiskId(*GInfo, key);
 
                     if (Ctx->HugeBlobCtx->IsHugeBlob(GInfo->GetTopology().GType, part.Key, Ctx->MinHugeBlobInBytes)) {
                         auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(
-                            key, data, vDiskId,
+                            key, std::move(data), vDiskId,
                             true, nullptr,
                             TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob
                         );
-                        SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), data.size());
+                        SendRequest(TVDiskIdShort(vDiskId), selfId, ev.release(), dataSize);
                     } else {
                         STLOG(PRI_DEBUG, BS_VDISK_BALANCING, BSVB11, VDISKP(Ctx->VCtx, "Add in multiput"), (LogoBlobId, key.ToString()),
-                            (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, data.size()));
+                            (To, GInfo->GetTopology().GetOrderNumber(TVDiskIdShort(vDiskId))), (DataSize, dataSize));
 
                         auto& ev = vDiskToEv[vDiskId];
                         if (!ev) {
                             ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vDiskId, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob, true, nullptr);
                         }
 
-                        ev->AddVPut(key, TRcBuf(data), nullptr, {}, NWilson::TTraceId());
+                        ev->AddVPut(key, TRcBuf(std::move(data)), nullptr, {}, NWilson::TTraceId());
                     }
                 }
             }
@@ -344,7 +347,7 @@ namespace {
     public:
         TSender(
             TActorId notifyId,
-            TConstArrayRef<TPartInfo> parts,
+            TVector<TPartInfo>&& parts,
             TQueueActorMapPtr queueActorMapPtr,
             std::shared_ptr<TBalancingCtx> ctx
         )
@@ -352,7 +355,7 @@ namespace {
             , QueueActorMapPtr(queueActorMapPtr)
             , Ctx(ctx)
             , GInfo(ctx->GInfo)
-            , Reader(Ctx->PDiskCtx, parts, ctx->VCtx->ReplPDiskReadQuoter, GInfo->GetTopology().GType, Ctx->MonGroup)
+            , Reader(Ctx->PDiskCtx, std::move(parts), ctx->VCtx->ReplPDiskReadQuoter, GInfo->GetTopology().GType, Ctx->MonGroup)
             , Sender(ctx, GInfo, queueActorMapPtr)
         {}
 
@@ -364,11 +367,11 @@ namespace {
 
 IActor* CreateSenderActor(
     TActorId notifyId,
-    TConstArrayRef<TPartInfo> parts,
+    TVector<TPartInfo>&& parts,
     TQueueActorMapPtr queueActorMapPtr,
     std::shared_ptr<TBalancingCtx> ctx
 ) {
-    return new TSender(notifyId, parts, queueActorMapPtr, ctx);
+    return new TSender(notifyId, std::move(parts), queueActorMapPtr, ctx);
 }
 
 } // NBalancing

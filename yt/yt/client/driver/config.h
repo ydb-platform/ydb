@@ -17,10 +17,9 @@ namespace NYT::NDriver {
 constexpr int ApiVersion3 = 3;
 constexpr int ApiVersion4 = 4;
 
-class TDriverConfig
+struct TDriverConfig
     : public NYTree::TYsonStruct
 {
-public:
     NApi::TFileReaderConfigPtr FileReader;
     NApi::TFileWriterConfigPtr FileWriter;
     NTableClient::TTableReaderConfigPtr TableReader;
@@ -38,6 +37,9 @@ public:
     TSlruCacheConfigPtr ClientCache;
 
     std::optional<TString> Token;
+
+    //! Target cluster for multiproxy mode.
+    std::optional<std::string> MultiproxyTargetCluster;
 
     TAsyncExpiringCacheConfigPtr ProxyDiscoveryCache;
 
@@ -58,4 +60,3 @@ DEFINE_REFCOUNTED_TYPE(TDriverConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDriver
-

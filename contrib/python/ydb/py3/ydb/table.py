@@ -545,6 +545,9 @@ class TableStats(object):
     def __init__(self):
         self.partitions = None
         self.store_size = 0
+        self.rows_estimate = 0
+        self.creation_time = None
+        self.modification_time = None
 
     def with_store_size(self, store_size):
         self.store_size = store_size
@@ -552,6 +555,18 @@ class TableStats(object):
 
     def with_partitions(self, partitions):
         self.partitions = partitions
+        return self
+
+    def with_rows_estimate(self, rows_estimate):
+        self.rows_estimate = rows_estimate
+        return self
+
+    def with_creation_time(self, creation_time):
+        self.creation_time = creation_time
+        return self
+
+    def with_modification_time(self, modification_time):
+        self.modification_time = modification_time
         return self
 
 
@@ -1577,7 +1592,22 @@ class TableSchemeEntry(scheme.SchemeEntry):
 
         self.table_stats = None
         if table_stats is not None:
+            from ._grpc.grpcwrapper.common_utils import datetime_from_proto_timestamp
+
             self.table_stats = TableStats()
+            if table_stats.creation_time:
+                self.table_stats = self.table_stats.with_creation_time(
+                    datetime_from_proto_timestamp(table_stats.creation_time)
+                )
+
+            if table_stats.modification_time:
+                self.table_stats = self.table_stats.with_modification_time(
+                    datetime_from_proto_timestamp(table_stats.modification_time)
+                )
+
+            if table_stats.rows_estimate != 0:
+                self.table_stats = self.table_stats.with_rows_estimate(table_stats.rows_estimate)
+
             if table_stats.partitions != 0:
                 self.table_stats = self.table_stats.with_partitions(table_stats.partitions)
 

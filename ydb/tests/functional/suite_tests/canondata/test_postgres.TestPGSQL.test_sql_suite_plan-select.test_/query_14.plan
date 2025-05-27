@@ -58,7 +58,7 @@
                                                                     }
                                                                 ],
                                                                 "Name": "Sort",
-                                                                "SortBy": ""
+                                                                "SortBy": "[row.column0,row.column1]"
                                                             },
                                                             {
                                                                 "Inputs": [
@@ -87,7 +87,7 @@
                                                                                 ],
                                                                                 "Limit": "1001",
                                                                                 "Name": "Top",
-                                                                                "TopBy": ""
+                                                                                "TopBy": "[row.column0,row.column1]"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 4,
@@ -111,7 +111,7 @@
                                                                                                 ],
                                                                                                 "Limit": "1001",
                                                                                                 "Name": "Top",
-                                                                                                "TopBy": ""
+                                                                                                "TopBy": "[row.column0,row.column1]"
                                                                                             }
                                                                                         ],
                                                                                         "PlanNodeId": 2,
@@ -122,6 +122,7 @@
                                                                                                     {
                                                                                                         "Inputs": [],
                                                                                                         "Name": "TableFullScan",
+                                                                                                        "Path": "/Root/postgres_select.test_plan/int8_tbl",
                                                                                                         "ReadColumns": [
                                                                                                             "q1",
                                                                                                             "q2"

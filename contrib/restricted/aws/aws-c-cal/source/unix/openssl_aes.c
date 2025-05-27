@@ -4,6 +4,7 @@
  */
 #include <aws/cal/private/symmetric_cipher_priv.h>
 
+#define OPENSSL_SUPPRESS_DEPRECATED
 #include <openssl/evp.h>
 
 struct openssl_aes_cipher {

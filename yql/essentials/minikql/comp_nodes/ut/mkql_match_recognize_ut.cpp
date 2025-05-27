@@ -64,57 +64,46 @@ namespace {
         const TTestInputData& input) {
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-        auto structType = pgmBuilder.NewStructType({
-            {"time", pgmBuilder.NewDataType(NUdf::TDataType<i64>::Id)},
-            {"key", pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id)},
-            {"sum", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)},
-            {"part", pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id)}});
+        const auto structType = pgmBuilder.NewStructType({
+            {"time", pgmBuilder.NewDataType(NUdf::EDataSlot::Int64)},
+            {"key", pgmBuilder.NewDataType(NUdf::EDataSlot::String)},
+            {"sum", pgmBuilder.NewDataType(NUdf::EDataSlot::Uint32)},
+            {"part", pgmBuilder.NewDataType(NUdf::EDataSlot::String)}
+        });
 
         TVector<TRuntimeNode> items;
-        for (size_t i = 0; i < input.size(); ++i)
-        {
-            auto time = pgmBuilder.NewDataLiteral<i64>(std::get<0>(input[i]));
-            auto key = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NUdf::TStringRef(std::get<1>(input[i])));
-            auto sum = pgmBuilder.NewDataLiteral<ui32>(std::get<2>(input[i]));
-            auto part = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NUdf::TStringRef(std::get<3>(input[i])));
-
-            auto item = pgmBuilder.NewStruct(structType,
-                {{"time", time}, {"key", key}, {"sum", sum},  {"part", part}});
-            items.push_back(std::move(item));
+        for (size_t i = 0; i < input.size(); ++i) {
+            const auto& [time, key, sum, part] = input[i];
+            items.push_back(pgmBuilder.NewStruct({
+                {"time", pgmBuilder.NewDataLiteral(time)},
+                {"key", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(key)},
+                {"sum", pgmBuilder.NewDataLiteral(sum)},
+                {"part", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(part)},
+            }));
         }
 
         const auto list = pgmBuilder.NewList(structType, std::move(items));
         auto inputFlow = pgmBuilder.ToFlow(list);
-
-        TVector<TStringBuf> partitionColumns;
-        TVector<std::pair<TStringBuf, TProgramBuilder::TBinaryLambda>> getMeasures = {{
-            std::make_pair(
-                TStringBuf("key"),
-                [&](TRuntimeNode /*measureInputDataArg*/, TRuntimeNode /*matchedVarsArg*/) {
-                    return pgmBuilder.NewDataLiteral<ui32>(56);
-                }
-        )}};
-        TVector<std::pair<TStringBuf, TProgramBuilder::TTernaryLambda>> getDefines = {{
-            std::make_pair(
-                TStringBuf("A"),
-                [&](TRuntimeNode /*inputDataArg*/, TRuntimeNode /*matchedVarsArg*/, TRuntimeNode /*currentRowIndexArg*/) {
-                    return pgmBuilder.NewDataLiteral<bool>(true);
-                }
-        )}};
-
         auto pgmReturn = pgmBuilder.MatchRecognizeCore(
             inputFlow,
             [&](TRuntimeNode item) {
-                return pgmBuilder.Member(item, "part");
+                return pgmBuilder.NewTuple({pgmBuilder.Member(item, "part")});
             },
-            partitionColumns,
-            getMeasures,
+            {},
+            {"key"sv},
+            {[&](TRuntimeNode /*measureInputDataArg*/, TRuntimeNode /*matchedVarsArg*/) {
+                return pgmBuilder.NewDataLiteral<ui32>(56);
+            }},
             {
                 {NYql::NMatchRecognize::TRowPatternFactor{"A", 3, 3, false, false, false}}
             },
-            getDefines,
+            {"A"sv},
+            {[&](TRuntimeNode /*inputDataArg*/, TRuntimeNode /*matchedVarsArg*/, TRuntimeNode /*currentRowIndexArg*/) {
+                return pgmBuilder.NewDataLiteral<bool>(true);
+            }},
             streamingMode,
-            {NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""}
+            {NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""},
+            NYql::NMatchRecognize::ERowsPerMatch::OneRow
         );
 
         auto graph = setup.BuildGraph(pgmReturn);

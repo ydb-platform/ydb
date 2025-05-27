@@ -1,8 +1,10 @@
 #pragma once
 
+#include "fwd.h"
+
 #include <limits>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NTable {
 
 //! Column family compression codec

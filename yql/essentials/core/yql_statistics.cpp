@@ -45,6 +45,24 @@ TString TOptimizerStatistics::ToString() const {
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
     os << "Type: " << ConvertToStatisticsTypeString(s.Type) << ", Nrows: " << s.Nrows
         << ", Ncols: " << s.Ncols << ", ByteSize: " << s.ByteSize << ", Cost: " << s.Cost;
+
+        os << ", Upper aliases: " << "[";
+    if (s.Aliases) {
+
+        std::string tmp;
+        for (const auto& c: *s.Aliases) {
+            tmp.append(c).append(", ");
+        }
+
+        if (!tmp.empty()) {
+            tmp.pop_back();
+            tmp.pop_back();
+        }
+        os << tmp;
+    }
+    os << "]";
+
+
     if (s.KeyColumns) {
         os << ", keys: ";
 
@@ -57,8 +75,25 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
             tmp.pop_back();
             tmp.pop_back();
         }
-        os << tmp;
+        os << "[" << tmp << "]";
     }
+
+    if (s.ShuffledByColumns) {
+        os << ", shuffled by: ";
+
+        std::string tmp;
+        for (const auto& c: s.ShuffledByColumns->Data) {
+            tmp.append(c.RelName).append(".").append(c.AttributeName).append(", ");
+        }
+
+        if (!tmp.empty()) {
+            tmp.pop_back();
+            tmp.pop_back();
+        }
+        os << "[" << tmp << "]";
+    }
+    os << ", LogicalOrderings state: " << s.LogicalOrderings.GetState();
+
     os << ", Sel: " << s.Selectivity;
     os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
     if (s.SortColumns) {
@@ -82,6 +117,7 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
 
         os << tmp;
     }
+
     return os;
 }
 
@@ -104,10 +140,15 @@ TOptimizerStatistics::TOptimizerStatistics(
     , Ncols(ncols)
     , ByteSize(byteSize)
     , Cost(cost)
+    , Selectivity(1.0)
     , KeyColumns(keyColumns)
     , ColumnStatistics(columnMap)
+    , ShuffledByColumns(nullptr)
+    , SortColumns(nullptr)
     , StorageType(storageType)
     , Specific(std::move(specific))
+    , Labels(nullptr)
+    , LogicalOrderings()
 {
 }
 
@@ -173,6 +214,16 @@ std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOpti
                 TString countMinRaw{};
                 Base64StrictDecode(countMinBase64, countMinRaw);
                 cStat.CountMinSketch.reset(NKikimr::TCountMinSketch::FromString(countMinRaw.data(), countMinRaw.size()));
+            }
+            if (auto eqWidthHistogram = colMap.find("histogram"); eqWidthHistogram != colMap.end()) {
+              TString histogramBase64 = eqWidthHistogram->second.GetStringSafe();
+
+              TString histogramBinary{};
+              Base64StrictDecode(histogramBase64, histogramBinary);
+              auto histogram = std::make_shared<NKikimr::TEqWidthHistogram>(
+                  histogramBinary.data(), histogramBinary.size());
+              cStat.EqWidthHistogramEstimator =
+                  std::make_shared<NKikimr::TEqWidthHistogramEstimator>(histogram);
             }
 
             res->ColumnStatistics->Data[columnName] = cStat;

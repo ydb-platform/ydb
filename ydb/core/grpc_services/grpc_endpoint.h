@@ -28,5 +28,6 @@ inline TActorId CreateGrpcPublisherServiceActorId() {
     return actorId;
 }
 
+const static TString KafkaEndpointId = "KafkaProxy";
 }
 }

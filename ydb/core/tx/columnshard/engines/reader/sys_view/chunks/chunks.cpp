@@ -35,9 +35,9 @@ void TStatsIterator::AppendStats(
         arrow::util::string_view lastColumnName;
         arrow::util::string_view lastTierName;
         for (auto&& r : records) {
-            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
+            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
-            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
+            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->GetTabletId());
             NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetMeta().GetRecordsCount());
             NArrow::Append<arrow::UInt64Type>(*builders[4], r->GetMeta().GetRawBytes());
             NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());
@@ -92,9 +92,9 @@ void TStatsIterator::AppendStats(
             std::reverse(indexes.begin(), indexes.end());
         }
         for (auto&& r : indexes) {
-            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
+            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
-            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
+            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->GetTabletId());
             NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetRecordsCount());
             NArrow::Append<arrow::UInt64Type>(*builders[4], r->GetRawBytes());
             NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());
@@ -131,8 +131,7 @@ std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TReadStatsMetadata:
 std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(
     const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     auto* index = self->GetIndexOptional();
-    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(),
-        IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC, read.GetProgram(),
+    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(), Sorting, read.GetProgram(),
         index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
 }
 
@@ -166,7 +165,7 @@ ui32 TStatsIterator::PredictRecordsCount(const NAbstract::TGranuleMetaView& gran
             break;
         }
     }
-    AFL_VERIFY(recordsCount);
+    AFL_VERIFY(recordsCount || granule.GetPortions().empty());
     return recordsCount;
 }
 
@@ -189,6 +188,22 @@ TConclusionStatus TStatsIterator::Start() {
     return TConclusionStatus::Success();
 }
 
+bool TStatsIterator::IsReadyForBatch() const {
+    if (!IndexGranules.size()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", false)("reason", "no_granules");
+        return false;
+    }
+    if (!IndexGranules.front().GetPortions().size()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", true)("reason", "no_granule_portions");
+        return true;
+    }
+    if (FetchedAccessors.contains(IndexGranules.front().GetPortions().front()->GetPortionId())) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "batch_ready_check")("result", true)("reason", "portion_fetched");
+        return true;
+    }
+    return false;
+}
+
 TStatsIterator::TFetchingAccessorAllocation::TFetchingAccessorAllocation(
     const std::shared_ptr<TDataAccessorsRequest>& request, const ui64 mem, const std::shared_ptr<NReader::TReadContext>& context)
     : TBase(mem)
@@ -200,7 +215,12 @@ TStatsIterator::TFetchingAccessorAllocation::TFetchingAccessorAllocation(
 }
 
 void TStatsIterator::TFetchingAccessorAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
+    Request = nullptr;
     Context->AbortWithError("cannot allocate memory for take accessors info: " + errorMessage);
+}
+
+const std::shared_ptr<const TAtomicCounter>& TStatsIterator::TFetchingAccessorAllocation::DoGetAbortionFlag() const {
+    return Context->GetAbortionFlag();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSysView::NChunks

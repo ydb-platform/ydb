@@ -17,10 +17,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto& schemeTx = tx->GetSchemeTx();
         if (!schemeTx.HasAlterCdcStreamNotice()) {
@@ -29,14 +29,14 @@ public:
 
         const auto& params = schemeTx.GetAlterCdcStreamNotice();
         const auto& streamDesc = params.GetStreamDescription();
-        const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
+        const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
         const auto state = streamDesc.GetState();
 
-        const auto pathId = PathIdFromPathId(params.GetPathId());
-        Y_ABORT_UNLESS(pathId.OwnerId == DataShard.GetPathOwnerId());
+        const auto pathId = TPathId::FromProto(params.GetPathId());
+        Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();
-        Y_ABORT_UNLESS(version);
+        Y_ENSURE(version);
 
         TUserTable::TPtr tableInfo;
         switch (state) {
@@ -50,7 +50,7 @@ public:
 
             if (params.HasDropSnapshot()) {
                 const auto& snapshot = params.GetDropSnapshot();
-                Y_ABORT_UNLESS(snapshot.GetStep() != 0);
+                Y_ENSURE(snapshot.GetStep() != 0);
 
                 const TSnapshotKey key(pathId, snapshot.GetStep(), snapshot.GetTxId());
                 DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
@@ -64,11 +64,11 @@ public:
             break;
 
         default:
-            Y_FAIL_S("Unexpected alter cdc stream"
+            Y_ENSURE(false, "Unexpected alter cdc stream"
                 << ": params# " << params.ShortDebugString());
         }
 
-        Y_ABORT_UNLESS(tableInfo);
+        Y_ENSURE(tableInfo);
         DataShard.AddUserTable(pathId, tableInfo);
 
         if (tableInfo->NeedSchemaSnapshots()) {

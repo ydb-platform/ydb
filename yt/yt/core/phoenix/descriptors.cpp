@@ -2,7 +2,7 @@
 
 #include "schemas.h"
 
-namespace NYT::NPhoenix2 {
+namespace NYT::NPhoenix {
 
 using namespace NYson;
 
@@ -156,5 +156,5 @@ const TTypeDescriptor& TUniverseDescriptor::GetTypeDescriptorByTypeIndexOrThrow(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NPhoenix2
+} // namespace NYT::NPhoenix
 

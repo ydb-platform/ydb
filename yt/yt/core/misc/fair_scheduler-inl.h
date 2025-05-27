@@ -125,7 +125,7 @@ private:
 
     TUserBucket* GetOrCreateBucket(const std::string& userName)
     {
-        VERIFY_SPINLOCK_AFFINITY(Lock_);
+        YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         auto [it, inserted] = NameToUserBucket_.emplace(userName, TUserBucket(userName));
         return &it->second;

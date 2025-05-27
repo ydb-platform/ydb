@@ -8,6 +8,7 @@ PROVIDES(
 PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/minikql
+    yql/essentials/sql/settings
 )
 
 SRCS(

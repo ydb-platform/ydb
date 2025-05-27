@@ -27,13 +27,19 @@ PEERDIR(
     yql/essentials/minikql/arrow
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/parser/pg_catalog
-    yql/essentials/minikql/codegen/llvm14
+    yql/essentials/minikql/codegen/llvm16
     library/cpp/resource
 )
 
 YQL_LAST_ABI_VERSION()
+
+IF (YQL_USE_PG_BC)
+    CFLAGS(
+        -DYQL_USE_PG_BC
+    )
+ENDIF()
 
 IF (MKQL_RUNTIME_VERSION)
     CFLAGS(

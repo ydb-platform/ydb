@@ -33,10 +33,22 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 45e7499cce0e83f20695e4ede0105bb9
+KEEP     COPYRIGHT_SERVICE_LABEL 429ee841da9865a2396e293e4a2752c4
 BELONGS ya.make
     License text:
-        // Copyright 2013-2024 Antony Polukhin.
+        // Copyright 2012-2025 Antony Polukhin.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/type_index.hpp [2:2]
+        include/boost/type_index/detail/compile_time_type_info.hpp [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a02ef28cf50c34a56bd1d0f4de9575c
+BELONGS ya.make
+    License text:
+        // Copyright 2013-2025 Antony Polukhin.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -64,15 +76,3 @@ BELONGS ya.make
         include/boost/type_index/runtime_cast/reference_cast.hpp [2:2]
         include/boost/type_index/runtime_cast/register_runtime_class.hpp [2:2]
         include/boost/type_index/runtime_cast/std_shared_ptr_cast.hpp [2:2]
-
-KEEP     COPYRIGHT_SERVICE_LABEL d70651d643ac20a83ef134e7e5b5c1ec
-BELONGS ya.make
-    License text:
-        // Copyright 2012-2024 Antony Polukhin.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/type_index.hpp [2:2]
-        include/boost/type_index/detail/compile_time_type_info.hpp [2:2]

@@ -27,6 +27,7 @@ public:
         AddHandler({TYtSection::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleSection));
         AddHandler({TYtReadTable::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleReadTable));
         AddHandler({TYtTableContent::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleTableContent));
+        AddHandler({TYtBlockTableContent::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleBlockTableContent));
 
         AddHandler({TYtIsKeySwitch::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
         AddHandler({TYqlRowSpec::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
@@ -99,19 +100,19 @@ public:
 
         if (const auto sort = path.Table().Ref().GetConstraint<TSortedConstraintNode>()) {
             if (const auto filtered = sort->FilterFields(ctx, filter)) {
-                path.Ptr()->AddConstraint(filtered);
+                path.Ptr()->AddConstraint(filtered->GetSimplifiedForType(*path.Ref().GetTypeAnn(), ctx));
             }
         }
 
         if (const auto uniq = path.Table().Ref().GetConstraint<TUniqueConstraintNode>()) {
             if (const auto filtered = uniq->FilterFields(ctx, filter)) {
-                path.Ptr()->AddConstraint(filtered);
+                path.Ptr()->AddConstraint(filtered->GetSimplifiedForType(*path.Ref().GetTypeAnn(), ctx));
             }
         }
 
         if (const auto dist = path.Table().Ref().GetConstraint<TDistinctConstraintNode>()) {
             if (const auto filtered = dist->FilterFields(ctx, filter)) {
-                path.Ptr()->AddConstraint(filtered);
+                path.Ptr()->AddConstraint(filtered->GetSimplifiedForType(*path.Ref().GetTypeAnn(), ctx));
             }
         }
 
@@ -184,6 +185,12 @@ public:
 
     TStatus HandleTableContent(TExprBase input, TExprContext& /*ctx*/) {
         TYtTableContent tableContent = input.Cast<TYtTableContent>();
+        input.Ptr()->CopyConstraints(tableContent.Input().Ref());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleBlockTableContent(TExprBase input, TExprContext& /*ctx*/) {
+        TYtBlockTableContent tableContent = input.Cast<TYtBlockTableContent>();
         input.Ptr()->CopyConstraints(tableContent.Input().Ref());
         return TStatus::Ok;
     }

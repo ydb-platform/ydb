@@ -19,19 +19,19 @@ $src1 = [
     <|e: 1, f: 10|>,
 ];
 
-$src =
+$src = (
     SELECT
         *
     FROM
         as_table($src)
-;
+);
 
-$src1 =
+$src1 = (
     SELECT
         *
     FROM
         as_table($src1)
-;
+);
 
 SELECT
     a,

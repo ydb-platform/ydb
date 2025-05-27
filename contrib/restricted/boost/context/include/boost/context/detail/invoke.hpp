@@ -29,7 +29,7 @@ typename std::enable_if<
     typename std::result_of< Fn &&( Args && ... ) >::type
 >::type
 invoke( Fn && fn, Args && ... args) {
-    return std::mem_fn( fn)( std::forward< Args >( args) ... );   
+    return std::mem_fn( fn)( std::forward< Args >( args) ... );
 }
 
 template< typename Fn, typename ... Args >

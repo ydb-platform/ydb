@@ -1,3 +1,4 @@
+import re
 import os
 from enum import auto, StrEnum
 from typing import Any, Literal, TYPE_CHECKING
@@ -25,7 +26,8 @@ if TYPE_CHECKING:
 # 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
 # 0.2 is 300 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
-ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.2  # seconds per file
+# 0.0 - not to use chunks
+ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.0  # seconds per file
 
 REQUIRED_MISSING = "~~required~~"
 
@@ -192,6 +194,7 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestDataDirsRename.value,
         df.TsResources.value,
         df.TsTestForPath.value,
+        df.DockerImage.value,
     ),
     TsTestType.PLAYWRIGHT: (
         df.Size.from_unit,
@@ -295,8 +298,21 @@ def _with_report_configure_error(fn):
     return _wrapper
 
 
-def _build_directives(name: str, flags: list[str] | tuple[str], paths: list[str]) -> str:
-    parts = [p for p in [name] + (flags or []) if p]
+def _get_var_name(s: str) -> tuple[bool, str]:
+    if not s.startswith("$"):
+        return False, ""
+
+    PLAIN_VAR_PATTERN = r"^\$\w+$"
+    WRAPPED_VAR_PATTERN = r"^\$\{\w+\}$"
+    if re.match(PLAIN_VAR_PATTERN, s):
+        return True, s[1:]
+    if re.match(WRAPPED_VAR_PATTERN, s):
+        return True, s[2:-1]
+    return False, ""
+
+
+def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
+    parts = [p for p in (flags or []) if p]
     parts_str = ";".join(parts)
     expressions = ['${{{parts}:"{path}"}}'.format(parts=parts_str, path=path) for path in paths]
 
@@ -306,8 +322,15 @@ def _build_directives(name: str, flags: list[str] | tuple[str], paths: list[str]
 def _build_cmd_input_paths(paths: list[str] | tuple[str], hide=False, disable_include_processor=False):
     hide_part = "hide" if hide else ""
     disable_ip_part = "context=TEXT" if disable_include_processor else ""
+    input_part = "input=TEXT" if disable_include_processor else "input"
 
-    return _build_directives("input", [hide_part, disable_ip_part], paths)
+    return _build_directives([hide_part, disable_ip_part, input_part], paths)
+
+
+def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):
+    hide_part = "hide" if hide else ""
+
+    return _build_directives([hide_part, "output"], paths)
 
 
 def _create_erm_json(unit: NotsUnitType):
@@ -387,16 +410,16 @@ def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: s
 
 
 def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
-    if major < 14:
+    if major < 16:
         raise Exception(
             "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major)
         )
 
-    if major < 18:
+    if major < 20:
         unit.message(
             [
                 "WARN",
-                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major),
+                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/Yk0qYZe17DeVKP".format(major),
             ]
         )
 
@@ -465,7 +488,7 @@ def on_ts_configure(unit: NotsUnitType) -> None:
 
         tsconfig = TsConfig.load(abs_tsconfig_path)
         config_files = tsconfig.inline_extend(dep_paths)
-        config_files = _resolve_module_files(unit, mod_dir, config_files)
+        config_files = [rootrel_arc_src(path, unit) for path in config_files]
 
         use_tsconfig_outdir = unit.get("TS_CONFIG_USE_OUTDIR") == "yes"
         tsconfig.validate(use_tsconfig_outdir)
@@ -517,15 +540,14 @@ def on_setup_build_env(unit: NotsUnitType) -> None:
     unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
 
 
-def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs) -> None:
+def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs, delimiter: str = " ") -> None:
     """
     SET_APPEND() python naive implementation - append value/values to the list of values
     """
-    previous_value = unit.get(var_name) or ""
-    value_in_str = " ".join(value) if isinstance(value, list) or isinstance(value, tuple) else value
-    new_value = previous_value + " " + value_in_str
-
-    unit.set([var_name, new_value])
+    old_str_value = unit.get(var_name)
+    old_values = [old_str_value] if old_str_value else []
+    new_values = list(value) if isinstance(value, list) or isinstance(value, tuple) else [value]
+    unit.set([var_name, delimiter.join(old_values + new_values)])
 
 
 def __strip_prefix(prefix: str, line: str) -> str:
@@ -616,22 +638,22 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if not test_files:
         return
 
-    tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
-    tsconfig_path = tsconfig_paths[0]
-
-    if len(tsconfig_paths) > 1:
-        tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
-        if not tsconfig_path:
+    tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+    if not tsconfig_path:
+        tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
+        if len(tsconfig_paths) > 1:
             macros = " or ".join([f"TS_TYPECHECK({p})" for p in tsconfig_paths])
             raise Exception(f"Module uses several tsconfig files, specify which one to use for typecheck: {macros}")
-        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
-        if not abs_tsconfig_path:
-            raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
+
+        tsconfig_path = tsconfig_paths[0]
+
+    abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+    if not abs_tsconfig_path:
+        raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 
     unit.on_peerdir_ts_resource("typescript")
     user_recipes = unit.get("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
 
     test_type = TsTestType.TSC_TYPECHECK
 
@@ -684,7 +706,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     recipes_value = unit.get("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
 
     test_type = TsTestType.TS_STYLELINT
 
@@ -711,19 +732,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
         unit.set_property(["DART_DATA", data])
 
     unit.set(["TEST_RECIPES_VALUE", recipes_value])
-
-
-def _resolve_module_files(unit: NotsUnitType, mod_dir: str, file_paths: list[str]) -> list[str]:
-    mod_dir_with_sep_len = len(mod_dir) + 1
-    resolved_files = []
-
-    for path in file_paths:
-        resolved = rootrel_arc_src(path, unit)
-        if resolved.startswith(mod_dir):
-            resolved = resolved[mod_dir_with_sep_len:]
-        resolved_files.append(resolved)
-
-    return resolved_files
 
 
 def _set_resource_vars(
@@ -784,14 +792,27 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
 
     if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
         unit.set(["_PREPARE_DEPS_RESOURCES", " ".join([f'${{resource:"{uri}"}}' for uri in sorted(resources)])])
         unit.set(["_PREPARE_DEPS_USE_RESOURCES_FLAG", "--resource-root $(RESOURCE_ROOT)"])
 
     else:
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives("output", [], sorted(outs)))
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["output"], sorted(outs)))
         unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
+
+
+def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
+    if unit.get("TS_LOCAL_CLI") == "yes":
+        return False
+
+    if unit.get("_WITH_NODE_MODULES") == "yes":
+        return True
+
+    node_modules_for = unit.get("NODE_MODULES_FOR")
+    nm_required_for = node_modules_for.split(":") if node_modules_for else []
+
+    return arc_path in nm_required_for
 
 
 @_with_report_configure_error
@@ -802,12 +823,20 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
 
     if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
-        local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-        ins, outs = pm.calc_node_modules_inouts(local_cli, has_deps)
+        nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
+        if nm_bundle_needed:
+            unit.set(["_NODE_MODULES_BUNDLE_ARG", "--nm-bundle yes"])
 
-        __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
+        ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
+
+        __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
         if not unit.get("TS_TEST_FOR"):
-            __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("output", ["hide"], sorted(outs)))
+            __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
+
+        lf = pm.load_lockfile_from_dir(pm.sources_path)
+
+        if hasattr(lf, "validate_importers"):
+            lf.validate_importers()
 
         if pj.get_use_prebuilder():
             unit.on_peerdir_ts_resource("@yatool/prebuilder")
@@ -824,7 +853,6 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
 
             if prebuilder_major == "0":
                 # TODO: FBP-1408
-                lf = pm.load_lockfile_from_dir(pm.sources_path)
                 is_valid, invalid_keys = lf.validate_has_addons_flags()
 
                 if not is_valid:
@@ -838,7 +866,6 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
                         + "\n  - ".join(invalid_keys)
                     )
             else:
-                lf = pm.load_lockfile_from_dir(pm.sources_path)
                 requires_build_packages = lf.get_requires_build_packages()
                 is_valid, validation_messages = pj.validate_prebuilds(requires_build_packages)
 
@@ -864,8 +891,13 @@ def on_ts_test_for_configure(
 
     for_mod_path = df.TsTestForPath.value(unit, (), {})[df.TsTestForPath.KEY]
     unit.onpeerdir([for_mod_path])
+
+    # user-defined recipes should be in the end
+    user_recipes = unit.get("TEST_RECIPES_VALUE").replace("$TEST_RECIPES_VALUE", "").strip()
+    unit.set(["TEST_RECIPES_VALUE", ""])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
     unit.on_setup_extract_output_tars_recipe([for_mod_path])
+    __set_append(unit, "TEST_RECIPES_VALUE", user_recipes)
 
     build_root = "$B" if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE] else "$(BUILD_ROOT)"
     unit.set(["TS_TEST_NM", os.path.join(build_root, for_mod_path, node_modules_filename)])
@@ -933,13 +965,23 @@ def on_set_ts_test_for_vars(unit: NotsUnitType, for_mod: str) -> None:
     unit.set(["TS_TEST_FOR_PATH", rootrel_arc_src(for_mod, unit)])
 
 
+def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str]) -> None:
+    for f in files_in:
+        if f.startswith(".."):
+            ymake.report_configure_error(
+                "TS_FILES* macroses are only allowed to use files inside the project directory.\n"
+                f"Got path '{f}'.\n"
+                "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
+            )
+
+    new_items = _build_cmd_input_paths(paths=files_in, hide=True, disable_include_processor=True)
+    new_items += _build_cmd_output_paths(paths=files_out, hide=True)
+    __set_append(unit, "_TS_FILES_INOUTS", new_items)
+
+
 @_with_report_configure_error
 def on_ts_files(unit: NotsUnitType, *files: str) -> None:
-    new_cmds = ['$COPY_CMD ${{input;context=TEXT:"{0}"}} ${{output;noauto:"{0}"}}'.format(f) for f in files]
-    all_cmds = unit.get("_TS_FILES_COPY_CMD")
-    if all_cmds:
-        new_cmds.insert(0, all_cmds)
-    unit.set(["_TS_FILES_COPY_CMD", " && ".join(new_cmds)])
+    __on_ts_files(unit, files, files)
 
 
 @_with_report_configure_error
@@ -956,21 +998,21 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
         )
         return
 
+    in_files = [os.path.join('${BINDIR}', f) for f in files]
+    out_files = [os.path.join('${BINDIR}', destination, f) for f in files]
+
     # TODO: FBP-1795
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
-    new_cmds = [
-        '$COPY_CMD ${{input;context=TEXT:"${{BINDIR}}/{0}"}} ${{output;noauto:"{1}/{0}"}}'.format(f, destination)
-        for f in files
-    ]
-    all_cmds = unit.get("_TS_FILES_COPY_CMD")
-    if all_cmds:
-        new_cmds.insert(0, all_cmds)
-    unit.set(["_TS_FILES_COPY_CMD", " && ".join(new_cmds)])
+    new_items = [f'$COPY_CMD {i} {o}' for (i, o) in zip(in_files, out_files)]
+    __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
+    logger.print_vars("_TS_PROJECT_SETUP_CMD")
+
+    __on_ts_files(unit, in_files, out_files)
 
 
 @_with_report_configure_error
 def on_ts_package_check_files(unit: NotsUnitType) -> None:
-    ts_files = unit.get("_TS_FILES_COPY_CMD")
+    ts_files = unit.get("_TS_FILES_INOUTS")
     if ts_files == "":
         ymake.report_configure_error(
             "\n"
@@ -985,3 +1027,22 @@ def on_depends_on_mod(unit: NotsUnitType) -> None:
     if unit.get("_TS_TEST_DEPENDS_ON_BUILD"):
         for_mod_path = unit.get("TS_TEST_FOR_PATH")
         unit.ondepends([for_mod_path])
+
+
+@_with_report_configure_error
+def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: str) -> None:
+    inputs = unit.get("_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS").split(" ")
+
+    def process_input(input: str) -> str:
+        is_var, var_name = _get_var_name(input)
+        if is_var:
+            return f"${{hide;input:{var_name}}}"
+        return _build_cmd_input_paths([input], hide=True)
+
+    processed_inputs = [process_input(i) for i in inputs if i]
+
+    js_script = os.path.normpath(js_script)
+    if not js_script.startswith("node_modules/"):
+        processed_inputs.append(_build_cmd_input_paths([js_script], hide=True))
+
+    unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])

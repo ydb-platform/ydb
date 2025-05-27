@@ -122,7 +122,7 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
     }
 
     if (descriptionProto.GetColumnShardCount() == 0) {
-        errors.AddError("trying to create OLAP store without zero shards");
+        errors.AddError("trying to create OLAP store with zero shards");
         return false;
     }
 

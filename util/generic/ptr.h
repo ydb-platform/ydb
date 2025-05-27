@@ -95,10 +95,14 @@ public:
 
 private:
     /*
-     * we do not want dependancy on cstdlib here...
+     * we do not want a dependency on cstdlib here...
      */
     static void DoDestroy(void* t) noexcept;
 };
+
+namespace NDetail {
+    [[noreturn]] void NullDerefenceThrowImpl();
+} // namespace NDetail
 
 template <class Base, class T>
 class TPointerCommon {
@@ -114,6 +118,18 @@ public:
         T* ptr = AsT();
         Y_ASSERT(ptr);
         return ptr;
+    }
+
+    inline typename std::add_lvalue_reference<T>::type GetRef() const {
+        T* ptr = AsT();
+        if (Y_UNLIKELY(!ptr)) {
+            NDetail::NullDerefenceThrowImpl();
+        }
+        if constexpr (std::is_void<T>::value) {
+            return;
+        } else {
+            return *ptr;
+        }
     }
 
 #ifndef __cpp_impl_three_way_comparison
@@ -161,7 +177,7 @@ public:
 };
 
 /*
- * void*-like pointers does not have operator*
+ * void*-like pointers do not have operator*
  */
 template <class Base>
 class TPointerBase<Base, void>: public TPointerCommon<Base, void> {

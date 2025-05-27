@@ -44,6 +44,10 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("convert_counters_to_delta_gauge", &TThis::ConvertCountersToDeltaGauge)
         .Default(false);
+    registrar.Parameter("enable_histogram_compat", &TThis::EnableHistogramCompat)
+        .Default(false);
+    registrar.Parameter("report_timestamps_for_rate_metrics", &TThis::ReportTimestampsForRateMetrics)
+        .Default(true);
 
     registrar.Parameter("export_summary", &TThis::ExportSummary)
         .Default(false);
@@ -92,6 +96,9 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
         .Default(DefaultProducerCollectionBatchSize)
         .GreaterThan(0);
 
+    registrar.Parameter("label_sanitization_policy", &TThis::LabelSanitizationPolicy)
+        .Default(ELabelSanitizationPolicy::None);
+
     registrar.Postprocessor([] (TThis* config) {
         if (config->LingerTimeout.GetValue() % config->GridStep.GetValue() != 0) {
             THROW_ERROR_EXCEPTION("\"linger_timeout\" must be multiple of \"grid_step\"");
@@ -136,7 +143,7 @@ TShardConfigPtr TSolomonExporterConfig::MatchShard(const std::string& sensorName
                 continue;
             }
 
-            if (static_cast<int>(prefix.size()) > matchSize) {
+            if (std::ssize(prefix) > matchSize) {
                 matchSize = prefix.size();
                 matchedShard = config;
             }

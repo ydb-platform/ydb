@@ -1,0 +1,73 @@
+{
+    "Detailed" : {
+        "Operations" : [
+            {
+                "Id" : 3,
+                "Name" : "DqStage",
+                "Streams" : {
+                    "Program" : [
+                        {
+                            "Name" : "DqSourceWideWrap"
+                        },
+                        {
+                            "Name" : "NarrowMap"
+                        }
+                    ]
+                }
+            },
+            {
+                "Id" : 2,
+                "Name" : "DqQuery!",
+                "DependsOn" : [
+                    3
+                ]
+            },
+            {
+                "Id" : 1,
+                "Name" : "Commit!",
+                "DependsOn" : [
+                    2
+                ]
+            }
+        ],
+        "OperationRoot" : 1,
+        "Providers" : [ ],
+        "OperationStats" : {
+            "Commit!" : 1,
+            "DqQuery!" : 1,
+            "DqStage" : 1
+        }
+    },
+    "Basic" : {
+        "nodes" : [
+            {
+                "id" : 3,
+                "level" : 1,
+                "name" : "DqStage #3",
+                "type" : "op"
+            },
+            {
+                "id" : 2,
+                "level" : 2,
+                "name" : "DqQuery!",
+                "type" : "op"
+            },
+            {
+                "id" : 1,
+                "level" : 3,
+                "name" : "Commit!",
+                "type" : "op"
+            }
+        ],
+        "links" : [
+            {
+                "source" : 3,
+                "target" : 2
+            },
+            {
+                "source" : 2,
+                "target" : 1
+            }
+        ]
+    }
+}

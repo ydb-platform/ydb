@@ -28,7 +28,38 @@ bool Contains(const auto& names, std::string_view str) {
     return std::find(std::begin(names), std::end(names), str) != std::end(names);
 }
 
-constexpr std::string_view ImplTables[] = {ImplTable, NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable};
+bool ContainsSystemColumn(const auto& columns) {
+    for (const auto& column : columns) {
+        if (column.StartsWith(SYSTEM_COLUMN_PREFIX)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const TString ImplTables[] = {
+    ImplTable,
+    NTableVectorKmeansTreeIndex::LevelTable,
+    NTableVectorKmeansTreeIndex::PostingTable,
+    NTableVectorKmeansTreeIndex::PrefixTable,
+    TString{NTableVectorKmeansTreeIndex::PostingTable} + NTableVectorKmeansTreeIndex::BuildSuffix0,
+    TString{NTableVectorKmeansTreeIndex::PostingTable} + NTableVectorKmeansTreeIndex::BuildSuffix1,
+};
+
+constexpr std::string_view GlobalSecondaryImplTables[] = {
+    ImplTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalSecondaryImplTables), std::end(GlobalSecondaryImplTables)));
+
+constexpr std::string_view GlobalKMeansTreeImplTables[] = {
+    NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalKMeansTreeImplTables), std::end(GlobalKMeansTreeImplTables)));
+
+constexpr std::string_view PrefixedGlobalKMeansTreeImplTables[] = {
+    NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable, NTableVectorKmeansTreeIndex::PrefixTable,
+};
+static_assert(std::is_sorted(std::begin(PrefixedGlobalKMeansTreeImplTables), std::end(PrefixedGlobalKMeansTreeImplTables)));
 
 }
 
@@ -36,12 +67,10 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType type, const T
     TTableColumns result;
 
     const bool isSecondaryIndex = type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
-    if (isSecondaryIndex) {
-        for (const auto& ik : index.KeyColumns) {
-            result.Keys.push_back(ik);
-            result.Columns.emplace(ik);
-        }
-    }
+    std::for_each(index.KeyColumns.begin(), index.KeyColumns.end() - (isSecondaryIndex ? 0 : 1), [&] (const auto& ik) {
+        result.Keys.push_back(ik);
+        result.Columns.emplace(ik);
+    });
 
     for (const auto& tk : table.Keys) {
         if (result.Columns.emplace(tk).second) {
@@ -100,32 +129,26 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
 
     const bool isSecondaryIndex = indexType != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
 
+    if (index.KeyColumns.size() < 1) {
+        explain = "should be at least single index key column";
+        return false;
+    }
     if (isSecondaryIndex) {
-        if (index.KeyColumns.size() < 1) {
-            explain = "should be at least single index key column";
-            return false;
-        }
         if (index.KeyColumns == table.Keys) {
             explain = "index keys shouldn't be table keys";
             return false;
         }
     } else {
-        if (index.KeyColumns.size() != 1) {
-            explain = "only single key column is supported for vector index";
+        if (ContainsSystemColumn(table.Keys)) {
+            explain = TStringBuilder() << "table key column shouldn't have a reserved name";
             return false;
         }
-
-        if (Contains(table.Keys, NTableVectorKmeansTreeIndex::PostingTable_ParentColumn)) {
-            explain = TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentColumn;
+        if (ContainsSystemColumn(index.KeyColumns)) {
+            explain = TStringBuilder() << "index key column shouldn't have a reserved name";
             return false;
         }
-        if (Contains(index.KeyColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentColumn)) {
-            // This isn't really needed, but it will be really strange to have column with such name but different meaning
-            explain = TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentColumn;
-            return false;
-        }
-        if (Contains(index.DataColumns, NTableVectorKmeansTreeIndex::PostingTable_ParentColumn)) {
-            explain = TStringBuilder() << "index data column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::PostingTable_ParentColumn;
+        if (ContainsSystemColumn(index.DataColumns)) {
+            explain = TStringBuilder() << "index data column shouldn't have a reserved name";
             return false;
         }
     }
@@ -133,6 +156,8 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     tmp.insert(table.Keys.begin(), table.Keys.end());
     if (isSecondaryIndex) {
         tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end());
+    } else {
+        // Vector indexes allow to add all columns both to index & data
     }
     if (const auto* broken = IsContains(index.DataColumns, tmp, true)) {
         explain = TStringBuilder()
@@ -142,11 +167,15 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     return true;
 }
 
-TVector<TString> GetImplTables(NKikimrSchemeOp::EIndexType indexType) {
+std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys) {
     if (indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        return { NTableVectorKmeansTreeIndex::LevelTable, NTableVectorKmeansTreeIndex::PostingTable };
+        if (indexKeys.size() == 1) {
+            return GlobalKMeansTreeImplTables;
+        } else {
+            return PrefixedGlobalKMeansTreeImplTables;
+        }
     } else {
-        return { ImplTable };
+        return GlobalSecondaryImplTables;
     }
 }
 
@@ -156,7 +185,20 @@ bool IsImplTable(std::string_view tableName) {
 
 bool IsBuildImplTable(std::string_view tableName) {
     // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
-    return tableName.ends_with("build");
+    return tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix0)
+        || tableName.ends_with(NTableVectorKmeansTreeIndex::BuildSuffix1);
+}
+
+static constexpr TClusterId PostingParentFlag = (1ull << 63ull);
+
+// Note: if cluster id is too big, something is wrong with cluster enumeration 
+void EnsureNoPostingParentFlag(TClusterId parent) {
+    Y_ENSURE((parent & PostingParentFlag) == 0);
+}
+
+TClusterId SetPostingParentFlag(TClusterId parent) {
+    EnsureNoPostingParentFlag(parent);
+    return (parent | PostingParentFlag);
 }
 
 }

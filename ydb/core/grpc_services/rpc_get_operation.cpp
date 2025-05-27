@@ -19,7 +19,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -164,7 +164,7 @@ private:
 
         IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, tid);
         Y_ABORT_UNLESS(pipeActor);
-        PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
+        PipeActorId_ = ctx.Register(pipeActor);
 
         auto request = MakeHolder<NConsole::TEvConsole::TEvGetOperationRequest>();
         request->Record.MutableRequest()->set_id(GetProtoRequest()->id());
@@ -191,7 +191,7 @@ private:
 
         IActor* pipeActor = NTabletPipe::CreateClient(ctx.SelfID, schemeShardTabletId);
         Y_ABORT_UNLESS(pipeActor);
-        PipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
+        PipeActorId_ = ctx.Register(pipeActor);
 
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);

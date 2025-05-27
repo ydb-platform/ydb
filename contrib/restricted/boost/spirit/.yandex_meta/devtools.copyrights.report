@@ -148,6 +148,37 @@ BELONGS ya.make
         include/boost/spirit/repository/home/qi/nonterminal/subrule.hpp [2:3]
         include/boost/spirit/repository/home/support/subrule_context.hpp [2:3]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 0b4c8d40873c94b904c3fd1a62049eff
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2014 Joel de Guzman
+            Copyright (c) 2017 wanghan02
+            Copyright (c) 2024 Nana Sakisaka
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/spirit/home/x3/auxiliary/guard.hpp [2:4]
+        include/boost/spirit/home/x3/core/proxy.hpp [2:4]
+        include/boost/spirit/home/x3/core/skip_over.hpp [2:4]
+        include/boost/spirit/home/x3/directive/confix.hpp [2:5]
+        include/boost/spirit/home/x3/directive/expect.hpp [2:4]
+        include/boost/spirit/home/x3/directive/matches.hpp [2:5]
+        include/boost/spirit/home/x3/directive/repeat.hpp [2:6]
+        include/boost/spirit/home/x3/directive/seek.hpp [2:5]
+        include/boost/spirit/home/x3/directive/skip.hpp [2:4]
+        include/boost/spirit/home/x3/nonterminal/detail/rule.hpp [2:4]
+        include/boost/spirit/home/x3/operator/alternative.hpp [2:4]
+        include/boost/spirit/home/x3/operator/difference.hpp [2:4]
+        include/boost/spirit/home/x3/operator/kleene.hpp [2:5]
+        include/boost/spirit/home/x3/operator/list.hpp [2:5]
+        include/boost/spirit/home/x3/operator/not_predicate.hpp [2:4]
+        include/boost/spirit/home/x3/operator/optional.hpp [2:5]
+        include/boost/spirit/home/x3/operator/plus.hpp [2:5]
+        include/boost/spirit/home/x3/operator/sequence.hpp [2:4]
+        include/boost/spirit/home/x3/support/expectation.hpp [2:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 12ca7f7ec40c36a05a70ff3f155d83bc
 BELONGS ya.make
     License text:
@@ -178,12 +209,14 @@ BELONGS ya.make
     License text:
             Copyright (c) 2011 Jamboree
             Copyright (c) 2014 Lee Clagett
+            Copyright (c) 2017 wanghan02
+            Copyright (c) 2024 Nana Sakisaka
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/spirit/home/x3/directive/seek.hpp [2:3]
+        include/boost/spirit/home/x3/directive/seek.hpp [2:5]
         include/boost/spirit/repository/home/qi/directive/seek.hpp [2:2]
         include/boost/spirit/repository/home/support/seek.hpp [2:2]
         include/boost/spirit/repository/include/qi_seek.hpp [2:2]
@@ -198,7 +231,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/spirit/home/x3/directive/no_case.hpp [2:2]
-        include/boost/spirit/home/x3/directive/repeat.hpp [2:4]
+        include/boost/spirit/home/x3/directive/repeat.hpp [2:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1b648647338e7dfb30cf8f41aab9764b
 BELONGS ya.make
@@ -713,16 +746,16 @@ BELONGS ya.make
         include/boost/spirit/home/x3/binary.hpp [2:2]
         include/boost/spirit/home/x3/binary/binary.hpp [2:3]
         include/boost/spirit/home/x3/char/detail/cast_char.hpp [2:3]
-        include/boost/spirit/home/x3/directive/matches.hpp [2:3]
+        include/boost/spirit/home/x3/directive/matches.hpp [2:5]
         include/boost/spirit/home/x3/directive/no_skip.hpp [2:4]
-        include/boost/spirit/home/x3/directive/repeat.hpp [2:4]
+        include/boost/spirit/home/x3/directive/repeat.hpp [2:6]
         include/boost/spirit/home/x3/nonterminal/detail/transform_attribute.hpp [2:3]
         include/boost/spirit/home/x3/nonterminal/simple_trace.hpp [2:3]
         include/boost/spirit/home/x3/numeric/real_policies.hpp [2:3]
-        include/boost/spirit/home/x3/operator/kleene.hpp [2:3]
-        include/boost/spirit/home/x3/operator/list.hpp [2:3]
-        include/boost/spirit/home/x3/operator/optional.hpp [2:3]
-        include/boost/spirit/home/x3/operator/plus.hpp [2:3]
+        include/boost/spirit/home/x3/operator/kleene.hpp [2:5]
+        include/boost/spirit/home/x3/operator/list.hpp [2:5]
+        include/boost/spirit/home/x3/operator/optional.hpp [2:5]
+        include/boost/spirit/home/x3/operator/plus.hpp [2:5]
         include/boost/spirit/home/x3/support/numeric_utils/detail/extract_int.hpp [2:6]
         include/boost/spirit/home/x3/support/traits/handles_container.hpp [2:3]
         include/boost/spirit/home/x3/support/traits/numeric_traits.hpp [2:2]
@@ -997,7 +1030,7 @@ BELONGS ya.make
         include/boost/spirit/home/support/utree/utree.hpp [2:4]
         include/boost/spirit/home/support/utree/utree_traits.hpp [2:4]
         include/boost/spirit/home/x3/binary/binary.hpp [2:3]
-        include/boost/spirit/home/x3/directive/repeat.hpp [2:4]
+        include/boost/spirit/home/x3/directive/repeat.hpp [2:6]
         include/boost/spirit/home/x3/version.hpp [2:4]
         include/boost/spirit/include/karma.hpp [2:4]
         include/boost/spirit/include/karma_action.hpp [2:4]
@@ -1493,13 +1526,15 @@ BELONGS ya.make
     License text:
             Copyright (c) 2009 Chris Hoeppler
             Copyright (c) 2014 Lee Clagett
+            Copyright (c) 2017 wanghan02
+            Copyright (c) 2024 Nana Sakisaka
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/spirit/home/x3/directive/confix.hpp [2:3]
-        include/boost/spirit/home/x3/directive/seek.hpp [2:3]
+        include/boost/spirit/home/x3/directive/confix.hpp [2:5]
+        include/boost/spirit/home/x3/directive/seek.hpp [2:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5ac86f7028be2a8c407bd6184321ac70
 BELONGS ya.make
@@ -1550,12 +1585,14 @@ BELONGS ya.make
     License text:
             Copyright (c) 2015 Mario Lang
             Copyright (c) 2001-2011 Hartmut Kaiser
+            Copyright (c) 2017 wanghan02
+            Copyright (c) 2024 Nana Sakisaka
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/spirit/home/x3/directive/matches.hpp [2:3]
+        include/boost/spirit/home/x3/directive/matches.hpp [2:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5c26b4d7fe3c1805cc2c8b0e905940b0
 BELONGS ya.make
@@ -2273,6 +2310,36 @@ BELONGS ya.make
     Files with this license:
         include/boost/spirit/repository/include/qi_advance.hpp [2:3]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 9cc187c2ded964449d78a313133bfdd2
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001-2014 Joel de Guzman
+            Copyright (c) 2017 wanghan02
+            Copyright (c) 2024 Nana Sakisaka
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/spirit/home/x3/auxiliary/guard.hpp [2:4]
+        include/boost/spirit/home/x3/core/proxy.hpp [2:4]
+        include/boost/spirit/home/x3/core/skip_over.hpp [2:4]
+        include/boost/spirit/home/x3/directive/confix.hpp [2:5]
+        include/boost/spirit/home/x3/directive/expect.hpp [2:4]
+        include/boost/spirit/home/x3/directive/matches.hpp [2:5]
+        include/boost/spirit/home/x3/directive/repeat.hpp [2:6]
+        include/boost/spirit/home/x3/directive/seek.hpp [2:5]
+        include/boost/spirit/home/x3/nonterminal/detail/rule.hpp [2:4]
+        include/boost/spirit/home/x3/operator/alternative.hpp [2:4]
+        include/boost/spirit/home/x3/operator/difference.hpp [2:4]
+        include/boost/spirit/home/x3/operator/kleene.hpp [2:5]
+        include/boost/spirit/home/x3/operator/list.hpp [2:5]
+        include/boost/spirit/home/x3/operator/not_predicate.hpp [2:4]
+        include/boost/spirit/home/x3/operator/optional.hpp [2:5]
+        include/boost/spirit/home/x3/operator/plus.hpp [2:5]
+        include/boost/spirit/home/x3/operator/sequence.hpp [2:4]
+        include/boost/spirit/home/x3/support/expectation.hpp [2:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 9d30d1a61743fde4bb0f00ff80c68d32
 BELONGS ya.make
     License text:
@@ -2326,7 +2393,7 @@ BELONGS ya.make
         include/boost/spirit/home/x3/auxiliary/eoi.hpp [2:3]
         include/boost/spirit/home/x3/auxiliary/eol.hpp [2:3]
         include/boost/spirit/home/x3/auxiliary/eps.hpp [2:2]
-        include/boost/spirit/home/x3/auxiliary/guard.hpp [2:2]
+        include/boost/spirit/home/x3/auxiliary/guard.hpp [2:4]
         include/boost/spirit/home/x3/char.hpp [2:2]
         include/boost/spirit/home/x3/char/any_char.hpp [2:2]
         include/boost/spirit/home/x3/char/char.hpp [2:2]
@@ -2344,16 +2411,16 @@ BELONGS ya.make
         include/boost/spirit/home/x3/core/detail/parse_into_container.hpp [2:2]
         include/boost/spirit/home/x3/core/parse.hpp [2:2]
         include/boost/spirit/home/x3/core/parser.hpp [2:3]
-        include/boost/spirit/home/x3/core/proxy.hpp [2:2]
-        include/boost/spirit/home/x3/core/skip_over.hpp [2:2]
-        include/boost/spirit/home/x3/directive/expect.hpp [2:2]
+        include/boost/spirit/home/x3/core/proxy.hpp [2:4]
+        include/boost/spirit/home/x3/core/skip_over.hpp [2:4]
+        include/boost/spirit/home/x3/directive/expect.hpp [2:4]
         include/boost/spirit/home/x3/directive/lexeme.hpp [2:2]
         include/boost/spirit/home/x3/directive/no_skip.hpp [2:4]
         include/boost/spirit/home/x3/directive/omit.hpp [2:2]
-        include/boost/spirit/home/x3/directive/skip.hpp [2:3]
+        include/boost/spirit/home/x3/directive/skip.hpp [2:4]
         include/boost/spirit/home/x3/nonterminal.hpp [2:2]
         include/boost/spirit/home/x3/nonterminal/debug_handler_state.hpp [2:2]
-        include/boost/spirit/home/x3/nonterminal/detail/rule.hpp [2:2]
+        include/boost/spirit/home/x3/nonterminal/detail/rule.hpp [2:4]
         include/boost/spirit/home/x3/nonterminal/detail/transform_attribute.hpp [2:3]
         include/boost/spirit/home/x3/nonterminal/rule.hpp [2:2]
         include/boost/spirit/home/x3/nonterminal/simple_trace.hpp [2:3]
@@ -2363,17 +2430,17 @@ BELONGS ya.make
         include/boost/spirit/home/x3/numeric/real_policies.hpp [2:3]
         include/boost/spirit/home/x3/numeric/uint.hpp [2:3]
         include/boost/spirit/home/x3/operator.hpp [2:2]
-        include/boost/spirit/home/x3/operator/alternative.hpp [2:2]
+        include/boost/spirit/home/x3/operator/alternative.hpp [2:4]
         include/boost/spirit/home/x3/operator/and_predicate.hpp [2:2]
         include/boost/spirit/home/x3/operator/detail/alternative.hpp [2:2]
         include/boost/spirit/home/x3/operator/detail/sequence.hpp [2:2]
-        include/boost/spirit/home/x3/operator/difference.hpp [2:2]
-        include/boost/spirit/home/x3/operator/kleene.hpp [2:3]
-        include/boost/spirit/home/x3/operator/list.hpp [2:3]
-        include/boost/spirit/home/x3/operator/not_predicate.hpp [2:2]
-        include/boost/spirit/home/x3/operator/optional.hpp [2:3]
-        include/boost/spirit/home/x3/operator/plus.hpp [2:3]
-        include/boost/spirit/home/x3/operator/sequence.hpp [2:2]
+        include/boost/spirit/home/x3/operator/difference.hpp [2:4]
+        include/boost/spirit/home/x3/operator/kleene.hpp [2:5]
+        include/boost/spirit/home/x3/operator/list.hpp [2:5]
+        include/boost/spirit/home/x3/operator/not_predicate.hpp [2:4]
+        include/boost/spirit/home/x3/operator/optional.hpp [2:5]
+        include/boost/spirit/home/x3/operator/plus.hpp [2:5]
+        include/boost/spirit/home/x3/operator/sequence.hpp [2:4]
         include/boost/spirit/home/x3/string.hpp [2:2]
         include/boost/spirit/home/x3/string/detail/string_parse.hpp [2:2]
         include/boost/spirit/home/x3/string/detail/tst.hpp [2:2]
@@ -2485,12 +2552,14 @@ BELONGS ya.make
     License text:
             Copyright (c) 2009 Chris Hoeppler
             Copyright (c) 2014 Lee Clagett
+            Copyright (c) 2017 wanghan02
+            Copyright (c) 2024 Nana Sakisaka
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/spirit/home/x3/directive/confix.hpp [2:3]
+        include/boost/spirit/home/x3/directive/confix.hpp [2:5]
         include/boost/spirit/repository/home/qi/directive/confix.hpp [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL aa4f3bb63ff4fdd4e894b9af2925c00e
@@ -2507,7 +2576,7 @@ BELONGS ya.make
         include/boost/spirit/home/x3/auxiliary/attr.hpp [2:4]
         include/boost/spirit/home/x3/core/parser.hpp [2:3]
         include/boost/spirit/home/x3/directive/no_skip.hpp [2:4]
-        include/boost/spirit/home/x3/directive/skip.hpp [2:3]
+        include/boost/spirit/home/x3/directive/skip.hpp [2:4]
         include/boost/spirit/home/x3/support/traits/handles_container.hpp [2:3]
         include/boost/spirit/home/x3/support/utility/sfinae.hpp [2:3]
 

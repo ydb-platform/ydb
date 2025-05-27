@@ -2,17 +2,18 @@ LIBRARY()
 
 SRCS(
     actors_factory.cpp
-    common.cpp
     coordinator.cpp
     leader_election.cpp
-    row_dispatcher_service.cpp
+    probes.cpp
     row_dispatcher.cpp
+    row_dispatcher_service.cpp
     topic_session.cpp
 )
 
 PEERDIR(
     ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
+    ydb/core/fq/libs/metrics
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/row_dispatcher/format_handler
     ydb/core/fq/libs/row_dispatcher/purecalc_compilation
@@ -28,8 +29,9 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/providers/pq/provider
 
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

@@ -32,7 +32,8 @@ namespace NKikimr {
         void Finish() {}
 
         // process on-disk data
-        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*sstId*/) {
+        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*sstId*/,
+                const void* /*sst*/) {
             switch (memRec.GetType()) {
                 // ignore non-huge blobs
                 case TBlobType::MemBlob:
@@ -44,7 +45,7 @@ namespace NKikimr {
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, outbound);
                     const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
-                    Y_ABORT_UNLESS(extr.End - extr.Begin == local.CountBits());
+                    Y_VERIFY_S(extr.End - extr.Begin == local.CountBits(), LogPrefix);
                     const TDiskPart *part = extr.Begin;
                     for (ui32 i = local.FirstPosition(); i != local.GetSize(); i = local.NextPosition(i), ++part) {
                         if (part->ChunkIdx && part->Size) {
@@ -66,7 +67,7 @@ namespace NKikimr {
         }
 
         void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* /*data*/, const TKeyLogoBlob& key, ui64 /*lsn*/) {
-            AddFromSegment(memRec, nullptr, key, Max<ui64>());
+            AddFromSegment(memRec, nullptr, key, Max<ui64>(), nullptr);
         }
 
         void Clear() {
@@ -91,8 +92,8 @@ namespace NKikimr {
     public:
         template<typename TRead>
         THugeBlobAndIndexMerger(const TString& logPrefix, const TBlobStorageGroupType& gtype, TRead&& read, TScrubCoroImpl *impl)
-        : HugeBlobMerger(logPrefix, gtype, std::move(read), impl)
-        , IndexMerger(gtype)
+            : HugeBlobMerger(logPrefix, gtype, std::move(read), impl)
+            , IndexMerger(gtype)
         {}
 
         void AddFromFresh(const TMemRecLogoBlob &memRec, const TRope* data, const TKeyLogoBlob &key, ui64 lsn) {
@@ -100,9 +101,10 @@ namespace NKikimr {
             IndexMerger.AddFromFresh(memRec, data, key, lsn);
         }
 
-        void AddFromSegment(const TMemRecLogoBlob &memRec, const TDiskPart* outbound, const TKeyLogoBlob &key, ui64 circaLsn) {
-            HugeBlobMerger.AddFromSegment(memRec, outbound, key, circaLsn);
-            IndexMerger.AddFromSegment(memRec, outbound, key, circaLsn);
+        void AddFromSegment(const TMemRecLogoBlob &memRec, const TDiskPart* outbound, const TKeyLogoBlob &key, ui64 circaLsn,
+                const auto *sst) {
+            HugeBlobMerger.AddFromSegment(memRec, outbound, key, circaLsn, sst);
+            IndexMerger.AddFromSegment(memRec, outbound, key, circaLsn, sst);
         }
 
         static bool HaveToMergeData() { return true; }

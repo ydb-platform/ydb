@@ -6,6 +6,7 @@
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/arrow/block_item_comparator.h>
 #include <yql/essentials/public/udf/arrow/block_item_hasher.h>
+#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
@@ -24,6 +25,39 @@ namespace NKikimr {
 namespace {
 
 static const TString UdfName("UDF");
+
+class TPrefixLogger : public NUdf::ILogger {
+public:
+    TPrefixLogger(const TString& moduleName, const NUdf::TLoggerPtr& inner)
+        : ModuleName_(moduleName)
+        , Inner_(inner)
+    {}
+
+    NUdf::TLogComponentId RegisterComponent(const NUdf::TStringRef& component) final {
+        TString fullName = TStringBuilder() << ModuleName_ << "." << component;
+        return Inner_->RegisterComponent(fullName);
+    }
+
+    void SetDefaultLevel(NUdf::ELogLevel level) final {
+        Inner_->SetDefaultLevel(level);
+    }
+
+    void SetComponentLevel(NUdf::TLogComponentId component, NUdf::ELogLevel level) final {
+        Inner_->SetComponentLevel(component, level);
+    }
+
+    bool IsActive(NUdf::TLogComponentId component, NUdf::ELogLevel level) const final {
+        return Inner_->IsActive(component, level);
+    }
+
+    void Log(NUdf::TLogComponentId component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+        Inner_->Log(component, level, message);
+    }
+
+private:
+    const TString ModuleName_;
+    const NUdf::TLoggerPtr Inner_;
+};
 
 class TPgTypeIndex {
     using TUdfTypes = TVector<NYql::NUdf::TPgTypeDescription>;
@@ -1430,9 +1464,13 @@ private:
 
 namespace NMiniKQL {
 
-bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+namespace {
+
+bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type, bool output) {
     switch (slot) {
     case NUdf::EDataSlot::Bool:
+        type = output ? arrow::boolean() : arrow::uint8();
+        return true;
     case NUdf::EDataSlot::Uint8:
         type = arrow::uint8();
         return true;
@@ -1517,11 +1555,30 @@ bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& ty
     }
 }
 
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
+inline bool IsSingularType(const TType* type) {
+    return type->IsNull() ||
+           type->IsVoid() ||
+           type->IsEmptyDict() ||
+           type->IsEmptyList();
+}
+
+inline bool NeedWrapWithExternalOptional(const TType* type) {
+    return type->IsPg() || IsSingularType(type);
+}
+
+bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail, bool output) {
     bool isOptional;
     auto unpacked = UnpackOptional(itemType, isOptional);
-    if (unpacked->IsOptional() || isOptional && unpacked->IsPg()) {
-        // at least 2 levels of optionals
+
+    if (output && !unpacked->IsData()) {
+        // output supports only data and optional data types
+        if (onFail) {
+            onFail(unpacked);
+        }
+        return false;
+    }
+
+    if (unpacked->IsOptional() || isOptional && NeedWrapWithExternalOptional(unpacked)) {
         ui32 nestLevel = 0;
         auto currentType = itemType;
         auto previousType = itemType;
@@ -1531,14 +1588,13 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
             currentType = AS_TYPE(TOptionalType, currentType)->GetItemType();
         } while (currentType->IsOptional());
 
-        if (currentType->IsPg()) {
+        if (NeedWrapWithExternalOptional(currentType)) {
             previousType = currentType;
             ++nestLevel;
         }
 
-        // previousType is always Optional
         std::shared_ptr<arrow::DataType> innerArrowType;
-        if (!ConvertArrowType(previousType, innerArrowType, onFail)) {
+        if (!ConvertArrowTypeImpl(previousType, innerArrowType, onFail, output)) {
             return false;
         }
 
@@ -1560,7 +1616,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
             std::shared_ptr<arrow::DataType> childType;
             const TString memberName(structType->GetMemberName(i));
             auto memberType = structType->GetMemberType(i);
-            if (!ConvertArrowType(memberType, childType, onFail)) {
+            if (!ConvertArrowTypeImpl(memberType, childType, onFail, output)) {
                 return false;
             }
             members.emplace_back(std::make_shared<arrow::Field>(memberName, childType, memberType->IsOptional()));
@@ -1576,7 +1632,7 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             std::shared_ptr<arrow::DataType> childType;
             auto elementType = tupleType->GetElementType(i);
-            if (!ConvertArrowType(elementType, childType, onFail)) {
+            if (!ConvertArrowTypeImpl(elementType, childType, onFail, output)) {
                 return false;
             }
 
@@ -1604,6 +1660,17 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
         return true;
     }
 
+    if (itemType->IsTagged()) {
+        auto taggedType = AS_TYPE(TTaggedType, itemType);
+        auto baseType = taggedType->GetBaseType();
+        return ConvertArrowTypeImpl(baseType, type, onFail, output);
+    }
+
+    if (IsSingularType(unpacked)) {
+        type = arrow::null();
+        return true;
+    }
+
     if (!unpacked->IsData()) {
         if (onFail) {
             onFail(unpacked);
@@ -1619,11 +1686,29 @@ bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, c
         return false;
     }
 
-    bool result = ConvertArrowType(*slot, type);
+    bool result = ConvertArrowTypeImpl(*slot, type, output);
     if (!result && onFail) {
         onFail(unpacked);
     }
     return result;
+}
+
+} // namespace
+
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
+    return ConvertArrowTypeImpl(itemType, type, onFail, false);
+}
+
+bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+    return ConvertArrowTypeImpl(slot, type, false);
+}
+
+bool ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
+    return ConvertArrowTypeImpl(itemType, type, onFail, true);
+}
+
+bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+    return ConvertArrowTypeImpl(slot, type, true);
 }
 
 void TArrowType::Export(ArrowSchema* out) const {
@@ -1637,13 +1722,16 @@ void TArrowType::Export(ArrowSchema* out) const {
 // TFunctionTypeInfoBuilder
 //////////////////////////////////////////////////////////////////////////////
 TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
+        NYql::TLangVersion langver,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
         const TStringBuf& moduleName,
         NUdf::ICountersProvider* countersProvider,
         const NUdf::TSourcePosition& pos,
-        const NUdf::ISecureParamsProvider* provider)
-    : Env_(env)
+        const NUdf::ISecureParamsProvider* secureParamsProvider,
+        const NUdf::ILogProvider* logProvider)
+    : LangVer_(langver)
+    , Env_(env)
     , ReturnType_(nullptr)
     , RunConfigType_(Env_.GetTypeOfVoidLazy())
     , UserType_(Env_.GetTypeOfVoidLazy())
@@ -1651,7 +1739,8 @@ TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
     , ModuleName_(moduleName)
     , CountersProvider_(countersProvider)
     , Pos_(pos)
-    , SecureParamsProvider_(provider)
+    , SecureParamsProvider_(secureParamsProvider)
+    , LogProvider_(logProvider)
 {
 }
 
@@ -1733,6 +1822,32 @@ bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStrin
     if (SecureParamsProvider_)
         return SecureParamsProvider_->GetSecureParam(key, value);
     return false;
+}
+
+NUdf::TLoggerPtr TFunctionTypeInfoBuilder::MakeLogger(bool synchronized) const {
+    if (!LogProvider_) {
+        return NUdf::MakeNullLogger();
+    }
+
+    auto inner = LogProvider_->MakeLogger();
+    NUdf::TLoggerPtr ret(new TPrefixLogger(TString(ModuleName_), inner));
+    if (synchronized) {
+        ret = NUdf::MakeSynchronizedLogger(ret);
+    }
+
+    return ret;
+}
+
+void TFunctionTypeInfoBuilder::SetMinLangVer(ui32 langver) {
+    MinLangVer_ = langver;
+
+}
+void TFunctionTypeInfoBuilder::SetMaxLangVer(ui32 langver) {
+    MaxLangVer_ = langver;
+}
+
+ui32 TFunctionTypeInfoBuilder::GetCurrentLangVer() const {
+    return LangVer_;
 }
 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
@@ -1853,6 +1968,8 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
     funcInfo->IRFunctionName = std::move(IRFunctionName_);
     funcInfo->SupportsBlocks = SupportsBlocks_;
     funcInfo->IsStrict = IsStrict_;
+    funcInfo->MinLangVer = MinLangVer_;
+    funcInfo->MaxLangVer = MaxLangVer_;
 }
 
 NUdf::TType* TFunctionTypeInfoBuilder::Primitive(NUdf::TDataTypeId typeId) const
@@ -2447,6 +2564,15 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         return sizeof(NYql::NUdf::TUnboxedValue);
     }
 
+    if (IsSingularType(type)) {
+        return 0;
+    }
+
+    if (type->IsTagged()) {
+        auto taggedType = AS_TYPE(TTaggedType, type);
+        return CalcMaxBlockItemSize(taggedType->GetBaseType());
+    }
+
     if (type->IsData()) {
         auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
         switch (slot) {
@@ -2520,6 +2646,9 @@ struct TComparatorTraits {
     using TExtOptional = NUdf::TExternalOptionalBlockItemComparator;
     template <typename T, bool Nullable>
     using TTzDateComparator = NUdf::TTzDateBlockItemComparator<T, Nullable>;
+    using TSingularType = NUdf::TSingularTypeBlockItemComparator;
+
+    constexpr static bool PassType = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -2529,6 +2658,10 @@ struct TComparatorTraits {
     static std::unique_ptr<TResult> MakeResource(bool isOptional) {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Comparator not implemented for block resources: ";
+    }
+
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
     }
 
     template<typename TTzDate>
@@ -2552,6 +2685,9 @@ struct THasherTraits {
     using TExtOptional = NUdf::TExternalOptionalBlockItemHasher;
     template <typename T, bool Nullable>
     using TTzDateHasher = NYql::NUdf::TTzDateBlockItemHasher<T, Nullable>;
+    using TSingularType = NUdf::TSingularTypeBlockItemHaser;
+
+    constexpr static bool PassType = false;
 
     static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -2562,7 +2698,7 @@ struct THasherTraits {
         Y_UNUSED(isOptional);
         ythrow yexception() << "Hasher not implemented for block resources";
     }
-    
+
     template<typename TTzDate>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
         if (isOptional) {
@@ -2571,14 +2707,18 @@ struct THasherTraits {
             return std::make_unique<TTzDateHasher<TTzDate, false>>();
         }
     }
+
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
+    }
 };
 
 NUdf::IBlockItemComparator::TPtr TBlockTypeHelper::MakeComparator(NUdf::TType* type) const {
-    return NUdf::MakeBlockReaderImpl<TComparatorTraits>(TTypeInfoHelper(), type, nullptr).release();
+    return NUdf::DispatchByArrowTraits<TComparatorTraits>(TTypeInfoHelper(), type, nullptr).release();
 }
 
 NUdf::IBlockItemHasher::TPtr TBlockTypeHelper::MakeHasher(NUdf::TType* type) const {
-    return NUdf::MakeBlockReaderImpl<THasherTraits>(TTypeInfoHelper(), type, nullptr).release();
+    return NUdf::DispatchByArrowTraits<THasherTraits>(TTypeInfoHelper(), type, nullptr).release();
 }
 
 TType* TTypeBuilder::NewVoidType() const {
@@ -2586,12 +2726,11 @@ TType* TTypeBuilder::NewVoidType() const {
 }
 
 TType* TTypeBuilder::NewNullType() const {
-    if (!UseNullType || RuntimeVersion < 11) {
-        TCallableBuilder callableBuilder(Env, "Null", NewOptionalType(NewVoidType()));
-        return TRuntimeNode(callableBuilder.Build(), false).GetStaticType();
-    } else {
+    if (UseNullType) {
         return TRuntimeNode(Env.GetNullLazy(), true).GetStaticType();
     }
+    TCallableBuilder callableBuilder(Env, "Null", NewOptionalType(NewVoidType()));
+    return TRuntimeNode(callableBuilder.Build(), false).GetStaticType();
 }
 
 TType* TTypeBuilder::NewEmptyStructType() const {
@@ -2679,17 +2818,11 @@ TType* TTypeBuilder::NewArrayType(const TArrayRef<TType* const>& elements) const
 }
 
 TType* TTypeBuilder::NewEmptyMultiType() const {
-    if (RuntimeVersion > 35) {
-        return TMultiType::Create(0, nullptr, Env);
-    }
-    return Env.GetEmptyTupleLazy()->GetGenericType();
+    return TMultiType::Create(0, nullptr, Env);
 }
 
 TType* TTypeBuilder::NewMultiType(const TArrayRef<TType* const>& elements) const {
-    if (RuntimeVersion > 35) {
-        return TMultiType::Create(elements.size(), elements.data(), Env);
-    }
-    return TTupleType::Create(elements.size(), elements.data(), Env);
+    return TMultiType::Create(elements.size(), elements.data(), Env);
 }
 
 TType* TTypeBuilder::NewResourceType(const std::string_view& tag) const {
@@ -2698,6 +2831,47 @@ TType* TTypeBuilder::NewResourceType(const std::string_view& tag) const {
 
 TType* TTypeBuilder::NewVariantType(TType* underlyingType) const {
     return TVariantType::Create(underlyingType, Env);
+}
+
+TType* TTypeBuilder::ValidateBlockStructType(const TStructType* structType) const {
+    MKQL_ENSURE(structType->GetMembersCount() > 0, "Expected at least one column");
+
+    std::vector<std::pair<std::string_view, TType*>> outStructItems;
+    outStructItems.reserve(structType->GetMembersCount() - 1);
+    bool hasBlockLengthColumn = false;
+    for (size_t i = 0; i < structType->GetMembersCount(); i++) {
+        auto blockType = AS_TYPE(TBlockType, structType->GetMemberType(i));
+        bool isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
+        auto itemType = blockType->GetItemType();
+        if (structType->GetMemberName(i) == NYql::BlockLengthColumnName) {
+            MKQL_ENSURE(isScalar, "Block length column should be scalar");
+            MKQL_ENSURE(AS_TYPE(TDataType, itemType)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+
+            hasBlockLengthColumn = true;
+        } else {
+            outStructItems.emplace_back(structType->GetMemberName(i), itemType);
+        }
+    }
+    MKQL_ENSURE(hasBlockLengthColumn, "Block struct must contain block length column");
+    return NewStructType(outStructItems);
+}
+
+TType* TTypeBuilder::BuildBlockStructType(const TStructType* structType) const {
+    std::vector<std::pair<std::string_view, TType*>> blockStructItems;
+    blockStructItems.reserve(structType->GetMembersCount() + 1);
+    for (size_t i = 0; i < structType->GetMembersCount(); i++) {
+        auto itemType = structType->GetMemberType(i);
+        MKQL_ENSURE(!itemType->IsBlock() , "Block types are not allowed here");
+        blockStructItems.emplace_back(
+            structType->GetMemberName(i),
+            NewBlockType(itemType, TBlockType::EShape::Many)
+        );
+    }
+    blockStructItems.emplace_back(
+        NYql::BlockLengthColumnName,
+        NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar)
+    );
+    return NewStructType(blockStructItems);
 }
 
 void RebuildTypeIndex() {

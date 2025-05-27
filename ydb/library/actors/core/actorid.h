@@ -49,8 +49,8 @@ namespace NActors {
             Raw.N.NodeId = nodeId | (poolId << PoolIndexShift);
         }
 
-        explicit TActorId(ui32 nodeId, const TStringBuf& x) noexcept {
-            Y_ABORT_UNLESS(x.size() <= MaxServiceIDLength, "service id is too long");
+        explicit TActorId(ui32 nodeId, const TStringBuf& x) {
+            Y_ENSURE(x.size() <= MaxServiceIDLength, "service id is too long");
             Raw.N.LocalId = 0;
             Raw.N.Hint = 0;
             Raw.N.NodeId = nodeId | ServiceMask;

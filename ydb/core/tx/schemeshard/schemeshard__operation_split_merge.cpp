@@ -705,6 +705,75 @@ public:
         return true;
     }
 
+    bool AllocateDstForOneToOne(
+            const NKikimrSchemeOp::TSplitMergeTablePartitions& info,
+            TTxId txId,
+            const TPathId& pathId,
+            const TVector<ui64>& srcPartitionIdxs,
+            const TTableInfo::TCPtr tableInfo,
+            TTxState& op,
+            const TChannelsBindings& channels,
+            TString& errStr,
+            TOperationContext& context)
+    {
+        Y_UNUSED(errStr);
+
+        // 1 source shard is split/merged into 1 shard
+        Y_ABORT_UNLESS(srcPartitionIdxs.size() == 1);
+        Y_ABORT_UNLESS(info.SplitBoundarySize() == 0);
+
+        TString firstRangeBegin;
+        if (srcPartitionIdxs[0] != 0) {
+            // Take the end of previous shard
+            firstRangeBegin = tableInfo->GetPartitions()[srcPartitionIdxs[0]-1].EndOfRange;
+        } else {
+            TVector<TCell> firstKey;
+            ui32 keyColCount = 0;
+            for (const auto& col : tableInfo->Columns) {
+                if (col.second.IsKey()) {
+                    ++keyColCount;
+                }
+            }
+            // Or start from (NULL, NULL, .., NULL)
+            firstKey.resize(keyColCount);
+            firstRangeBegin = TSerializedCellVec::Serialize(firstKey);
+        }
+
+        op.SplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
+        // Fill src shards
+        TString prevRangeEnd = firstRangeBegin;
+        for (ui64 pi : srcPartitionIdxs) {
+            auto* srcRange = op.SplitDescription->AddSourceRanges();
+            auto shardIdx = tableInfo->GetPartitions()[pi].ShardIdx;
+            srcRange->SetShardIdx(ui64(shardIdx.GetLocalId()));
+            srcRange->SetTabletID(ui64(context.SS->ShardInfos[shardIdx].TabletID));
+            srcRange->SetKeyRangeBegin(prevRangeEnd);
+            TString rangeEnd = tableInfo->GetPartitions()[pi].EndOfRange;
+            srcRange->SetKeyRangeEnd(rangeEnd);
+            prevRangeEnd = rangeEnd;
+        }
+
+        // Fill dst shard
+        TShardInfo datashardInfo = TShardInfo::DataShardInfo(txId, pathId);
+        datashardInfo.BindedChannels = channels;
+
+        auto idx = context.SS->RegisterShardInfo(datashardInfo);
+
+        ui64 lastSrcPartition = srcPartitionIdxs.back();
+        TString lastRangeEnd = tableInfo->GetPartitions()[lastSrcPartition].EndOfRange;
+
+        TTxState::TShardOperation dstShardOp(idx, ETabletType::DataShard, TTxState::CreateParts);
+        dstShardOp.RangeEnd = lastRangeEnd;
+        op.Shards.push_back(dstShardOp);
+
+        auto* dstRange = op.SplitDescription->AddDestinationRanges();
+        dstRange->SetShardIdx(ui64(idx.GetLocalId()));
+        dstRange->SetKeyRangeBegin(firstRangeBegin);
+        dstRange->SetKeyRangeEnd(lastRangeEnd);
+
+        return true;
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -721,18 +790,31 @@ public:
         }
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TSplitMerge Propose"
-                         << ", tableStr: " << info.GetTablePath()
-                         << ", tableId: " << pathId
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
-
+            "TSplitMerge Propose"
+            << ", tableStr: " << info.GetTablePath()
+            << ", tableId: " << pathId
+            << ", opId: " << OperationId
+            << ", at schemeshard: " << ssId
+            << ", request: " << info.ShortDebugString());
+        
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
+
+        auto setResultError = [&](NKikimrScheme::EStatus status, const TString& error) {
+            result->SetError(status, error);
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TSplitMerge Propose failed " << status << " " << error
+                << ", tableStr: " << info.GetTablePath()
+                << ", tableId: " << pathId
+                << ", opId: " << OperationId
+                << ", at schemeshard: " << ssId
+                << ", request: " << info.ShortDebugString());
+        };
+
         TString errStr;
 
         if (!info.HasTablePath() && !info.HasTableLocalId()) {
             errStr = "Neither table name nor pathId in SplitMergeInfo";
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            setResultError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
@@ -759,18 +841,18 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
+                setResultError(checks.GetStatus(), checks.GetError());
                 return result;
             }
         }
 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            setResultError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
         if (!context.SS->CheckLocks(path.Base()->PathId, Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            setResultError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }
 
@@ -781,7 +863,14 @@ public:
         if (tableInfo->IsBackup) {
             TString errMsg = TStringBuilder()
                 << "cannot split/merge backup table " << info.GetTablePath();
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
+            setResultError(NKikimrScheme::StatusInvalidParameter, errMsg);
+            return result;
+        }
+
+        if (tableInfo->IsRestore) {
+            TString errMsg = TStringBuilder()
+                << "cannot split/merge restore table " << info.GetTablePath();
+            setResultError(NKikimrScheme::StatusInvalidParameter, errMsg);
             return result;
         }
 
@@ -794,7 +883,7 @@ public:
             auto srcShardIdx = context.SS->GetShardIdx(srcTabletId);
             if (!srcShardIdx) {
                 TString errMsg = TStringBuilder() << "Unknown SourceTabletId: " << srcTabletId;
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
+                setResultError(NKikimrScheme::StatusInvalidParameter, errMsg);
                 return result;
             }
 
@@ -804,7 +893,7 @@ public:
                     << ", tablet: " << srcTabletId
                     << ", srcShardIdx: " << srcShardIdx
                     << ", pathId: " << path.Base()->PathId;
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
+                setResultError(NKikimrScheme::StatusInvalidParameter, errMsg);
                 return result;
             }
 
@@ -814,20 +903,20 @@ public:
                     << ", tablet: " << srcTabletId
                     << ", srcShardIdx: " << srcShardIdx
                     << ", pathId: " << path.Base()->PathId;
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
+                setResultError(NKikimrScheme::StatusInvalidParameter, errMsg);
                 return result;
             }
 
             if (context.SS->ShardInfos.FindPtr(srcShardIdx)->PathId != path.Base()->PathId || !shardIdx2partition.contains(srcShardIdx)) {
                 TString errMsg = TStringBuilder() << "TabletId " << srcTabletId << " is not a partition of table " << info.GetTablePath();
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errMsg);
+                setResultError(NKikimrScheme::StatusInvalidParameter, errMsg);
                 return result;
             }
 
 
             if (context.SS->ShardIsUnderSplitMergeOp(srcShardIdx)) {
                 TString errMsg = TStringBuilder() << "TabletId " << srcTabletId << " is already in process of split";
-                result->SetError(NKikimrScheme::StatusMultipleModifications, errMsg);
+                setResultError(NKikimrScheme::StatusMultipleModifications, errMsg);
                 return result;
             }
 
@@ -835,7 +924,7 @@ public:
                 const auto* stats = tableInfo->GetStats().PartitionStats.FindPtr(srcShardIdx);
                 if (!stats || stats->ShardState != NKikimrTxDataShard::Ready) {
                     TString errMsg = TStringBuilder() << "Src TabletId " << srcTabletId << " is not in Ready state";
-                    result->SetError(NKikimrScheme::StatusNotAvailable, errMsg);
+                    setResultError(NKikimrScheme::StatusNotAvailable, errMsg);
                     return result;
                 }
 
@@ -850,7 +939,7 @@ public:
         if (context.SS->SplitSettings.SplitMergePartCountLimit != -1 &&
             totalSrcPartCount >= context.SS->SplitSettings.SplitMergePartCountLimit)
         {
-            result->SetError(NKikimrScheme::StatusNotAvailable,
+            setResultError(NKikimrScheme::StatusNotAvailable,
                              Sprintf("Split/Merge operation involves too many parts: %" PRIu64, totalSrcPartCount));
 
             LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -862,7 +951,7 @@ public:
         }
 
         if (srcPartitionIdxs.empty()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "No source partitions specified for split/merge TxId " << OperationId.GetTxId());
+            setResultError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "No source partitions specified for split/merge TxId " << OperationId.GetTxId());
             return result;
         }
 
@@ -878,7 +967,7 @@ public:
 
             if (!context.SS->GetBindingsRooms(path.GetPathIdForDomain(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) {
                 errStr = TString("database doesn't have required storage pools to create tablet with storage config, details: ") + errStr;
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                setResultError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
 
@@ -893,7 +982,7 @@ public:
             }
         } else if (context.SS->IsCompatibleChannelProfileLogic(path.GetPathIdForDomain(), tableInfo)) {
             if (!context.SS->GetChannelsBindings(path.GetPathIdForDomain(), tableInfo, channelsBinding, errStr)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                setResultError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
         }
@@ -913,17 +1002,23 @@ public:
         if (srcPartitionIdxs.size() == 1 && dstCount > 1) {
             // This is Split operation, allocate new shards for split Dsts
             if (!AllocateDstForSplit(info, OperationId.GetTxId(), path.Base()->PathId, srcPartitionIdxs[0], tableInfo, op, channelsBinding, errStr, context)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                setResultError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
         } else if (dstCount == 1 && srcPartitionIdxs.size() > 1) {
             // This is merge, allocate 1 Dst shard
             if (!AllocateDstForMerge(info, OperationId.GetTxId(), path.Base()->PathId, srcPartitionIdxs, tableInfo, op, channelsBinding, errStr, context)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                setResultError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
+        } else if (srcPartitionIdxs.size() == 1 && dstCount == 1 && info.GetAllowOneToOneSplitMerge()) {
+            // This is one-to-one split/merge
+            if (!AllocateDstForOneToOne(info, OperationId.GetTxId(), path.Base()->PathId, srcPartitionIdxs, tableInfo, op, channelsBinding, errStr, context)) {
+                setResultError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
         } else {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Invalid request: only 1->N or N->1 are supported");
+            setResultError(NKikimrScheme::StatusInvalidParameter, "Invalid request: only 1->N or N->1 are supported");
             return result;
         }
 
@@ -967,10 +1062,20 @@ public:
             }
         }
 
-        path.DomainInfo()->AddInternalShards(op); //allow over commit for merge
+        path.DomainInfo()->AddInternalShards(op, context.SS); //allow over commit for merge
         path->IncShardsInside(dstCount);
 
         SetState(NextState());
+
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TSplitMerge Propose accepted"
+            << ", tableStr: " << info.GetTablePath()
+            << ", tableId: " << pathId
+            << ", opId: " << OperationId
+            << ", at schemeshard: " << ssId
+            << ", op: " << op.SplitDescription->ShortDebugString()
+            << ", request: " << info.ShortDebugString());
+
         return result;
     }
 

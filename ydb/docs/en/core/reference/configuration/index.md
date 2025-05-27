@@ -123,9 +123,15 @@ hosts:
 
 When deploying {{ ydb-short-name }} with a Kubernetes operator, the entire `hosts` section is generated automatically, replacing any user-specified content in the configuration passed to the operator. All Storage nodes use `host_config_id` = `1`, for which the [correct configuration](#host-configs-k8s) must be specified.
 
+## log_config: Logging configuration {#log-config}
+
+The `log_config` section controls how {{ ydb-short-name }} processes and manages logs. It allows you to customize logging levels, formats, and destinations for different components.
+
+For detailed information about log configuration options, see [{#T}](log_config.md).
+
 ## domains_config: Cluster domain {#domains-config}
 
-This section contains the configuration of the {{ ydb-short-name }} cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage), [State Storage](#domains-state), and [authentication](#auth) configurations.
+This section contains the configuration of the {{ ydb-short-name }} cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage) and [State Storage](#domains-state) configurations.
 
 ### Syntax
 
@@ -149,11 +155,11 @@ This section defines one or more types of storage pools available in the cluster
 
 The following [fault tolerance modes](../../concepts/topology.md) are available:
 
-| Mode | Description |
---- | ---
-| `none` | There is no redundancy. Applies for testing. |
-| `block-4-2` | Redundancy factor of 1.5, applies to single data center clusters. |
-| `mirror-3-dc` | Redundancy factor of 3, applies to multi-data center clusters. |
+| Mode          | Description                                                       |
+|---------------|-------------------------------------------------------------------|
+| `none`        | There is no redundancy. Applies for testing.                      |
+| `block-4-2`   | Redundancy factor of 1.5, applies to single data center clusters. |
+| `mirror-3-dc` | Redundancy factor of 3, applies to multi-data center clusters.    |
 
 ### Syntax
 
@@ -162,7 +168,7 @@ The following [fault tolerance modes](../../concepts/topology.md) are available:
   - kind: <storage pool name>
     pool_config:
       box_id: 1
-      encryption: <optional, specify 1 to encrypt data on the disk>
+      encryption_mode: <optional, specify 1 to encrypt data on the disk>
       erasure_species: <fault tolerance mode name - none, block-4-2, or mirror-3-dc>
       kind: <storage pool name - specify the same value as above>
       pdisk_filter:
@@ -207,177 +213,6 @@ Each State Storage client (for example, DataShard tablet) uses `nto_select` node
 
 Odd numbers must be used for `nto_select` because using even numbers does not improve fault tolerance in comparison to the nearest smaller odd number.
 
-## Authentication configuration {#auth}
-
-The [authentication mode](../../concepts/auth.md) in the {{ ydb-short-name }} cluster is created in the `domains_config.security_config` section.
-
-### Syntax
-
-```yaml
-domains_config:
-  ...
-  security_config:
-    enforce_user_token_requirement: Bool
-  ...
-```
-
-| Key | Description |
---- | ---
-| `enforce_user_token_requirement` | Require a user token.<br/>Acceptable values:<br/><ul><li>`false`: Anonymous authentication mode, no token needed (used by default if the parameter is omitted).</li><li>`true`: Username/password authentication mode. A valid user token is needed for authentication.</li></ul> |
-
-### Examples {#domains-examples}
-
-{% list tabs %}
-
-- `block-4-2`
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: Root
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: 1
-           erasure_species: block-4-2
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - type: SSD
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node: [1, 2, 3, 4, 5, 6, 7, 8]
-         nto_select: 5
-       ssid: 1
-
-
-- `block-4-2` + Auth
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: Root
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: 1
-           erasure_species: block-4-2
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - type: SSD
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node: [1, 2, 3, 4, 5, 6, 7, 8]
-         nto_select: 5
-       ssid: 1
-     security_config:
-       enforce_user_token_requirement: true
-
-
-- `mirror-3-dc`
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: global
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: 1
-           erasure_species: mirror-3-dc
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - type: SSD
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
-         nto_select: 9
-       ssid: 1
-   ```
-
-- `none` (without fault tolerance)
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: Root
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: 1
-           erasure_species: none
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - type: SSD
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node:
-         - 1
-         nto_select: 1
-       ssid: 1
-   ```
-
-- Multiple pools
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: Root
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: '1'
-           erasure_species: block-4-2
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - {type: SSD}
-           vdisk_kind: Default
-       - kind: rot
-         pool_config:
-           box_id: '1'
-           erasure_species: block-4-2
-           kind: rot
-           pdisk_filter:
-           - property:
-             - {type: ROT}
-           vdisk_kind: Default
-       - kind: rotencrypted
-         pool_config:
-           box_id: '1'
-           encryption_mode: 1
-           erasure_species: block-4-2
-           kind: rotencrypted
-           pdisk_filter:
-           - property:
-             - {type: ROT}
-           vdisk_kind: Default
-       - kind: ssdencrypted
-         pool_config:
-           box_id: '1'
-           encryption_mode: 1
-           erasure_species: block-4-2
-           kind: ssdencrypted
-           pdisk_filter:
-           - property:
-             - {type: SSD}
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node: [1, 16, 31, 46, 61, 76, 91, 106]
-         nto_select: 5
-       ssid: 1
-   ```
-
-{% endlist %}
-
 ## Actor system {#actor-system}
 
 The CPU resources are mainly used by the actor system. Depending on the type, all actors run in one of the pools (the `name` parameter). Configuring is allocating a node's CPU cores across the actor system pools. When allocating them, please keep in mind that PDisks and the gRPC API run outside the actor system and require separate resources.
@@ -402,11 +237,11 @@ actor_system_config:
   cpu_count: 10
 ```
 
-| Parameter | Description |
---- | ---
-| `use_auto_config` | Enabling automatic configuring of the actor system. |
-| `node_type` | Node type. Determines the expected workload and vCPU ratio between the pools. Possible values:<ul><li>`STORAGE`: The node interacts with network block store volumes and is responsible for managing the Distributed Storage.</li><li>`COMPUTE`: The node processes the workload generated by users.</li><li>`HYBRID`: The node is used for hybrid load or the usage of `System`, `User`, and `IC` for the node under load is about the same. |
-| `cpu_count` | Number of vCPUs allocated to the node. |
+| Parameter         | Description                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `use_auto_config` | Enabling automatic configuring of the actor system.                                                                                                                                                                                                                                                                                                                                                                                           |
+| `node_type`       | Node type. Determines the expected workload and vCPU ratio between the pools. Possible values:<ul><li>`STORAGE`: The node interacts with network block store volumes and is responsible for managing the Distributed Storage.</li><li>`COMPUTE`: The node processes the workload generated by users.</li><li>`HYBRID`: The node is used for hybrid load or the usage of `System`, `User`, and `IC` for the node under load is about the same. |
+| `cpu_count`       | Number of vCPUs allocated to the node.                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ### Manual configuring {#tuneconfig}
 
@@ -442,19 +277,19 @@ actor_system_config:
     spin_threshold: 0
 ```
 
-| Parameter | Description |
---- | ---
-| `executor` | Pool configuration.<br/>You should only change the number of CPU cores (the `threads` parameter) in the pool configs. |
-| `name` | Pool name that indicates its purpose. Possible values:<ul><li>`System`: A pool that is designed for running quick internal operations in {{ ydb-full-name }} (it serves system tablets, state storage, distributed storage I/O, and erasure coding).</li><li>`User`: A pool that serves the user load (user tablets, queries run in the Query Processor).</li><li>`Batch`: A pool that serves tasks with no strict limit on the execution time, background operations like garbage collection and heavy queries run in the Query Processor.</li><li>`IO`: A pool responsible for performing any tasks with blocking operations (such as authentication or writing logs to a file).</li><li>`IC`: Interconnect, it serves the load related to internode communication (system calls to wait for sending and send data across the network, data serialization, as well as message splits and merges).</li></ul> |
-| `spin_threshold` | The number of CPU cycles before going to sleep if there are no messages. In sleep mode, there is less power consumption, but it may increase request latency under low loads. |
-| `threads` | The number of CPU cores allocated per pool.<br/>Make sure the total number of cores assigned to the System, User, Batch, and IC pools does not exceed the number of available system cores. |
-| `max_threads` | Maximum vCPU that can be allocated to the pool from idle cores of other pools. When you set this parameter, the system enables the mechanism of expanding the pool at full utilization, provided that idle vCPUs are available.<br/>The system checks the current utilization and reallocates vCPUs once per second.  |
-| `max_avg_ping_deviation` | Additional condition to expand the pool's vCPU. When more than 90% of vCPUs allocated to the pool are utilized, you need to worsen SelfPing by more than `max_avg_ping_deviation` microseconds from 10 milliseconds expected. |
-| `time_per_mailbox_micro_secs` | The number of messages per actor to be handled before switching to a different actor. |
-| `type` | Pool type. Possible values:<ul><li>`IO` should be set for IO pools.</li><li>`BASIC` should be set for any other pool.</li></ul> |
-| `scheduler` | Scheduler configuration. The actor system scheduler is responsible for the delivery of deferred messages exchanged by actors.<br/>We do not recommend changing the default scheduler parameters. |
-| `progress_threshold` | The actor system supports requesting message sending scheduled for a later point in time. The system might fail to send all scheduled messages at some point. In this case, it starts sending them in "virtual time" by handling message sending in each loop over a period that doesn't exceed the `progress_threshold` value in microseconds and shifting the virtual time by the `progress_threshold` value until it reaches real time. |
-| `resolution` | When making a schedule for sending messages, discrete time slots are used. The slot duration is set by the `resolution` parameter in microseconds. |
+| Parameter                     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|-------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `executor`                    | Pool configuration.<br/>You should only change the number of CPU cores (the `threads` parameter) in the pool configs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `name`                        | Pool name that indicates its purpose. Possible values:<ul><li>`System`: A pool that is designed for running quick internal operations in {{ ydb-full-name }} (it serves system tablets, state storage, distributed storage I/O, and erasure coding).</li><li>`User`: A pool that serves the user load (user tablets, queries run in the Query Processor).</li><li>`Batch`: A pool that serves tasks with no strict limit on the execution time, background operations like garbage collection and heavy queries run in the Query Processor.</li><li>`IO`: A pool responsible for performing any tasks with blocking operations (such as authentication or writing logs to a file).</li><li>`IC`: Interconnect, it serves the load related to internode communication (system calls to wait for sending and send data across the network, data serialization, as well as message splits and merges).</li></ul> |
+| `spin_threshold`              | The number of CPU cycles before going to sleep if there are no messages. In sleep mode, there is less power consumption, but it may increase request latency under low loads.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `threads`                     | The number of CPU cores allocated per pool.<br/>Make sure the total number of cores assigned to the System, User, Batch, and IC pools does not exceed the number of available system cores.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `max_threads`                 | Maximum vCPU that can be allocated to the pool from idle cores of other pools. When you set this parameter, the system enables the mechanism of expanding the pool at full utilization, provided that idle vCPUs are available.<br/>The system checks the current utilization and reallocates vCPUs once per second.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `max_avg_ping_deviation`      | Additional condition to expand the pool's vCPU. When more than 90% of vCPUs allocated to the pool are utilized, you need to worsen SelfPing by more than `max_avg_ping_deviation` microseconds from 10 milliseconds expected.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `time_per_mailbox_micro_secs` | The number of messages per actor to be handled before switching to a different actor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `type`                        | Pool type. Possible values:<ul><li>`IO` should be set for IO pools.</li><li>`BASIC` should be set for any other pool.</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `scheduler`                   | Scheduler configuration. The actor system scheduler is responsible for the delivery of deferred messages exchanged by actors.<br/>We do not recommend changing the default scheduler parameters.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `progress_threshold`          | The actor system supports requesting message sending scheduled for a later point in time. The system might fail to send all scheduled messages at some point. In this case, it starts sending them in "virtual time" by handling message sending in each loop over a period that doesn't exceed the `progress_threshold` value in microseconds and shifting the virtual time by the `progress_threshold` value until it reaches real time.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `resolution`                  | When making a schedule for sending messages, discrete time slots are used. The slot duration is set by the `resolution` parameter in microseconds.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ## Memory controller {#memory-controller}
 
@@ -601,61 +436,6 @@ blob_storage_config:
 
 For a configuration located in 3 availability zones, specify 3 rings. For a configuration within a single availability zone, specify exactly one ring.
 
-## Configuring authentication providers {#auth-config}
-
-{{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
-
-### Configuring LDAP authentication {#ldap-auth-config}
-
-One of the user authentication methods in {{ ydb-short-name }} is with an LDAP directory. More details about this type of authentication can be found in the section on [interacting with the LDAP directory](../../concepts/auth.md#ldap-auth-provider). To configure LDAP authentication, the `ldap_authentication` section must be defined.
-
-Example of the `ldap_authentication` section:
-
-```yaml
-auth_config:
-  #...
-  ldap_authentication:
-    hosts:
-      - "ldap-hostname-01.example.net"
-      - "ldap-hostname-02.example.net"
-      - "ldap-hostname-03.example.net"
-    port: 389
-    base_dn: "dc=mycompany,dc=net"
-    bind_dn: "cn=serviceAccaunt,dc=mycompany,dc=net"
-    bind_password: "serviceAccauntPassword"
-    search_filter: "uid=$username"
-    use_tls:
-      enable: true
-      ca_cert_file: "/path/to/ca.pem"
-      cert_require: DEMAND
-  ldap_authentication_domain: "ldap"
-  scheme: "ldap"
-  requested_group_attribute: "memberOf"
-  extended_settings:
-      enable_nested_groups_search: true
-
-  refresh_time: "1h"
-  #...
-```
-
-| Parameter | Description |
-| --- | --- |
-| `hosts` | A list of hostnames where the LDAP server is running. |
-| `port` | The port used to connect to the LDAP server. |
-| `base_dn` | The root of the subtree in the LDAP directory from which the user entry search begins. |
-| `bind_dn` | The Distinguished Name (DN) of the service account used to search for the user entry. |
-| `bind_password` | The password for the service account used to search for the user entry. |
-| `search_filter` | A filter for searching the user entry in the LDAP directory. The filter string can include the sequence *$username*, which is replaced with the username requested for authentication in the database. |
-| `use_tls` | Configuration settings for the TLS connection between {{ ydb-short-name }} and the LDAP server. |
-| `enable` | Determines if a TLS connection [using the `StartTls` request](../../concepts/auth.md#starttls) will be attempted. When set to `true`, the `ldaps` connection scheme should be disabled by setting `ldap_authentication.scheme` to `ldap`. |
-| `ca_cert_file` | The path to the certification authority's certificate file. |
-| `cert_require` | Specifies the certificate requirement level for the LDAP server.<br>Possible values:<ul><li>`NEVER` - {{ ydb-short-name }} does not request a certificate or accepts any presented certificate.</li><li>`ALLOW` - {{ ydb-short-name }} requests a certificate from the LDAP server but will establish the TLS session even if the certificate is not trusted.</li><li>`TRY` - {{ ydb-short-name }} requires a certificate from the LDAP server and terminates the connection if it is not trusted.</li><li>`DEMAND`/`HARD` - These are equivalent to `TRY` and are the default setting, with the value set to `DEMAND`.</li></ul> |
-| `ldap_authentication_domain` | An identifier appended to the username to distinguish LDAP directory users from those authenticated using other providers. The default value is `ldap`. |
-| `scheme` | The connection scheme to the LDAP server.<br>Possible values:<ul><li>`ldap` - Connects without encryption, sending passwords in plain text. This is the default value.</li><li>`ldaps` - Connects using TLS encryption from the first request. To use `ldaps`, disable the [`StartTls` request](../../concepts/auth.md#starttls) by setting `ldap_authentication.use_tls.enable` to `false`, and provide certificate details in `ldap_authentication.use_tls.ca_cert_file` and set the certificate requirement level in `ldap_authentication.use_tls.cert_require`.</li><li>Any other value defaults to `ldap`.</li></ul> |
-| `requested_group_attribute` | The attribute used for reverse group membership. The default is `memberOf`. |
-| `extended_settings.enable_nested_groups_search` | A flag indicating whether to perform a request to retrieve the full hierarchy of groups to which the user's direct groups belong. |
-| `host` | The hostname of the LDAP server. This parameter is deprecated and should be replaced with the `hosts` parameter. |
-| `refresh_time` | Specifies the interval for refreshing user information. The actual update will occur within the range from `refresh_time/2` to `refresh_time`. |
 
 ## Enabling stable node names {#node-broker-config}
 
@@ -680,6 +460,34 @@ By default, the prefix is `slot-`. To override the prefix, add the following to 
 node_broker_config:
   stable_node_name_prefix: <new prefix>
 ```
+
+## Configuring Health Check {#healthcheck-config}
+
+This section configures thresholds and timeout settings used by the {{ ydb-short-name }} [health check service](../ydb-sdk/health-check-api.md). These parameters help configure detection of potential [issues](../ydb-sdk/health-check-api.md#issues), such as excessive restarts or time drift between dynamic nodes.
+
+### Syntax
+
+```yaml
+healthcheck_config:
+  thresholds:
+    node_restarts_yellow: 10
+    node_restarts_orange: 30
+    nodes_time_difference_yellow: 5000
+    nodes_time_difference_orange: 25000
+    tablets_restarts_orange: 30
+  timeout: 20000
+```
+
+### Parameters
+
+| Parameter                                 | Default | Description                                                                   |
+|-------------------------------------------|---------|-------------------------------------------------------------------------------|
+| `thresholds.node_restarts_yellow`         | `10`    | Number of node restarts to trigger a `YELLOW` warning                         |
+| `thresholds.node_restarts_orange`         | `30`    | Number of node restarts to trigger an `ORANGE` alert                          |
+| `thresholds.nodes_time_difference_yellow` | `5000`  | Max allowed time difference (in us) between dynamic nodes for `YELLOW` issue  |
+| `thresholds.nodes_time_difference_orange` | `25000` | Max allowed time difference (in us) between dynamic nodes for `ORANGE` issue  |
+| `thresholds.tablets_restarts_orange`      | `30`    | Number of tablet restarts to trigger an `ORANGE` alert                        |
+| `timeout`                                 | `20000` | Maximum health check response time (in ms)                                    |
 
 ## Sample cluster configurations {#examples}
 

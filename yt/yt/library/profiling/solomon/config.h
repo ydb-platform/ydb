@@ -41,6 +41,8 @@ struct TSolomonExporterConfig
     bool ConvertCountersToRateForSolomon;
     bool RenameConvertedCounters;
     bool ConvertCountersToDeltaGauge;
+    bool EnableHistogramCompat;
+    bool ReportTimestampsForRateMetrics;
 
     bool ExportSummary;
     bool ExportSummaryAsMax;
@@ -73,6 +75,8 @@ struct TSolomonExporterConfig
     TDuration UpdateSensorServiceTreePeriod;
 
     int ProducerCollectionBatchSize;
+
+    ELabelSanitizationPolicy LabelSanitizationPolicy;
 
     TShardConfigPtr MatchShard(const std::string& sensorName);
 

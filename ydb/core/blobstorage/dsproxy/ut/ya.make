@@ -6,7 +6,7 @@ SPLIT_FACTOR(20)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -25,6 +25,7 @@ SRCS(
     dsproxy_sequence_ut.cpp
     dsproxy_patch_ut.cpp
     dsproxy_counters_ut.cpp
+    dsproxy_request_reporting_ut.cpp
 )
 
 IF (BUILD_TYPE != "DEBUG")

@@ -104,7 +104,7 @@ public:
         , PhysicalOptProposalTransformer_([this]() { return CreateYtPhysicalOptProposalTransformer(State_); })
         , PhysicalFinalizingTransformer_([this]() {
             auto transformer = CreateYtPhysicalFinalizingTransformer(State_);
-            transformer = CreateYtBlockInputFilterTransformer(State_, std::move(transformer));
+            transformer = CreateYtBlockIOFilterTransformer(State_, std::move(transformer));
             if (State_->IsHybridEnabled())
                 transformer = CreateYtDqHybridTransformer(State_, std::move(transformer));
             return transformer;
@@ -266,12 +266,16 @@ public:
             }
             if (auto columnGroup = NYql::GetSetting(*res->Child(TYtWriteTable::idx_Settings), EYtSettingType::ColumnGroups)) {
                 const TString normalized = NormalizeColumnGroupSpec(columnGroup->Tail().Content());
-                res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings,
-                    NYql::UpdateSettingValue(*res->Child(TYtWriteTable::idx_Settings),
-                        EYtSettingType::ColumnGroups,
-                        ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), normalized, TNodeFlags::MultilineContent),
-                        ctx)
-                    );
+                if (normalized) {
+                    res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings,
+                        NYql::UpdateSettingValue(*res->Child(TYtWriteTable::idx_Settings),
+                            EYtSettingType::ColumnGroups,
+                            ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), normalized, TNodeFlags::MultilineContent),
+                            ctx)
+                        );
+                } else {
+                    res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings, NYql::RemoveSetting(*res->Child(TYtWriteTable::idx_Settings), EYtSettingType::ColumnGroups, ctx));
+                }
             } else if (NYql::HasSetting(*res->Child(TYtWriteTable::idx_Table)->Child(TYtTable::idx_Settings), EYtSettingType::Anonymous)) {
                 if (const auto mode = State_->Configuration->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable); mode != EColumnGroupMode::Disable) {
                     res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings,
@@ -610,6 +614,14 @@ public:
 
     IDqIntegration* GetDqIntegration() override {
         return State_->DqIntegration_.Get();
+    }
+
+    IYtflowIntegration* GetYtflowIntegration() override {
+        return State_->YtflowIntegration_.Get();
+    }
+
+    IYtflowOptimization* GetYtflowOptimization() override {
+        return State_->YtflowOptimization_.Get();
     }
 
 private:

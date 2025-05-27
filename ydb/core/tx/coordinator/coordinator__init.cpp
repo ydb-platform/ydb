@@ -124,7 +124,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
             Self->Config.Resolution = PlanResolution;
             Self->Config.ReducedResolution = ReducedResolution;
             Self->Config.HaveProcessingParams = HaveProcessingParams;
-            Self->SetCounter(COUNTER_MISSING_CONFIG, HaveProcessingParams ? 1 : 0);
+            Self->SetCounter(COUNTER_MISSING_CONFIG, HaveProcessingParams ? 0 : 1);
 
             if (LastBlockedActor && LastPlanned < LastBlockedStep) {
                 Self->RestoreState(LastBlockedActor, LastBlockedStep);

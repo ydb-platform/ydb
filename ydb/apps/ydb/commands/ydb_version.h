@@ -5,6 +5,8 @@
 namespace NYdb {
 namespace NConsoleClient {
 
+extern const char* VersionResourceName;
+
 class TCommandVersion : public TClientCommand {
 public:
     TCommandVersion();

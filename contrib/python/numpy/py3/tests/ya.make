@@ -1,13 +1,8 @@
-PY3TEST()
+PY3_LIBRARY()
 
-REQUIREMENTS(
-    cpu:4
-    ram:25
-)
+VERSION(1.26.4)
 
-SIZE(MEDIUM)
-
-FORK_SUBTESTS()
+LICENSE(BSD-3-Clause)
 
 PEERDIR(
     contrib/python/numpy
@@ -16,235 +11,31 @@ PEERDIR(
     contrib/python/pytz
 )
 
-DATA(
-    arcadia/contrib/python/numpy/py3/numpy
-)
-
 NO_LINT()
 
-SRCDIR(
-    contrib/python/numpy/py3
-)
+SRCDIR(contrib/python/numpy/py3)
 
 PY_SRCS(
     TOP_LEVEL
     numpy/conftest.py
 )
 
-TEST_SRCS(
-    numpy/array_api/tests/__init__.py
-    numpy/array_api/tests/test_array_object.py
-    numpy/array_api/tests/test_creation_functions.py
-    numpy/array_api/tests/test_data_type_functions.py
-    numpy/array_api/tests/test_elementwise_functions.py
-    numpy/array_api/tests/test_indexing_functions.py
-    numpy/array_api/tests/test_manipulation_functions.py
-    numpy/array_api/tests/test_set_functions.py
-    numpy/array_api/tests/test_sorting_functions.py
-    numpy/array_api/tests/test_validation.py
-    numpy/compat/tests/__init__.py
-    numpy/compat/tests/test_compat.py
-    numpy/core/tests/__init__.py
-    numpy/core/tests/_locales.py
-    numpy/core/tests/test__exceptions.py
-    numpy/core/tests/test_abc.py
-    numpy/core/tests/test_api.py
-    numpy/core/tests/test_argparse.py
-    numpy/core/tests/test_array_coercion.py
-    #numpy/core/tests/test_array_interface.py
-    numpy/core/tests/test_arraymethod.py
-    numpy/core/tests/test_arrayprint.py
-    numpy/core/tests/test_casting_floatingpoint_errors.py
-    numpy/core/tests/test_casting_unittests.py
-    numpy/core/tests/test_conversion_utils.py
-    numpy/core/tests/test_cpu_dispatcher.py
-    numpy/core/tests/test_cpu_features.py
-    numpy/core/tests/test_custom_dtypes.py
-    numpy/core/tests/test_cython.py
-    numpy/core/tests/test_datetime.py
-    numpy/core/tests/test_defchararray.py
-    numpy/core/tests/test_deprecations.py
-    numpy/core/tests/test_dlpack.py
-    numpy/core/tests/test_dtype.py
-    numpy/core/tests/test_einsum.py
-    numpy/core/tests/test_errstate.py
-    numpy/core/tests/test_extint128.py
-    numpy/core/tests/test_function_base.py
-    numpy/core/tests/test_getlimits.py
-    numpy/core/tests/test_half.py
-    numpy/core/tests/test_hashtable.py
-    numpy/core/tests/test_indexerrors.py
-    numpy/core/tests/test_indexing.py
-    numpy/core/tests/test_item_selection.py
-    numpy/core/tests/test_limited_api.py
-    numpy/core/tests/test_longdouble.py
-    numpy/core/tests/test_machar.py
-    numpy/core/tests/test_mem_overlap.py
-    #numpy/core/tests/test_mem_policy.py
-    numpy/core/tests/test_memmap.py
-    numpy/core/tests/test_multiarray.py
-    numpy/core/tests/test_nditer.py
-    numpy/core/tests/test_nep50_promotions.py
-    numpy/core/tests/test_numeric.py
-    numpy/core/tests/test_numerictypes.py
-    numpy/core/tests/test_numpy_2_0_compat.py
-    numpy/core/tests/test_overrides.py
-    numpy/core/tests/test_print.py
-    numpy/core/tests/test_protocols.py
-    numpy/core/tests/test_records.py
-    numpy/core/tests/test_regression.py
-    numpy/core/tests/test_scalar_ctors.py
-    numpy/core/tests/test_scalar_methods.py
-    numpy/core/tests/test_scalarbuffer.py
-    numpy/core/tests/test_scalarinherit.py
-    numpy/core/tests/test_scalarmath.py
-    numpy/core/tests/test_scalarprint.py
-    numpy/core/tests/test_shape_base.py
-    numpy/core/tests/test_simd.py
-    numpy/core/tests/test_simd_module.py
-    numpy/core/tests/test_strings.py
-    numpy/core/tests/test_ufunc.py
-    numpy/core/tests/test_umath.py
-    numpy/core/tests/test_umath_accuracy.py
-    numpy/core/tests/test_umath_complex.py
-    numpy/core/tests/test_unicode.py
-    #numpy/distutils/tests/__init__.py
-    #numpy/distutils/tests/test_build_ext.py
-    #numpy/distutils/tests/test_ccompiler_opt.py
-    #numpy/distutils/tests/test_ccompiler_opt_conf.py
-    #numpy/distutils/tests/test_exec_command.py
-    #numpy/distutils/tests/test_fcompiler.py
-    #numpy/distutils/tests/test_fcompiler_gnu.py
-    #numpy/distutils/tests/test_fcompiler_intel.py
-    #numpy/distutils/tests/test_fcompiler_nagfor.py
-    #numpy/distutils/tests/test_from_template.py
-    #numpy/distutils/tests/test_log.py
-    #numpy/distutils/tests/test_mingw32ccompiler.py
-    #numpy/distutils/tests/test_misc_util.py
-    #numpy/distutils/tests/test_npy_pkg_config.py
-    #numpy/distutils/tests/test_shell_utils.py
-    #numpy/distutils/tests/test_system_info.py
-    #numpy/f2py/tests/__init__.py
-    #numpy/f2py/tests/test_abstract_interface.py
-    #numpy/f2py/tests/test_array_from_pyobj.py
-    #numpy/f2py/tests/test_assumed_shape.py
-    #numpy/f2py/tests/test_block_docstring.py
-    #numpy/f2py/tests/test_callback.py
-    #numpy/f2py/tests/test_character.py
-    #numpy/f2py/tests/test_common.py
-    #numpy/f2py/tests/test_compile_function.py
-    #numpy/f2py/tests/test_crackfortran.py
-    #numpy/f2py/tests/test_data.py
-    #numpy/f2py/tests/test_docs.py
-    #numpy/f2py/tests/test_f2cmap.py
-    #numpy/f2py/tests/test_f2py2e.py
-    #numpy/f2py/tests/test_isoc.py
-    #numpy/f2py/tests/test_kind.py
-    #numpy/f2py/tests/test_mixed.py
-    #numpy/f2py/tests/test_module_doc.py
-    #numpy/f2py/tests/test_parameter.py
-    #numpy/f2py/tests/test_quoted_character.py
-    #numpy/f2py/tests/test_regression.py
-    #numpy/f2py/tests/test_return_character.py
-    #numpy/f2py/tests/test_return_complex.py
-    #numpy/f2py/tests/test_return_integer.py
-    #numpy/f2py/tests/test_return_logical.py
-    #numpy/f2py/tests/test_return_real.py
-    #numpy/f2py/tests/test_semicolon_split.py
-    #numpy/f2py/tests/test_size.py
-    #numpy/f2py/tests/test_string.py
-    #numpy/f2py/tests/test_symbolic.py
-    #numpy/f2py/tests/test_value_attrspec.py
-    #numpy/f2py/tests/util.py
-    numpy/fft/tests/__init__.py
-    numpy/fft/tests/test_helper.py
-    numpy/fft/tests/test_pocketfft.py
-    numpy/lib/tests/__init__.py
-    numpy/lib/tests/test__datasource.py
-    numpy/lib/tests/test__iotools.py
-    numpy/lib/tests/test__version.py
-    numpy/lib/tests/test_arraypad.py
-    numpy/lib/tests/test_arraysetops.py
-    numpy/lib/tests/test_arrayterator.py
-    numpy/lib/tests/test_financial_expired.py
-    numpy/lib/tests/test_format.py
-    numpy/lib/tests/test_function_base.py
-    numpy/lib/tests/test_histograms.py
-    numpy/lib/tests/test_index_tricks.py
-    numpy/lib/tests/test_io.py
-    numpy/lib/tests/test_loadtxt.py
-    numpy/lib/tests/test_mixins.py
-    numpy/lib/tests/test_nanfunctions.py
-    numpy/lib/tests/test_packbits.py
-    numpy/lib/tests/test_polynomial.py
-    numpy/lib/tests/test_recfunctions.py
-    numpy/lib/tests/test_regression.py
-    numpy/lib/tests/test_shape_base.py
-    numpy/lib/tests/test_stride_tricks.py
-    numpy/lib/tests/test_twodim_base.py
-    numpy/lib/tests/test_type_check.py
-    numpy/lib/tests/test_ufunclike.py
-    numpy/lib/tests/test_utils.py
-    numpy/linalg/tests/__init__.py
-    numpy/linalg/tests/test_deprecations.py
-    numpy/linalg/tests/test_linalg.py
-    numpy/linalg/tests/test_regression.py
-    numpy/ma/tests/__init__.py
-    numpy/ma/tests/test_core.py
-    numpy/ma/tests/test_deprecations.py
-    numpy/ma/tests/test_extras.py
-    numpy/ma/tests/test_mrecords.py
-    numpy/ma/tests/test_old_ma.py
-    numpy/ma/tests/test_regression.py
-    numpy/ma/tests/test_subclassing.py
-    numpy/matrixlib/tests/__init__.py
-    numpy/matrixlib/tests/test_defmatrix.py
-    numpy/matrixlib/tests/test_interaction.py
-    numpy/matrixlib/tests/test_masked_matrix.py
-    numpy/matrixlib/tests/test_matrix_linalg.py
-    numpy/matrixlib/tests/test_multiarray.py
-    numpy/matrixlib/tests/test_numeric.py
-    numpy/matrixlib/tests/test_regression.py
-    numpy/polynomial/tests/__init__.py
-    numpy/polynomial/tests/test_chebyshev.py
-    numpy/polynomial/tests/test_classes.py
-    numpy/polynomial/tests/test_hermite.py
-    numpy/polynomial/tests/test_hermite_e.py
-    numpy/polynomial/tests/test_laguerre.py
-    numpy/polynomial/tests/test_legendre.py
-    numpy/polynomial/tests/test_polynomial.py
-    numpy/polynomial/tests/test_polyutils.py
-    numpy/polynomial/tests/test_printing.py
-    numpy/polynomial/tests/test_symbol.py
-    numpy/random/tests/__init__.py
-    numpy/random/tests/data/__init__.py
-    numpy/random/tests/test_direct.py
-    numpy/random/tests/test_extending.py
-    numpy/random/tests/test_generator_mt19937.py
-    numpy/random/tests/test_generator_mt19937_regressions.py
-    numpy/random/tests/test_random.py
-    numpy/random/tests/test_randomstate.py
-    numpy/random/tests/test_randomstate_regression.py
-    numpy/random/tests/test_regression.py
-    numpy/random/tests/test_seed_sequence.py
-    numpy/random/tests/test_smoke.py
-    numpy/testing/tests/__init__.py
-    numpy/testing/tests/test_utils.py
-    numpy/tests/__init__.py
-    numpy/tests/test__all__.py
-    #numpy/tests/test_ctypeslib.py
-    numpy/tests/test_lazyloading.py
-    numpy/tests/test_matlib.py
-    numpy/tests/test_numpy_config.py
-    numpy/tests/test_numpy_version.py
-    numpy/tests/test_public_api.py
-    numpy/tests/test_reloading.py
-    #numpy/tests/test_scripts.py
-    numpy/tests/test_warnings.py
-    numpy/typing/tests/__init__.py
-    #numpy/typing/tests/test_isfile.py
-    #numpy/typing/tests/test_runtime.py
-    numpy/typing/tests/test_typing.py
-)
-
 END()
+
+RECURSE_FOR_TESTS(
+    array_api
+    compat
+    core
+    # distutils
+    # f2py
+    fft
+    lib
+    linalg
+    ma
+    # matrixlib - merged with linalg
+    polynomial
+    random
+    testing
+    tests
+    typing
+)

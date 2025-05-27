@@ -79,8 +79,8 @@ private:
     TMaybe<TRowElement> Row_;
     TMaybe<TRowElement> NextRow_;
 
-    THolder<TRowBuilder> Builder_;
-    THolder<::NYson::TYsonListParser> Parser_;
+    std::unique_ptr<TRowBuilder> Builder_;
+    std::unique_ptr<::NYson::TYsonListParser> Parser_;
 
     std::exception_ptr Exception_;
     bool NeedParseFirst_ = true;

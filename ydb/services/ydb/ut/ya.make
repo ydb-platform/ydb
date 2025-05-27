@@ -25,6 +25,7 @@ SRCS(
     ydb_olapstore_ut.cpp
     ydb_monitoring_ut.cpp
     ydb_query_ut.cpp
+    ydb_read_rows_ut.cpp
     ydb_ldap_login_ut.cpp
     ydb_login_ut.cpp
     ydb_object_storage_ut.cpp
@@ -33,7 +34,7 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/getopt
-    ydb/library/grpc/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
@@ -50,13 +51,13 @@ PEERDIR(
     ydb/public/lib/yson_value
     ydb/public/lib/ut_helpers
     ydb/public/lib/ydb_cli/commands
-    ydb/public/sdk/cpp/client/draft
-    ydb/public/sdk/cpp/client/ydb_coordination
-    ydb/public/sdk/cpp/client/ydb_export
-    ydb/public/sdk/cpp/client/ydb_extension
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_monitoring
+    ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/coordination
+    ydb/public/sdk/cpp/src/client/export
+    ydb/public/sdk/cpp/src/client/extension_common
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/monitoring
     ydb/services/ydb
 )
 

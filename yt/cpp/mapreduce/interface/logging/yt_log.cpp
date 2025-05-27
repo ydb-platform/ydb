@@ -92,7 +92,7 @@ private:
         }
     }
 
-    static void LogMessage(const ILoggerPtr& logger, ILogger::ELevel level, const ::TSourceLocation& sourceLocation, const char* format, ...)
+    static void LogMessage(const ILoggerPtr& /* logger */, ILogger::ELevel level, const ::TSourceLocation& sourceLocation, const char* format, ...)
     {
         va_list args;
         va_start(args, format);

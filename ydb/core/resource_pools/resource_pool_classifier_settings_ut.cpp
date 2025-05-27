@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
     Y_UNIT_TEST(SettingsValidation) {
         TClassifierSettings settings;
         settings.MemberName = BUILTIN_ACL_METADATA;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(settings.Validate(), yexception, TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << settings.MemberName);
+        UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << settings.MemberName);
     }
 }
 

@@ -544,9 +544,9 @@ public:
     }
 
     bool CheckAccess(const TSecurityObject& access) {
-        if (!Settings.User.Defined())
+        if (Settings.User == nullptr)
             return true;
-        return access.CheckAccess(NACLib::EAccessRights::SelectRow, Settings.User.GetRef());
+        return access.CheckAccess(NACLib::EAccessRights::SelectRow, *Settings.User);
     }
 
      void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {

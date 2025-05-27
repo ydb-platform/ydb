@@ -86,7 +86,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
 
 TAlter& TAlter::Merge(const TSchemeChanges &log)
 {
-    Y_ABORT_UNLESS(&Log != &log, "Cannot merge changes onto itself");
+    Y_ENSURE(&Log != &log, "Cannot merge changes onto itself");
 
     int added = log.DeltaSize();
     if (added > 0) {
@@ -122,7 +122,7 @@ TAlter& TAlter::DropTable(ui32 id)
 
 TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null)
 {
-    Y_ABORT_UNLESS(!NScheme::NTypeIds::IsParametrizedType(type));
+    Y_ENSURE(!NScheme::NTypeIds::IsParametrizedType(type));
     return AddColumnWithTypeInfo(table, name, id, type, {}, notNull, null);
 }
 
@@ -139,7 +139,7 @@ TAlter& TAlter::AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, 
     if (!null.IsNull())
         delta.SetDefault(null.Data(), null.Size());
 
-    Y_ABORT_UNLESS((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
+    Y_ENSURE((bool)typeInfoProto == NScheme::NTypeIds::IsParametrizedType(type));
     if (typeInfoProto) {
         *delta.MutableColumnTypeInfo() = *typeInfoProto;
     }
@@ -216,7 +216,7 @@ TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
 
 TAlter& TAlter::SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer)
 {
-    Y_ABORT_UNLESS(!blobs.empty(), "Room must have at least one external blob channel");
+    Y_ENSURE(!blobs.empty(), "Room must have at least one external blob channel");
 
     auto *delta = Log.AddDelta();
 
@@ -363,7 +363,7 @@ TAlter& TAlter::ApplyLastRecord()
 {
     if (Sink) {
         int deltasCount = Log.DeltaSize();
-        Y_ABORT_UNLESS(deltasCount > 0);
+        Y_ENSURE(deltasCount > 0);
 
         if (!Sink->ApplyAlterRecord(Log.GetDelta(deltasCount - 1))) {
             Log.MutableDelta()->RemoveLast();

@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/impl/federated_topic_impl.h>
 
-namespace NYdb::NFederatedTopic {
+namespace NYdb::inline V2::NFederatedTopic {
 
 // TFederatedReadSessionSettings
 // Read policy settings

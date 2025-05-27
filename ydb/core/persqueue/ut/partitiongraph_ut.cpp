@@ -59,22 +59,22 @@ Y_UNIT_TEST_SUITE(TPartitionGraphTest) {
         UNIT_ASSERT(n4);
         UNIT_ASSERT(n5);
 
-        UNIT_ASSERT_VALUES_EQUAL(n0->Parents.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(n0->Children.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(n0->HierarhicalParents.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(n0->DirectParents.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(n0->DirectChildren.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(n0->AllParents.size(), 0);
 
-        UNIT_ASSERT_VALUES_EQUAL(n1->Parents.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(n1->Children.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(n1->HierarhicalParents.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(n1->DirectParents.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(n1->DirectChildren.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(n1->AllParents.size(), 0);
 
-        UNIT_ASSERT_VALUES_EQUAL(n5->Parents.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(n5->Children.size(), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(n5->HierarhicalParents.size(), 4);
-        UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n0) == n5->HierarhicalParents.end());
-        UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n1) != n5->HierarhicalParents.end());
-        UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n2) != n5->HierarhicalParents.end());
-        UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n3) != n5->HierarhicalParents.end());
-        UNIT_ASSERT(std::find(n5->HierarhicalParents.cbegin(),  n5->HierarhicalParents.cend(), n4) != n5->HierarhicalParents.end());
+        UNIT_ASSERT_VALUES_EQUAL(n5->DirectParents.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(n5->DirectChildren.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(n5->AllParents.size(), 4);
+        UNIT_ASSERT(std::find(n5->AllParents.cbegin(),  n5->AllParents.cend(), n0) == n5->AllParents.end());
+        UNIT_ASSERT(std::find(n5->AllParents.cbegin(),  n5->AllParents.cend(), n1) != n5->AllParents.end());
+        UNIT_ASSERT(std::find(n5->AllParents.cbegin(),  n5->AllParents.cend(), n2) != n5->AllParents.end());
+        UNIT_ASSERT(std::find(n5->AllParents.cbegin(),  n5->AllParents.cend(), n3) != n5->AllParents.end());
+        UNIT_ASSERT(std::find(n5->AllParents.cbegin(),  n5->AllParents.cend(), n4) != n5->AllParents.end());
 
         {
             std::set<ui32> traversedNodes;

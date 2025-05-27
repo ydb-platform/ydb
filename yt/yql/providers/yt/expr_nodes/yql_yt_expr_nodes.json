@@ -79,7 +79,10 @@
         {
             "Name": "TYtOutTable",
             "Base": "TYtTableBase",
-            "Match": {"Type": "Callable", "Name": "YtOutTable"}
+            "Match": {"Type": "Callable", "Name": "YtOutTable"},
+            "Children": [
+                {"Index": 5, "Name": "Cluster", "Type": "TCoAtom", "Optional": true}
+            ]
         },
         {
             "Name": "TYtOutSection",
@@ -195,13 +198,24 @@
             ]
         },
         {
-            "Name": "TYtTableContent",
+            "Name": "TYtTableContentBase",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "YtTableContent"},
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
+        },
+        {
+            "Name": "TYtTableContent",
+            "Base": "TYtTableContentBase",
+            "Match": {"Type": "Callable", "Name": "YtTableContent"}
+        },
+        {
+            "Name": "TYtBlockTableContent",
+            "Base": "TYtTableContentBase",
+            "Match": {"Type": "Callable", "Name": "YtBlockTableContent"}
         },
         {
             "Name": "TYtLength",
@@ -491,6 +505,15 @@
                 {"Index": 0, "Name": "PickledUserState", "Type": "TExprBase"},
                 {"Index": 1, "Name": "UserStateType", "Type": "TExprBase"},
                 {"Index": 2, "Name": "ProcessStateKey", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TYtQLFilter",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtQLFilter"},
+            "Children": [
+                {"Index": 0, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Predicate", "Type": "TCoLambda"}
             ]
         }
     ]

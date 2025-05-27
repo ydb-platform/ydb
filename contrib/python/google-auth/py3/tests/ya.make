@@ -11,6 +11,7 @@ PEERDIR(
     contrib/python/freezegun
     contrib/python/aioresponses
     contrib/python/pytest-asyncio
+    contrib/python/PyJWT
 )
 
 DATA(

@@ -25,14 +25,17 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
 
     const TPortionMeta::EProduced producedClassResultCompaction = GetResultProducedClass();
     for (auto& portionInfo : AppendedPortions) {
-        portionInfo.GetPortionConstructor().MutablePortionConstructor().MutableMeta().UpdateRecordsMeta(producedClassResultCompaction);
+        auto& constructor = portionInfo.GetPortionConstructor().MutablePortionConstructor();
+        constructor.MutableMeta().UpdateRecordsMeta(producedClassResultCompaction);
+        constructor.MutableMeta().SetCompactionLevel(GranuleMeta->GetOptimizerPlanner().GetAppropriateLevel(
+            GetPortionsToMove().GetTargetCompactionLevel().value_or(0), portionInfo.GetPortionConstructor()));
     }
 }
 
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
 
-    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId()));
+    self.BackgroundController.StartCompaction(GranuleMeta->GetPathId());
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted();
 }
@@ -45,7 +48,7 @@ void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnSh
 }
 
 void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    self.BackgroundController.FinishCompaction(TPlanCompactionInfo(GranuleMeta->GetPathId()));
+    self.BackgroundController.FinishCompaction(GranuleMeta->GetPathId());
     Y_ABORT_UNLESS(NeedGranuleStatusProvide);
     if (context.FinishedSuccessfully) {
         GranuleMeta->OnCompactionFinished();
@@ -71,7 +74,7 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(
 }
 
 TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
-    Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
+    Y_DEBUG_ABORT_UNLESS(!NActors::TlsActivationContext || !NeedGranuleStatusProvide || !IsActive());
 }
 
 }   // namespace NKikimr::NOlap

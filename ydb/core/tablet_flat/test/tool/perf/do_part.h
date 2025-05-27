@@ -42,7 +42,7 @@ namespace NPerf {
             }
         }
 
-        static NPage::TConf Config(bool compress) noexcept
+        static NPage::TConf Config(bool compress)
         {
             NPage::TConf conf;
 
@@ -54,7 +54,7 @@ namespace NPerf {
             return conf;
         }
 
-        static TStats Stats(const TPart &part_) noexcept
+        static TStats Stats(const TPart &part_)
         {
             auto &part = dynamic_cast<const NTest::TPartStore&>(part_);
 

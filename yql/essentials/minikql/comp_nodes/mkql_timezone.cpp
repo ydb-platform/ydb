@@ -116,7 +116,7 @@ public:
         if (IsOptional1) {
             result->addIncoming(value, block);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
-            BranchInst::Create(done, good, IsEmpty(value, block), block);
+            BranchInst::Create(done, good, IsEmpty(value, block, context), block);
 
             block = good;
         }
@@ -125,7 +125,7 @@ public:
         const auto id = GetterFor<ui16>(tz, context, block);
 
         const auto big = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, id, ConstantInt::get(id->getType(), TimezonesCount), "big", block);
-        auto test = IsOptional2 ? BinaryOperator::CreateOr(IsEmpty(tz, block), big, "test", block) : static_cast<Value*>(big);
+        auto test = IsOptional2 ? BinaryOperator::CreateOr(IsEmpty(tz, block, context), big, "test", block) : static_cast<Value*>(big);
 
         for (const auto black : BlackList) {
             const auto& str = ToString(black);

@@ -19,10 +19,9 @@ namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TConnectionConfig
+struct TConnectionConfig
     : public NApi::TConnectionConfig
 {
-public:
     static TConnectionConfigPtr CreateFromClusterUrl(
         const std::string& clusterUrl,
         const std::optional<std::string>& proxyRole = {});

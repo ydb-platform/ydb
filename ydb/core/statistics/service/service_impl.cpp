@@ -27,7 +27,7 @@
 #include <util/datetime/cputimer.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
 namespace NKikimr {
@@ -188,7 +188,7 @@ public:
         if (mon) {
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "statservice", "Statistics service",
-                false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+                false, TActivationContext::ActorSystem(), SelfId());
         }
 
         Become(&TStatService::StateWork);
@@ -695,7 +695,10 @@ private:
 
                 while(parser.TryNextRow()) {
                     auto& col = parser.ColumnParser("data");
-                    query_response->Data = col.GetString();
+                    // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
+                    query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
+                        ? col.GetOptionalString()
+                        : col.GetString();
                  }
             } else {
                 SA_LOG_E("[TStatService::ReadRowsResponse] QueryId[ "
@@ -1047,13 +1050,13 @@ private:
             columnTags->Add(tag);
         }
 
-        const auto round = AggregationStatistics.Round;
-        NTabletPipe::SendData(SelfId(), clientId, request.release(), round);
-        Schedule(Settings.StatisticsRequestTimeout, new TEvPrivate::TEvStatisticsRequestTimeout(round, tabletId));
-
         SA_LOG_D("TEvStatisticsRequest send"
             << ", client id = " << clientId
             << ", path = " << *path);
+
+        const auto round = AggregationStatistics.Round;
+        NTabletPipe::SendData(SelfId(), clientId, request.release(), round);
+        Schedule(Settings.StatisticsRequestTimeout, new TEvPrivate::TEvStatisticsRequestTimeout(round, tabletId));
     }
 
     void OnTabletError(ui64 tabletId) {

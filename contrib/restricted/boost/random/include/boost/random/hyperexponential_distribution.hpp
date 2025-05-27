@@ -18,17 +18,15 @@
 #define BOOST_RANDOM_HYPEREXPONENTIAL_DISTRIBUTION_HPP
 
 
+#include <boost/assert.hpp>
 #include <boost/config.hpp>
 #include <boost/core/cmath.hpp>
 #include <boost/random/detail/operators.hpp>
 #include <boost/random/detail/vector_io.hpp>
+#include <boost/random/detail/size.hpp>
 #include <boost/random/discrete_distribution.hpp>
 #include <boost/random/exponential_distribution.hpp>
-#include <boost/range/begin.hpp>
-#include <boost/range/end.hpp>
-#include <boost/range/size.hpp>
 #include <boost/type_traits/has_pre_increment.hpp>
-#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <iterator>
@@ -266,7 +264,7 @@ class hyperexponential_distribution
         {
             hyperexp_detail::normalize(probs_);
 
-            assert( hyperexp_detail::check_params(probs_, rates_) );
+            BOOST_ASSERT( hyperexp_detail::check_params(probs_, rates_) );
         }
 
         /**
@@ -294,12 +292,12 @@ class hyperexponential_distribution
                 param_type(ProbRangeT const& prob_range,
                            RateRangeT const& rate_range,
                            typename boost::disable_if_c<boost::has_pre_increment<ProbRangeT>::value || boost::has_pre_increment<RateRangeT>::value>::type* = 0)
-        : probs_(boost::begin(prob_range), boost::end(prob_range)),
-          rates_(boost::begin(rate_range), boost::end(rate_range))
+        : probs_(std::begin(prob_range), std::end(prob_range)),
+          rates_(std::begin(rate_range), std::end(rate_range))
         {
             hyperexp_detail::normalize(probs_);
 
-            assert( hyperexp_detail::check_params(probs_, rates_) );
+            BOOST_ASSERT( hyperexp_detail::check_params(probs_, rates_) );
         }
 
         /**
@@ -330,13 +328,13 @@ class hyperexponential_distribution
         //  We SFINAE this out of existance if the argument type is
         //  incrementable as in that case the type is probably an iterator.
         public: template <typename RateIterT>
-                param_type(RateIterT rate_first, 
-                           RateIterT rate_last,  
+                param_type(RateIterT rate_first,
+                           RateIterT rate_last,
                            typename boost::enable_if_c<boost::has_pre_increment<RateIterT>::value>::type* = 0)
         : probs_(std::distance(rate_first, rate_last), 1), // will be normalized below
           rates_(rate_first, rate_last)
         {
-            assert(probs_.size() == rates_.size());
+            BOOST_ASSERT(probs_.size() == rates_.size());
         }
 
         /**
@@ -355,12 +353,12 @@ class hyperexponential_distribution
          */
         public: template <typename RateRangeT>
                 param_type(RateRangeT const& rate_range)
-        : probs_(boost::size(rate_range), 1), // Will be normalized below
-          rates_(boost::begin(rate_range), boost::end(rate_range))
+        : probs_(boost::random::detail::size(rate_range), 1), // Will be normalized below
+          rates_(std::begin(rate_range), std::end(rate_range))
         {
             hyperexp_detail::normalize(probs_);
 
-            assert( hyperexp_detail::check_params(probs_, rates_) );
+            BOOST_ASSERT( hyperexp_detail::check_params(probs_, rates_) );
         }
 
 #ifndef BOOST_NO_CXX11_HDR_INITIALIZER_LIST
@@ -387,7 +385,7 @@ class hyperexponential_distribution
         {
             hyperexp_detail::normalize(probs_);
 
-            assert( hyperexp_detail::check_params(probs_, rates_) );
+            BOOST_ASSERT( hyperexp_detail::check_params(probs_, rates_) );
         }
 
         /**
@@ -413,7 +411,7 @@ class hyperexponential_distribution
         {
             hyperexp_detail::normalize(probs_);
 
-            assert( hyperexp_detail::check_params(probs_, rates_) );
+            BOOST_ASSERT( hyperexp_detail::check_params(probs_, rates_) );
         }
 #endif // BOOST_NO_CXX11_HDR_INITIALIZER_LIST
 
@@ -518,7 +516,7 @@ class hyperexponential_distribution
             hyperexp_detail::normalize(param.probs_);
 
             //post: vector size conformance
-            assert(param.probs_.size() == param.rates_.size());
+            BOOST_ASSERT(param.probs_.size() == param.rates_.size());
 
             return is;
         }
@@ -529,7 +527,7 @@ class hyperexponential_distribution
             return lhs.probs_ == rhs.probs_
                    && lhs.rates_ == rhs.rates_;
         }
-        
+
         /** Returns true if the two sets of parameters are the different. */
         public: BOOST_RANDOM_DETAIL_INEQUALITY_OPERATOR(param_type)
 
@@ -578,7 +576,7 @@ class hyperexponential_distribution
     : dd_(prob_first, prob_last),
       rates_(rate_first, rate_last)
     {
-        assert( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
+        BOOST_ASSERT( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
     }
 
     /**
@@ -608,9 +606,9 @@ class hyperexponential_distribution
                                           RateRangeT const& rate_range,
                                           typename boost::disable_if_c<boost::has_pre_increment<ProbRangeT>::value || boost::has_pre_increment<RateRangeT>::value>::type* = 0)
     : dd_(prob_range),
-      rates_(boost::begin(rate_range), boost::end(rate_range))
+      rates_(std::begin(rate_range), std::end(rate_range))
     {
-        assert( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
+        BOOST_ASSERT( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
     }
 
     /**
@@ -648,7 +646,7 @@ class hyperexponential_distribution
     : dd_(std::vector<RealT>(std::distance(rate_first, rate_last), 1)),
       rates_(rate_first, rate_last)
     {
-        assert( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
+        BOOST_ASSERT( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
     }
 
     /**
@@ -667,10 +665,10 @@ class hyperexponential_distribution
      */
     public: template <typename RateRangeT>
             hyperexponential_distribution(RateRangeT const& rate_range)
-    : dd_(std::vector<RealT>(boost::size(rate_range), 1)),
-      rates_(boost::begin(rate_range), boost::end(rate_range))
+    : dd_(std::vector<RealT>(boost::random::detail::size(rate_range), 1)),
+      rates_(std::begin(rate_range), std::end(rate_range))
     {
-        assert( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
+        BOOST_ASSERT( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
     }
 
     /**
@@ -682,7 +680,7 @@ class hyperexponential_distribution
     : dd_(param.probabilities()),
       rates_(param.rates())
     {
-        assert( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
+        BOOST_ASSERT( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
     }
 
 #ifndef BOOST_NO_CXX11_HDR_INITIALIZER_LIST
@@ -708,7 +706,7 @@ class hyperexponential_distribution
     : dd_(l1.begin(), l1.end()),
       rates_(l2.begin(), l2.end())
     {
-        assert( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
+        BOOST_ASSERT( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
     }
 
     /**
@@ -733,7 +731,7 @@ class hyperexponential_distribution
     : dd_(std::vector<RealT>(std::distance(l1.begin(), l1.end()), 1)),
       rates_(l1.begin(), l1.end())
     {
-        assert( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
+        BOOST_ASSERT( hyperexp_detail::check_params(dd_.probabilities(), rates_) );
     }
 #endif
 
@@ -854,7 +852,7 @@ class hyperexponential_distribution
         return lhs.dd_ == rhs.dd_
                && lhs.rates_ == rhs.rates_;
     }
-    
+
     /**
      * Returns true if the two instances of @c hyperexponential_distribution will
      * return different sequences of values given equal generators.

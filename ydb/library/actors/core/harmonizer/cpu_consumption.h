@@ -34,7 +34,7 @@ struct THarmonizerCpuConsumption {
     TStackVec<i16, 8> NeedyPools;
     TStackVec<std::pair<i16, float>, 8> HoggishPools;
     TStackVec<bool, 8> IsNeedyByPool;
-    std::vector<i16> FreeHalfThread;
+    TStackVec<i16, 8> FreeHalfSharedThreads;
 
     void Init(i16 poolCount);
 

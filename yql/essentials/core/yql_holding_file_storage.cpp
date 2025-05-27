@@ -25,6 +25,16 @@ TFileLinkPtr THoldingFileStorage::FreezeFile(const TUserDataBlock& block) {
     return FindOrPutData(block);
 }
 
+
+TFileLinkPtr THoldingFileStorage::GetFrozenBlock(const TUserDataBlock& block) const {
+    if (block.FrozenFile) {
+        return block.FrozenFile;
+    }
+    auto it = Links_.find(block);
+    Y_ENSURE (it != Links_.end());
+    return it->second;
+}
+
 NThreading::TFuture<std::function<TFileLinkPtr()>> THoldingFileStorage::FreezeFileAsync(const TUserDataBlock& block) {
     if (block.FrozenFile) {
         return MakeFutureWithConstantAction(block.FrozenFile);

@@ -33,6 +33,8 @@ common:
     to: /public-materials/videos.md
   - from: /concepts/databases.md
     to: /concepts/glossary.md
+  - from: /concepts/vector_index.md
+    to: concepts/vector_search.md
   - from: /postgresql/pg-dump.md
     to: /postgresql/import.md
   - from: /concepts/column-table.md
@@ -55,8 +57,6 @@ common:
     to: /devops/kubernetes/initial-deployment.md
   - from: /deploy/orchestrated/operate.md
     to: /devops/kubernetes/initial-deployment.md
-  - from: /cluster/system-requirements.md
-    to: /devops/system-requirements.md
   - from: /cluster/index.md
     to: /devops/index.md
   - from: /cluster/logs.md
@@ -65,18 +65,14 @@ common:
     to: /reference/observability/metrics/grafana-dashboards.md
   - from: /administration/production-storage-config.md
     to: /deploy/configuration/config.md
-  - from: /administration/decommissioning.md
-    to: /devops/manual/decommissioning.md
-  - from: /deploy/manual/decommissioning.md
-    to: /devops/manual/decommissioning.md
-  - from: /administration/monitoring.md
-    to: /devops/manual/monitoring.md
-  - from: /deploy/manual/monitoring.md
-    to: /devops/manual/monitoring.md
   - from: /administration/state-storage-move.md
     to: /devops/manual/state-storage-move.md
   - from: /deploy/manual/static-group-move.md
     to: /devops/manual/static-group-move.md
+  - from: /administration/monitoring.md
+    to: /devops/manual/monitoring.md
+  - from: /deploy/manual/monitoring.md
+    to: /devops/manual/monitoring.md
   - from: /administration/upgrade.md
     to: /devops/manual/upgrade.md
   - from: /deploy/manual/upgrade.md
@@ -184,11 +180,15 @@ common:
 
 # Security-related redirects
   - from: /cluster/access.md
-    to: /security/acess-management.md
+    to: /security/authorization.md
   - from: /cluster/audit-log.md
     to: /security/audit-log.md
   - from: /cluster/short-access-control-notation.md
     to: /security/short-access-control-notation.md
+  - from: /concepts/auth.md
+    to: /security/authentication.md
+  - from: /security/access-management.md
+    to: /security/authorization.md
 
 # Contributors-related redirects
   - from: /development/build-ya.md
@@ -346,6 +346,50 @@ common:
   - from: /integrations/liquibase.md
     to: /integrations/migration/liquibase.md
 
+# Redirects for troubleshooting
+
+  - from: /dev/troubleshooting/index.md
+    to: /troubleshooting/index.md
+  - from: /dev/troubleshooting/performance/hardware/io-bandwidth.md
+    to: /troubleshooting/performance/hardware/io-bandwidth.md
+  - from: /dev/troubleshooting/performance/hardware/disk-space.md
+    to: /troubleshooting/performance/hardware/disk-space.md
+  - from: /dev/troubleshooting/performance/hardware/insufficient-memory.md
+    to: /troubleshooting/performance/hardware/insufficient-memory.md
+  - from: /dev/troubleshooting/performance/hardware/cpu-bottleneck.md
+    to: /troubleshooting/performance/hardware/cpu-bottleneck.md
+  - from: /dev/troubleshooting/performance/queries/transaction-lock-invalidation.md
+    to: /troubleshooting/performance/queries/transaction-lock-invalidation.md
+  - from: /dev/troubleshooting/performance/queries/uncached-queries.md
+    to: /troubleshooting/performance/queries/uncached-queries.md
+  - from: /dev/troubleshooting/performance/queries/overloaded-errors.md
+    to: /troubleshooting/performance/queries/overloaded-errors.md
+  - from: /dev/troubleshooting/performance/schemas/splits-merges.md
+    to: /troubleshooting/performance/schemas/splits-merges.md
+  - from: /dev/troubleshooting/performance/schemas/overloaded-shards.md
+    to: /troubleshooting/performance/schemas/overloaded-shards.md
+  - from: /dev/troubleshooting/performance/system/system-clock-drift.md
+    to: /troubleshooting/performance/system/system-clock-drift.md
+  - from: /dev/troubleshooting/performance/index.md
+    to: /troubleshooting/performance/index.md
+  - from: /dev/troubleshooting/performance/ydb/tablets-moved.md
+    to: /troubleshooting/performance/ydb/tablets-moved.md
+  - from: /dev/troubleshooting/performance/ydb/ydb-updates.md
+    to: /troubleshooting/performance/ydb/ydb-updates.md
+  - from: /dev/troubleshooting/performance/infrastructure/hardware.md
+    to: /troubleshooting/performance/infrastructure/hardware.md
+  - from: /dev/troubleshooting/performance/infrastructure/network.md
+    to: /troubleshooting/performance/infrastructure/network.md
+  - from: /dev/troubleshooting/performance/infrastructure/dc-drills.md
+    to: /troubleshooting/performance/infrastructure/dc-drills.md
+  - from: /dev/troubleshooting/performance/infrastructure/dc-outage.md
+    to: /troubleshooting/performance/infrastructure/dc-outage.md
+
+# Redirects for reference/configuration
+
+  - from: /reference/configuration/node-authentication.md
+    to: /reference/configuration/client_certificate_authorization.md
+
 ru:
   - from: /postgresql/index.md
     to: /postgresql/intro.md
@@ -353,3 +397,69 @@ ru:
     to: /dev/terraform.md
   - from: /postgresql/docker-connect.md
     to: /postgresql/connect.md
+
+  # Redirects for Deployment Options
+  - from: /devops/(ansible|kubernetes|manual)/(.*)$
+    to: /devops/deployment-options/$1/$2
+
+  # Redirects for Observability
+  - from: /devops/manual/(monitoring|logging)\.md$
+    to: /devops/observability/$1.md
+  - from: /devops/manual/system-views.md
+    to: /devops/observability/system-views.md
+
+  # Redirects for Maintenance
+  - from: /devops/manual/upgrade.md
+    to: /devops/concepts/versioning.md
+  - from: /devops/manual/maintenance-without-downtime.md
+    to: /devops/concepts/maintenance-without-downtime.md
+
+  # Redirects for Federated Queries
+  - from: /devops/manual/federated-queries/(.*)$
+    to: /devops/deployment-options/manual/federated-queries/$1
+
+  # Redirect for backup-and-recovery
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery.md
+
+  # Redirect for deprecated instructions
+  - from: /devops/manual/state-storage-move.md
+    to: /devops/configuration-management/configuration-v1/state-storage-move.md
+  - from: /devops/manual/static-group-move.md
+    to: /devops/configuration-management/configuration-v1/static-group-move.md
+
+  # Redirect for system-requirements
+  - from: /devops/system-requirements.md
+    to: /devops/concepts/system-requirements.md
+  - from: /cluster/system-requirements.md
+    to: /devops/concepts/system-requirements.md
+
+  # Redirects for maintenance folder
+  - from: /maintenance/(.*)$
+    to: /devops/deployment-options/manual/$1
+
+en:
+  - from: /cluster/system-requirements.md
+    to: /devops/system-requirements.md
+  - from: /devops/observability/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment.md
+  - from: /maintenance/manual/dynamic-config.md
+    to: /devops/deployment-options/manual/dynamic-config.md
+  - from: /maintenance/manual/config-overview.md
+    to: /devops/deployment-options/manual/config-overview.md
+  - from: /maintenance/manual/node_restarting.md
+    to: /devops/deployment-options/manual/node-restarting.md
+  - from: /maintenance/manual/cluster_expansion.md
+    to: /devops/deployment-options/manual/cluster-expansion.md
+  - from: /maintenance/manual/selfheal.md
+    to: /devops/deployment-options/manual/selfheal.md
+  - from: /maintenance/manual/index.md
+    to: /devops/deployment-options/manual/index.md
+  - from: /maintenance/manual/change_actorsystem_configs.md
+    to: /devops/deployment-options/manual/change-actorsystem-configs.md
+  - from: /maintenance/manual/cms.md
+    to: /devops/deployment-options/manual/cms.md
+
+  # Redirects for maintenance folder
+  - from: /maintenance/(.*)$
+    to: /devops/deployment-options/manual/$1

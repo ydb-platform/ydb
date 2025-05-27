@@ -2,7 +2,7 @@
 
 #include "coordination.h"
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 const Ydb::Coordination::DescribeNodeResult& TProtoAccessor::GetProto(const NCoordination::TNodeDescription& nodeDescription) {
     return nodeDescription.GetProto();

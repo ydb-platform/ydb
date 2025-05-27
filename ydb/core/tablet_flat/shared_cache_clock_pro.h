@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "util_fmt_abort.h"
 #include <ydb/core/util/cache_cache_iface.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/monlib/counters/counters.h>
@@ -87,7 +88,7 @@ public:
         } else if (auto it = Entries.find(TPageTraits::GetKey(page)); it != Entries.end()) {
             // transforms a 'Cold non-resident' ('Test') page to a 'Hot' page:
             TPageEntry* entry = AsEntry(it);
-            Y_ABORT_UNLESS(!entry->Page);
+            Y_ENSURE(!entry->Page);
             return Fill(entry, page);
         } else {
             // adds a 'Cold resident' page
@@ -103,8 +104,8 @@ public:
 
             Entries.erase(it);
         } else {
-            Y_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
-            Y_ABORT_UNLESS(!TPageTraits::GetReferenced(page));
+            Y_ENSURE(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
+            Y_ENSURE(!TPageTraits::GetReferenced(page));
         }
     }
 
@@ -155,7 +156,7 @@ public:
                         sizeCold += entry->Size;
                         break;
                     default:
-                        Y_ABORT("Unknown location");
+                        Y_TABLET_ERROR("Unknown location");
                 }
             } else {
                 result << "T ";
@@ -192,7 +193,7 @@ private:
         Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
 
         auto inserted = Entries.emplace(TPageTraits::GetKey(page), page, TPageTraits::GetSize(page));
-        Y_ABORT_UNLESS(inserted.second);
+        Y_ENSURE(inserted.second);
         TPageEntry* entry = AsEntry(inserted.first);
 
         LinkEntry(entry);
@@ -206,10 +207,10 @@ private:
     TIntrusiveList<TPage> Fill(TPageEntry* entry, TPage* page) {
         Y_DEBUG_ABORT_UNLESS(!entry->Page);
         Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) == EClockProPageLocation::None);
-        Y_ABORT_UNLESS(!TPageTraits::GetReferenced(page));
-        Y_ABORT_UNLESS(TPageTraits::GetSize(page) == entry->Size);
+        Y_ENSURE(!TPageTraits::GetReferenced(page));
+        Y_ENSURE(TPageTraits::GetSize(page) == entry->Size);
 
-        Y_ABORT_UNLESS(SizeTest >= entry->Size);
+        Y_ENSURE(SizeTest >= entry->Size);
         SizeTest -= entry->Size;
 
         UnlinkEntry(entry);
@@ -236,20 +237,20 @@ private:
     }
 
     void RunHandCold(TIntrusiveList<TPage>& evictedList) {
-        Y_ABORT_UNLESS(HandCold);
+        Y_ENSURE(HandCold);
         TPageEntry* entry = HandCold->Node();
 
         if (IsCold(entry)) {
             if (TPageTraits::GetReferenced(entry->Page)) {
                 TPageTraits::SetReferenced(entry->Page, false);
                 
-                Y_ABORT_UNLESS(SizeCold >= entry->Size);
+                Y_ENSURE(SizeCold >= entry->Size);
                 SizeCold -= entry->Size;
 
                 TPageTraits::SetLocation(entry->Page, EClockProPageLocation::Hot);
                 SizeHot += entry->Size;
             } else {
-                Y_ABORT_UNLESS(SizeCold >= entry->Size);
+                Y_ENSURE(SizeCold >= entry->Size);
                 SizeCold -= entry->Size;
 
                 TPageTraits::SetLocation(entry->Page, EClockProPageLocation::None);
@@ -273,7 +274,7 @@ private:
     }
 
     void RunHandHot(TIntrusiveList<TPage>& evictedList) {
-        Y_ABORT_UNLESS(HandHot);
+        Y_ENSURE(HandHot);
 
         if (HandHot == HandTest) {
             RunHandTest(evictedList);
@@ -288,7 +289,7 @@ private:
             if (TPageTraits::GetReferenced(entry->Page)) {
                 TPageTraits::SetReferenced(entry->Page, false);
             } else {
-                Y_ABORT_UNLESS(SizeHot >= entry->Size);
+                Y_ENSURE(SizeHot >= entry->Size);
                 SizeHot -= entry->Size;
 
                 TPageTraits::SetLocation(entry->Page, EClockProPageLocation::Cold);
@@ -301,7 +302,7 @@ private:
     }
 
     void RunHandTest(TIntrusiveList<TPage>& evictedList) {
-        Y_ABORT_UNLESS(HandTest);
+        Y_ENSURE(HandTest);
 
         if (HandTest == HandCold) {
             RunHandCold(evictedList);
@@ -313,7 +314,7 @@ private:
         TPageEntry* entry = HandTest->Node();
 
         if (IsTest(entry)) {
-            Y_ABORT_UNLESS(SizeTest >= entry->Size);
+            Y_ENSURE(SizeTest >= entry->Size);
             SizeTest -= entry->Size;
 
             ColdTarget -= Min(ColdTarget, entry->Size);
@@ -321,8 +322,8 @@ private:
             UnlinkEntry(entry);
 
             auto it = Entries.find(entry->Key);
-            Y_ABORT_UNLESS(it != Entries.end());
-            Y_ABORT_UNLESS(AsEntry(it) == entry);
+            Y_ENSURE(it != Entries.end());
+            Y_ENSURE(AsEntry(it) == entry);
             Entries.erase(it);
         }
 
@@ -362,21 +363,21 @@ private:
         if (entry->Page) {
             switch (TPageTraits::GetLocation(entry->Page)) {
                 case EClockProPageLocation::Hot:
-                    Y_ABORT_UNLESS(SizeHot >= entry->Size);
+                    Y_ENSURE(SizeHot >= entry->Size);
                     SizeHot -= entry->Size;
                     break;
                 case EClockProPageLocation::Cold:
-                    Y_ABORT_UNLESS(SizeCold >= entry->Size);
+                    Y_ENSURE(SizeCold >= entry->Size);
                     SizeCold -= entry->Size;
                     break;
                 default:
-                    Y_ABORT("Unexpected page location");
+                    Y_TABLET_ERROR("Unexpected page location");
             }
 
             TPageTraits::SetReferenced(entry->Page, false);
             TPageTraits::SetLocation(entry->Page, EClockProPageLocation::None);
         } else {
-            Y_ABORT_UNLESS(SizeTest >= entry->Size);
+            Y_ENSURE(SizeTest >= entry->Size);
             SizeTest -= entry->Size;
         }
 

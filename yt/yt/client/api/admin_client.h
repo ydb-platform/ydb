@@ -185,7 +185,7 @@ struct TMaintenanceFilter
     // Empty means no filtering by id.
     std::vector<TMaintenanceId> Ids;
     std::optional<EMaintenanceType> Type;
-    std::variant<TByUser::TAll, TByUser::TMine, TString> User;
+    std::variant<TByUser::TAll, TByUser::TMine, std::string> User;
 };
 
 struct TRemoveMaintenanceOptions
@@ -198,6 +198,15 @@ struct TRequestRestartOptions
 
 struct TRequestRestartResult
 { };
+
+struct TCollectCoverageOptions
+    : public TTimeoutOptions
+{ };
+
+struct TCollectCoverageResult
+{
+    TString CoverageMap;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -317,6 +326,10 @@ struct IAdminClient
     virtual TFuture<TRequestRestartResult> RequestRestart(
         const std::string& nodeAddress,
         const TRequestRestartOptions& options = {}) = 0;
+
+    virtual TFuture<TCollectCoverageResult> CollectCoverage(
+        const std::string& address,
+        const TCollectCoverageOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

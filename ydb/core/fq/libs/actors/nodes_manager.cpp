@@ -8,8 +8,8 @@
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 #include <ydb/library/actors/core/log.h>
@@ -147,7 +147,7 @@ private:
             if (!Peers.empty()) {
                 auto firstPeer = NextPeer;
                 while (true) {
-                    Y_ABORT_UNLESS(NextPeer < Peers.size());
+                    Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
                     auto& nextNode = Peers[NextPeer];
 
                     if (++NextPeer >= Peers.size()) {
@@ -217,7 +217,7 @@ private:
 
         TVector<TPeer> nodes;
         for (ui32 i = 0; i < count; ++i) {
-            Y_ABORT_UNLESS(NextPeer < Peers.size());
+            Y_ABORT_UNLESS(NextPeer < Peers.size(), "NextPeer %" PRIu32 ", Peers size %" PRIu32, (ui32)NextPeer, (ui32)Peers.size());
             nodes.push_back(Peers[SingleNodeScheduler.NodeOrder[NextPeer]]);
         }
         if (++NextPeer >= Peers.size()) {
@@ -318,14 +318,13 @@ private:
     void HandleResponse(NFq::TEvInternalService::TEvHealthCheckResponse::TPtr& ev) {
         try {
             const auto& status = ev->Get()->Status.GetStatus();
-            THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo());
             if (!ev->Get()->Status.IsSuccess()) {
                 ythrow yexception() <<  status << '\n' << ev->Get()->Status.GetIssues().ToString();
             }
             const auto& res = ev->Get()->Result;
 
-            auto& nodesInfo = nameServiceUpdateReq->Nodes;
-            nodesInfo.reserve(res.nodes().size());
+            auto nodesInfo = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+            nodesInfo->reserve(res.nodes().size());
 
             Peers.clear();
             std::set<ui32> nodeIds; // may be not unique
@@ -340,7 +339,7 @@ private:
                   node.active_workers(), node.memory_limit(), node.memory_allocated(), node.data_center()});
 
                 if (node.interconnect_port()) {
-                    nodesInfo.emplace_back(TEvInterconnect::TNodeInfo{
+                    nodesInfo->emplace_back(TEvInterconnect::TNodeInfo{
                         node.node_id(),
                         node.node_address(),
                         node.hostname(), // host
@@ -356,8 +355,9 @@ private:
             ServiceCounters.Counters->GetCounter("PeerCount", false)->Set(Peers.size());
             ServiceCounters.Counters->GetCounter("NodesHealthCheckOk", true)->Inc();
 
-            LOG_T("Send NodeInfo with size: " << nodesInfo.size() << " to DynamicNameserver");
-            if (!nodesInfo.empty()) {
+            LOG_T("Send NodeInfo with size: " << nodesInfo->size() << " to DynamicNameserver");
+            if (!nodesInfo->empty()) {
+                THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo(nodesInfo));
                 Send(GetNameserviceActorId(), nameServiceUpdateReq.Release());
             }
         } catch (yexception &e) {

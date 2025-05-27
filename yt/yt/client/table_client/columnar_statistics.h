@@ -16,6 +16,8 @@ struct TLightweightColumnarStatistics
     std::optional<i64> TimestampTotalWeight;
     //! Total data weight of legacy chunks whose meta misses columnar statistics.
     i64 LegacyChunkDataWeight = 0;
+    //! Data size expected to be read from disk.
+    std::optional<i64> ReadDataSizeEstimate;
 };
 
 struct TNamedColumnarStatistics
@@ -30,10 +32,10 @@ struct TNamedColumnarStatistics
     TNamedColumnarStatistics& operator +=(const TNamedColumnarStatistics& other);
 };
 
-typedef THyperLogLog<
+using TColumnarHyperLogLogDigest = THyperLogLog<
     // Precision = 4, or 16 registers
     4
-> TColumnarHyperLogLogDigest;
+>;
 
 //! This struct includes large per-column statistics too big to fit together with basic stats
 struct TLargeColumnarStatistics
@@ -41,7 +43,7 @@ struct TLargeColumnarStatistics
     //! Per-column HyperLogLog digest to approximate number of unique values in the column.
     std::vector<TColumnarHyperLogLogDigest> ColumnHyperLogLogDigests;
 
-    bool Empty() const;
+    bool IsEmpty() const;
     void Clear();
     void Resize(int columnCount);
 
@@ -88,6 +90,12 @@ struct TColumnarStatistics
 
     //! Large per-column statistics, including columnar HLL.
     TLargeColumnarStatistics LargeStatistics;
+
+    //! This field provides an estimate, in bytes, of the data size expected to be read from disk.
+    //! It is calculated on nodes for specified columns set and cannot be recalculated on-the-fly.
+    //! To prevent errors, this field is set to null whenever the set of columns is modified or
+    //! when new rows are added to statistics.
+    std::optional<i64> ReadDataSizeEstimate;
 
     TColumnarStatistics& operator+=(const TColumnarStatistics& other);
     bool operator==(const TColumnarStatistics& other) const = default;

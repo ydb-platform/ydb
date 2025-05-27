@@ -35,6 +35,7 @@ YT_DEFINE_ERROR_ENUM(
     ((ChangelogIOError)            (614))
     ((InvalidChangelogState)       (615))
     ((ReadOnly)                    (616))
+    ((RestartAfterRecovery)        (617))
 );
 
 DEFINE_ENUM(EPeerKind,

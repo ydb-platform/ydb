@@ -28,7 +28,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+        NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
 
         Client->CreateSession().Subscribe([actorId, actorSystem](const NYdb::NTable::TAsyncCreateSessionResult& result) {
@@ -44,7 +44,7 @@ public:
         if (result.IsSuccess()) {
             LOG_DEBUG_S(ctx, EService::MVP, "MetaVersions: got session, making query");
 
-            NActors::TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
+            NActors::TActorSystem* actorSystem = ctx.ActorSystem();
             NActors::TActorId actorId = ctx.SelfID;
             TString query = TStringBuilder()
                     << "SELECT version_str, color_class FROM `" << RootDomain << "/ydb/MasterClusterVersions.db`"
@@ -81,10 +81,10 @@ public:
             while (parser.TryNextRow()) {
                 // Almost no type checking: assume here strict conformance to the schema.
                 // Records with empty color_class are skipped as invalid.
-                TMaybe<ui32> color_class = parser.ColumnParser("color_class").GetOptionalUint32();
-                if (!color_class.Empty()) {
+                auto color_class = parser.ColumnParser("color_class").GetOptionalUint32();
+                if (color_class.has_value()) {
                     versionInfoCache->emplace_back(
-                        parser.ColumnParser("version_str").GetUtf8(),
+                        TString{parser.ColumnParser("version_str").GetUtf8()},
                         *color_class
                     );
                 }

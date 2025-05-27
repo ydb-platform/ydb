@@ -7,7 +7,7 @@
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/library/actors/core/event_local.h>
 
@@ -227,13 +227,14 @@ struct TEvSaveScriptResultPartFinished : public NActors::TEventLocal<TEvSaveScri
 };
 
 struct TEvSaveScriptResultFinished : public NActors::TEventLocal<TEvSaveScriptResultFinished, TKqpScriptExecutionEvents::EvSaveScriptResultFinished> {
-    TEvSaveScriptResultFinished(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
+    TEvSaveScriptResultFinished(Ydb::StatusIds::StatusCode status, size_t resultSetId, NYql::TIssues issues = {})
         : Status(status)
+        , ResultSetId(resultSetId)
         , Issues(std::move(issues))
-    {
-    }
+    {}
 
     Ydb::StatusIds::StatusCode Status;
+    size_t ResultSetId = 0;
     NYql::TIssues Issues;
 };
 

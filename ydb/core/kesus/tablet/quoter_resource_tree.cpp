@@ -804,6 +804,7 @@ void THierarchicalDRRQuoterResourceTree::CalcParametersForAccounting() {
         if (!cfg->GetResourceId() && parent) { cfg->SetResourceId(parent->GetResourceId()); }
         if (!cfg->GetSourceId() && parent) { cfg->SetSourceId(parent->GetSourceId()); }
         if (cfg->GetTags().empty() && parent) { *cfg->MutableTags() = parent->GetTags(); }
+        if (cfg->GetLabels().empty() && parent) { *cfg->MutableLabels() = parent->GetLabels(); }
     };
     calcMetricsParams(accCfg->MutableProvisioned(), accCfgParent ? &accCfgParent->GetProvisioned() : nullptr);
     calcMetricsParams(accCfg->MutableOnDemand(), accCfgParent ? &accCfgParent->GetOnDemand() : nullptr);

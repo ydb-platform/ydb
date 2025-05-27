@@ -22,7 +22,9 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
         const TIntrusivePtr<ITimeProvider>& timeProvider,
         NKikimr::NMiniKQL::IStatsRegistry* jobStats,
         NKikimr::NUdf::ICountersProvider* counters,
-        const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider)
+        const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
+        const NKikimr::NUdf::ILogProvider* logProvider,
+        TLangVersion langVer)
     : FunctionRegistry(functionRegistry)
     , Alloc(alloc)
     , RandomProvider(randomProvider)
@@ -30,6 +32,8 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
     , JobStats(jobStats)
     , Counters(counters)
     , SecureParamsProvider(secureParamsProvider)
+    , LogProvider(logProvider)
+    , LangVer(langVer)
     , Env(env)
 {
 }
@@ -50,7 +54,7 @@ const NKikimr::NMiniKQL::TTypeEnvironment* TLambdaBuilder::CreateTypeEnv() const
 TRuntimeNode TLambdaBuilder::BuildLambda(const IMkqlCallableCompiler& compiler, const TExprNode::TPtr& lambdaNode,
     TExprContext& exprCtx, TArgumentsMap&& arguments) const
 {
-    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry);
+    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry, false, LangVer);
     TMkqlBuildContext ctx(compiler, pgmBuilder, exprCtx, lambdaNode->UniqueId(), std::move(arguments));
     return MkqlBuildExpr(*lambdaNode, ctx);
 }
@@ -58,7 +62,7 @@ TRuntimeNode TLambdaBuilder::BuildLambda(const IMkqlCallableCompiler& compiler, 
 TRuntimeNode TLambdaBuilder::TransformAndOptimizeProgram(NKikimr::NMiniKQL::TRuntimeNode root,
     TCallableVisitFuncProvider funcProvider) {
     TExploringNodeVisitor explorer;
-    explorer.Walk(root.GetNode(), GetTypeEnvironment());
+    explorer.Walk(root.GetNode(), GetTypeEnvironment().GetNodeStack());
     bool wereChanges = false;
     TRuntimeNode program = SinglePassVisitCallables(root, explorer, funcProvider, GetTypeEnvironment(), true, wereChanges);
     program = LiteralPropagationOptimization(program, GetTypeEnvironment(), true);
@@ -130,6 +134,9 @@ public:
     void Invalidate() final {
         return Graph->Invalidate();
     }
+    void InvalidateCaches() final {
+        return Graph->InvalidateCaches();
+    }
     TMemoryUsageInfo& GetMemInfo() const final {
         return Graph->GetMemInfo();
     }
@@ -177,7 +184,9 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     TString serialized;
 
     TComputationPatternOpts patternOpts(Alloc.Ref(), GetTypeEnvironment());
-    patternOpts.SetOptions(factory, FunctionRegistry, validateMode, validatePolicy, optLLVM, graphPerProcess, JobStats, Counters, SecureParamsProvider);
+    patternOpts.SetOptions(factory, FunctionRegistry, validateMode, validatePolicy,
+        optLLVM, graphPerProcess, JobStats, Counters,
+        SecureParamsProvider, LogProvider, LangVer);
     auto preparePatternFunc = [&]() {
         if (serialized) {
             auto tupleRunTimeNodes = DeserializeRuntimeNode(serialized, GetTypeEnvironment());
@@ -187,7 +196,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
                 entryPoints[index] = tupleNodes->GetValue(1 + index).GetNode();
             }
         }
-        explorer.Walk(root.GetNode(), GetTypeEnvironment());
+        explorer.Walk(root.GetNode(), GetTypeEnvironment().GetNodeStack());
         auto pattern = MakeComputationPattern(explorer, root, entryPoints, patternOpts);
         for (const auto& node : explorer.GetNodes()) {
             node->SetCookie(0);
@@ -198,13 +207,14 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     auto pattern = preparePatternFunc();
     YQL_ENSURE(pattern);
 
-    const TComputationOptsFull computeOpts(JobStats, Alloc.Ref(), GetTypeEnvironment(), *randomProvider, *timeProvider, validatePolicy, SecureParamsProvider, Counters);
+    const TComputationOptsFull computeOpts(JobStats, Alloc.Ref(), GetTypeEnvironment(), *randomProvider, *timeProvider,
+        validatePolicy, SecureParamsProvider, Counters, LogProvider, LangVer);
     auto graph = pattern->Clone(computeOpts);
     return MakeHolder<TComputationGraphProxy>(std::move(pattern), std::move(graph));
 }
 
 TRuntimeNode TLambdaBuilder::MakeTuple(const TVector<TRuntimeNode>& items) const {
-    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry);
+    TProgramBuilder pgmBuilder(GetTypeEnvironment(), *FunctionRegistry, false, LangVer);
     return pgmBuilder.NewTuple(items);
 }
 
@@ -214,8 +224,8 @@ TRuntimeNode TLambdaBuilder::Deserialize(const TString& code) {
 
 std::pair<TString, size_t> TLambdaBuilder::Serialize(TRuntimeNode rootNode) {
     TExploringNodeVisitor explorer;
-    explorer.Walk(rootNode.GetNode(), GetTypeEnvironment());
-    TString code = SerializeRuntimeNode(explorer, rootNode, GetTypeEnvironment());
+    explorer.Walk(rootNode.GetNode(), GetTypeEnvironment().GetNodeStack());
+    TString code = SerializeRuntimeNode(explorer, rootNode, GetTypeEnvironment().GetNodeStack());
     size_t nodes = explorer.GetNodes().size();
     return std::make_pair(code, nodes);
 }

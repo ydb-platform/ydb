@@ -11,6 +11,7 @@
 #include <util/system/compiler.h>
 #include <util/system/yassert.h>
 
+#include "iterator.h"
 #include "ptr.h"
 #include "utility.h"
 #include "explicit_type.h"
@@ -38,7 +39,6 @@ void ResizeUninitialized(std::basic_string<TCharType, TCharTraits, TAllocator>& 
 
 #define Y_NOEXCEPT
 
-#ifndef TSTRING_IS_STD_STRING
 template <class T>
 class TStringPtrOps {
 public:
@@ -82,11 +82,11 @@ struct TStdString: public TRefCountHolder, public B {
     }
 
     static TStdString* NullStr() noexcept {
-    #ifdef _LIBCPP_VERSION
+#ifdef _LIBCPP_VERSION
         return (TStdString*)NULL_STRING_REPR;
-    #else
+#else
         return Singleton<TStdString>();
-    #endif
+#endif
     }
 
 private:
@@ -156,7 +156,6 @@ private:
     TStringType& S_;
     size_t Pos_;
 };
-#endif
 
 template <typename TCharType, typename TTraits>
 class TBasicString: public TStringBase<TBasicString<TCharType, TTraits>, TCharType, TTraits> {
@@ -519,7 +518,7 @@ public:
     }
 
     TBasicString(const TCharType* b, const TCharType* e)
-        : TBasicString(b, e - b)
+        : TBasicString(b, NonNegativeDistance(b, e))
     {
     }
 
@@ -656,7 +655,7 @@ public:
     }
 
     TBasicString& assign(const TCharType* first, const TCharType* last) Y_LIFETIME_BOUND {
-        return assign(first, last - first);
+        return assign(first, NonNegativeDistance(first, last));
     }
 
     TBasicString& assign(const TCharType* pc, size_t pos, size_t n) Y_LIFETIME_BOUND {

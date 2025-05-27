@@ -1,6 +1,6 @@
 def onpy_extralibs(unit, *args):
     """
-    @usage: EXTRALIBS(liblist)
+    @usage: PY_EXTRALIBS(liblist)
     Add external dynamic libraries during program linkage stage" }
     """
 

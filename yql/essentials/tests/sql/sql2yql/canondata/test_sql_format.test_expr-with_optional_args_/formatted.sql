@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-$f = Yql::WithOptionalArgs(($x, $y, $z) -> ($x + ($y ?? 0) + ($z ?? 0)), AsAtom("2"));
+$f = Yql::WithOptionalArgs(($x, $y, $z) -> ($x + ($y ?? 0) + ($z ?? 0)), AsAtom('2'));
 
 SELECT
     $f(1),

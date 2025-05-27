@@ -53,6 +53,16 @@ enum EDrainDownPolicy {
     DRAIN_POLICY_KEEP_DOWN = 2;
 }
 
+enum ELockLostReason {
+    LOCK_LOST_REASON_UNKNOWN = 0;
+    LOCK_LOST_REASON_NODE_DISCONNECTED = 1;
+    LOCK_LOST_REASON_HIVE_RESTART = 2;
+    LOCK_LOST_REASON_TABLET_DELETED = 3;
+    LOCK_LOST_REASON_NEW_LOCK = 4;
+    LOCK_LOST_REASON_TABLET_RELEASED = 5;
+    LOCK_LOST_REASON_UNLOCKED = 6;
+}
+
 message TChannelInfo {
     message THistorySlot {
         optional uint32 FromGeneration = 1;
@@ -313,6 +323,7 @@ message TEvRequestHiveNodeStats {
     // The next 2 fields should always be used together
     optional uint64 FilterTabletsByPathId = 7;
     optional uint64 FilterTabletsBySchemeShardId = 8;
+    optional NKikimrSubDomains.TDomainKey FilterTabletsByObjectDomain = 9;
 }
 
 message THiveNodeStats {
@@ -366,6 +377,7 @@ message TEvDrainNode {
     optional bool KeepDown = 4 [default = false]; // deprecated in favor of DownPolicy
     optional uint32 DrainInFlight = 5;
     optional EDrainDownPolicy DownPolicy = 6 [default = DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART];
+    optional uint64 SeqNo = 7;
 }
 
 message TEvDrainNodeResult {
@@ -405,6 +417,7 @@ message TEvLockTabletExecution {
 
 message TEvLockTabletExecutionLost {
     optional fixed64 TabletID = 1;
+    optional ELockLostReason Reason = 2;
 }
 
 message TEvLockTabletExecutionResult {
@@ -604,7 +617,7 @@ message TScaleRecommenderPolicies {
     message TScaleRecommenderPolicy {
         message TTargetTrackingPolicy {
             oneof Target {
-                uint32 AverageCpuUtilizationPercent = 1; 
+                uint32 AverageCpuUtilizationPercent = 1;
             }
         }
 

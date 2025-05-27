@@ -1,6 +1,6 @@
 #pragma once
 
-#include "binary.h"
+#include <yql/essentials/minikql/jsonpath/parser/binary.h>
 #include "value.h"
 
 #include <yql/essentials/public/issue/yql_issue.h>

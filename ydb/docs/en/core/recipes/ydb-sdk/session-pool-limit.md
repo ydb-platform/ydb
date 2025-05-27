@@ -70,11 +70,24 @@ Below are examples of the code for setting the session pool limit in different {
 - Java
 
   ```java
-  this.tableClient = TableClient.newClient(transport)
+  this.queryClient = QueryClient.newClient(transport)
           // 10 - minimum number of active sessions to keep in the pool during the cleanup
           // 500 - maximum number of sessions in the pool
-          .sessionPoolSize(10, 500)
+          .sessionPoolMinSize(10)
+          .sessionPoolMaxSize(500)
           .build();
+  ```
+
+- JDBC Driver
+
+  Usually working with JDBC applications use the different connections pools, such as [HikariCP](https://github.com/brettwooldridge/HikariCP) or [C3p0](https://github.com/swaldman/c3p0). By default the {{ ydb-short-name }} JDBC driver detects current count of opened connections and tunes the session pool size itself. So if the application has correct configured `HikariCP` или `C3p0`, it may not configure the session pool.
+
+  Example of HikariCP configuration in `String` application.properties:
+
+  ```properties
+    spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
+    spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
+    spring.datasource.hikari.maximum-pool-size=100 # maximum size of JDBC connections
   ```
 
 {% endlist %}

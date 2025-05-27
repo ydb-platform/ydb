@@ -2,9 +2,10 @@
 
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NYdb::NStatusHelpers;
 using namespace NLastGetopt;
 
-static void CreateSeriesTable(TTableClient& client, const TString& path) {
+static void CreateSeriesTable(TTableClient& client, const std::string& path) {
 
      ThrowOnError(client.RetryOperationSync([path](TSession session) {
 
@@ -37,7 +38,7 @@ static void CreateSeriesTable(TTableClient& client, const TString& path) {
     }));
 }
 
-int Create(TDriver& driver, const TString& path) {
+int Create(TDriver& driver, const std::string& path) {
     TTableClient client(driver);
     CreateSeriesTable(client, path);
     return 0;

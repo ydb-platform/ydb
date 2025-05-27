@@ -38,6 +38,7 @@ public:
 
 private:
     NYTree::INodePtr Session;
+    std::vector<NYTree::INodePtr> Results;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -46,14 +47,9 @@ private:
 
 // -> Cookie
 class TWriteTableFragmentCommand
-    : public TTypedCommand<NApi::TFragmentTableWriterOptions>
-    , private TWriteTableCommand
+    : public TTypedCommand<NApi::TTableFragmentWriterOptions>
 {
 public:
-    // Shadow normal execute in order to fix
-    // ambiguity in dispatch.
-    void Execute(ICommandContextPtr context) override;
-
     REGISTER_YSON_STRUCT_LITE(TWriteTableFragmentCommand);
 
     static void Register(TRegistrar registrar);
@@ -62,10 +58,9 @@ private:
     using TBase = TWriteTableCommand;
 
     NYTree::INodePtr Cookie;
-    TRefCountedPtr ResultingCookie;
+    i64 MaxRowBufferSize;
 
-    TFuture<NApi::ITableWriterPtr> CreateTableWriter(
-        const ICommandContextPtr& context) const override;
+    NApi::ITableFragmentWriterPtr CreateTableWriter(const ICommandContextPtr& context);
 
     void DoExecute(ICommandContextPtr context) override;
 };

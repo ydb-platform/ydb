@@ -24,12 +24,15 @@ template<bool IsWide>
 class TDqInputUnionStreamValue : public TComputationValue<TDqInputUnionStreamValue<IsWide>> {
     using TBase = TComputationValue<TDqInputUnionStreamValue<IsWide>>;
 public:
-    TDqInputUnionStreamValue(TMemoryUsageInfo* memInfo, const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs, TDqMeteringStats::TInputStatsMeter stats)
+    TDqInputUnionStreamValue(TMemoryUsageInfo* memInfo, const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
+        TDqMeteringStats::TInputStatsMeter stats, TInstant& startTs, bool& inputConsumed)
         : TBase(memInfo)
         , Inputs(std::move(inputs))
         , Alive(Inputs.size())
         , Batch(type)
         , Stats(stats)
+        , StartTs(startTs)
+        , InputConsumed(inputConsumed)
     {}
 
 private:
@@ -41,6 +44,10 @@ private:
                 case NUdf::EFetchStatus::Ok:
                     break;
                 case NUdf::EFetchStatus::Finish:
+                    if (Y_UNLIKELY(!StartTs)) {
+                        StartTs = Now();
+                    }
+                    [[fallthrough]];
                 case NUdf::EFetchStatus::Yield:
                     return status;
             }
@@ -52,6 +59,10 @@ private:
         if (Stats) {
             Stats.Add(result);
         }
+        if (Y_UNLIKELY(!StartTs)) {
+            StartTs = Now();
+        }
+        InputConsumed = true;
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -63,6 +74,10 @@ private:
                 case NUdf::EFetchStatus::Ok:
                     break;
                 case NUdf::EFetchStatus::Finish:
+                    if (Y_UNLIKELY(!StartTs)) {
+                        StartTs = Now();
+                    }
+                    [[fallthrough]];
                 case NUdf::EFetchStatus::Yield:
                     return status;
             }
@@ -76,6 +91,10 @@ private:
         if (Stats) {
             Stats.Add(result, width);
         }
+        if (Y_UNLIKELY(!StartTs)) {
+            StartTs = Now();
+        }
+        InputConsumed = true;
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -108,6 +127,8 @@ private:
     size_t Index = 0;
     TUnboxedValueBatch Batch;
     TDqMeteringStats::TInputStatsMeter Stats;
+    TInstant& StartTs;
+    bool& InputConsumed;
 };
 
 template<bool IsWide>
@@ -115,12 +136,14 @@ class TDqInputMergeStreamValue : public TComputationValue<TDqInputMergeStreamVal
     using TBase = TComputationValue<TDqInputMergeStreamValue<IsWide>>;
 public:
     TDqInputMergeStreamValue(TMemoryUsageInfo* memInfo, const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
-        TVector<TSortColumnInfo>&& sortCols, TDqMeteringStats::TInputStatsMeter stats)
+        TVector<TSortColumnInfo>&& sortCols, TDqMeteringStats::TInputStatsMeter stats, TInstant& startTs, bool& inputConsumed)
         : TBase(memInfo)
         , Inputs(std::move(inputs))
         , Width(type->IsMulti() ? static_cast<const NMiniKQL::TMultiType*>(type)->GetElementsCount() : TMaybe<ui32>())
         , SortCols(std::move(sortCols))
         , Stats(stats)
+        , StartTs(startTs)
+        , InputConsumed(inputConsumed)
     {
         YQL_ENSURE(!IsWide ^ Width.Defined());
         CurrentBuffers.reserve(Inputs.size());
@@ -196,6 +219,10 @@ private:
             case NUdf::EFetchStatus::Ok:
                 break;
             case NUdf::EFetchStatus::Finish:
+                if (Y_UNLIKELY(!StartTs)) {
+                    StartTs = Now();
+                }
+                [[fallthrough]];
             case NUdf::EFetchStatus::Yield:
                 return status;
         }
@@ -204,6 +231,10 @@ private:
         if (Stats) {
             Stats.Add(result);
         }
+        if (Y_UNLIKELY(!StartTs)) {
+            StartTs = Now();
+        }
+        InputConsumed = true;
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -223,6 +254,7 @@ private:
         if (Stats) {
             Stats.Add(result, width);
         }
+        InputConsumed = true;
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -309,6 +341,8 @@ private:
     ui32 InitializationIndex = 0;
     TMap<ui32, EDataSlot> SortColTypes;
     TDqMeteringStats::TInputStatsMeter Stats;
+    TInstant& StartTs;
+    bool& InputConsumed;
 };
 
 TVector<NKikimr::NMiniKQL::TType*> ExtractBlockItemTypes(const NKikimr::NMiniKQL::TType* type) {
@@ -345,15 +379,14 @@ TVector<std::unique_ptr<IBlockReader>> MakeReaders(const TVector<NKikimr::NMiniK
     return result;
 }
 
-TVector<std::unique_ptr<IArrayBuilder>> MakeBuilders(ui64 blockLen, const TVector<NKikimr::NMiniKQL::TType*> itemTypes) {
+TVector<std::unique_ptr<IArrayBuilder>> MakeBuilders(ui64 blockLen, const TVector<NKikimr::NMiniKQL::TType*> itemTypes, NUdf::IPgBuilder* pgBuilder) {
     TVector<std::unique_ptr<IArrayBuilder>> result;
     TTypeInfoHelper helper;
     for (auto& itemType : itemTypes) {
         if (itemType) {
             // TODO: pass memory pool
-            // TODO: IPgBuilder
             YQL_ENSURE(!itemType->IsPg(), "pg types are not supported yet");
-            result.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), blockLen, nullptr));
+            result.emplace_back(MakeArrayBuilder(helper, itemType, *NYql::NUdf::GetYqlMemoryPool(), blockLen, pgBuilder));
         } else {
             result.emplace_back();
         }
@@ -380,15 +413,18 @@ class TDqInputMergeBlockStreamValue : public TComputationValue<TDqInputMergeBloc
     using TBase = TComputationValue<TDqInputMergeBlockStreamValue>;
 public:
     TDqInputMergeBlockStreamValue(TMemoryUsageInfo* memInfo, const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
-        TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats)
+        TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats,
+        TInstant& startTs, bool& inputConsumed, NUdf::IPgBuilder* pgBuilder)
         : TBase(memInfo)
         , SortCols_(std::move(sortCols))
         , ItemTypes_(ExtractBlockItemTypes(type))
         , MaxOutputBlockLen_(CalcMaxBlockLength(ItemTypes_.begin(), ItemTypes_.end(), TTypeInfoHelper()))
         , Comparators_(MakeComparators(SortCols_, ItemTypes_))
-        , Builders_(MakeBuilders(MaxOutputBlockLen_, ItemTypes_))
+        , Builders_(MakeBuilders(MaxOutputBlockLen_, ItemTypes_, pgBuilder))
         , Factory_(factory)
         , Stats_(stats)
+        , StartTs(startTs)
+        , InputConsumed(inputConsumed)
     {
         YQL_ENSURE(MaxOutputBlockLen_ > 0);
         InputData_.reserve(inputs.size());
@@ -552,6 +588,9 @@ private:
     NUdf::EFetchStatus WideFetch(NKikimr::NUdf::TUnboxedValue* result, ui32 width) final {
         YQL_ENSURE(width == ItemTypes_.size() + 1);
         if (IsFinished_) {
+            if (Y_UNLIKELY(!StartTs)) {
+                StartTs = Now();
+            }
             return NUdf::EFetchStatus::Finish;
         }
 
@@ -576,6 +615,10 @@ private:
         if (Stats_) {
             Stats_.Add(result, width);
         }
+        if (Y_UNLIKELY(!StartTs)) {
+            StartTs = Now();
+        }
+        InputConsumed = true;
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -645,7 +688,7 @@ private:
                 if (status == NUdf::EFetchStatus::Ok) {
                     std::make_heap(InputRows_.begin(), InputRows_.end());
                 }
-            }            
+            }
         }
 
         if (!OutputBlockLen_) {
@@ -685,9 +728,11 @@ private:
 
     const NKikimr::NMiniKQL::THolderFactory& Factory_;
     TDqMeteringStats::TInputStatsMeter Stats_;
-    
+
     std::unique_ptr<TArgsDechunker> Output_;
     bool IsFinished_ = false;
+    TInstant& StartTs;
+    bool& InputConsumed;
 };
 
 void ValidateInputTypes(const NKikimr::NMiniKQL::TType* type, const TVector<IDqInput::TPtr>& inputs) {
@@ -723,7 +768,7 @@ void TDqMeteringStats::TInputStatsMeter::Add(const NKikimr::NUdf::TUnboxedValue*
         } else {
             Stats->RowsConsumed += 1;
         }
-        
+
         NYql::NDq::TDqDataSerializer::TEstimateSizeSettings settings;
         settings.DiscardUnsupportedTypes = true;
         settings.WithHeaders = false;
@@ -740,17 +785,18 @@ void TDqMeteringStats::TInputStatsMeter::Add(const NKikimr::NUdf::TUnboxedValue*
 }
 
 NUdf::TUnboxedValue CreateInputUnionValue(const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
-    const NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats)
+    const NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats, TInstant& startTs, bool& inputConsumed)
 {
     ValidateInputTypes(type, inputs);
     if (type->IsMulti()) {
-        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats);
+        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputConsumed);
     }
-    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats);
+    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputConsumed);
 }
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
-    TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats)
+    TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats,
+    TInstant& startTs, bool& inputConsumed, NUdf::IPgBuilder* pgBuilder)
 {
     ValidateInputTypes(type, inputs);
     YQL_ENSURE(!inputs.empty());
@@ -759,13 +805,13 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(const NKikimr::NMiniKQL::TTyp
             // we can ignore scalar columns, since all they have exactly the same value in all inputs
             EraseIf(sortCols, [](const auto& sortCol) { return *sortCol.IsScalar; });
             if (sortCols.empty()) {
-                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats);
+                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputConsumed);
             }
-            return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats);
+            return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats, startTs, inputConsumed, pgBuilder);
         }
-        return factory.Create<TDqInputMergeStreamValue<true>>(type, std::move(inputs), std::move(sortCols), stats);
+        return factory.Create<TDqInputMergeStreamValue<true>>(type, std::move(inputs), std::move(sortCols), stats, startTs, inputConsumed);
     }
-    return factory.Create<TDqInputMergeStreamValue<false>>(type, std::move(inputs), std::move(sortCols), stats);
+    return factory.Create<TDqInputMergeStreamValue<false>>(type, std::move(inputs), std::move(sortCols), stats, startTs, inputConsumed);
 }
 
 } // namespace NYql::NDq

@@ -12,7 +12,7 @@
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/threading/task_scheduler/task_scheduler.h>
@@ -558,6 +558,7 @@ public:
         , Service(GrpcClient.CreateGRpcServiceConnection<Yql::DqsProto::DqService>(GrpcConf))
         , TaskScheduler()
         , OpenSessionTimeout(timeout)
+        , IsStopped(false)
     {
         TaskScheduler.Start();
     }
@@ -567,6 +568,11 @@ public:
     }
 
     void Stop() {
+        bool expected = false;
+        if (!IsStopped.compare_exchange_strong(expected, true)) {
+            return;
+        }
+
         decltype(Sessions) sessions;
         with_lock (Mutex) {
             sessions = std::move(Sessions);
@@ -630,7 +636,7 @@ public:
             } else {
                 YQL_CLOG(ERROR, ProviderDq) << "OpenSession error: " << status.Msg;
                 this_->DropSession(sessionId);
-                promise.SetException(status.Msg);
+                promise.SetException(TString{status.Msg});
             }
         };
 
@@ -729,6 +735,8 @@ private:
 
     TMutex Mutex;
     THashMap<TString, std::shared_ptr<TDqGatewaySession>> Sessions;
+
+    std::atomic<bool> IsStopped;
 };
 
 class TDqGateway: public IDqGateway {
@@ -741,6 +749,7 @@ public:
     }
 
     ~TDqGateway() {
+        Stop();
     }
 
     void Stop() override {

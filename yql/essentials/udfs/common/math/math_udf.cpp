@@ -60,12 +60,21 @@ using TTaggedRoundingMode = NYql::NUdf::TTagged<ui32, TagRoundingMode>;
 #define MATH_UDF_MAP_WITHOUT_IR(XX)                                                                 \
     XX(NearbyInt, TOptional<i64>(TAutoMap<double>, TTaggedRoundingMode), 0)
 
+#ifdef DISABLE_IR
+#define MATH_STRICT_UDF(name, signature, optionalArgsCount)                                         \
+    SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(T##name, signature, optionalArgsCount) {                   \
+        TUnboxedValuePod res;                                                                       \
+        name##IR(this, &res, valueBuilder, args);                                                   \
+        return res;                                                                                 \
+    }
+#else
 #define MATH_STRICT_UDF(name, signature, optionalArgsCount)                                                       \
     SIMPLE_STRICT_UDF_WITH_IR(T##name, signature, optionalArgsCount, "/llvm_bc/Math", #name "IR") {               \
         TUnboxedValuePod res;                                                                                     \
         name##IR(this, &res, valueBuilder, args);                                                                 \
         return res;                                                                                               \
     }
+#endif
 
 #define MATH_STRICT_UDF_WITHOUT_IR(name, signature, optionalArgsCount)                                            \
     SIMPLE_STRICT_UDF_WITH_OPTIONAL_ARGS(T##name, signature, optionalArgsCount) {                                                    \

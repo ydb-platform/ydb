@@ -6,9 +6,11 @@ RECURSE(
     config
     dq
     gateway
+    gateways_utils
     metrics
     mkql
-    proto/python
+    mkql_simple_file
+    proto
     provider
     schema
     structured_token

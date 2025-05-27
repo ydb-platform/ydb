@@ -89,14 +89,15 @@ bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
     return true;
 }
 
-bool CompileLibrary(const TString& alias, const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize)
+bool CompileLibrary(const NSQLTranslation::TTranslators& translators, const TString& alias,
+    const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize)
 {
     TAstParseResult res;
     if (alias.EndsWith(".sql")) {
         NSQLTranslation::TTranslationSettings translationSettings;
         translationSettings.SyntaxVersion = 1;
         translationSettings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
-        res = NSQLTranslation::SqlToYql(script, translationSettings);
+        res = NSQLTranslation::SqlToYql(translators, script, translationSettings);
     } else {
         res = ParseAst(script, nullptr, alias);
     }
@@ -198,7 +199,8 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
     return true;
 }
 
-bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModulesTable& modules, bool optimize)
+bool CompileLibraries(const NSQLTranslation::TTranslators& translators, const TUserDataTable& userData,
+    TExprContext& ctx, TModulesTable& modules, bool optimize)
 {
     THashMap<TString, TLibraryCohesion> libs;
     for (const auto& data : userData) {
@@ -212,7 +214,7 @@ bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModule
             }
 
             if (!libraryData.empty()) {
-                if (CompileLibrary(alias, libraryData, ctx, libs[alias], optimize))
+                if (CompileLibrary(translators, alias, libraryData, ctx, libs[alias], optimize))
                     modules[TModuleResolver::NormalizeModuleName(alias)] = libs[alias].Exports;
                 else
                     return false;

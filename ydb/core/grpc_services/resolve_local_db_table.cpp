@@ -51,14 +51,5 @@ namespace NGRpcService {
         }
     }
 
-    bool IsSuperUser(const NACLib::TUserToken& userToken, const TAppData& appData) {
-        const auto& adminSids = appData.AdministrationAllowedSIDs;
-        for (const auto& sid : adminSids) {
-            if (userToken.IsExist(sid))
-                return true;
-        }
-        return false;
-    }
-
 } // namespace NKikimr
 } // namespace NGRpcService

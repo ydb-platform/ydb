@@ -17,6 +17,7 @@
  */
 
 #include <cmath>
+#include <unordered_set>
 
 #include "Node.hh"
 
@@ -26,12 +27,44 @@ using std::string;
 
 Node::~Node() = default;
 
+struct Name::Aliases {
+    std::vector<std::string> raw;
+    std::unordered_set<std::string> fullyQualified;
+};
+
+Name::Name() = default;
+
 Name::Name(const std::string &name) {
     fullname(name);
 }
 
+Name::Name(std::string simpleName, std::string ns) : ns_(std::move(ns)), simpleName_(std::move(simpleName)) {
+    check();
+}
+
+Name::Name(const Name &other) {
+    *this = other;
+}
+
+Name &Name::operator=(const Name &other) {
+    if (this != &other) {
+        ns_ = other.ns_;
+        simpleName_ = other.simpleName_;
+        if (other.aliases_) {
+            aliases_ = std::make_unique<Aliases>(*other.aliases_);
+        }
+    }
+    return *this;
+}
+
+Name::Name(Name &&other) = default;
+
+Name &Name::operator=(Name &&other) = default;
+
+Name::~Name() = default;
+
 string Name::fullname() const {
-    return (ns_.empty()) ? simpleName_ : ns_ + "." + simpleName_;
+    return ns_.empty() ? simpleName_ : ns_ + "." + simpleName_;
 }
 
 void Name::fullname(const string &name) {
@@ -44,6 +77,23 @@ void Name::fullname(const string &name) {
         simpleName_ = name.substr(n + 1);
     }
     check();
+}
+
+const std::vector<std::string> &Name::aliases() const {
+    static const std::vector<std::string> emptyAliases;
+    return aliases_ ? aliases_->raw : emptyAliases;
+}
+
+void Name::addAlias(const std::string &alias) {
+    if (!aliases_) {
+        aliases_ = std::make_unique<Aliases>();
+    }
+    aliases_->raw.push_back(alias);
+    if (!ns_.empty() && alias.find_last_of('.') == string::npos) {
+        aliases_->fullyQualified.emplace(ns_ + "." + alias);
+    } else {
+        aliases_->fullyQualified.insert(alias);
+    }
 }
 
 bool Name::operator<(const Name &n) const {
@@ -72,6 +122,16 @@ bool Name::operator==(const Name &n) const {
     return ns_ == n.ns_ && simpleName_ == n.simpleName_;
 }
 
+bool Name::equalOrAliasedBy(const Name &n) const {
+    return *this == n || (n.aliases_ && n.aliases_->fullyQualified.find(fullname()) != n.aliases_->fullyQualified.end());
+}
+
+void Name::clear() {
+    ns_.clear();
+    simpleName_.clear();
+    aliases_.reset();
+}
+
 void Node::setLogicalType(LogicalType logicalType) {
     checkLock();
 
@@ -86,14 +146,13 @@ void Node::setLogicalType(LogicalType logicalType) {
             if (type_ == AVRO_FIXED) {
                 // Max precision that can be supported by the current size of
                 // the FIXED type.
-                long maxPrecision = floor(log10(2.0) * (8.0 * fixedSize() - 1));
+                auto maxPrecision = static_cast<int32_t>(floor(log10(2.0) * (8.0 * static_cast<double>(fixedSize()) - 1)));
                 if (logicalType.precision() > maxPrecision) {
                     throw Exception(
-                        boost::format(
-                            "DECIMAL precision %1% is too large for the "
-                            "FIXED type of size %2%, precision cannot be "
-                            "larger than %3%")
-                        % logicalType.precision() % fixedSize() % maxPrecision);
+                        "DECIMAL precision {} is too large for the "
+                        "FIXED type of size {}, precision cannot be "
+                        "larger than {}",
+                        logicalType.precision(), fixedSize(), maxPrecision);
                 }
             }
             if (logicalType.scale() > logicalType.precision()) {

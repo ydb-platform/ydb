@@ -36,12 +36,14 @@ using namespace NResourceBroker;
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
 
-#define LOG_AS_C(stream) LOG_CRIT_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_AS_D(stream) LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_AS_I(stream) LOG_INFO_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_AS_E(stream) LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_AS_W(stream) LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
-#define LOG_AS_N(stream) LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream)
+#define LOG_AS_SAFE(log) {if (ActorSystem) { log; }}
+
+#define LOG_AS_C(stream) LOG_AS_SAFE(LOG_CRIT_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+#define LOG_AS_D(stream) LOG_AS_SAFE(LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+#define LOG_AS_I(stream) LOG_AS_SAFE(LOG_INFO_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+#define LOG_AS_E(stream) LOG_AS_SAFE(LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+#define LOG_AS_W(stream) LOG_AS_SAFE(LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
+#define LOG_AS_N(stream) LOG_AS_SAFE(LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_RESOURCE_MANAGER, stream))
 
 namespace {
 
@@ -163,7 +165,9 @@ public:
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
         , SpillingPercent(config.GetSpillingPercent())
         , TotalMemoryResource(MakeIntrusive<TMemoryResource>(config.GetQueryMemoryLimit(), (double)100, config.GetSpillingPercent()))
+        , ResourceSnapshotState(std::make_shared<TResourceSnapshotState>())
     {
+        PublishAfterBootstrap.clear();
         SetConfigValues(config);
     }
 
@@ -178,6 +182,11 @@ public:
             config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
 
         CreateResourceInfoExchanger(config.GetInfoExchangerSettings());
+
+        if (PublishAfterBootstrap.test()) {
+            FireResourcesPublishing();
+            PublishAfterBootstrap.clear();
+        }
     }
 
     const TIntrusivePtr<TKqpCounters>& GetCounters() const override {
@@ -195,7 +204,6 @@ public:
 
     void CreateResourceInfoExchanger(
             const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings) {
-        ResourceSnapshotState = std::make_shared<TResourceSnapshotState>();
         auto exchanger = CreateKqpResourceInfoExchangerActor(
             Counters, ResourceSnapshotState, settings);
         ResourceInfoExchanger = ActorSystem->Register(exchanger);
@@ -489,7 +497,11 @@ public:
     void FireResourcesPublishing() {
         bool prev = PublishScheduled.test_and_set();
         if (!prev) {
-            ActorSystem->Send(SelfId, new TEvPrivate::TEvSchedulePublishResources);
+            if (Y_LIKELY(ActorSystem)) {
+                ActorSystem->Send(SelfId, new TEvPrivate::TEvSchedulePublishResources);
+            } else {
+                PublishAfterBootstrap.test_and_set();
+            }
         }
     }
 
@@ -535,6 +547,7 @@ public:
     // current state
     std::atomic<ui64> LastResourceBrokerTaskId = 0;
 
+    std::atomic_flag PublishAfterBootstrap;
     std::atomic_flag PublishScheduled;
     // pattern cache for different actors
     std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> PatternCache;

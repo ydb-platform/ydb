@@ -68,6 +68,7 @@ public:
 
     void Validate(const NYql::NUdf::TUnboxedValue& parsedValue) const override {
         if (!parsedValue) {
+            UNIT_FAIL("Unexpected NULL value for optional cell");
             return;
         }
         Value->Validate(parsedValue.GetOptionalValue());
@@ -153,7 +154,7 @@ TBaseFixture::TBaseFixture()
     : TTypeParser(__LOCATION__, {})
     , MemoryInfo("TBaseFixture alloc")
     , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemoryInfo))
-    , Runtime(1)
+    , Runtime(1, true)
 {
     NKikimr::EnableYDBBacktraceFormat();
     signal(SIGSEGV, &SegmentationFaultHandler);
@@ -166,13 +167,13 @@ void TBaseFixture::SetUp(NUnitTest::TTestContext&) {
     TAutoPtr<NKikimr::TAppPrepare> app = new NKikimr::TAppPrepare();
     Runtime.SetLogBackend(NActors::CreateStderrBackend());
     Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NActors::NLog::PRI_TRACE);
-    Runtime.SetDispatchTimeout(TDuration::Seconds(5));
+    Runtime.SetDispatchTimeout(WAIT_TIMEOUT);
     Runtime.Initialize(app->Unwrap());
 
     // Init tls context
     auto* actorSystem = Runtime.GetActorSystem(0);
     Mailbox = std::make_unique<NActors::TMailbox>();
-    ExecutorThread = std::make_unique<NActors::TExecutorThread>(0, actorSystem, nullptr, nullptr, "test thread");
+    ExecutorThread = std::make_unique<NActors::TExecutorThread>(0, actorSystem, nullptr, "test thread");
     ActorCtx = std::make_unique<NActors::TActorContext>(*Mailbox, *ExecutorThread, GetCycleCountFast(), NActors::TActorId());
     PrevActorCtx = NActors::TlsActivationContext;
     NActors::TlsActivationContext = ActorCtx.get();

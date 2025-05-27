@@ -45,7 +45,7 @@ protected:
     }
 
 public:
-    const TReadMetadata::TConstPtr& GetReadMetadata() const {
+    const NCommon::TReadMetadata::TConstPtr& GetReadMetadata() const {
         return SpecialReadContext->GetReadMetadata();
     }
 
@@ -60,18 +60,13 @@ public:
     TScanHead& MutableScanner() {
         return *Scanner;
     }
-    virtual void OnSentDataFromInterval(const ui32 sourceIdx) const override {
-        if (SpecialReadContext->IsAborted()) {
-            return;
-        }
-        Scanner->ContinueSource(sourceIdx);
-    }
+    virtual void OnSentDataFromInterval(const TPartialSourceAddress& sourceAddress) override;
 
     void OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result);
 
     TPlainReadData(const std::shared_ptr<TReadContext>& context);
     ~TPlainReadData() {
-        if (!SpecialReadContext->IsAborted()) {
+        if (SpecialReadContext->IsActive()) {
             Abort("unexpected on destructor");
         }
     }

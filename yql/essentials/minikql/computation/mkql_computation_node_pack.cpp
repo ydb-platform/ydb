@@ -1067,34 +1067,39 @@ TStringBuf TValuePackerGeneric<Fast>::Pack(const NUdf::TUnboxedValuePod& value) 
 
 // Transport packer
 template<bool Fast>
-TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type, arrow::MemoryPool* pool)
+TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type, arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
     , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
     MKQL_ENSURE(!stable, "Stable packing is not supported");
-    InitBlocks();
+    InitBlocks(minFillPercentage);
 }
 
 template<bool Fast>
-TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, arrow::MemoryPool* pool)
+TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
     , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
 {
-    InitBlocks();
+    InitBlocks(minFillPercentage);
 }
 
 template<bool Fast>
-void TValuePackerTransport<Fast>::InitBlocks() {
+void TValuePackerTransport<Fast>::InitBlocks(TMaybe<ui8> minFillPercentage) {
     TVector<const TBlockType*> items;
     if (IsLegacyStructBlock(Type_, BlockLenIndex_, items)) {
         IsLegacyBlock_ = true;
     } else if (!IsMultiBlock(Type_, BlockLenIndex_, items)) {
         return;
     }
+
+    const TBlockSerializerParams serializerParams = {
+        .Pool = &ArrowPool_,
+        .MinFillPercentage = minFillPercentage
+    };
 
     IsBlock_ = true;
     ConvertedScalars_.resize(items.size());
@@ -1104,13 +1109,19 @@ void TValuePackerTransport<Fast>::InitBlocks() {
     for (ui32 i = 0; i < items.size(); ++i) {
         if (i != BlockLenIndex_) {
             const TBlockType* itemType = items[i];
-            BlockSerializers_[i] = MakeBlockSerializer(TTypeInfoHelper(), itemType->GetItemType());
+            BlockSerializers_[i] = MakeBlockSerializer(TTypeInfoHelper(), itemType->GetItemType(), serializerParams);
             BlockDeserializers_[i] = MakeBlockDeserializer(TTypeInfoHelper(), itemType->GetItemType());
             if (itemType->GetShape() == TBlockType::EShape::Scalar) {
                 BlockReaders_[i] = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), itemType->GetItemType());
             }
         }
     }
+}
+
+template<bool Fast>
+void TValuePackerTransport<Fast>::SetMinFillPercentage(TMaybe<ui8> minFillPercentage) {
+    MKQL_ENSURE(IsBlock_, "SetMinFillPercentage() can be used only for blocks");
+    InitBlocks(minFillPercentage);
 }
 
 template<bool Fast>

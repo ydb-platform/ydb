@@ -2,70 +2,26 @@
 
 #include <library/cpp/colorizer/colors.h>
 
+#include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
-
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
 
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb/tests/tools/kqprun/runlib/kikimr_setup.h>
+#include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
+
 #include <yql/essentials/utils/log/log.h>
 
+using namespace NKikimrRun;
 
 namespace NKqpRun {
 
 namespace {
 
-class TStaticCredentialsProvider : public NYdb::ICredentialsProvider {
-public:
-    TStaticCredentialsProvider(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    TString GetAuthInfo() const override {
-        return YqlToken_;
-    }
-
-    bool IsValid() const override {
-        return true;
-    }
-
-private:
-    TString YqlToken_;
-};
-
-class TStaticCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
-public:
-    TStaticCredentialsProviderFactory(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
-        return std::make_shared<TStaticCredentialsProvider>(YqlToken_);
-    }
-
-private:
-    TString YqlToken_;
-};
-
-class TStaticSecuredCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
-public:
-    TStaticSecuredCredentialsFactory(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
-        return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
-    }
-
-private:
-    TString YqlToken_;
-};
-
-
 class TSessionState {
 public:
-    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId)
+    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId, TYdbSetupSettings::EVerbose verboseLevel)
         : Runtime_(runtime)
         , TargetNodeIndex_(targetNodeIndex)
     {
@@ -78,7 +34,8 @@ public:
         auto closePromise = NThreading::NewPromise<void>();
         SessionHolderActor_ = Runtime_->Register(CreateSessionHolderActor(TCreateSessionRequest{
             .Event = std::move(event),
-            .TargetNode = Runtime_->GetNodeId(targetNodeIndex)
+            .TargetNode = Runtime_->GetNodeId(targetNodeIndex),
+            .VerboseLevel = verboseLevel
         }, openPromise, closePromise));
 
         SessionId_ = openPromise.GetFuture().GetValueSync();
@@ -129,125 +86,160 @@ void FillQueryMeta(TQueryMeta& meta, const NKikimrKqp::TQueryResponse& response)
 
 //// TYdbSetup::TImpl
 
-class TYdbSetup::TImpl {
+class TYdbSetup::TImpl : public TKikimrSetupBase {
+    using TBase = TKikimrSetupBase;
+    using EVerbose = TYdbSetupSettings::EVerbose;
+    using EHealthCheck = TYdbSetupSettings::EHealthCheck;
+
+    class TPortGenerator {
+    public:
+        TPortGenerator(TPortManager& portManager, ui32 firstPort)
+            : PortManager_(portManager)
+            , Port_(firstPort)
+        {}
+
+        ui32 GetPort() {
+            if (!Port_) {
+                return PortManager_.GetPort();
+            }
+            return Port_++;
+        }
+
+    private:
+        TPortManager& PortManager_;
+        ui32 Port_;
+    };
+
 private:
-    TAutoPtr<TLogBackend> CreateLogBackend() const {
-        if (Settings_.LogOutputFile) {
-            return NActors::CreateFileBackend(Settings_.LogOutputFile);
-        } else {
-            return NActors::CreateStderrBackend();
-        }
-    }
-
-    void SetLoggerSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
-        auto loggerInitializer = [this](NActors::TTestActorRuntime& runtime) {
-            if (Settings_.AppConfig.GetLogConfig().HasDefaultLevel()) {
-                auto priority = NActors::NLog::EPriority(Settings_.AppConfig.GetLogConfig().GetDefaultLevel());
-                auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
-                for (int i = 0; i < descriptor->value_count(); ++i) {
-                    runtime.SetLogPriority(static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number()), priority);
-                }
+    void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) {
+        TFsPath diskPath;
+        if (Settings_.PDisksPath && *Settings_.PDisksPath != "-") {
+            diskPath = *Settings_.PDisksPath;
+            if (!diskPath) {
+                ythrow yexception() << "Storage directory path should not be empty";
             }
-
-            for (auto setting : Settings_.AppConfig.GetLogConfig().get_arr_entry()) {
-                NKikimrServices::EServiceKikimr service;
-                if (!NKikimrServices::EServiceKikimr_Parse(setting.GetComponent(), &service)) {
-                    ythrow yexception() << "Invalid kikimr service name " << setting.GetComponent();
-                }
-
-                runtime.SetLogPriority(service, NActors::NLog::EPriority(setting.GetLevel()));
+            if (diskPath.IsRelative()) {
+                diskPath = TFsPath::Cwd() / diskPath;
             }
-
-            runtime.SetLogBackendFactory([this]() { return CreateLogBackend(); });
-        };
-
-        serverSettings.SetLoggerInitializer(loggerInitializer);
-    }
-
-    void SetFunctionRegistry(NKikimr::Tests::TServerSettings& serverSettings) const {
-        if (!Settings_.FunctionRegistry) {
-            return;
+            diskPath.Fix();
+            diskPath.MkDir();
+            if (Settings_.VerboseLevel >= EVerbose::InitLogs) {
+                Cout << CoutColors_.Cyan() << "Setup storage by path: " << diskPath.GetPath() << CoutColors_.Default() << Endl;
+            }
         }
 
-        auto functionRegistryFactory = [this](const NKikimr::NScheme::TTypeRegistry&) {
-            return Settings_.FunctionRegistry.Get();
-        };
+        bool formatDisk = true;
+        if (diskPath) {
+            StorageMetaPath_ = TFsPath(diskPath).Child("kqprun_storage_meta.conf");
+            if (StorageMetaPath_.Exists() && !Settings_.FormatStorage) {
+                if (!google::protobuf::TextFormat::ParseFromString(TFileInput(StorageMetaPath_.GetPath()).ReadAll(), &StorageMeta_)) {
+                    ythrow yexception() << "Storage meta is corrupted, please use --format-storage";
+                }
+                formatDisk = false;
+            }
 
-        serverSettings.SetFrFactory(functionRegistryFactory);
-    }
+            if (Settings_.DiskSize && StorageMeta_.GetStorageSize() != *Settings_.DiskSize) {
+                if (!formatDisk) {
+                    ythrow yexception() << "Cannot change disk size without formatting storage, current disk size " << NKikimr::NBlobDepot::FormatByteSize(StorageMeta_.GetStorageSize()) << ", please use --format-storage";
+                }
+                StorageMeta_.SetStorageSize(*Settings_.DiskSize);
+            } else if (!StorageMeta_.GetStorageSize()) {
+                StorageMeta_.SetStorageSize(DEFAULT_STORAGE_SIZE);
+            }
 
-    void SetStorageSettings(NKikimr::Tests::TServerSettings& serverSettings) const {
+            const TString& domainName = NKikimr::CanonizePath(Settings_.DomainName);
+            if (!StorageMeta_.GetDomainName()) {
+                StorageMeta_.SetDomainName(domainName);
+            } else if (StorageMeta_.GetDomainName() != domainName) {
+                ythrow yexception() << "Cannot change domain name without formatting storage, current name " << StorageMeta_.GetDomainName() << ", please use --format-storage";
+            }
+
+            UpdateStorageMeta();
+        }
+
+        TString storagePath = diskPath.GetPath();
+        SlashFolderLocal(storagePath);
+
         const NKikimr::NFake::TStorage storage = {
-            .UseDisk = Settings_.UseRealPDisks,
+            .UseDisk = !!Settings_.PDisksPath,
             .SectorSize = NKikimr::TTestStorageFactory::SECTOR_SIZE,
-            .ChunkSize = Settings_.UseRealPDisks ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
-            .DiskSize = Settings_.DiskSize
+            .ChunkSize = Settings_.PDisksPath ? NKikimr::TTestStorageFactory::CHUNK_SIZE : NKikimr::TTestStorageFactory::MEM_CHUNK_SIZE,
+            .DiskSize = Settings_.DiskSize ? *Settings_.DiskSize : 32_GB,
+            .FormatDisk = formatDisk,
+            .DiskPath = storagePath
         };
 
-        serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.UseRealPDisks);
+        serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.PDisksPath);
         serverSettings.SetCustomDiskParams(storage);
+
+        const auto storageGeneration = StorageMeta_.GetStorageGeneration();
+        serverSettings.SetStorageGeneration(storageGeneration, storageGeneration > 0);
     }
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
-        const ui32 msgBusPort = PortManager_.GetPort();
+        auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerboseLevel >= EVerbose::InitLogs);
+        serverSettings.SetDataCenterCount(Settings_.DcCount);
 
-        NKikimr::Tests::TServerSettings serverSettings(msgBusPort, Settings_.AppConfig.GetAuthConfig(), Settings_.AppConfig.GetPQConfig());
-        serverSettings.SetNodeCount(Settings_.NodeCount);
-
-        serverSettings.SetDomainName(Settings_.DomainName);
-        serverSettings.SetAppConfig(Settings_.AppConfig);
-        serverSettings.SetFeatureFlags(Settings_.AppConfig.GetFeatureFlags());
-        serverSettings.SetControls(Settings_.AppConfig.GetImmediateControlsConfig());
-        serverSettings.SetCompactionConfig(Settings_.AppConfig.GetCompactionConfig());
-        serverSettings.PQClusterDiscoveryConfig = Settings_.AppConfig.GetPQClusterDiscoveryConfig();
-        serverSettings.NetClassifierConfig = Settings_.AppConfig.GetNetClassifierConfig();
-
-        const auto& kqpSettings = Settings_.AppConfig.GetKQPConfig().GetSettings();
-        serverSettings.SetKqpSettings({kqpSettings.begin(), kqpSettings.end()});
-
-        serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(Settings_.YqlToken));
-        serverSettings.SetComputationFactory(Settings_.ComputationFactory);
-        serverSettings.SetYtGateway(Settings_.YtGateway);
-        serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
-        serverSettings.SetInitializeFederatedQuerySetupFactory(true);
-        serverSettings.SetVerbose(false);
-
-        SetLoggerSettings(serverSettings);
-        SetFunctionRegistry(serverSettings);
         SetStorageSettings(serverSettings);
 
-        if (Settings_.MonitoringEnabled) {
-            serverSettings.InitKikimrRunConfig();
-            serverSettings.SetMonitoringPortOffset(Settings_.MonitoringPortOffset, true);
-            serverSettings.SetNeedStatsCollectors(true);
+        for (const auto& [tenantPath, tenantInfo] : StorageMeta_.GetTenants()) {
+            Settings_.Tenants.emplace(tenantPath, tenantInfo);
         }
 
-        if (Settings_.GrpcEnabled) {
-            serverSettings.SetGrpcPort(grpcPort);
-        }
-
-        if (!Settings_.SharedTenants.empty() || !Settings_.DedicatedTenants.empty()) {
-            serverSettings.SetDynamicNodeCount(Settings_.SharedTenants.size() + Settings_.DedicatedTenants.size());
-            for (const TString& dedicatedTenant : Settings_.DedicatedTenants) {
-                serverSettings.AddStoragePoolType(dedicatedTenant);
-            }
-            for (const auto& sharedTenant : Settings_.SharedTenants) {
-                serverSettings.AddStoragePoolType(sharedTenant);
+        ui32 dynNodesCount = 0;
+        for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
+            if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
+                serverSettings.AddStoragePool(tenantPath, TStringBuilder() << GetTenantPath(tenantPath) << ":" << tenantPath);
+                dynNodesCount += tenantInfo.GetNodesCount();
             }
         }
+        serverSettings.SetDynamicNodeCount(dynNodesCount);
 
         return serverSettings;
     }
 
-    void CreateTenant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& type) const {
-        const auto path = request.path();
-        Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating " << type << " tenant " << path << "..." << CoutColors_.Default() << Endl;
-        Tenants_->CreateTenant(std::move(request));
+    void CreateTenant(Ydb::Cms::CreateDatabaseRequest&& request, const TString& relativePath, const TString& type, TStorageMeta::TTenant tenantInfo, ui32 grpcPort) {
+        const auto absolutePath = request.path();
+        const auto [it, inserted] = StorageMeta_.MutableTenants()->emplace(relativePath, tenantInfo);
+        if (inserted || it->second.GetCreationInProgress()) {
+            if (Settings_.VerboseLevel >= EVerbose::Info) {
+                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating " << type << " tenant " << absolutePath << "..." << CoutColors_.Default() << Endl;
+            }
 
-        if (Settings_.MonitoringEnabled) {
-            ui32 nodeIndex = GetNodeIndexForDatabase(path);
-            NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
-            GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(path), "", edgeActor, 0, true), nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
+            it->second.SetCreationInProgress(true);
+            UpdateStorageMeta();
+
+            Tenants_->CreateTenant(std::move(request), tenantInfo.GetNodesCount(), TENANT_CREATION_TIMEOUT, true);
+
+            it->second.SetCreationInProgress(false);
+            UpdateStorageMeta();
+        } else {
+            if (it->second.GetType() != tenantInfo.GetType()) {
+                ythrow yexception() << "Can not change tenant " << absolutePath << " type without formatting storage, current type " << TStorageMeta::TTenant::EType_Name(it->second.GetType()) << ", please use --format-storage";
+            }
+            if (it->second.GetSharedTenant() != tenantInfo.GetSharedTenant()) {
+                ythrow yexception() << "Can not change tenant " << absolutePath << " shared resources without formatting storage from '" << it->second.GetSharedTenant() << "', please use --format-storage";
+            }
+            if (it->second.GetNodesCount() != tenantInfo.GetNodesCount()) {
+                it->second.SetNodesCount(tenantInfo.GetNodesCount());
+                UpdateStorageMeta();
+            }
+            if (Settings_.VerboseLevel >= EVerbose::Info) {
+                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Starting " << type << " tenant " << absolutePath << "..." << CoutColors_.Default() << Endl;
+            }
+            if (!request.has_serverless_resources()) {
+                Tenants_->Run(absolutePath, tenantInfo.GetNodesCount());
+            }
+        }
+
+        if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
+            if (Settings_.GrpcEnabled) {
+                Server_->EnableGRpc(grpcPort, GetNodeIndexForDatabase(absolutePath), absolutePath);
+            } else if (Settings_.MonitoringEnabled) {
+                ui32 nodeIndex = GetNodeIndexForDatabase(absolutePath);
+                NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
+                GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0, true), nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
+            }
         }
     }
 
@@ -256,58 +248,75 @@ private:
         storage->set_count(1);
     }
 
-    void CreateTenants() {
-        for (const TString& dedicatedTenant : Settings_.DedicatedTenants) {
+    void CreateTenants(TPortGenerator& grpcPortGen) {
+        std::set<TString> sharedTenants;
+        std::map<TString, TStorageMeta::TTenant> serverlessTenants;
+        for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
             Ydb::Cms::CreateDatabaseRequest request;
-            request.set_path(GetTenantPath(dedicatedTenant));
-            AddTenantStoragePool(request.mutable_resources()->add_storage_units(), dedicatedTenant);
-            CreateTenant(std::move(request), "dedicated");
-        }
+            request.set_path(GetTenantPath(tenantPath));
 
-        for (const TString& sharedTenant : Settings_.SharedTenants) {
-            Ydb::Cms::CreateDatabaseRequest request;
-            request.set_path(GetTenantPath(sharedTenant));
-            AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), sharedTenant);
-            CreateTenant(std::move(request), "shared");
-        }
+            switch (tenantInfo.GetType()) {
+                case TStorageMeta::TTenant::DEDICATED:
+                    AddTenantStoragePool(request.mutable_resources()->add_storage_units(), tenantPath);
+                    CreateTenant(std::move(request), tenantPath, "dedicated", tenantInfo, grpcPortGen.GetPort());
+                    break;
 
-        ServerlessToShared_.reserve(Settings_.ServerlessTenants.size());
-        for (const TString& serverlessTenant : Settings_.ServerlessTenants) {
-            Ydb::Cms::CreateDatabaseRequest request;
-            if (serverlessTenant.Contains('@')) {
-                TStringBuf serverless;
-                TStringBuf shared;
-                TStringBuf(serverlessTenant).Split('@', serverless, shared);
+                case TStorageMeta::TTenant::SHARED:
+                    sharedTenants.emplace(tenantPath);
+                    AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), tenantPath);
+                    CreateTenant(std::move(request), tenantPath, "shared", tenantInfo, grpcPortGen.GetPort());
+                    break;
 
-                request.set_path(GetTenantPath(TString(serverless)));
-                request.mutable_serverless_resources()->set_shared_database_path(GetTenantPath(TString(shared)));
-            } else if (!Settings_.SharedTenants.empty()) {
-                request.set_path(GetTenantPath(serverlessTenant));
-                request.mutable_serverless_resources()->set_shared_database_path(GetTenantPath(*Settings_.SharedTenants.begin()));
-            } else {
-                ythrow yexception() << "Can not create serverless tenant " << serverlessTenant << ", there is no shared tenants";
+                case TStorageMeta::TTenant::SERVERLESS:
+                    serverlessTenants.emplace(tenantPath, tenantInfo);
+                    break;
+
+                default:
+                    ythrow yexception() << "Unexpected tenant type: " << TStorageMeta::TTenant::EType_Name(tenantInfo.GetType());
+                    break;
             }
-            ServerlessToShared_[request.path()] = request.serverless_resources().shared_database_path();
+        }
 
-            CreateTenant(std::move(request), "serverless");
+        for (auto [tenantPath, tenantInfo] : serverlessTenants) {
+            if (!tenantInfo.GetSharedTenant()) {
+                if (sharedTenants.empty()) {
+                    ythrow yexception() << "Can not create serverless tenant, there is no shared tenants, please use `--shared <shared name>`";
+                }
+                if (sharedTenants.size() > 1) {
+                    ythrow yexception() << "Can not create serverless tenant, there is more than one shared tenant, please use `--serverless " << tenantPath << "@<shared name>`";
+                }
+                tenantInfo.SetSharedTenant(*sharedTenants.begin());
+            }
+
+            Ydb::Cms::CreateDatabaseRequest request;
+            request.set_path(GetTenantPath(tenantPath));
+            request.mutable_serverless_resources()->set_shared_database_path(GetTenantPath(tenantInfo.GetSharedTenant()));
+            ServerlessToShared_[request.path()] = request.serverless_resources().shared_database_path();
+            CreateTenant(std::move(request), tenantPath, "serverless", tenantInfo, 0);
         }
     }
 
-    void InitializeServer(ui32 grpcPort) {
-        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(grpcPort);
+    void InitializeServer() {
+        TPortGenerator grpcPortGen(PortManager, Settings_.FirstGrpcPort);
+        const ui32 domainGrpcPort = grpcPortGen.GetPort();
+        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(domainGrpcPort);
 
         Server_ = MakeIntrusive<NKikimr::Tests::TServer>(serverSettings);
+
+        StorageMeta_.SetStorageGeneration(StorageMeta_.GetStorageGeneration() + 1);
+        UpdateStorageMeta();
+
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
 
         if (Settings_.GrpcEnabled) {
-            Server_->EnableGRpc(grpcPort);
+            Server_->EnableGRpc(domainGrpcPort);
         }
 
         Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
         Client_->InitRootScheme();
 
         Tenants_ = MakeHolder<NKikimr::Tests::TTenants>(Server_);
-        CreateTenants();
+        CreateTenants(grpcPortGen);
     }
 
     void InitializeYqlLogger() {
@@ -315,30 +324,47 @@ private:
             return;
         }
 
-        bool found = false;
-        for (auto& entry : *Settings_.AppConfig.MutableLogConfig()->MutableEntry()) {
-            if (entry.GetComponent() == "KQP_YQL") {
-                entry.SetLevel(NActors::NLog::PRI_TRACE);
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            auto entry = Settings_.AppConfig.MutableLogConfig()->AddEntry();
-            entry->SetComponent("KQP_YQL");
-            entry->SetLevel(NActors::NLog::PRI_TRACE);
-        }
-
+        ModifyLogPriorities({{NKikimrServices::EServiceKikimr::KQP_YQL, NActors::NLog::PRI_TRACE}}, *Settings_.AppConfig.MutableLogConfig());
         NYql::NLog::InitLogger(NActors::CreateNullBackend());
     }
 
+    NThreading::TFuture<void> RunHealthCheck(const TString& database) const {
+        EHealthCheck level = Settings_.HealthCheckLevel;
+        i32 nodesCount = Settings_.NodeCount;
+        TVector<ui32> tenantNodesIdx;
+        if (database != Settings_.DomainName) {
+            tenantNodesIdx = Tenants_->List(database);
+            nodesCount = tenantNodesIdx.size();
+        }
+
+        const TWaitResourcesSettings settings = {
+            .ExpectedNodeCount = nodesCount,
+            .HealthCheckLevel = level,
+            .HealthCheckTimeout = Settings_.HealthCheckTimeout,
+            .VerboseLevel = Settings_.VerboseLevel,
+            .Database = NKikimr::CanonizePath(database)
+        };
+
+        std::vector<NThreading::TFuture<void>> futures;
+        futures.reserve(nodesCount);
+        for (i32 nodeIdx = 0; nodeIdx < nodesCount; ++nodeIdx) {
+            const auto promise = NThreading::NewPromise();
+            GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), tenantNodesIdx ? tenantNodesIdx[nodeIdx] : nodeIdx, GetRuntime()->GetAppData().SystemPoolId);
+            futures.emplace_back(promise.GetFuture());
+        }
+
+        return NThreading::WaitAll(futures);
+    }
+
     void WaitResourcesPublishing() const {
-        auto promise = NThreading::NewPromise();
-        GetRuntime()->Register(CreateResourcesWaiterActor(promise, Settings_.NodeCount), 0, GetRuntime()->GetAppData().SystemPoolId);
+        std::vector<NThreading::TFuture<void>> futures(1, RunHealthCheck(Settings_.DomainName));
+        futures.reserve(StorageMeta_.GetTenants().size() + 1);
+        for (const auto& [tenantName, _] : StorageMeta_.GetTenants()) {
+            futures.emplace_back(RunHealthCheck(GetTenantPath(tenantName)));
+        }
 
         try {
-            promise.GetFuture().GetValue(Settings_.InitializationTimeout);
+            NThreading::WaitAll(futures).GetValue(2 * Settings_.HealthCheckTimeout);
         } catch (...) {
             ythrow yexception() << "Failed to initialize all resources: " << CurrentExceptionMessage();
         }
@@ -349,20 +375,33 @@ public:
         : Settings_(settings)
         , CoutColors_(NColorizer::AutoColors(Cout))
     {
-        const ui32 grpcPort = Settings_.GrpcPort ? Settings_.GrpcPort : PortManager_.GetPort();
-
         InitializeYqlLogger();
-        InitializeServer(grpcPort);
+        InitializeServer();
         WaitResourcesPublishing();
 
-        if (Settings_.MonitoringEnabled) {
+        if (Settings_.MonitoringEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
             for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
-                Cout << CoutColors_.Cyan() << "Monitoring port" << (Settings_.NodeCount > 1 ? TStringBuilder() << " for node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
+                Cout << CoutColors_.Cyan() << "Monitoring port" << (Server_->StaticNodes() + Server_->DynamicNodes() > 1 ? TStringBuilder() << " for static node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
             }
+            const auto printTenantNodes = [this](const std::pair<TString, TStorageMeta::TTenant>& tenantInfo) {
+                if (tenantInfo.second.GetType() == TStorageMeta::TTenant::SERVERLESS) {
+                    return;
+                }
+                const auto& nodes = Tenants_->List(GetTenantPath(tenantInfo.first));
+                for (auto it = nodes.rbegin(); it != nodes.rend(); ++it) {
+                    Cout << CoutColors_.Cyan() << "Monitoring port for dynamic node " << *it + 1 << " [" << tenantInfo.first << "]: " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(*it) << Endl;
+                }
+            };
+            std::for_each(Settings_.Tenants.rbegin(), Settings_.Tenants.rend(), std::bind(printTenantNodes, std::placeholders::_1));
         }
 
-        if (Settings_.GrpcEnabled) {
-            Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << grpcPort << Endl;
+        if (Settings_.GrpcEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
+            Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << Server_->GetGRpcServer().GetPort() << Endl;
+            for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
+                if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
+                    Cout << CoutColors_.Cyan() << "Tenant [" << tenantPath << "] gRPC port: " << CoutColors_.Default() << Server_->GetTenantGRpcServer(GetTenantPath(tenantPath)).GetPort() << Endl;
+                }
+            }
         }
     }
 
@@ -406,13 +445,15 @@ public:
     }
 
     NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId) const {
-        TString executionId = *NKikimr::NKqp::ScriptExecutionIdFromOperation(operation);
+        TString error;
+        const auto executionId = NKikimr::NKqp::ScriptExecutionIdFromOperation(operation, error);
+        Y_ENSURE(executionId, error);
 
         ui32 nodeIndex = GetNodeIndexForDatabase(database);
         NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
         auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
-        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
+        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), *executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
 
         GetRuntime()->Register(fetchActor, nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
 
@@ -440,7 +481,7 @@ public:
 
         auto request = GetQueryRequest(query);
         auto startPromise = NThreading::NewPromise();
-        GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new TEvPrivate::TEvStartAsyncQuery(std::move(request), startPromise));
+        GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new NKikimrRun::TEvPrivate::TEvStartAsyncQuery(std::move(request), startPromise));
 
         return startPromise.GetFuture().GetValueSync();
     }
@@ -451,7 +492,7 @@ public:
         }
 
         auto finalizePromise = NThreading::NewPromise();
-        GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new TEvPrivate::TEvFinalizeAsyncQueryRunner(finalizePromise));
+        GetRuntime()->Send(*AsyncQueryRunnerActorId_, GetRuntime()->AllocateEdgeActor(), new NKikimrRun::TEvPrivate::TEvFinalizeAsyncQueryRunner(finalizePromise));
 
         return finalizePromise.GetFuture().GetValueSync();
     }
@@ -469,7 +510,7 @@ public:
             ythrow yexception() << "Trace opt was disabled";
         }
 
-        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend());
+        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend(Settings_));
     }
 
     static void StopTraceOpt() {
@@ -509,6 +550,7 @@ private:
         request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         request->SetDatabase(database);
         request->SetPoolId(query.PoolId);
+        request->MutableYdbParameters()->insert(query.Params.begin(), query.Params.end());
 
         if (query.Timeout) {
             request->SetTimeoutMs(query.Timeout.MilliSeconds());
@@ -516,7 +558,7 @@ private:
 
         if (Settings_.SameSession) {
             if (!SessionState_) {
-                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId);
+                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId, Settings_.VerboseLevel);
             }
             request->SetSessionId(SessionState_->GetSessionId());
         }
@@ -535,7 +577,8 @@ private:
             .Event = std::move(event),
             .TargetNode = GetRuntime()->GetNodeId(targetNodeIndex),
             .ResultRowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit(),
-            .ResultSizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit()
+            .ResultSizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit(),
+            .QueryId = query.QueryId
         };
     }
 
@@ -544,12 +587,12 @@ private:
     }
 
     TString GetDatabasePath(const TString& database) const {
-        return NKikimr::CanonizePath(database ? database : Settings_.DomainName);
+        return NKikimr::CanonizePath(database ? database : GetDefaultDatabase());
     }
 
     ui32 GetNodeIndexForDatabase(const TString& path) const {
-        auto canonizedPath = NKikimr::CanonizePath(path);
-        if (canonizedPath.empty() || canonizedPath == NKikimr::CanonizePath(Settings_.DomainName)) {
+        auto canonizedPath = NKikimr::CanonizePath(path ? path : GetDefaultDatabase());
+        if (canonizedPath == NKikimr::CanonizePath(Settings_.DomainName)) {
             return RandomNumber(Settings_.NodeCount);
         }
 
@@ -564,6 +607,27 @@ private:
         ythrow yexception() << "Unknown tenant '" << canonizedPath << "'";
     }
 
+    TString GetDefaultDatabase() const {
+        if (StorageMeta_.TenantsSize() > 1) {
+            ythrow yexception() << "Can not choose default database, there is more than one tenants, please use `-D <database name>`";
+        }
+        if (StorageMeta_.TenantsSize() == 1) {
+            return GetTenantPath(StorageMeta_.GetTenants().begin()->first);
+        }
+        return Settings_.DomainName;
+    }
+
+    void UpdateStorageMeta() const {
+        if (StorageMetaPath_) {
+            TString storageMetaStr;
+            google::protobuf::TextFormat::PrintToString(StorageMeta_, &storageMetaStr);
+
+            TFileOutput storageMetaOutput(StorageMetaPath_.GetPath());
+            storageMetaOutput.Write(storageMetaStr);
+            storageMetaOutput.Finish();
+        }
+    }
+
 private:
     TYdbSetupSettings Settings_;
     NColorizer::TColors CoutColors_;
@@ -571,38 +635,13 @@ private:
     NKikimr::Tests::TServer::TPtr Server_;
     THolder<NKikimr::Tests::TClient> Client_;
     THolder<NKikimr::Tests::TTenants> Tenants_;
-    TPortManager PortManager_;
 
     std::unordered_map<TString, TString> ServerlessToShared_;
     std::optional<NActors::TActorId> AsyncQueryRunnerActorId_;
     std::optional<TSessionState> SessionState_;
+    TFsPath StorageMetaPath_;
+    NKqpRun::TStorageMeta StorageMeta_;
 };
-
-
-//// TRequestResult
-
-TRequestResult::TRequestResult()
-    : Status(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
-{}
-
-TRequestResult::TRequestResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
-    : Status(status)
-    , Issues(issues)
-{}
-
-TRequestResult::TRequestResult(Ydb::StatusIds::StatusCode status, const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues)
-    : Status(status)
-{
-    NYql::IssuesFromMessage(issues, Issues);
-}
-
-bool TRequestResult::IsSuccess() const {
-    return Status == Ydb::StatusIds::SUCCESS;
-}
-
-TString TRequestResult::ToString() const {
-    return TStringBuilder() << "Request finished with status: " << Status << "\nIssues:\n" << Issues.ToString() << "\n";
-}
 
 
 //// TYdbSetup

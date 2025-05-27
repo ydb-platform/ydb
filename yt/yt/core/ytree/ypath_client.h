@@ -12,6 +12,8 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <library/cpp/yt/logging/logger.h>
+
 namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -45,7 +47,7 @@ public:
     const std::string& GetUserTag() const override;
     void SetUserTag(const std::string& tag) override;
 
-    void SetUserAgent(const TString& userAgent) override;
+    void SetUserAgent(const std::string& userAgent) override;
 
     bool GetRetry() const override;
     void SetRetry(bool value) override;
@@ -207,6 +209,7 @@ using TYPathMaybeRef = std::conditional_t<IsArcadiaProtobuf, const TYPath&, TYPa
 TYPathMaybeRef GetRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
 TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader& header);
 
+const google::protobuf::RepeatedPtrField<TProtobufString>& GetRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header);
 const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header);
 
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path);

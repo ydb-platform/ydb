@@ -376,7 +376,8 @@ TExprNode::TPtr QuoteCode(const TExprNode::TPtr& node, TExprContext& ctx, TNodeO
 }
 
 IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry, IGraphTransformer* calcTransfomer) {
+    TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry,
+    IGraphTransformer* calcTransfomer, TTypeAnnCallableFactory typeAnnCallableFactory) {
     output = input;
     if (ctx.Step.IsDone(TExprStep::ExprEval))
         return IGraphTransformer::TStatus::Ok;
@@ -391,7 +392,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     bool isOptionalAtom = false;
     bool isTypePipeline = false;
     bool isCodePipeline = false;
-    TTransformationPipeline pipeline(&types);
+    TTransformationPipeline pipeline(&types, typeAnnCallableFactory);
     pipeline.AddServiceTransformers();
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(functionRegistry);
@@ -526,11 +527,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     IGraphTransformer::TStatus hasPendingEvaluations = IGraphTransformer::TStatus::Ok;
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
+    settings.TrackFrames = true;
     auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr {
-        TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-            return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()), TStringBuilder() << "At function: " << node->Content());
-        });
-
         if (node->IsCallable("EvaluateIf!")) {
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
                 return nullptr;
@@ -973,7 +971,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             clonedArg = ctx.NewCallable(clonedArg->Pos(), "SerializeCode", { clonedArg });
         }
 
-        TString key;
+        TString key, yson;
         NYT::TNode ysonNode;
         if (types.QContext) {
             key = MakeCacheKey(*clonedArg);
@@ -988,74 +986,80 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         }
 
         do {
-            calcProvider.Clear();
-            calcWorldRoot.Drop();
-            fullTransformer->Rewind();
-            auto prevSteps = ctx.Step;
-            TEvalScope scope(types);
-            ctx.Step.Reset();
-            if (prevSteps.IsDone(TExprStep::Recapture)) {
-                ctx.Step.Done(TExprStep::Recapture);
-            }
-            status = SyncTransform(*fullTransformer, clonedArg, ctx);
-            ctx.Step = prevSteps;
-            if (status.Level == IGraphTransformer::TStatus::Error) {
-                return nullptr;
+            if (ysonNode.IsUndefined() && isAtomPipeline && clonedArg->IsCallable("String")) {
+                ysonNode = NYT::TNode()("Data",NYT::TNode(clonedArg->Head().Content()));
+                yson = NYT::NodeToYsonString(ysonNode, NYT::NYson::EYsonFormat::Binary);
+            } else {
+                calcProvider.Clear();
+                calcWorldRoot.Drop();
+                fullTransformer->Rewind();
+                auto prevSteps = ctx.Step;
+                TEvalScope scope(types);
+                ctx.Step.Reset();
+                if (prevSteps.IsDone(TExprStep::Recapture)) {
+                    ctx.Step.Done(TExprStep::Recapture);
+                }
+                status = SyncTransform(*fullTransformer, clonedArg, ctx);
+                ctx.Step = prevSteps;
+                if (status.Level == IGraphTransformer::TStatus::Error) {
+                    return nullptr;
+                }
+
+                // execute calcWorldRoot
+                auto execTransformer = CreateExecutionTransformer(types, [](const TOperationProgress&){}, false);
+                status = SyncTransform(*execTransformer, calcWorldRoot, ctx);
+                if (status.Level == IGraphTransformer::TStatus::Error) {
+                    return nullptr;
+                }
+
+                if (types.QContext.CanRead()) {
+                    break;
+                }
+
+                IDataProvider::TFillSettings fillSettings;
+                auto delegatedNode = Build<TResult>(ctx, node->Pos())
+                    .Input(clonedArg)
+                    .BytesLimit()
+                        .Value(TString())
+                    .Build()
+                    .RowsLimit()
+                        .Value(TString())
+                    .Build()
+                    .FormatDetails()
+                        .Value(ToString((ui32)NYson::EYsonFormat::Binary))
+                    .Build()
+                    .Settings().Build()
+                    .Format()
+                        .Value(ToString((ui32)IDataProvider::EResultFormat::Yson))
+                    .Build()
+                    .PublicId()
+                        .Value(TString())
+                    .Build()
+                    .Discard()
+                        .Value("false")
+                    .Build()
+                    .Origin(calcWorldRoot)
+                    .Done().Ptr();
+
+                auto atomType = ctx.MakeType<TUnitExprType>();
+                for (auto idx: {TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails,
+                    TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard, TResOrPullBase::idx_Settings }) {
+                    delegatedNode->Child(idx)->SetTypeAnn(atomType);
+                    delegatedNode->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
+                }
+
+                delegatedNode->SetTypeAnn(atomType);
+                delegatedNode->SetState(TExprNode::EState::ConstrComplete);
+                auto& transformer = calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer();
+                status = SyncTransform(transformer, delegatedNode, ctx);
+                if (status.Level == IGraphTransformer::TStatus::Error) {
+                    return nullptr;
+                }
+
+                yson = TString{delegatedNode->GetResult().Content()};
+                ysonNode = NYT::NodeFromYsonString(yson);
             }
 
-            // execute calcWorldRoot
-            auto execTransformer = CreateExecutionTransformer(types, [](const TOperationProgress&){}, false);
-            status = SyncTransform(*execTransformer, calcWorldRoot, ctx);
-            if (status.Level == IGraphTransformer::TStatus::Error) {
-                return nullptr;
-            }
-
-            if (types.QContext.CanRead()) {
-                break;
-            }
-
-            IDataProvider::TFillSettings fillSettings;
-            auto delegatedNode = Build<TResult>(ctx, node->Pos())
-                .Input(clonedArg)
-                .BytesLimit()
-                    .Value(TString())
-                .Build()
-                .RowsLimit()
-                    .Value(TString())
-                .Build()
-                .FormatDetails()
-                    .Value(ToString((ui32)NYson::EYsonFormat::Binary))
-                .Build()
-                .Settings().Build()
-                .Format()
-                    .Value(ToString((ui32)IDataProvider::EResultFormat::Yson))
-                .Build()
-                .PublicId()
-                    .Value(TString())
-                .Build()
-                .Discard()
-                    .Value("false")
-                .Build()
-                .Origin(calcWorldRoot)
-                .Done().Ptr();
-
-            auto atomType = ctx.MakeType<TUnitExprType>();
-            for (auto idx: {TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails,
-                TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard, TResOrPullBase::idx_Settings }) {
-                delegatedNode->Child(idx)->SetTypeAnn(atomType);
-                delegatedNode->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
-            }
-
-            delegatedNode->SetTypeAnn(atomType);
-            delegatedNode->SetState(TExprNode::EState::ConstrComplete);
-            auto& transformer = calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer();
-            status = SyncTransform(transformer, delegatedNode, ctx);
-            if (status.Level == IGraphTransformer::TStatus::Error) {
-                return nullptr;
-            }
-
-            TString yson{delegatedNode->GetResult().Content()};
-            ysonNode = NYT::NodeFromYsonString(yson);
             if (ysonNode.HasKey("FallbackProvider")) {
                 nextProvider = ysonNode["FallbackProvider"].AsString();
             } else if (types.QContext.CanWrite()) {

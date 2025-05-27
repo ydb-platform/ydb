@@ -22,6 +22,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/generic/intrlist.h>
+#include <util/string/vector.h>
 
 namespace {
 
@@ -723,6 +724,20 @@ public:
         }
     }
 
+    bool CheckTotalRetriesExeeded() {
+        const auto limit = MaxTotalRetries();
+        return limit && TotalRetries + 1 > *limit;
+    }
+
+    bool CheckShardRetriesExeeded(ui64 id) {
+        if (!Reads[id] || Reads[id].Finished) {
+            return false;
+        }
+
+        const auto& state = Reads[id].Shard;
+        return state->RetryAttempt + 1 > MaxShardRetries();
+    }
+
     void RetryRead(ui64 id, bool allowInstantRetry = true) {
         if (!Reads[id] || Reads[id].Finished) {
             return;
@@ -730,18 +745,17 @@ public:
 
         auto state = Reads[id].Shard;
 
-        TotalRetries += 1;
-        auto limit = MaxTotalRetries();
-        if (limit && TotalRetries > *limit) {
+        if (CheckTotalRetriesExeeded()) {
             return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
                 NDqProto::StatusIds::UNAVAILABLE);
         }
+        ++TotalRetries;
 
-        state->RetryAttempt += 1;
-        if (state->RetryAttempt > MaxShardRetries()) {
+        if (CheckShardRetriesExeeded(id)) {
             ResetRead(id);
             return ResolveShard(state);
         }
+        ++state->RetryAttempt;
 
         auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
         if (delay == TDuration::Zero()) {
@@ -791,11 +805,23 @@ public:
         auto& record = ev->Record;
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
-        for (const auto& column : Settings->GetColumns()) {
+
+        BatchOperationReadColumns.clear();
+
+        auto columnsSize = static_cast<size_t>(Settings->GetColumns().size());
+        for (size_t i = 0; i < columnsSize; ++i) {
+            const auto& column = Settings->GetColumns()[i];
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
+
+                if (Settings->GetIsBatch()) {
+                    NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(column.GetType(), column.GetTypeInfo());
+                    BatchOperationReadColumns.emplace_back(column.GetId(), typeInfo, column.GetIsPrimary());
+                }
             }
         }
+
+        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() >= KeyColumnTypes.size());
 
         if (CollectDuplicateStats) {
             for (const auto& column : DuplicateCheckExtraColumns) {
@@ -825,7 +851,11 @@ public:
         record.MutableTableId()->SetTableId(Settings->GetTable().GetTableId().GetTableId());
         record.MutableTableId()->SetSchemaVersion(Settings->GetTable().GetSchemaVersion());
 
-        record.SetReverse(Settings->GetReverse());
+        if (Settings->HasOptionalSorting()) {
+            record.SetReverse(Settings->GetOptionalSorting() == (ui32)ERequestSorting::DESC);
+        } else {
+            record.SetReverse(Settings->GetReverse());
+        }
         if (limit) {
             record.SetMaxRows(*limit);
             record.SetTotalRowsLimit(*limit);
@@ -836,6 +866,9 @@ public:
 
         if (Settings->HasLockTxId() && BrokenLocks.empty()) {
             record.SetLockTxId(Settings->GetLockTxId());
+            if (Settings->HasLockMode()) {
+                ev->Record.SetLockMode(Settings->GetLockMode());
+            }
         }
 
         if (Settings->HasLockNodeId()) {
@@ -951,12 +984,16 @@ public:
             Reads[id].Shard->Issues.push_back(issue);
         }
 
+        auto replyError = [&](auto message, auto status) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
+            return RuntimeError(message, status, issues);
+        };
+
         if (UseFollowers && record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS && Reads[id].Shard->SuccessBatches > 0) {
             // read from follower is interrupted with error after several successful responses.
             // in this case read is not safe because we can return inconsistent data.
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
-            return RuntimeError("Failed to read from follower", NYql::NDqProto::StatusIds::UNAVAILABLE, issues);
+            return replyError("Failed to read from follower", NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
 
         switch (record.GetStatus().GetCode()) {
@@ -965,20 +1002,33 @@ public:
                 break;
             }
             case Ydb::StatusIds::OVERLOADED: {
+                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                    return replyError(
+                        TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
+                        NYql::NDqProto::StatusIds::OVERLOADED);
+                }
                 return RetryRead(id, false);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
+                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                    return replyError(
+                        TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
+                        NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                }
                 return RetryRead(id);
             }
             case Ydb::StatusIds::NOT_FOUND: {
+                if (CheckTotalRetriesExeeded() || CheckShardRetriesExeeded(id)) {
+                    return replyError(
+                        TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded.",
+                        NYql::NDqProto::StatusIds::UNAVAILABLE);
+                }
                 auto shard = Reads[id].Shard;
                 ResetRead(id);
                 return ResolveShard(shard);
             }
             default: {
-                NYql::TIssues issues;
-                NYql::IssuesFromMessage(record.GetStatus().GetIssues(), issues);
-                return RuntimeError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED, issues);
+                return replyError("Read request aborted", NYql::NDqProto::StatusIds::ABORTED);
             }
         }
 
@@ -994,11 +1044,19 @@ public:
             BrokenLocks.push_back(lock);
         }
 
+        if (UseFollowers) {
+            YQL_ENSURE(Locks.empty());
+        }
+
         CA_LOG_D("Taken " << Locks.size() << " locks");
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
         Reads[id].RegisterMessage(*ev->Get());
+
+        if (Settings->GetIsBatch()) {
+            SetBatchOperationMaxRow(ev->Get());
+        }
 
 
         ReceivedRowCount += ev->Get()->GetRowsCount();
@@ -1449,6 +1507,22 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
+        if (Settings->GetIsBatch() && !BatchOperationMaxRow.empty()) {
+            std::vector<TCell> keyRow;
+            for (size_t i = 0; i < BatchOperationReadColumns.size(); ++i) {
+                if (const auto& column = BatchOperationReadColumns[i]; column.IsPrimary) {
+                    keyRow.push_back(BatchOperationMaxRow[i]);
+                    resultInfo.AddBatchOperationKeyIds(column.Id);
+                }
+            }
+
+            if (!keyRow.empty()) {
+                YQL_ENSURE(keyRow.size() == KeyColumnTypes.size());
+
+                TConstArrayRef<TCell> keyRef(keyRow);
+                resultInfo.SetBatchOperationMaxKey(TSerializedCellVec::Serialize(keyRef));
+            }
+        }
         result.PackFrom(resultInfo);
         return result;
     }
@@ -1495,6 +1569,13 @@ private:
                 }
                 DuplicateCheckColumnRemap.push_back(positions[column.Tag]);
             }
+        }
+    }
+
+    void SetBatchOperationMaxRow(TEvDataShard::TEvReadResult* ev) {
+        if (ev->GetRowsCount() > 0) {
+            auto cells = ev->GetCells(ev->GetRowsCount() - 1);
+            BatchOperationMaxRow = TOwnedCellVec::Make(cells);
         }
     }
 
@@ -1568,6 +1649,15 @@ private:
     THashMap<TString, TDuplicationStats> DuplicateCheckStats;
     TVector<TResultColumn> DuplicateCheckExtraColumns;
     TVector<ui32> DuplicateCheckColumnRemap;
+
+    struct TReadColumnInfo {
+        ui32 Id;
+        NScheme::TTypeInfo TypeInfo;
+        bool IsPrimary = false;
+    };
+
+    TVector<TReadColumnInfo> BatchOperationReadColumns;
+    TOwnedCellVec BatchOperationMaxRow;
 };
 
 

@@ -7,11 +7,11 @@
 
 
 ====================COPYRIGHT====================
-//  Copyright (c) 1998-2021 Marti Maria Saguer
+//  Copyright (c) 1998-2024 Marti Maria Saguer
 
 
 ====================COPYRIGHT====================
-//  Copyright (c) 1998-2023 Marti Maria Saguer
+//  Copyright (c) 1998-2025 Marti Maria Saguer
 
 
 ====================COPYRIGHT====================
@@ -77,7 +77,7 @@ Christian Albrecht
 Dimitrios Anastassakis 
 Lemke Software 
 Tim Zaman
-
+Amir Montazery and Open Source Technology Improvement Fund (ostif.org), Google, for fuzzer fundings. 
 
 ====================MIT====================
 // Permission is hereby granted, free of charge, to any person obtaining

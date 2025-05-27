@@ -84,6 +84,7 @@ public:
     TActorId LockedToActor;
     TDuration LockedReconnectTimeout;
     ui64 PendingUnlockSeqNo;
+    bool StoppedByTenant = false;
 
     bool SeizedByChild = false; // transient state for migration - need to delete it later
     bool NeedToReleaseFromParent = false; // transient state for migration - need to delete it later

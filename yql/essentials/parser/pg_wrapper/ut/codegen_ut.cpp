@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
     void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
         const TString& name = fixed ? "date_eq" : "textout";
         ICodegen::TPtr codegen;
-        TExecFunc execFunc;        
+        TExecFunc execFunc;
         switch (flavor) {
         case EKernelFlavor::Indirect: {
             if (fixed) {
@@ -94,10 +94,10 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
                     nullBuilder.Reserve(length);
                     auto out = dataBuilder.MutableData();
                     auto outNulls = nullBuilder.MutableData();
-                    NUdf::TFixedSizeBlockReader<ui64, false> reader1;                    
-                    NUdf::TFixedSizeBlockReader<ui64, false> reader2;                    
+                    NUdf::TFixedSizeBlockReader<ui64, false> reader1;
+                    NUdf::TFixedSizeBlockReader<ui64, false> reader2;
                     const auto& array1 = *batch.values[0].array();
-                    const auto ptr1 = array1.GetValues<ui64>(1);                
+                    const auto ptr1 = array1.GetValues<ui64>(1);
                     if (batch.values[1].is_array()) {
                         const auto& array2 = *batch.values[1].array();
                         const auto ptr2 = array2.GetValues<ui64>(1);
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
         arrow::compute::ExecBatch batch(std::move(batchArgs), N);
 
         {
-            Cout << "begin...\n";            
+            Cout << "begin...\n";
             TSimpleTimer timer;
             for (size_t count = 0; count < (fixed ? 10000 : 1000); ++count) {
                 arrow::Datum res;
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
     Y_UNIT_TEST(PgFixedFuncIndirect) {
         PgFuncImpl(EKernelFlavor::Indirect, false, true);
         PgFuncImpl(EKernelFlavor::Indirect, true, true);
-    }    
+    }
 
 #if !defined(USE_SLOW_PG_KERNELS)
     Y_UNIT_TEST(PgFixedFuncCpp) {
@@ -255,19 +255,21 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
         PgFuncImpl(EKernelFlavor::Cpp, true, true);
     }
 
+#if defined(YQL_USE_PG_BC)
     Y_UNIT_TEST(PgFixedFuncBC) {
         PgFuncImpl(EKernelFlavor::BitCode, false, true);
         PgFuncImpl(EKernelFlavor::BitCode, true, true);
     }
-#endif    
+#endif
+#endif
 
     Y_UNIT_TEST(PgStrFuncIdeal) {
         PgFuncImpl(EKernelFlavor::Ideal, false, false);
-    }        
+    }
 
     Y_UNIT_TEST(PgStrFuncDefArg) {
         PgFuncImpl(EKernelFlavor::DefArg, false, false);
-    }    
+    }
 
     Y_UNIT_TEST(PgStrFuncIndirect) {
         PgFuncImpl(EKernelFlavor::Indirect, false, false);
@@ -278,9 +280,11 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
         PgFuncImpl(EKernelFlavor::Cpp, false, false);
     }
 
+#if defined(YQL_USE_PG_BC)
     Y_UNIT_TEST(PgStrFuncBC) {
         PgFuncImpl(EKernelFlavor::BitCode, false, false);
     }
+#endif
 #endif
 
 }

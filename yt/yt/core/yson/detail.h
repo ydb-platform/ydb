@@ -604,7 +604,7 @@ public:
                     Buffer_.back());
         }
 
-        for (int i = 1; i < static_cast<int>(expectedString.size()); ++i) {
+        for (int i = 1; i < std::ssize(expectedString); ++i) {
             PushBack(TBaseStream::template GetChar<AllowFinish>());
             TBaseStream::Advance(1);
             if (Buffer_.back() != expectedString[i]) {
@@ -721,7 +721,7 @@ public:
         PushBack(TBaseStream::template GetChar<AllowFinish>());
         TBaseStream::Advance(1);
         if (Buffer_[0] == trueString[0]) {
-            for (int i = 1; i < static_cast<int>(trueString.size()); ++i) {
+            for (int i = 1; i < std::ssize(trueString); ++i) {
                 PushBack(TBaseStream::template GetChar<AllowFinish>());
                 TBaseStream::Advance(1);
                 if (Buffer_.back() != trueString[i]) {
@@ -730,7 +730,7 @@ public:
             }
             return true;
         } else if (Buffer_[0] == falseString[0]) {
-            for (int i = 1; i < static_cast<int>(falseString.size()); ++i) {
+            for (int i = 1; i < std::ssize(falseString); ++i) {
                 PushBack(TBaseStream::template GetChar<AllowFinish>());
                 TBaseStream::Advance(1);
                 if (Buffer_.back() != falseString[i]) {

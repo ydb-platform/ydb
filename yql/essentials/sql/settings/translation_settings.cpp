@@ -45,7 +45,7 @@ namespace NSQLTranslation {
     }
 
     TTranslationSettings::TTranslationSettings()
-        : ModuleMapping({{"core", "/lib/yql/core.yql"}})
+        : ModuleMapping({{"core", "/lib/yql/core.yqls"}})
         , BindingsMode(EBindingsMode::ENABLED)
         , Mode(ESqlMode::QUERY)
         , MaxErrors(SQL_MAX_PARSER_ERRORS)
@@ -53,7 +53,7 @@ namespace NSQLTranslation {
         , EnableGenericUdfs(true)
         , SyntaxVersion(1)
         , AnsiLexer(false)
-        , Antlr4Parser(false)
+        , Antlr4Parser(true)
         , PgParser(false)
         , InferSyntaxVersion(false)
         , V0Behavior(EV0Behavior::Disable)
@@ -72,10 +72,6 @@ namespace NSQLTranslation {
         if (!NYql::IsUtf8(query)) {
             issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR, "Invalid UTF8 input"));
             return false;
-        }
-
-        if (settings.Flags.contains("Antlr4")) {
-            settings.Antlr4Parser = true;
         }
 
         TSplitDelimiters lineDelimiters("\n\r");

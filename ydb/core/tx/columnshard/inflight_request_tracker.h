@@ -85,6 +85,12 @@ class TInFlightReadsTracker {
 private:
     std::map<NOlap::TSnapshot, TSnapshotLiveInfo> SnapshotsLive;
     std::shared_ptr<TRequestsTracerCounters> Counters;
+    THashMap<ui64, NActors::TActorId> ActorIds;
+
+    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    ui64 NextCookie = 1;
+    THashMap<ui64, NOlap::NReader::TReadMetadataBase::TConstPtr> RequestsMeta;
+    NOlap::TSelectInfo::TStats SelectStatsDelta;
 
 public:
     std::optional<NOlap::TSnapshot> GetSnapshotToClean() const {
@@ -103,6 +109,9 @@ public:
     // Returns a unique cookie associated with this request
     [[nodiscard]] ui64 AddInFlightRequest(
         NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index);
+    void AddScanActorId(const ui64 cookie, const NActors::TActorId& actorId) {
+        AFL_VERIFY(ActorIds.emplace(cookie, actorId).second);
+    }
 
     [[nodiscard]] NOlap::NReader::TReadMetadataBase::TConstPtr ExtractInFlightRequest(ui64 cookie, const NOlap::TVersionedIndex* index, const TInstant now);
 
@@ -110,6 +119,12 @@ public:
         auto delta = SelectStatsDelta;
         SelectStatsDelta = NOlap::TSelectInfo::TStats();
         return delta;
+    }
+
+    void Stop(TColumnShard* /*self*/) {
+        for (auto&& i : ActorIds) {
+            NActors::TActivationContext::Send(i.second, std::make_unique<NActors::TEvents::TEvPoison>());
+        }
     }
 
     TInFlightReadsTracker(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const std::shared_ptr<TRequestsTracerCounters>& counters)
@@ -120,12 +135,6 @@ public:
 private:
     void AddToInFlightRequest(
         const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* index);
-
-private:
-    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
-    ui64 NextCookie = 1;
-    THashMap<ui64, NOlap::NReader::TReadMetadataBase::TConstPtr> RequestsMeta;
-    NOlap::TSelectInfo::TStats SelectStatsDelta;
 };
 
 }   // namespace NKikimr::NColumnShard

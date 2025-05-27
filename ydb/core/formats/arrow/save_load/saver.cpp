@@ -2,9 +2,8 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-TColumnSaver::TColumnSaver(NArrow::NTransformation::ITransformer::TPtr transformer, const NArrow::NSerialization::TSerializerContainer serializer)
-    : Transformer(transformer)
-    , Serializer(serializer)
+TColumnSaver::TColumnSaver(const NArrow::NSerialization::TSerializerContainer serializer)
+    : Serializer(serializer)
 {
     Y_ABORT_UNLESS(Serializer);
 }
@@ -28,11 +27,7 @@ TString TColumnSaver::Apply(const std::shared_ptr<arrow::RecordBatch>& data) con
             serializer = it->second;
         }
     }
-    if (Transformer) {
-        return serializer->SerializeFull(Transformer->Transform(data));
-    } else {
-        return serializer->SerializePayload(data);
-    }
+    return serializer->SerializePayload(data);
 }
 
 }

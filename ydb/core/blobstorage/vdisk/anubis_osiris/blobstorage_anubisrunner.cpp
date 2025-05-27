@@ -54,7 +54,7 @@ namespace NKikimr {
             str << "\n";
 
             ctx.Send(ReplyId, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::SyncerInfoId));
-            ctx.Send(NotifyId, new TEvents::TEvActorDied());
+            ctx.Send(NotifyId, new TEvents::TEvGone());
             Die(ctx);
         }
 
@@ -89,7 +89,8 @@ namespace NKikimr {
                              NMon::TEvHttpInfo::TPtr &ev,
                              const TActorId &notifyId,
                              const TActorId &anubisId,
-                             const TString &curRunnerState)
+                             const TString &curRunnerState,
+                             const TString& vDiskLogPrefix)
             : TActorBootstrapped<TAnubisRunnerHttpInfoActor>()
             , Ev(ev)
             , ReplyId(Ev->Sender)
@@ -97,7 +98,7 @@ namespace NKikimr {
             , AnubisId(anubisId)
             , CurRunnerState(curRunnerState)
         {
-            Y_ABORT_UNLESS(Ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_VERIFY_S(Ev->Get()->SubRequestId == TDbMon::SyncerInfoId, vDiskLogPrefix);
         }
     };
 
@@ -202,7 +203,7 @@ namespace NKikimr {
         }
 
         // This handler is called when TAnubisRunnerHttpInfoActor is finished
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
         }
@@ -221,7 +222,7 @@ namespace NKikimr {
                 ctx.Send(AnubisId, new TEvents::TEvPoisonPill());
                 AnubisId = TActorId();
                 RunAnubis(ctx);
-                Y_ABORT_UNLESS(AnubisId != TActorId());
+                Y_VERIFY_S(AnubisId != TActorId(), AnubisCtx->HullCtx->VCtx->VDiskLogPrefix);
             }
         }
 
@@ -245,7 +246,7 @@ namespace NKikimr {
                       HFunc(TEvFullSyncedWith, Handle)
                       HFunc(TEvAnubisDone, Handle)
                       HFunc(NMon::TEvHttpInfo, Handle)
-                      HFunc(TEvents::TEvActorDied, Handle)
+                      HFunc(TEvents::TEvGone, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       HFunc(TEvVGenerationChange, Handle)
                       CFunc(TEvents::TSystem::Wakeup, HandleWakeup)
@@ -255,11 +256,12 @@ namespace NKikimr {
         // Handle TEvHttpInfo
         ////////////////////////////////////////////////////////////////////////
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_VERIFY_S(ev->Get()->SubRequestId == TDbMon::SyncerInfoId, AnubisCtx->HullCtx->VCtx->VDiskLogPrefix);
             // save current local state
             TString s = QuorumTracker.ToString();
             // create an actor to handle request
-            auto actor = std::make_unique<TAnubisRunnerHttpInfoActor>(ev, ctx.SelfID, AnubisId, s);
+            auto actor = std::make_unique<TAnubisRunnerHttpInfoActor>(ev, ctx.SelfID, AnubisId, s,
+                AnubisCtx->HullCtx->VCtx->VDiskLogPrefix);
             auto aid = ctx.Register(actor.release());
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }

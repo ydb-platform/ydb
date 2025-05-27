@@ -130,7 +130,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         ctx.Ctx = &*ctx.Func->arg_begin();
@@ -163,7 +162,7 @@ private:
 
             const auto item = GetNodeValue(Flow, ctx, block);
 
-            BranchInst::Create(exit, good, IsSpecial(item, block), block);
+            BranchInst::Create(exit, good, IsSpecial(item, block, context), block);
 
             block = good;
 
@@ -217,7 +216,7 @@ public:
 
             const auto item = GetNodeValue(Flow, ctx, block);
             result->addIncoming(item, block);
-            BranchInst::Create(exit, next, IsSpecial(item, block), block);
+            BranchInst::Create(exit, next, IsSpecial(item, block, context), block);
 
             block = next;
 
@@ -241,7 +240,7 @@ public:
             const auto state = new LoadInst(valueType, statePtr, "state", block);
 
             result->addIncoming(item, block);
-            BranchInst::Create(part, exit, IsFinish(item, block), block);
+            BranchInst::Create(part, exit, IsFinish(item, block, context), block);
 
             block = part;
 
@@ -555,7 +554,7 @@ private:
         MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
@@ -565,7 +564,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -580,8 +578,7 @@ private:
 
         auto block = main;
 
-        const auto container = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+        const auto container = static_cast<Value*>(containerArg);
 
         const auto first = new LoadInst(stateType, stateArg, "first", block);
         const auto reload = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, first, ConstantInt::get(stateType, ui8(EState::Next)), "reload", block);
@@ -592,7 +589,7 @@ private:
             block = load;
 
             new StoreInst(ConstantInt::get(stateType, ui8(EState::Work)), stateArg, block);
-            SafeUnRefUnboxed(valuePtr, ctx, block);
+            SafeUnRefUnboxedOne(valuePtr, ctx, block);
             GetNodeValue(valuePtr, ItemArg, ctx, block);
             ReturnInst::Create(context, ConstantInt::get(statusType, ui32(NUdf::EFetchStatus::Ok)), block);
         }
@@ -624,7 +621,7 @@ private:
 
             block = pass;
 
-            SafeUnRefUnboxed(valuePtr, ctx, block);
+            SafeUnRefUnboxedOne(valuePtr, ctx, block);
             GetNodeValue(valuePtr, ItemArg, ctx, block);
             BranchInst::Create(exit, block);
 
@@ -652,7 +649,7 @@ private:
         MKQL_ENSURE(codegenInput, "Input arg must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
@@ -662,7 +659,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -683,15 +679,14 @@ private:
 
         auto block = main;
 
-        const auto input = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, inputArg, "load_input", false, block) : static_cast<Value*>(inputArg);
+        const auto input = static_cast<Value*>(inputArg);
 
         BranchInst::Create(loop, block);
 
         block = loop;
 
         const auto stream = new LoadInst(valueType, streamArg, "stream", block);
-        BranchInst::Create(next, work, IsEmpty(stream, block), block);
+        BranchInst::Create(next, work, IsEmpty(stream, block, context), block);
 
         {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);

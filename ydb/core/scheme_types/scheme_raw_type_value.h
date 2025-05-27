@@ -3,6 +3,7 @@
 #include "scheme_type_info.h"
 
 #include <util/generic/array_ref.h>
+#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {
@@ -17,12 +18,12 @@ public:
         , ValueType()
     {}
 
-    TRawTypeValue(const void* buf, ui32 bufSize, NScheme::TTypeId vtype)
+    TRawTypeValue(const void* buf, size_t bufSize, NScheme::TTypeId vtype)
         : Buffer(buf)
         , BufferSize(bufSize)
         , ValueType(vtype)
     {
-        Y_DEBUG_ABORT_UNLESS(!buf || vtype != 0);
+        Y_ASSERT(!buf || vtype != 0);
     }
 
     TRawTypeValue(TArrayRef<const char> ref, NScheme::TTypeId vtype)

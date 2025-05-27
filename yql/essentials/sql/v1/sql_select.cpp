@@ -43,6 +43,7 @@ bool CollectJoinLinkSettings(TPosition pos, TJoinLinkSettings& linkSettings, TCo
 
         if (TJoinLinkSettings::EStrategy::Default == linkSettings.Strategy) {
             linkSettings.Strategy = newStrategy;
+            linkSettings.Values = hint.Values;
         } else if (newStrategy == linkSettings.Strategy) {
             ctx.Error() << "Duplicate join strategy hint";
             return false;
@@ -1026,8 +1027,10 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
 
     const bool selectStream = node.HasBlock3();
     TVector<TNodePtr> without;
+    bool forceWithout = false;
     if (node.HasBlock8()) {
-        if (!ColumnList(without, node.GetBlock8().GetRule_without_column_list2())) {
+        forceWithout = node.GetBlock8().HasBlock2();
+        if (!ColumnList(without, node.GetBlock8().GetRule_without_column_list3())) {
             return nullptr;
         }
     }
@@ -1166,7 +1169,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         return nullptr;
     }
     return BuildSelectCore(Ctx, startPos, std::move(source), groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy, having,
-        std::move(windowSpec), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
+        std::move(windowSpec), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
 bool TSqlSelect::WindowDefinition(const TRule_window_definition& rule, TWinSpecs& winSpecs) {
@@ -1420,6 +1423,7 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
         TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec;
         bool distinct = false;
         TVector<TNodePtr> without;
+        bool forceWithout = false;
         bool stream = false;
 
         TVector<TNodePtr> terms;
@@ -1427,7 +1431,7 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
 
         result = BuildSelectCore(Ctx, unionPos, std::move(result), groupByExpr, groupBy, compactGroupBy, groupBySuffix,
             assumeOrderBy, orderBy, having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms),
-            distinct, std::move(without), stream, outermostSettings, {}, {});
+            distinct, std::move(without), forceWithout, stream, outermostSettings, {}, {});
 
         result = BuildSelect(unionPos, std::move(result), skipTake);
     } else if (skipTake) {

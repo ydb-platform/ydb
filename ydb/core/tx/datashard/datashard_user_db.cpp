@@ -27,7 +27,7 @@ NTable::EReady TDataShardUserDb::SelectRow(
         const TMaybe<TRowVersion>& readVersion)
 {
     auto tid = Self.GetLocalTableId(tableId);
-    Y_ABORT_UNLESS(tid != 0, "Unexpected SelectRow for an unknown table");
+    Y_ENSURE(tid != 0, "Unexpected SelectRow for an unknown table");
 
     SetPerformedUserReads(true);
 
@@ -68,7 +68,7 @@ void TDataShardUserDb::UpsertRow(
     const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
-    Y_ABORT_UNLESS(localTableId != 0, "Unexpected UpdateRow for an unknown table");
+    Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
     // apply special columns if declared
     TUserTable::TSpecialUpdate specUpdates = Self.SpecialUpdates(Db, tableId);
@@ -124,7 +124,7 @@ void TDataShardUserDb::ReplaceRow(
     const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
-    Y_ABORT_UNLESS(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
+    Y_ENSURE(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
 
     UpsertRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops);
 
@@ -137,7 +137,7 @@ void TDataShardUserDb::InsertRow(
     const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
-    Y_ABORT_UNLESS(localTableId != 0, "Unexpected InsertRow for an unknown table");
+    Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
 
     if (RowExists(tableId, key))
         throw TUniqueConstrainException();
@@ -153,7 +153,7 @@ void TDataShardUserDb::UpdateRow(
     const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
-    Y_ABORT_UNLESS(localTableId != 0, "Unexpected UpdateRow for an unknown table");
+    Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
     if (!RowExists(tableId, key))
         return;
@@ -168,7 +168,7 @@ void TDataShardUserDb::EraseRow(
     const TArrayRef<const TRawTypeValue> key)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
-    Y_ABORT_UNLESS(localTableId != 0, "Unexpected UpdateRow for an unknown table");
+    Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
     UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {});
 
@@ -176,6 +176,16 @@ void TDataShardUserDb::EraseRow(
     
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;
+}
+
+bool TDataShardUserDb::PrechargeRow(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key)
+{
+    auto localTableId = Self.GetLocalTableId(tableId);
+    Y_ENSURE(localTableId != 0, "Unexpected PrechargeRow for an unknown table");
+
+    return Db.Precharge(localTableId, key, key, {}, 0, Max<ui64>(), Max<ui64>());     
 }
 
 void TDataShardUserDb::IncreaseUpdateCounters(
@@ -318,17 +328,25 @@ ui64 TDataShardUserDb::GetChangeGroup() {
 
 void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const TRowVersion& writeVersion) {
     auto localTid = Self.GetLocalTableId(tableId);
-    Y_VERIFY_S(localTid, "Unexpected failure to find table " << tableId << " in datashard " << Self.TabletID());
+    Y_ENSURE(localTid, "Unexpected failure to find table " << tableId << " in datashard " << Self.TabletID());
 
     if (!Db.HasOpenTx(localTid, lockId)) {
+        if (Db.HasRemovedTx(localTid, lockId)) {
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "Committing removed changes lockId# " << lockId << " tid# " << localTid << " shard# " << Self.TabletID());
+            Self.IncCounter(COUNTER_REMOVED_COMMITTED_TXS);
+        }
         return;
     }
 
-    if (auto lock = Self.SysLocksTable().GetRawLock(lockId, TRowVersion::Min()); lock && !VolatileCommitOrdered) {
+    if (auto lock = Self.SysLocksTable().GetRawLock(lockId); lock && !VolatileCommitOrdered) {
         lock->ForAllVolatileDependencies([this](ui64 txId) {
             auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId);
             if (info && info->State != EVolatileTxState::Aborting) {
                 if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
+                    if (GlobalTxId == 0) {
+                        throw TNeedGlobalTxId();
+                    }
                     SetVolatileTxId(GlobalTxId);
                 }
             }
@@ -532,7 +550,7 @@ private:
 
 void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) {
     auto localTableId = Self.GetLocalTableId(tableId);
-    Y_ABORT_UNLESS(localTableId != 0, "Unexpected CheckWriteConflicts for an unknown table");
+    Y_ENSURE(localTableId != 0, "Unexpected CheckWriteConflicts for an unknown table");
 
     // When there are uncommitted changes (write locks) we must find which
     // locks would break upon commit.
@@ -585,6 +603,9 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
         // Upgrade to volatile ordered commit and ignore the page fault
         if (!VolatileCommitOrdered) {
             if (!VolatileTxId) {
+                if (GlobalTxId == 0) {
+                    throw TNeedGlobalTxId();
+                }
                 SetVolatileTxId(GlobalTxId);
             }
             VolatileCommitOrdered = true;
@@ -629,6 +650,9 @@ void TDataShardUserDb::BreakWriteConflict(ui64 txId) {
                 // it into a real volatile transaction, it works as usual in
                 // every sense, only persistent commit order is affected by
                 // a dependency below.
+                if (GlobalTxId == 0) {
+                    throw TNeedGlobalTxId();
+                }
                 SetVolatileTxId(GlobalTxId);
             }
             VolatileDependencies.insert(info->TxId);
@@ -658,10 +682,10 @@ TVector<ui64> TDataShardUserDb::GetVolatileCommitTxIds() const {
 
 ui64 TDataShardUserDb::GetWriteTxId(const TTableId& tableId) {
     auto localTableId = Self.GetLocalTableId(tableId);
-    Y_ABORT_UNLESS(localTableId != 0, "Unexpected GetWriteTxId for an unknown table");
+    Y_ENSURE(localTableId != 0, "Unexpected GetWriteTxId for an unknown table");
 
     if (VolatileTxId) {
-        Y_ABORT_UNLESS(!LockTxId);
+        Y_ENSURE(!LockTxId);
         if (VolatileCommitTxIds.insert(VolatileTxId).second) {
             // Update TxMap to include the new commit
             auto it = TxMaps.find(tableId.PathId);
@@ -677,7 +701,7 @@ ui64 TDataShardUserDb::GetWriteTxId(const TTableId& tableId) {
 
 NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableId) {
     auto localTableId = Self.GetLocalTableId(tableId);
-    Y_ABORT_UNLESS(localTableId != 0, "Unexpected GetReadTxMap for an unknown table");
+    Y_ENSURE(localTableId != 0, "Unexpected GetReadTxMap for an unknown table");
 
     auto baseTxMap = Self.GetVolatileTxManager().GetTxMap();
 
@@ -716,7 +740,7 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
 
 NTable::ITransactionObserverPtr TDataShardUserDb::GetReadTxObserver(const TTableId& tableId) {
     auto localTableId = Self.GetLocalTableId(tableId);
-    Y_ABORT_UNLESS(localTableId != 0, "Unexpected GetReadTxObserver for an unknown table");
+    Y_ENSURE(localTableId != 0, "Unexpected GetReadTxObserver for an unknown table");
 
     bool needObserver = (
         // We need observer when there are waiting changes in the tx map
@@ -743,7 +767,7 @@ NTable::ITransactionObserverPtr TDataShardUserDb::GetReadTxObserver(const TTable
 }
 
 void TDataShardUserDb::AddReadConflict(ui64 txId) const {
-    Y_ABORT_UNLESS(LockTxId);
+    Y_ENSURE(LockTxId);
 
     // We have detected uncommitted changes in txId that could affect
     // our read result. We arrange a conflict that breaks our lock
@@ -752,7 +776,7 @@ void TDataShardUserDb::AddReadConflict(ui64 txId) const {
 }
 
 void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) const {
-    Y_ABORT_UNLESS(LockTxId);
+    Y_ENSURE(LockTxId);
 
     if (rowVersion > ReadVersion) {
         // We are reading from snapshot at ReadVersion and should not normally

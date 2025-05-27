@@ -31,7 +31,7 @@
 
 #include "ngtcp2_conv.h"
 
-#define NGTCP2_INITIAL_TABLE_LENBITS 4
+#define NGTCP2_INITIAL_HASHBITS 4
 
 void ngtcp2_map_init(ngtcp2_map *map, const ngtcp2_mem *mem) {
   map->mem = mem;
@@ -119,7 +119,11 @@ void ngtcp2_map_print_distance(const ngtcp2_map *map) {
 static int insert(ngtcp2_map_bucket *table, size_t hashbits,
                   ngtcp2_map_key_type key, void *data) {
   size_t idx = hash(key, hashbits);
-  ngtcp2_map_bucket b = {0, key, data}, *bkt;
+  ngtcp2_map_bucket b = {
+    .key = key,
+    .data = data,
+  };
+  ngtcp2_map_bucket *bkt;
   size_t mask = (1u << hashbits) - 1;
 
   for (;;) {
@@ -196,7 +200,7 @@ int ngtcp2_map_insert(ngtcp2_map *map, ngtcp2_map_key_type key, void *data) {
         return rv;
       }
     } else {
-      rv = map_resize(map, NGTCP2_INITIAL_TABLE_LENBITS);
+      rv = map_resize(map, NGTCP2_INITIAL_HASHBITS);
       if (rv != 0) {
         return rv;
       }

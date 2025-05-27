@@ -1,4 +1,5 @@
 #include "origin_attributes.h"
+#include "error_attributes.h"
 
 #include <library/cpp/yt/assert/assert.h>
 
@@ -83,7 +84,7 @@ std::optional<TOriginAttributes::TErasedExtensionData> GetExtensionData()
     return std::nullopt;
 }
 
-TString FormatOrigin(const TOriginAttributes& attributes)
+std::string FormatOrigin(const TOriginAttributes& attributes)
 {
     using TFunctor = TString(*)(const TOriginAttributes&);
 
@@ -103,6 +104,47 @@ TString FormatOrigin(const TOriginAttributes& attributes)
             }
             FormatValue(builder, threadName, "v");
         }));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TOriginAttributes ExtractFromDictionary(TErrorAttributes* attributes)
+{
+    using TFunctor = TOriginAttributes(*)(TErrorAttributes*);
+
+    if (auto strong = NGlobal::GetErasedVariable(ExtractFromDictionaryTag)) {
+        return strong->AsConcrete<TFunctor>()(attributes);
+    }
+
+    return ExtractFromDictionaryDefault(attributes);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes)
+{
+    TOriginAttributes result;
+    if (attributes == nullptr) {
+        return result;
+    }
+
+    static const std::string HostKey("host");
+    result.HostHolder = TSharedRef::FromString(attributes->GetAndRemove(HostKey, std::string()));
+    result.Host = result.HostHolder.empty() ? TStringBuf() : TStringBuf(result.HostHolder.Begin(), result.HostHolder.End());
+
+    static const std::string DatetimeKey("datetime");
+    result.Datetime = attributes->GetAndRemove(DatetimeKey, TInstant());
+
+    static const std::string PidKey("pid");
+    result.Pid = attributes->GetAndRemove(PidKey, TProcessId{});
+
+    static const std::string TidKey("tid");
+    result.Tid = attributes->GetAndRemove(TidKey, NThreading::InvalidThreadId);
+
+    static const std::string ThreadNameKey("thread");
+    result.ThreadName = {attributes->GetAndRemove(ThreadNameKey, std::string())};
+
+    return result;
 }
 
 } // namespace NDetail

@@ -108,15 +108,23 @@ namespace orc {
 
   void RleEncoder::recordPosition(PositionRecorder* recorder) const {
     uint64_t flushedSize = outputStream->getSize();
-    uint64_t unflushedSize = static_cast<uint64_t>(bufferPosition);
+    uint64_t unusedBufferSize = static_cast<uint64_t>(bufferLength - bufferPosition);
     if (outputStream->isCompressed()) {
       recorder->add(flushedSize);
-      recorder->add(unflushedSize);
+      // There are multiple blocks in the input buffer, but bufferPosition only records the
+      // effective length of the last block. We need rawInputBufferSize to record the total length
+      // of all variable blocks.
+      recorder->add(outputStream->getRawInputBufferSize() - unusedBufferSize);
     } else {
-      flushedSize -= static_cast<uint64_t>(bufferLength);
-      recorder->add(flushedSize + unflushedSize);
+      recorder->add(flushedSize - unusedBufferSize);
     }
     recorder->add(static_cast<uint64_t>(numLiterals));
+  }
+
+  void RleEncoder::finishEncode() {
+    outputStream->BackUp(static_cast<int>(bufferLength - bufferPosition));
+    outputStream->finishStream();
+    bufferLength = bufferPosition = 0;
   }
 
 }  // namespace orc

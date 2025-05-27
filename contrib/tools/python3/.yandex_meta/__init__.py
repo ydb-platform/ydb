@@ -256,6 +256,7 @@ python3 = NixSourceProject(
         "sys/byteorder.h",
         "sys/lwp.h",
         "sys/memfd.h",
+        "sys/pidfd.h",
         # ifdef __VXWORKS__
         "rtpLib.h",
         "taskLib.h",

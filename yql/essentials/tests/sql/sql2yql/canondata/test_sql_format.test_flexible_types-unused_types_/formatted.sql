@@ -7,11 +7,11 @@ PRAGMA FlexibleTypes;
 
 $format = ($x) -> (FormatType($x));
 
-$src =
+$src = (
     SELECT
         1 AS integer,
         Float
-;
+);
 
 SELECT
     $format(integer) AS formatted,

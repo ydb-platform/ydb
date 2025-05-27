@@ -22,7 +22,7 @@ IActor *CreateConfigsSubscriber(
     ui64 cookie = 0,
     bool processYaml = false,
     ui64 version = 0,
-    const TString &yamlConfig = {},
+    const TString &mainYamlConfig = {},
     const TMap<ui64, TString> &volatileYamlConfigs = {},
     const std::optional<TNodeInfo> explicitNodeInfo = std::nullopt);
 

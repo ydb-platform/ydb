@@ -15,7 +15,7 @@ private:
     const TGranuleMeta& Owner;
 
 public:
-    TPortionsIndex(const TGranuleMeta& owner, const NColumnShard::TPortionsIndexCounters& counters)
+    TPortionsIndex(const TGranuleMeta& owner, const NColumnShard::TPortionsIndexCounters& /* counters */)
         : Owner(owner)
     {
         Y_UNUSED(Owner);

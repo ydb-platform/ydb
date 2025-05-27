@@ -86,6 +86,8 @@ public:
                 return "uncategorized_plan_mismatch";
             case TQueryReplayEvents::MissingTableMetadata:
                 return "missing_table_metadata";
+            case TQueryReplayEvents::UncategorizedFailure:
+                return "uncategorized_failure";
             default:
                 return "unspecified";
         }
@@ -141,7 +143,7 @@ public:
 
     THolder<TQueryReplayEvents::TEvCompileResponse> RunReplay(NJson::TJsonValue&& json) {
         TString queryType = json["query_type"].GetStringSafe();
-        if (queryType == "QUERY_TYPE_AST_SCAN") {
+        if (queryType == "QUERY_TYPE_AST_SCAN" || queryType == "QUERY_TYPE_AST_DML") {
             return nullptr;
         }
 
@@ -233,6 +235,7 @@ static NYT::TTableSchema OutputSchema() {
 REGISTER_NAMED_MAPPER("Query replay mapper", TQueryReplayMapper);
 
 int main(int argc, const char** argv) {
+    NYT::TConfig::Get()->LogLevel = NYT::NLogLevel::Info;
     NYT::Initialize(argc, argv);
 
     TQueryReplayConfig config;
@@ -251,6 +254,18 @@ int main(int argc, const char** argv) {
             NJson::ReadJsonTree(&in, &readConfig, &queryJson, false);
         }
 
+        Cerr << "Running local replay of the query:" << Endl
+	     << "Database: " << queryJson["query_database"].GetStringSafe() << Endl
+	     << UnescapeC(queryJson["query_text"].GetStringSafe()) << Endl;
+        auto TableMetadata = ExtractStaticMetadata(queryJson);
+        Cerr << "Tables: " << Endl;
+	for(auto& [name, meta]: TableMetadata) {
+            Cerr << "TableName: " << name << Endl;
+            NKikimrKqp::TKqpTableMetadataProto protoDescription;
+            meta->ToMessage(&protoDescription);
+            Cerr << protoDescription.Utf8DebugString() << Endl;
+        }
+
         auto result = fakeMapper.RunReplay(std::move(queryJson));
 
         auto status = result.Get()->Status;
@@ -265,7 +280,6 @@ int main(int argc, const char** argv) {
     }
 
     auto client = NYT::CreateClient(config.Cluster);
-    NYT::SetLogger(NYT::CreateStdErrLogger(NYT::ILogger::ELevel::INFO));
 
     NYT::TMapOperationSpec spec;
     spec.AddInput<NYT::TNode>(config.SrcPath);
@@ -285,6 +299,14 @@ int main(int argc, const char** argv) {
     spec.MaxFailedJobCount(10000);
 
     client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel));
+
+    auto mergeSpec = NYT::TMergeOperationSpec();
+    mergeSpec.AddInput(NYT::TRichYPath(config.DstPath));
+    mergeSpec.Output(NYT::TRichYPath(config.DstPath));
+    mergeSpec.CombineChunks(true);
+    mergeSpec.ForceTransform(true);
+
+    client->Merge(mergeSpec);
 
     return EXIT_SUCCESS;
 }

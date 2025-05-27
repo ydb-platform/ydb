@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     external_data_source.cpp
+    external_source_builder.cpp
     external_source_factory.cpp
     object_storage.cpp
     validation_functions.cpp
@@ -22,8 +23,9 @@ PEERDIR(
     ydb/library/yql/providers/s3/object_listers
     ydb/library/yql/providers/s3/path_generator
     yql/essentials/public/issue
-    ydb/public/sdk/cpp/client/ydb_params
-    ydb/public/sdk/cpp/client/ydb_value
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/params
+    ydb/public/sdk/cpp/src/client/value
 )
 
 END()

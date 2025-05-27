@@ -73,8 +73,8 @@ TUnversionedOwningValue ApproximateMaxValue(TUnversionedValue value)
 template <typename TRow>
 void UpdateLargeColumnarStatistics(TLargeColumnarStatistics& statistics, TRange<TRow> rows)
 {
-    for (const auto& values : rows) {
-        for (const auto& value : values) {
+    for (auto row : rows) {
+        for (const auto& value : row) {
             if (value.Type != EValueType::Null) {
                 auto valueNoFlags = value;
                 valueNoFlags.Flags = EValueFlags::None;
@@ -159,7 +159,7 @@ void UpdateColumnarStatistics(TColumnarStatistics& statistics, TRange<TRow> rows
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TLargeColumnarStatistics::Empty() const
+bool TLargeColumnarStatistics::IsEmpty() const
 {
     return ColumnHyperLogLogDigests.empty();
 }
@@ -186,6 +186,8 @@ TLargeColumnarStatistics& TLargeColumnarStatistics::operator+=(const TLargeColum
 
 TColumnarStatistics& TColumnarStatistics::operator+=(const TColumnarStatistics& other)
 {
+    ReadDataSizeEstimate.reset();
+
     if (GetColumnCount() == 0) {
         Resize(other.GetColumnCount(), other.HasValueStatistics(), other.HasLargeStatistics());
     }
@@ -261,7 +263,8 @@ TLightweightColumnarStatistics TColumnarStatistics::MakeLightweightStatistics() 
     return TLightweightColumnarStatistics{
         .ColumnDataWeightsSum = std::accumulate(ColumnDataWeights.begin(), ColumnDataWeights.end(), (i64)0),
         .TimestampTotalWeight = TimestampTotalWeight,
-        .LegacyChunkDataWeight = LegacyChunkDataWeight
+        .LegacyChunkDataWeight = LegacyChunkDataWeight,
+        .ReadDataSizeEstimate = ReadDataSizeEstimate,
     };
 }
 
@@ -288,7 +291,7 @@ bool TColumnarStatistics::HasValueStatistics() const
 
 bool TColumnarStatistics::HasLargeStatistics() const
 {
-    return GetColumnCount() == 0 || !LargeStatistics.Empty();
+    return GetColumnCount() == 0 || !LargeStatistics.IsEmpty();
 }
 
 void TColumnarStatistics::ClearValueStatistics()
@@ -306,6 +309,8 @@ int TColumnarStatistics::GetColumnCount() const
 
 void TColumnarStatistics::Resize(int columnCount, bool keepValueStatistics, bool keepLargeStatistics)
 {
+    ReadDataSizeEstimate.reset();
+
     if (columnCount < GetColumnCount()) {
         // Downsizes are not allowed. If reducing column count, must clear the stats completely.
         YT_VERIFY(columnCount == 0);
@@ -332,6 +337,8 @@ void TColumnarStatistics::Resize(int columnCount, bool keepValueStatistics, bool
 
 void TColumnarStatistics::Update(TRange<TUnversionedRow> rows)
 {
+    ReadDataSizeEstimate.reset();
+
     UpdateColumnarStatistics(*this, rows);
 
     if (ChunkRowCount) {
@@ -341,6 +348,8 @@ void TColumnarStatistics::Update(TRange<TUnversionedRow> rows)
 
 void TColumnarStatistics::Update(TRange<TVersionedRow> rows)
 {
+    ReadDataSizeEstimate.reset();
+
     std::vector<TRange<TUnversionedValue>> keyColumnRows;
     keyColumnRows.reserve(rows.Size());
     for (const auto& row : rows) {

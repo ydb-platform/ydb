@@ -37,6 +37,7 @@ class TestResult:
     elapsed: float
     count_of_passed: int
     owners: str
+    status_description: str
 
     @property
     def status_display(self):
@@ -67,15 +68,23 @@ class TestResult:
     @classmethod
     def from_junit(cls, testcase):
         classname, name = testcase.get("classname"), testcase.get("name")
-
+        status_description = None
         if testcase.find("failure") is not None:
             status = TestStatus.FAIL
+            if testcase.find("failure").text is not None:
+                status_description = testcase.find("failure").text
         elif testcase.find("error") is not None:
             status = TestStatus.ERROR
+            if testcase.find("error").text is not None:
+                status_description = testcase.find("error").text
         elif get_property_value(testcase, "mute") is not None:
             status = TestStatus.MUTE
+            if testcase.find("skipped").text is not None:
+                status_description = testcase.find("skipped").text
         elif testcase.find("skipped") is not None:
             status = TestStatus.SKIP
+            if testcase.find("skipped").text is not None:
+                status_description = testcase.find("skipped").text
         else:
             status = TestStatus.PASS
 
@@ -96,7 +105,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed, 0,'')
+        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description)
 
 
 class TestSummaryLine:
@@ -221,7 +230,7 @@ def render_pm(value, url, diff=None):
     return text
 
 
-def render_testlist_html(rows, fn, build_preset):
+def render_testlist_html(rows, fn, build_preset, branch):
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
@@ -264,7 +273,7 @@ def render_testlist_html(rows, fn, build_preset):
         tests_names_for_history.append(test.full_name)
 
     try:
-        history = get_test_history(tests_names_for_history, last_n_runs, build_preset)
+        history = get_test_history(tests_names_for_history, last_n_runs, build_preset, branch)
     except Exception:
         print(traceback.format_exc())
    
@@ -284,11 +293,24 @@ def render_testlist_html(rows, fn, build_preset):
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (-val.count_of_passed, val.full_name))
 
+    buid_preset_params = '--build unknown_build_type'
+    if build_preset == 'release-asan' :
+        buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'release-msan':
+        buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'release-tsan':   
+        buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'relwithdebinfo':
+        buid_preset_params = '--build "relwithdebinfo"'
+        
     content = env.get_template("summary.html").render(
         status_order=status_order,
         tests=status_test,
         has_any_log=has_any_log,
         history=history,
+        build_preset=build_preset,
+        buid_preset_params=buid_preset_params,
+        branch=branch
     )
 
     with open(fn, "w") as fp:
@@ -325,7 +347,7 @@ def get_codeowners_for_tests(codeowners_file_path, tests_data):
             tests_data_with_owners.append(test)
 
 
-def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset):
+def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch):
     summary = TestSummary(is_retry=is_retry)
 
     for title, html_fn, path in paths:
@@ -339,7 +361,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset)
             html_fn = os.path.relpath(html_fn, public_dir)
         report_url = f"{public_dir_url}/{html_fn}"
 
-        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn),build_preset)
+        render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn),build_preset, branch)
         summary_line.add_report(html_fn, report_url)
         summary.add_line(summary_line)
 
@@ -398,6 +420,7 @@ def main():
     parser.add_argument("--public_dir_url", required=True)
     parser.add_argument("--summary_links", required=True)
     parser.add_argument('--build_preset', default="default-linux-x86-64-relwithdebinfo", required=False)
+    parser.add_argument('--branch', default="main", required=False)
     parser.add_argument('--status_report_file', required=False)
     parser.add_argument('--is_retry', required=True, type=int)
     parser.add_argument('--is_last_retry', required=True, type=int)
@@ -414,7 +437,13 @@ def main():
     paths = iter(args.args)
     title_path = list(zip(paths, paths, paths))
 
-    summary = gen_summary(args.public_dir, args.public_dir_url, title_path, is_retry=bool(args.is_retry),build_preset=args.build_preset)
+    summary = gen_summary(args.public_dir,
+                          args.public_dir_url,
+                          title_path,
+                          is_retry=bool(args.is_retry),
+                          build_preset=args.build_preset,
+                          branch=args.branch
+                          )
     write_summary(summary)
 
     if summary.is_failed and not args.is_test_result_ignored:

@@ -200,6 +200,11 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
         Y_ABORT("bad status");
     };
 
+    // There should be no consumers in the configuration of the background partition. When creating a partition,
+    // the PQ tablet specifically removes all consumer settings from the config.
+    Y_ABORT_UNLESS(!Partition()->IsSupportive() ||
+                   (Partition()->Config.GetConsumers().empty() && Partition()->TabletConfig.GetConsumers().empty()));
+
     Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
     Partition()->PartitionGraph = MakePartitionGraph(Partition()->Config);
 
@@ -318,10 +323,10 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         bool res = meta.ParseFromString(response.GetValue());
         Y_ABORT_UNLESS(res);
 
-        Partition()->StartOffset = meta.GetStartOffset();
-        Partition()->EndOffset = meta.GetEndOffset();
-        if (Partition()->StartOffset == Partition()->EndOffset) {
-           Partition()->NewHead.Offset = Partition()->Head.Offset = Partition()->EndOffset;
+        Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
+        Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
+        if (Partition()->BlobEncoder.StartOffset == Partition()->BlobEncoder.EndOffset) {
+           Partition()->BlobEncoder.NewHead.Offset = Partition()->BlobEncoder.Head.Offset = Partition()->BlobEncoder.EndOffset;
         }
         if (meta.HasStartOffset()) {
             GetContext().StartOffset = meta.GetStartOffset();
@@ -395,6 +400,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
         case NKikimrProto::OVERRUN: {
             auto& sourceIdStorage = Partition()->SourceIdStorage;
             auto& usersInfoStorage = Partition()->UsersInfoStorage;
+            const bool isSupportive = Partition()->IsSupportive();
 
             for (ui32 i = 0; i < range.PairSize(); ++i) {
                 const auto& pair = range.GetPair(i);
@@ -416,9 +422,9 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                     sourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), now);
                 } else if (type == TKeyPrefix::MarkProtoSourceId) {
                     sourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), now);
-                } else if (type == TKeyPrefix::MarkUser) {
+                } else if ((type == TKeyPrefix::MarkUser) && !isSupportive) {
                     usersInfoStorage->Parse(*key, pair.GetValue(), ctx);
-                } else if (type == TKeyPrefix::MarkUserDeprecated) {
+                } else if ((type == TKeyPrefix::MarkUserDeprecated) && !isSupportive) {
                     usersInfoStorage->ParseDeprecated(*key, pair.GetValue(), ctx);
                 }
             }
@@ -482,12 +488,12 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset !=  Partition()->StartOffset) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->StartOffset);
+            if (GetContext().StartOffset && *GetContext().StartOffset !=  Partition()->BlobEncoder.StartOffset) {
+                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->BlobEncoder.StartOffset);
                 return PoisonPill(ctx);
             }
-            if (GetContext().EndOffset && *GetContext().EndOffset !=  Partition()->EndOffset) {
-                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->EndOffset);
+            if (GetContext().EndOffset && *GetContext().EndOffset !=  Partition()->BlobEncoder.EndOffset) {
+                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->BlobEncoder.EndOffset);
                 return PoisonPill(ctx);
             }
 
@@ -502,22 +508,98 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     };
 }
 
-void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext&) {
-    auto& endOffset = Partition()->EndOffset;
-    auto& startOffset = Partition()->StartOffset;
-    auto& head = Partition()->Head;
-    auto& dataKeysBody = Partition()->DataKeysBody;
-    auto& gapOffsets = Partition()->GapOffsets;
-    auto& gapSize = Partition()->GapSize;
-    auto& bodySize = Partition()->BodySize;
+THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
+                                      const TPartitionId& partitionId)
+{
+    TVector<TKey> source;
 
     for (ui32 i = 0; i < range.PairSize(); ++i) {
-        auto pair = range.GetPair(i);
+        const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
+        source.push_back(TKey::FromString(pair.GetKey(), partitionId));
+    }
+
+    auto isKeyLess = [](const TKey& lhs, const TKey& rhs) {
+        auto makeOffset = [](const TKey& k) {
+            return std::make_tuple(k.GetOffset(), k.GetPartNo());
+        };
+
+        auto makeCount = [](const TKey& k) {
+            return k.GetCount() + k.GetInternalPartsCount();
+        };
+
+        const auto leftOffset = makeOffset(lhs);
+        const auto rightOffset = makeOffset(rhs);
+
+        if (leftOffset < rightOffset) {
+            return true;
+        }
+
+        if (rightOffset < leftOffset) {
+            return false;
+        }
+
+        return makeCount(lhs) > makeCount(rhs);
+    };
+
+    std::sort(source.begin(), source.end(), isKeyLess);
+
+    THashSet<TString> filtered;
+
+    size_t partsCount = 0;
+    ui64 nextOffset = 0;
+
+    for (const auto& k : source) {
+        if (filtered.empty() || k.GetOffset() >= nextOffset) {
+            filtered.insert(k.ToString());
+            partsCount = k.GetCount() + k.GetInternalPartsCount();
+            nextOffset = k.GetOffset() + k.GetCount();
+        } else {
+            //Y_ABORT_UNLESS(partsCount >= k.GetCount() + k.GetInternalPartsCount(),
+            //               "Key: %s, "
+            //               "partsCount: %" PRISZT ", Count: %" PRIu32 ", InternalPartsCount: %" PRIu32
+            //               ", nextOffset: %" PRIu64,
+            //               k.ToString().data(),
+            //               partsCount, k.GetCount(), k.GetInternalPartsCount(),
+            //               nextOffset);
+
+            partsCount -= k.GetCount() + k.GetInternalPartsCount();
+
+            Y_UNUSED(partsCount);
+        }
+    }
+
+    return filtered;
+}
+
+void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext&) {
+    auto& endOffset = Partition()->BlobEncoder.EndOffset;
+    auto& startOffset = Partition()->BlobEncoder.StartOffset;
+    auto& head = Partition()->BlobEncoder.Head;
+    auto& dataKeysBody = Partition()->BlobEncoder.DataKeysBody;
+    auto& gapOffsets = Partition()->GapOffsets;
+    auto& gapSize = Partition()->GapSize;
+    auto& bodySize = Partition()->BlobEncoder.BodySize;
+
+    // If there are multiple keys for a message, then only the key that contains more messages remains.
+    //
+    // Extra keys will be added to the queue for deletion.
+    const auto actualKeys = FilterBlobsMetaData(range,
+                                                PartitionId());
+
+    for (ui32 i = 0; i < range.PairSize(); ++i) {
+        const auto& pair = range.GetPair(i);
+        Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+        auto k = TKey::FromString(pair.GetKey(), PartitionId());
+        if (!actualKeys.contains(pair.GetKey())) {
+            Partition()->DeletedKeys.emplace_back(k.ToString());
+            continue;
+        }
         if (dataKeysBody.empty()) { //no data - this is first pair of first range
             head.Offset = endOffset = startOffset = k.GetOffset();
-            if (k.GetPartNo() > 0) ++startOffset;
+            if (k.GetPartNo() > 0) {
+                ++startOffset;
+            }
             head.PartNo = 0;
         } else {
             Y_ABORT_UNLESS(endOffset <= k.GetOffset(), "%" PRIu64 " <= %" PRIu64 " %s", endOffset, k.GetOffset(), pair.GetKey().c_str());
@@ -530,15 +612,17 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
         Y_ABORT_UNLESS(k.GetOffset() >= endOffset);
         endOffset = k.GetOffset() + k.GetCount();
         //at this point EndOffset > StartOffset
-        if (!k.IsHead()) //head.Size will be filled after read or head blobs
+        if (!k.HasSuffix()) //head.Size will be filled after read or head blobs
             bodySize += pair.GetValueSize();
 
         PQ_LOG_D("Got data offset " << k.GetOffset() << " count " << k.GetCount() << " size " << pair.GetValueSize()
                 << " so " << startOffset << " eo " << endOffset << " " << pair.GetKey()
         );
-        dataKeysBody.push_back({k, pair.GetValueSize(),
-                        TInstant::Seconds(pair.GetCreationUnixTime()),
-                        dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size});
+        dataKeysBody.emplace_back(k,
+                                  pair.GetValueSize(),
+                                  TInstant::Seconds(pair.GetCreationUnixTime()),
+                                  dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
+                                  Partition()->MakeBlobKeyToken(k.ToString()));
     }
 
     Y_ABORT_UNLESS(endOffset >= startOffset);
@@ -546,16 +630,16 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
 
 
 void TInitDataRangeStep::FormHeadAndProceed() {
-    auto& endOffset = Partition()->EndOffset;
-    auto& startOffset = Partition()->StartOffset;
-    auto& head = Partition()->Head;
-    auto& headKeys = Partition()->HeadKeys;
-    auto& dataKeysBody = Partition()->DataKeysBody;
+    auto& endOffset = Partition()->BlobEncoder.EndOffset;
+    auto& startOffset = Partition()->BlobEncoder.StartOffset;
+    auto& head = Partition()->BlobEncoder.Head;
+    auto& headKeys = Partition()->BlobEncoder.HeadKeys;
+    auto& dataKeysBody = Partition()->BlobEncoder.DataKeysBody;
 
     head.Offset = endOffset;
     head.PartNo = 0;
 
-    while (dataKeysBody.size() > 0 && dataKeysBody.back().Key.IsHead()) {
+    while (dataKeysBody.size() > 0 && dataKeysBody.back().Key.HasSuffix()) {
         Y_ABORT_UNLESS(dataKeysBody.back().Key.GetOffset() + dataKeysBody.back().Key.GetCount() == head.Offset); //no gaps in head allowed
         headKeys.push_front(dataKeysBody.back());
         head.Offset = dataKeysBody.back().Key.GetOffset();
@@ -563,7 +647,7 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         dataKeysBody.pop_back();
     }
     for (const auto& p : dataKeysBody) {
-        Y_ABORT_UNLESS(!p.Key.IsHead());
+        Y_ABORT_UNLESS(!p.Key.HasSuffix());
     }
 
     Y_ABORT_UNLESS(headKeys.empty() || head.Offset == headKeys.front().Key.GetOffset() && head.PartNo == headKeys.front().Key.GetPartNo());
@@ -583,8 +667,8 @@ TInitDataStep::TInitDataStep(TInitializer* initializer)
 void TInitDataStep::Execute(const TActorContext &ctx) {
     TVector<TString> keys;
     //form head request
-    for (auto& p : Partition()->HeadKeys) {
-        keys.push_back({p.Key.Data(), p.Key.Size()});
+    for (const auto& p : Partition()->BlobEncoder.HeadKeys) {
+        keys.emplace_back(p.Key.Data(), p.Key.Size());
     }
     Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount);
     if (keys.empty()) {
@@ -609,9 +693,9 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     auto& response = ev->Get()->Record;
     Y_ABORT_UNLESS(response.ReadResultSize());
 
-    auto& head = Partition()->Head;
-    auto& headKeys = Partition()->HeadKeys;
-    auto& dataKeysHead = Partition()->DataKeysHead;
+    auto& head = Partition()->BlobEncoder.Head;
+    auto& headKeys = Partition()->BlobEncoder.HeadKeys;
+    auto& dataKeysHead = Partition()->BlobEncoder.DataKeysHead;
     auto& compactLevelBorder = Partition()->CompactLevelBorder;
     auto totalLevels = Partition()->TotalLevels;
 
@@ -623,7 +707,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
         switch(read.GetStatus()) {
             case NKikimrProto::OK: {
                 const TKey& key = headKeys[i].Key;
-                Y_ABORT_UNLESS(key.IsHead());
+                Y_ABORT_UNLESS(key.HasSuffix());
 
                 ui32 size = headKeys[i].Size;
                 ui64 offset = key.GetOffset();
@@ -635,13 +719,13 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 Y_ABORT_UNLESS(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
                 Y_ABORT_UNLESS(!dataKeysHead[currentLevel].NeedCompaction());
 
-                PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->EndOffset
+                PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->BlobEncoder.EndOffset
                         << " key " << key.GetOffset() << "," << key.GetCount() << " valuesize " << read.GetValue().size()
                         << " expected " << size
                 );
 
-                Y_ABORT_UNLESS(offset + 1 >= Partition()->StartOffset);
-                Y_ABORT_UNLESS(offset < Partition()->EndOffset);
+                Y_ABORT_UNLESS(offset + 1 >= Partition()->BlobEncoder.StartOffset);
+                Y_ABORT_UNLESS(offset < Partition()->BlobEncoder.EndOffset);
                 Y_ABORT_UNLESS(size == read.GetValue().size(), "size=%d == read.GetValue().size() = %d", size, read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
@@ -684,17 +768,13 @@ TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer
 }
 
 void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
-    if (Partition()->EndWriteTimestamp != TInstant::Zero() || (Partition()->HeadKeys.empty() && Partition()->DataKeysBody.empty())) {
+    if (Partition()->EndWriteTimestamp != TInstant::Zero() ||
+        Partition()->BlobEncoder.IsEmpty()) {
         PQ_LOG_I("Initializing EndWriteTimestamp skipped because already initialized.");
         return Done(ctx);
     }
 
-    TDataKey* lastKey = nullptr;
-    if (!Partition()->HeadKeys.empty()) {
-        lastKey = &Partition()->HeadKeys.back();
-    } else if (!Partition()->DataKeysBody.empty()) {
-        lastKey = &Partition()->DataKeysBody.back();
-    }
+    const TDataKey* lastKey = Partition()->BlobEncoder.GetLastKey();
 
     if (lastKey) {
         Partition()->EndWriteTimestamp = lastKey->Timestamp;
@@ -776,7 +856,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     ui32 border = LEVEL0;
     MaxSizeCheck = 0;
     MaxBlobSize = AppData(ctx)->PQConfig.GetMaxBlobSize();
-    PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
+    BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     for (ui32 i = 0; i < TotalLevels; ++i) {
         CompactLevelBorder.push_back(border);
         MaxSizeCheck += border;
@@ -789,7 +869,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     std::reverse(CompactLevelBorder.begin(), CompactLevelBorder.end());
 
     for (ui32 i = 0; i < TotalLevels; ++i) {
-        DataKeysHead.push_back(TKeyLevel(CompactLevelBorder[i]));
+        BlobEncoder.DataKeysHead.emplace_back(CompactLevelBorder[i]);
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {

@@ -156,12 +156,21 @@ public:
                 TDqPqTopicSource topicSource = maybeTopicSource.Cast();
 
                 TPqTopic topic = topicSource.Topic();
-                srcDesc.SetTopicPath(TString(topic.Path().Value()));
-                srcDesc.SetDatabase(TString(topic.Database().Value()));
                 const TStringBuf cluster = topic.Cluster().Value();
                 const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
                 YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
+                auto topicPath = topic.Path().Value();
+                auto topicDatabase = topic.Database().Value();
+                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
+                    auto pos = topicPath.find('/');
+                    Y_ENSURE(pos != TStringBuf::npos);
+                    srcDesc.SetTopicPath(TString(topicPath.substr(pos + 1)));
+                    srcDesc.SetDatabase("/logbroker-federation/" + TString(topicPath.substr(0, pos)));
+                } else {
+                    srcDesc.SetTopicPath(TString(topicPath));
+                    srcDesc.SetDatabase(TString(topicDatabase));
+                }
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
                 const TStructExprType* fullRowType = topicSource.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -205,6 +214,23 @@ public:
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     }
                 }
+
+                for (auto prop : topic.Props()) {
+                    const TStringBuf name = Name(prop);
+                    if (name == FederatedClustersProp) {
+                        auto clusterList = prop.Value().Cast<TDqPqFederatedClusterList>();
+                        for (auto cluster : clusterList) {
+                            auto federatedCluster = srcDesc.AddFederatedClusters();
+                            federatedCluster->SetName(cluster.Name().StringValue());
+                            federatedCluster->SetEndpoint(cluster.Endpoint().StringValue());
+                            federatedCluster->SetDatabase(cluster.Database().StringValue());
+                            if (cluster.PartitionsCount()) {
+                                federatedCluster->SetPartitionsCount(FromString<ui32>(cluster.PartitionsCount().Cast().StringValue()));
+                            }
+                        }
+                    }
+                }
+
                 srcDesc.SetFormat(format);
 
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSource.Token().Raw())) {
@@ -234,6 +260,7 @@ public:
                     srcDesc.SetPredicate(predicateSql);
                     srcDesc.SetSharedReading(true);
                 }
+                *srcDesc.MutableDisposition() = State_->Disposition;
                 protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
@@ -255,8 +282,17 @@ public:
                 const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
                 YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
                 sinkDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
-                sinkDesc.SetTopicPath(TString(topic.Path().Value()));
-                sinkDesc.SetDatabase(TString(topic.Database().Value()));
+                auto topicPath = topic.Path().Value();
+                auto topicDatabase = topic.Database().Value();
+                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
+                    auto pos = topicPath.find('/');
+                    Y_ENSURE(pos != TStringBuf::npos);
+                    sinkDesc.SetTopicPath(TString(topicPath.substr(pos + 1)));
+                    sinkDesc.SetDatabase("/logbroker-federation/" + TString(topicPath.substr(0, pos)));
+                } else {
+                    sinkDesc.SetTopicPath(TString(topicPath));
+                    sinkDesc.SetDatabase(TString(topicDatabase));
+                }
 
                 size_t const settingsCount = topicSink.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {

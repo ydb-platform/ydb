@@ -120,6 +120,40 @@ TEST(TypeDeserialize, Decimal) {
     ASSERT_DESERIALIZED_EQ(NTi::Decimal(20, 10), R"({type_name=decimal; precision=20; scale=10})");
     ASSERT_DESERIALIZED_EQ(NTi::Decimal(20, 10), R"({scale=10; type_name=decimal; precision=20})");
     ASSERT_DESERIALIZED_EQ(NTi::Decimal(10, 10), R"({type_name=decimal; precision=10; scale=10})");
+    ASSERT_DESERIALIZED_EQ(NTi::Decimal(10, 0), R"({type_name=decimal; precision=10; scale=0})");
+}
+
+TEST(TypeDeserialize, DecimalBadTypeParameters) {
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        []() {
+            NTi::NIo::DeserializeYson(*NTi::HeapFactory(), R"({type_name=decimal; precision=0; scale=10})");
+        }(),
+        NTi::TDeserializationException, R"(invalid zero "precision")");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        []() {
+            NTi::NIo::DeserializeYson(*NTi::HeapFactory(), R"({type_name=decimal; precision=-2; scale=10})");
+        }(),
+        NTi::TDeserializationException, R"("precision" must be greater or equal to zero)");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        []() {
+            NTi::NIo::DeserializeYson(*NTi::HeapFactory(), R"({type_name=decimal; precision=2; scale=-2})");
+        }(),
+        NTi::TDeserializationException, R"("scale" must be greater or equal to zero)");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        []() {
+            NTi::NIo::DeserializeYson(*NTi::HeapFactory(), R"({type_name=decimal; precision=2; scale=-2})");
+        }(),
+        NTi::TDeserializationException, R"("scale" must be greater or equal to zero)");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        []() {
+            NTi::NIo::DeserializeYson(*NTi::HeapFactory(), R"({type_name=decimal; precision=1000; scale=2})");
+        }(),
+        NTi::TDeserializationException, R"("precision" is too big)");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        []() {
+            NTi::NIo::DeserializeYson(*NTi::HeapFactory(), R"({type_name=decimal; precision=2; scale=1000})");
+        }(),
+        NTi::TDeserializationException, R"("scale" is too big)");
 }
 
 TEST(TypeDeserialize, DecimalMissingTypeParameters) {

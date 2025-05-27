@@ -55,11 +55,12 @@ TSamplingThrottlingControl* GetTracingControlTls() {
 
 } // namespace
 
-void HandleTracing(NWilson::TTraceId& traceId, const TRequestDiscriminator& discriminator) {
+NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent) {
     TSamplingThrottlingControl* control = GetTracingControlTls();
     if (Y_LIKELY(control)) {
-        control->HandleTracing(traceId, discriminator);
+        return control->HandleTracing(discriminator, traceparent);
     }
+    return NWilson::TTraceId{};
 }
 
 void ClearTracingControl() {

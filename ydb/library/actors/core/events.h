@@ -75,7 +75,7 @@ namespace NActors {
                 return Blob.size();
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs) noexcept {
+            static TEvBlob* Load(const TEventSerializedData* bufs) noexcept {
                 return new TEvBlob(bufs->GetString());
             }
 
@@ -106,6 +106,7 @@ namespace NActors {
                 CoroTimeout,
                 InvokeQuery,
                 Wilson,
+                Preemption,
                 End,
 
                 // Compatibility section
@@ -126,6 +127,14 @@ namespace NActors {
             TEvWakeup(ui64 tag = 0) : Tag(tag) { }
 
             const ui64 Tag = 0;
+        };
+
+        struct TEvPreemption: public TEventLocal<TEvPreemption, TSystem::Preemption> {
+            bool ByEventCount = false;
+            bool ByCycles = false;
+            bool ByTailSend = false;
+            ui32 EventCount = 0;
+            ui64 Cycles = 0;
         };
 
         struct TEvSubscribe: public TEventLocal<TEvSubscribe, TSystem::Subscribe> {
@@ -154,7 +163,7 @@ namespace NActors {
 
             TString ToStringHeader() const override;
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override;
-            static IEventBase* Load(TEventSerializedData* bufs);
+            static TEvUndelivered* Load(const TEventSerializedData* bufs);
             bool IsSerializable() const override;
 
             ui32 CalculateSerializedSize() const override { return 2 * sizeof(ui32); }

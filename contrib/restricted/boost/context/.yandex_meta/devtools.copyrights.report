@@ -54,21 +54,6 @@ BELONGS ya.make
         src/asm/ontop_arm64_aapcs_macho_gas.S [2:4]
         src/asm/ontop_arm64_aapcs_pe_armasm.masm [1:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 48ce97ba62fc10cee11a213ab0560d6d
-BELONGS ya.make
-    License text:
-               Copyright Claudio Jeker 2024
-           Distributed under the Boost Software License, Version 1.0.
-              (See accompanying file LICENSE_1_0.txt or copy at
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/asm/jump_sparc64_sysv_elf_gas.S [2:4]
-        src/asm/make_sparc64_sysv_elf_gas.S [2:4]
-        src/asm/ontop_sparc64_sysv_elf_gas.S [2:4]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 768f987faaed0adc6222ab24c7bd02e6
 BELONGS ya.make
     License text:
@@ -84,101 +69,41 @@ BELONGS ya.make
         src/asm/jump_arm_aapcs_elf_gas.S [2:4]
         src/asm/jump_arm_aapcs_macho_gas.S [2:4]
         src/asm/jump_arm_aapcs_pe_armasm.masm [2:4]
-        src/asm/jump_i386_ms_pe_clang_gas.S [2:5]
-        src/asm/jump_i386_ms_pe_gas.asm [2:5]
         src/asm/jump_i386_ms_pe_masm.masm [2:4]
         src/asm/jump_i386_sysv_elf_gas.S [2:4]
         src/asm/jump_i386_sysv_macho_gas.S [2:4]
-        src/asm/jump_mips32_o32_elf_gas.S [2:4]
-        src/asm/jump_ppc32_sysv_elf_gas.S [2:4]
-        src/asm/jump_ppc32_sysv_macho_gas.S [2:4]
-        src/asm/jump_ppc32_sysv_xcoff_gas.S [2:4]
-        src/asm/jump_ppc64_sysv_elf_gas.S [2:4]
-        src/asm/jump_ppc64_sysv_macho_gas.S [2:4]
-        src/asm/jump_ppc64_sysv_xcoff_gas.S [3:5]
-        src/asm/jump_x86_64_ms_pe_clang_gas.S [2:5]
-        src/asm/jump_x86_64_ms_pe_gas.asm [2:5]
         src/asm/jump_x86_64_ms_pe_masm.masm [2:4]
         src/asm/jump_x86_64_sysv_elf_gas.S [2:4]
         src/asm/jump_x86_64_sysv_macho_gas.S [2:4]
         src/asm/make_arm_aapcs_elf_gas.S [2:4]
         src/asm/make_arm_aapcs_macho_gas.S [2:4]
         src/asm/make_arm_aapcs_pe_armasm.masm [2:4]
-        src/asm/make_i386_ms_pe_clang_gas.S [2:5]
-        src/asm/make_i386_ms_pe_gas.asm [2:5]
         src/asm/make_i386_ms_pe_masm.masm [2:4]
         src/asm/make_i386_sysv_elf_gas.S [2:4]
         src/asm/make_i386_sysv_macho_gas.S [2:4]
-        src/asm/make_mips32_o32_elf_gas.S [2:4]
-        src/asm/make_ppc32_sysv_elf_gas.S [2:4]
-        src/asm/make_ppc32_sysv_macho_gas.S [2:4]
-        src/asm/make_ppc32_sysv_xcoff_gas.S [2:4]
-        src/asm/make_ppc64_sysv_elf_gas.S [2:4]
-        src/asm/make_ppc64_sysv_macho_gas.S [2:4]
-        src/asm/make_ppc64_sysv_xcoff_gas.S [2:4]
-        src/asm/make_x86_64_ms_pe_clang_gas.S [2:5]
-        src/asm/make_x86_64_ms_pe_gas.asm [2:5]
         src/asm/make_x86_64_ms_pe_masm.masm [2:4]
         src/asm/make_x86_64_sysv_elf_gas.S [2:4]
         src/asm/make_x86_64_sysv_macho_gas.S [2:4]
         src/asm/ontop_arm_aapcs_elf_gas.S [2:4]
         src/asm/ontop_arm_aapcs_macho_gas.S [2:4]
         src/asm/ontop_arm_aapcs_pe_armasm.masm [2:4]
-        src/asm/ontop_i386_ms_pe_clang_gas.S [2:5]
-        src/asm/ontop_i386_ms_pe_gas.asm [2:5]
         src/asm/ontop_i386_ms_pe_masm.masm [2:4]
         src/asm/ontop_i386_sysv_elf_gas.S [2:4]
         src/asm/ontop_i386_sysv_macho_gas.S [2:4]
-        src/asm/ontop_mips32_o32_elf_gas.S [2:4]
-        src/asm/ontop_ppc32_sysv_elf_gas.S [2:4]
-        src/asm/ontop_ppc32_sysv_macho_gas.S [2:4]
-        src/asm/ontop_ppc32_sysv_xcoff_gas.S [2:4]
-        src/asm/ontop_ppc64_sysv_elf_gas.S [2:4]
-        src/asm/ontop_ppc64_sysv_macho_gas.S [2:4]
-        src/asm/ontop_ppc64_sysv_xcoff_gas.S [2:4]
-        src/asm/ontop_x86_64_ms_pe_clang_gas.S [2:5]
-        src/asm/ontop_x86_64_ms_pe_gas.asm [2:5]
         src/asm/ontop_x86_64_ms_pe_masm.masm [2:4]
         src/asm/ontop_x86_64_sysv_elf_gas.S [2:4]
         src/asm/ontop_x86_64_sysv_macho_gas.S [2:4]
-        src/asm/tail_ontop_ppc32_sysv.cpp [2:4]
         src/untested.cpp [2:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL b56e68f168b25ead2610488b3af94842
+KEEP     COPYRIGHT_SERVICE_LABEL 9ed7b7468c684d33492a4176e9cf31b1
 BELONGS ya.make
-    License text:
-                    Copyright Jiaxun Yang 2018.
-           Distributed under the Boost Software License, Version 1.0.
-              (See accompanying file LICENSE_1_0.txt or copy at
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/asm/jump_mips64_n64_elf_gas.S [2:4]
-        src/asm/make_mips64_n64_elf_gas.S [2:4]
-        src/asm/ontop_mips64_n64_elf_gas.S [2:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL bdb654e3fbbec678064a117bc379b41b
-BELONGS ya.make
-    License text:
-                    Copyright Sergue E. Leontiev 2013.
-           Distributed under the Boost Software License, Version 1.0.
-              (See accompanying file LICENSE_1_0.txt or copy at
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/asm/jump_combined_sysv_macho_gas.S [2:4]
-        src/asm/jump_i386_x86_64_sysv_macho_gas.S [2:4]
-        src/asm/jump_ppc32_ppc64_sysv_macho_gas.S [2:4]
-        src/asm/make_combined_sysv_macho_gas.S [2:4]
-        src/asm/make_i386_x86_64_sysv_macho_gas.S [2:4]
-        src/asm/make_ppc32_ppc64_sysv_macho_gas.S [2:4]
-        src/asm/ontop_combined_sysv_macho_gas.S [2:4]
-        src/asm/ontop_i386_x86_64_sysv_macho_gas.S [2:4]
-        src/asm/ontop_ppc32_ppc64_sysv_macho_gas.S [2:4]
+        src/fcontext.cpp [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c3ce9643507aa0942a28211fe8f95eff
 BELONGS ya.make
@@ -236,24 +161,3 @@ BELONGS ya.make
         include/boost/context/windows/protected_fixedsize_stack.hpp [2:4]
         src/posix/stack_traits.cpp [2:4]
         src/windows/stack_traits.cpp [2:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL d1eeae51f362a32140f64b39499ca9bf
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/asm/jump_i386_ms_pe_clang_gas.S [2:5]
-        src/asm/jump_i386_ms_pe_gas.asm [2:5]
-        src/asm/jump_x86_64_ms_pe_clang_gas.S [2:5]
-        src/asm/jump_x86_64_ms_pe_gas.asm [2:5]
-        src/asm/make_i386_ms_pe_clang_gas.S [2:5]
-        src/asm/make_i386_ms_pe_gas.asm [2:5]
-        src/asm/make_x86_64_ms_pe_clang_gas.S [2:5]
-        src/asm/make_x86_64_ms_pe_gas.asm [2:5]
-        src/asm/ontop_i386_ms_pe_clang_gas.S [2:5]
-        src/asm/ontop_i386_ms_pe_gas.asm [2:5]
-        src/asm/ontop_x86_64_ms_pe_clang_gas.S [2:5]
-        src/asm/ontop_x86_64_ms_pe_gas.asm [2:5]

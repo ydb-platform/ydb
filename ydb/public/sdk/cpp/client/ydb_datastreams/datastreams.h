@@ -4,7 +4,7 @@
 
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
 
-namespace NYdb::NDataStreams::V1 {
+namespace NYdb::inline V2::NDataStreams::V1 {
 
     template<class TProtoResult>
     class TProtoResultWrapper : public NYdb::TStatus {
@@ -170,13 +170,13 @@ namespace NYdb::NDataStreams::V1 {
     };
 
     struct TCreateStreamSettings : public NYdb::TOperationRequestSettings<TCreateStreamSettings> {
-        FLUENT_SETTING(ui32, ShardCount);
-        FLUENT_SETTING_OPTIONAL(ui32, RetentionPeriodHours);
-        FLUENT_SETTING_OPTIONAL(ui32, RetentionStorageMegabytes);
-        FLUENT_SETTING(ui64, WriteQuotaKbPerSec);
-        FLUENT_SETTING_OPTIONAL(EStreamMode, StreamMode);
+        FLUENT_SETTING_DEPRECATED(ui32, ShardCount);
+        FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, RetentionPeriodHours);
+        FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, RetentionStorageMegabytes);
+        FLUENT_SETTING_DEPRECATED(ui64, WriteQuotaKbPerSec);
+        FLUENT_SETTING_OPTIONAL_DEPRECATED(EStreamMode, StreamMode);
 
-        FLUENT_SETTING_OPTIONAL(TPartitioningSettings, PartitioningSettings);
+        FLUENT_SETTING_OPTIONAL_DEPRECATED(TPartitioningSettings, PartitioningSettings);
         TPartitioningSettingsBuilder<TCreateStreamSettings> BeginConfigurePartitioningSettings();
     };
     template<typename TSettings>
@@ -252,53 +252,53 @@ namespace NYdb::NDataStreams::V1 {
     };
 
     struct TListStreamsSettings : public NYdb::TOperationRequestSettings<TListStreamsSettings> {
-        FLUENT_SETTING(ui32, Limit);
-        FLUENT_SETTING(TString, ExclusiveStartStreamName);
-        FLUENT_SETTING_DEFAULT(bool, Recurse, true);
+        FLUENT_SETTING_DEPRECATED(ui32, Limit);
+        FLUENT_SETTING_DEPRECATED(TString, ExclusiveStartStreamName);
+        FLUENT_SETTING_DEFAULT_DEPRECATED(bool, Recurse, true);
     };
     struct TDeleteStreamSettings : public NYdb::TOperationRequestSettings<TDeleteStreamSettings> {
-        FLUENT_SETTING_DEFAULT(bool, EnforceConsumerDeletion, false);
+        FLUENT_SETTING_DEFAULT_DEPRECATED(bool, EnforceConsumerDeletion, false);
     };
     struct TDescribeStreamSettings : public NYdb::TOperationRequestSettings<TDescribeStreamSettings> {
-        FLUENT_SETTING(ui32, Limit);
-        FLUENT_SETTING(TString, ExclusiveStartShardId);
+        FLUENT_SETTING_DEPRECATED(ui32, Limit);
+        FLUENT_SETTING_DEPRECATED(TString, ExclusiveStartShardId);
     };
     struct TListShardsSettings : public NYdb::TOperationRequestSettings<TListShardsSettings> {
-        FLUENT_SETTING(TString, ExclusiveStartShardId);
-        FLUENT_SETTING(ui32, MaxResults);
-        FLUENT_SETTING(TString, NextToken);
-        FLUENT_SETTING(ui64, StreamCreationTimestamp);
+        FLUENT_SETTING_DEPRECATED(TString, ExclusiveStartShardId);
+        FLUENT_SETTING_DEPRECATED(ui32, MaxResults);
+        FLUENT_SETTING_DEPRECATED(TString, NextToken);
+        FLUENT_SETTING_DEPRECATED(ui64, StreamCreationTimestamp);
     };
     struct TGetRecordsSettings : public NYdb::TOperationRequestSettings<TGetRecordsSettings> {
-        FLUENT_SETTING_DEFAULT(ui32, Limit, 10000);
+        FLUENT_SETTING_DEFAULT_DEPRECATED(ui32, Limit, 10000);
     };
     struct TGetShardIteratorSettings : public NYdb::TOperationRequestSettings<TGetShardIteratorSettings> {
-        FLUENT_SETTING(TString, StartingSequenceNumber);
-        FLUENT_SETTING(ui64, Timestamp);
+        FLUENT_SETTING_DEPRECATED(TString, StartingSequenceNumber);
+        FLUENT_SETTING_DEPRECATED(ui64, Timestamp);
     };
     struct TSubscribeToShardSettings : public NYdb::TOperationRequestSettings<TSubscribeToShardSettings> {};
     struct TDescribeLimitsSettings : public NYdb::TOperationRequestSettings<TDescribeLimitsSettings> {};
     struct TDescribeStreamSummarySettings : public NYdb::TOperationRequestSettings<TDescribeStreamSummarySettings> {};
     struct TDecreaseStreamRetentionPeriodSettings : public NYdb::TOperationRequestSettings<TDecreaseStreamRetentionPeriodSettings> {
-        FLUENT_SETTING(ui32, RetentionPeriodHours);
+        FLUENT_SETTING_DEPRECATED(ui32, RetentionPeriodHours);
     };
     struct TIncreaseStreamRetentionPeriodSettings : public NYdb::TOperationRequestSettings<TIncreaseStreamRetentionPeriodSettings> {
-        FLUENT_SETTING(ui32, RetentionPeriodHours);
+        FLUENT_SETTING_DEPRECATED(ui32, RetentionPeriodHours);
     };
     struct TUpdateShardCountSettings : public NYdb::TOperationRequestSettings<TUpdateShardCountSettings> {
-        FLUENT_SETTING(ui32, TargetShardCount);
+        FLUENT_SETTING_DEPRECATED(ui32, TargetShardCount);
     };
     struct TUpdateStreamModeSettings : public NYdb::TOperationRequestSettings<TUpdateStreamModeSettings> {
-        FLUENT_SETTING_DEFAULT(EStreamMode, StreamMode, ESM_PROVISIONED);
+        FLUENT_SETTING_DEFAULT_DEPRECATED(EStreamMode, StreamMode, ESM_PROVISIONED);
     };
     struct TUpdateStreamSettings : public NYdb::TOperationRequestSettings<TUpdateStreamSettings> {
-        FLUENT_SETTING(ui32, TargetShardCount);
-        FLUENT_SETTING_OPTIONAL(ui32, RetentionPeriodHours);
-        FLUENT_SETTING_OPTIONAL(ui32, RetentionStorageMegabytes);
-        FLUENT_SETTING(ui64, WriteQuotaKbPerSec);
-        FLUENT_SETTING_OPTIONAL(EStreamMode, StreamMode);
+        FLUENT_SETTING_DEPRECATED(ui32, TargetShardCount);
+        FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, RetentionPeriodHours);
+        FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, RetentionStorageMegabytes);
+        FLUENT_SETTING_DEPRECATED(ui64, WriteQuotaKbPerSec);
+        FLUENT_SETTING_OPTIONAL_DEPRECATED(EStreamMode, StreamMode);
 
-        FLUENT_SETTING_OPTIONAL(TPartitioningSettings, PartitioningSettings);
+        FLUENT_SETTING_OPTIONAL_DEPRECATED(TPartitioningSettings, PartitioningSettings);
         TPartitioningSettingsBuilder<TUpdateStreamSettings> BeginConfigurePartitioningSettings();
     };
     struct TPutRecordSettings : public NYdb::TOperationRequestSettings<TPutRecordSettings> {};
@@ -307,8 +307,8 @@ namespace NYdb::NDataStreams::V1 {
     struct TDeregisterStreamConsumerSettings : public NYdb::TOperationRequestSettings<TDeregisterStreamConsumerSettings> {};
     struct TDescribeStreamConsumerSettings : public NYdb::TOperationRequestSettings<TDescribeStreamConsumerSettings> {};
     struct TListStreamConsumersSettings : public NYdb::TOperationRequestSettings<TListStreamConsumersSettings> {
-        FLUENT_SETTING(ui32, MaxResults);
-        FLUENT_SETTING(TString, NextToken);
+        FLUENT_SETTING_DEPRECATED(ui32, MaxResults);
+        FLUENT_SETTING_DEPRECATED(TString, NextToken);
     };
     struct TAddTagsToStreamSettings : public NYdb::TOperationRequestSettings<TAddTagsToStreamSettings> {};
     struct TDisableEnhancedMonitoringSettings : public NYdb::TOperationRequestSettings<TDisableEnhancedMonitoringSettings> {};

@@ -54,7 +54,7 @@ public:
         block = slow;
 
         const auto value = GetNodeValue(Optional, ctx, block);
-        BranchInst::Create(pres, miss, IsExists(value, block), block);
+        BranchInst::Create(pres, miss, IsExists(value, block, context), block);
 
         block = pres;
         codegenItem->CreateSetValue(ctx, block, IsMultiOptional ? GetOptionalValue(context, value, block) : value);
@@ -136,7 +136,7 @@ public:
         block = slow;
 
         const auto value = GetNodeValue(Optional, ctx, block);
-        BranchInst::Create(pres, miss, IsExists(value, block), block);
+        BranchInst::Create(pres, miss, IsExists(value, block, context), block);
 
         block = pres;
         codegenItem->CreateSetValue(ctx, block, IsMultiOptional ? GetOptionalValue(context, value, block) : value);
@@ -218,7 +218,7 @@ public:
         block = init;
 
         const auto value = GetNodeValue(Optional, ctx, block);
-        BranchInst::Create(good, miss, IsExists(value, block), block);
+        BranchInst::Create(good, miss, IsExists(value, block, context), block);
 
         block = good;
 

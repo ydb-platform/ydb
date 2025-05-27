@@ -2,6 +2,7 @@
 
 #include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/ytree/helpers.h>
 
 #include <yt/yt/core/yson/string.h>
 

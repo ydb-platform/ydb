@@ -459,6 +459,94 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                               "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
     }
 
+    Y_UNIT_TEST(RequestReplaceDevicePDisk)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
+                                   MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/dev/bad/device/path"));
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, env.PDiskName(0, 1))
+                ),
+            TStatus::ALLOW
+        );
+    }
+
+    Y_UNIT_TEST(RequestReplaceDevicePDiskByPath)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto pdiskId = env.PDiskId(0, 0);
+
+        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                ),
+            TStatus::ALLOW
+        );
+    }
+
+    Y_UNIT_TEST(RequestReplacePDiskDoesntBreakGroup)
+    {
+        auto opts = TTestEnvOpts(8, 2).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        {
+            auto pdiskId = env.PDiskId(0, 0);
+    
+            TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+    
+            env.CheckPermissionRequest(
+                MakePermissionRequest(TRequestOptions("user", false, false, false),
+                        MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                    ),
+                TStatus::ALLOW
+            );
+        }
+
+        {
+            auto pdiskId = env.PDiskId(1, 0);
+    
+            TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+    
+            env.CheckPermissionRequest(
+                MakePermissionRequest(TRequestOptions("user", false, false, false),
+                        MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                    ),
+                TStatus::DISALLOW_TEMP
+            );
+        }
+    }
+
+    Y_UNIT_TEST(RequestReplacePDiskConsecutiveWithDone)
+    {
+        auto opts = TTestEnvOpts(8, 2).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        for (ui32 i = 0; i < 8; ++i) {
+            auto pdiskId = env.PDiskId(i, 0);
+    
+            TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+    
+            auto rec = env.CheckPermissionRequest(
+                MakePermissionRequest(TRequestOptions("user", false, false, false),
+                        MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                    ),
+                TStatus::ALLOW
+            );
+
+            auto pid = rec.GetPermissions(0).GetId();
+
+            env.CheckDonePermission("user", pid);
+        }
+    }
+
     Y_UNIT_TEST(RequestReplaceManyDevicesOnOneNode)
     {
         TCmsTestEnv env(16, 3);
@@ -1288,9 +1376,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         THashMap<ui32, ui32> NodeToRing;
         THashSet<ui32> StateStorageNodes;
-
-        for (ui32 ring = 0; ring < info->Rings.size(); ++ring) {
-            for (auto& replica : info->Rings[ring].Replicas) {
+        auto &group = info->RingGroups[0];
+        for (ui32 ring = 0; ring < group.Rings.size(); ++ring) {
+            for (auto& replica : group.Rings[ring].Replicas) {
                 ui32 nodeId = replica.NodeId();
 
                 NodeToRing[nodeId] = ring;

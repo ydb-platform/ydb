@@ -5,9 +5,9 @@
 #include <thread>
 
 template <>
-struct std::formatter<TString>: std::formatter<std::string_view> {
+struct std::formatter<std::string>: std::formatter<std::string_view> {
     template <typename FormatContext>
-    auto format(const TString& param, FormatContext& fc) const {
+    auto format(const std::string& param, FormatContext& fc) const {
         return std::formatter<std::string_view>::format(std::string_view{param}, fc);
     }
 };
@@ -16,7 +16,7 @@ using namespace NYdb;
 using namespace NTable;
 namespace {
 
-constexpr ui64 kBulkSize = 1000;
+constexpr uint64_t kBulkSize = 1000;
 constexpr std::string_view FlatIndex = "flat";
 
 namespace NQuantizer {
@@ -37,28 +37,28 @@ bool EqualsICase(std::string_view l, std::string_view r) {
 void PrintTop(TResultSetParser&& parser) {
     while (parser.TryNextRow()) {
         Y_ASSERT(parser.ColumnsCount() >= 1);
-        Cout << *parser.ColumnParser(0).GetOptionalFloat() << "\t";
+        std::cout << *parser.ColumnParser(0).GetOptionalFloat() << "\t";
         for (size_t i = 1; i < parser.ColumnsCount(); ++i) {
-            Cout << *parser.ColumnParser(1).GetOptionalUtf8() << "\t";
+            std::cout << *parser.ColumnParser(1).GetOptionalUtf8() << "\t";
         }
-        Cout << "\n";
+        std::cout << "\n";
     }
-    Cout << Endl;
+    std::cout << std::endl;
 }
 
-TString FullName(const TOptions& options, const TString& name) {
-    return TString::Join(options.Database, "/", name);
+std::string FullName(const TOptions& options, const std::string& name) {
+    return options.Database + std::string("/") + name;
 }
 
-TString IndexName(const TOptions& options) {
-    return TString::Join(options.Table, "_", options.IndexType, "_", options.IndexQuantizer);
+std::string IndexName(const TOptions& options) {
+    return options.Table + std::string("_") + options.IndexType + std::string("_") + options.IndexQuantizer;
 }
 
-TString FullIndexName(const TOptions& options) {
+std::string FullIndexName(const TOptions& options) {
     return FullName(options, IndexName(options));
 }
 
-void DropTable(TTableClient& client, const TString& table) {
+void DropTable(TTableClient& client, const std::string& table) {
     auto r = client.RetryOperationSync([&](TSession session) {
         TDropTableSettings settings;
         return session.DropTable(table).ExtractValueSync();
@@ -88,7 +88,7 @@ void CreateFlat(TTableClient& client, const TOptions& options) {
 }
 
 void UpdateFlat(TTableClient& client, const TOptions& options, std::string_view type) {
-    TString query = std::format(R"(
+    std::string query = std::format(R"(
         DECLARE $begin AS Uint64;
         DECLARE $rows AS Uint64;
 
@@ -103,13 +103,13 @@ void UpdateFlat(TTableClient& client, const TOptions& options, std::string_view 
                                 options.Embedding,
                                 type,
                                 type == NQuantizer::Bit ? "Float" : type);
-    Cout << query << Endl;
+    std::cout << query << std::endl;
 
     auto last = std::chrono::steady_clock::now();
-    ui64 current = 0;
-    ui64 overall = (options.Rows + kBulkSize - 1) / kBulkSize;
+    uint64_t current = 0;
+    uint64_t overall = (options.Rows + kBulkSize - 1) / kBulkSize;
     auto report = [&](auto curr) {
-        Cout << "Already done " << current << " / " << overall << " upserts, time spent: " << std::chrono::duration<double>{curr - last}.count() << Endl;
+        std::cout << "Already done " << current << " / " << overall << " upserts, time spent: " << std::chrono::duration<double>{curr - last}.count() << std::endl;
         last = curr;
     };
     auto waitRequest = [&](auto& request) {
@@ -135,11 +135,9 @@ void UpdateFlat(TTableClient& client, const TOptions& options, std::string_view 
     TParamsBuilder paramsBuilder;
     TRetryOperationSettings retrySettings;
     retrySettings
-        .MaxRetries(60)
-        .GetSessionClientTimeout(TDuration::Seconds(60))
-        .Idempotent(true)
-        .RetryUndefined(true);
-    for (ui64 i = 0; i < options.Rows; i += kBulkSize) {
+        .MaxRetries(10)
+        .GetSessionClientTimeout(TDuration::Seconds(1));
+    for (uint64_t i = 0; i < options.Rows; i += kBulkSize) {
         waitFirst();
         paramsBuilder.AddParam("$begin").Uint64(i).Build();
         paramsBuilder.AddParam("$rows").Uint64(kBulkSize).Build();
@@ -163,7 +161,7 @@ void UpdateFlat(TTableClient& client, const TOptions& options, std::string_view 
 }
 
 void TopKFlat(TTableClient& client, const TOptions& options, std::string_view type) {
-    TString query = std::format(R"(
+    std::string query = std::format(R"(
           $TargetBinary = Knn::ToBinaryStringFloat($Target);
           $TargetSQ = Knn::ToBinaryString{7}(CAST($Target AS List<{8}>));
         
@@ -187,7 +185,7 @@ void TopKFlat(TTableClient& client, const TOptions& options, std::string_view ty
                                 options.TopK,
                                 type,
                                 type == NQuantizer::Bit ? "Float" : type);
-    Cout << query << Endl;
+    std::cout << query << std::endl;
     std::ifstream targetFileStream(options.Target);
     std::stringstream targetStrStream;
     targetStrStream << targetFileStream.rdbuf();

@@ -159,10 +159,13 @@ void EnsureNotDistinct(const TCoAggregate& aggregate) {
 
 TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprContext& ctx, bool analyticsMode) {
     const auto pos = aggregate.Pos();
+    const auto addError = [&](TStringBuf message) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), message));
+    };
 
     const auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
     if (!hopSetting) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), "Aggregate over stream must have 'hopping' setting"));
+        addError("Aggregate over stream must have 'hopping' setting");
         return Nothing();
     }
 
@@ -176,47 +179,67 @@ TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprCont
 
     const auto maybeTraits = TMaybeNode<TCoHoppingTraits>(traitsNode);
     if (!maybeTraits) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), "Invalid 'hopping' setting in Aggregate"));
+        addError("Invalid 'hopping' setting in Aggregate");
         return Nothing();
     }
 
     const auto traits = maybeTraits.Cast();
 
-    const auto checkIntervalParam = [&] (TExprBase param) -> ui64 {
+    const auto checkIntervalParam = [&](TExprBase param) -> TMaybe<i64> {
         if (param.Maybe<TCoJust>()) {
             param = param.Cast<TCoJust>().Input();
         }
         if (!param.Maybe<TCoInterval>()) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), "Not an interval data ctor"));
-            return 0;
+            addError("Not an interval data ctor");
+            return Nothing();
         }
-        auto value = FromString<i64>(param.Cast<TCoInterval>().Literal().Value());
-        if (value <= 0) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos), "Interval value must be positive"));
-            return 0;
-        }
-        return (ui64)value;
+        return FromString<i64>(param.Cast<TCoInterval>().Literal().Value());
     };
 
     const auto hop = checkIntervalParam(traits.Hop());
     if (!hop) {
         return Nothing();
     }
+    const auto hopTime = *hop;
+
     const auto interval = checkIntervalParam(traits.Interval());
     if (!interval) {
         return Nothing();
     }
+    const auto intervalTime = *interval;
+
     const auto delay = checkIntervalParam(traits.Delay());
     if (!delay) {
         return Nothing();
     }
+    const auto delayTime = *delay;
 
-    if (interval < hop) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), "Interval must be greater or equal then hop"));
+    if (hopTime <= 0) {
+        addError("Hop time must be positive");
         return Nothing();
     }
-    if (delay < hop) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), "Delay must be greater or equal then hop"));
+    if (intervalTime <= 0) {
+        addError("Interval time must be positive");
+        return Nothing();
+    }
+    if (delayTime < 0) {
+        addError("Delay time must be non-negative");
+        return Nothing();
+    }
+    if (intervalTime % hopTime) {
+        addError("Interval time must be divisible by hop time");
+        return Nothing();
+    }
+    if (delayTime % hopTime) {
+        addError("Delay time must be divisible by hop time");
+        return Nothing();
+    }
+    if (intervalTime / hopTime > 100'000) {
+        addError("Too many hops in interval");
+        return Nothing();
+    }
+    if (delayTime / hopTime > 100'000) {
+        addError("Too many hops in delay");
         return Nothing();
     }
 
@@ -230,9 +253,9 @@ TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprCont
     return THoppingTraits {
         hoppingColumn,
         newTraits,
-        hop,
-        interval,
-        delay
+        static_cast<ui64>(hopTime),
+        static_cast<ui64>(intervalTime),
+        static_cast<ui64>(delayTime),
     };
 }
 

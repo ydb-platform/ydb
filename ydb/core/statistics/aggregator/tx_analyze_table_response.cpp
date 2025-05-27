@@ -21,7 +21,7 @@ struct TStatisticsAggregator::TTxAnalyzeTableResponse : public TTxBase {
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTableResponse::Execute");
 
         const TString operationId = Record.GetOperationId();
-        const TPathId pathId = PathIdFromPathId(Record.GetPathId());
+        const TPathId pathId = TPathId::FromProto(Record.GetPathId());
         auto operationTable = Self->ForceTraversalTable(operationId, pathId);
         if (!operationTable) {
             SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeTableResponse::Execute. Unknown OperationTable. Record: " << Record.ShortDebugString());

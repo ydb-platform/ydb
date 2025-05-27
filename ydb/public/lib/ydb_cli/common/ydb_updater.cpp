@@ -12,33 +12,49 @@
 #include <util/system/execpath.h>
 #include <util/system/shellcommand.h>
 
+#ifndef _win32_
+#include <sys/utsname.h>
+#endif
 namespace NYdb {
 namespace NConsoleClient {
 
-const char* VersionResourceName = "version.txt";
+TString GetOsArchitecture() {
+#if defined(_win32_)
+    return "amd64";
+#else
+    struct utsname uts;
+    uname(&uts);
+    TString machine = uts.machine;
+    if (machine == "arm64" || machine == "aarch64") {
+        return "arm64";
+    } else {
+        return "amd64";
+    }
+#endif
+}
 
 namespace {
 #if defined(_darwin_)
-    const TString OsVersion = "darwin";
-    const TString BinaryName = "ydb";
-    const TString HomeDir = GetHomeDir();
+    const TString osVersion = "darwin";
+    const TString binaryName = "ydb";
+    const TString homeDir = GetHomeDir();
 #elif defined(_win32_)
-    const TString OsVersion = "windows";
-    const TString BinaryName = "ydb.exe";
-    const TString HomeDir = GetEnv("USERPROFILE");
+    const TString osVersion = "windows";
+    const TString binaryName = "ydb.exe";
+    const TString homeDir = GetEnv("USERPROFILE");
 #else
-    const TString OsVersion = "linux";
-    const TString BinaryName = "ydb";
-    const TString HomeDir = GetHomeDir();
+    const TString osVersion = "linux";
+    const TString binaryName = "ydb";
+    const TString homeDir = GetHomeDir();
 #endif
-    const TString DefaultConfigFile = TStringBuilder() << HomeDir << "/ydb/bin/config.json";
-    const TString DefaultTempFile = TStringBuilder() << HomeDir << "/ydb/install/" << BinaryName;
-    const TString StorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release/";
-    const TString VersionUrl = TStringBuilder() << StorageUrl << "stable";
+    const TString osArch = GetOsArchitecture();
+    const TString defaultConfigFile = TStringBuilder() << homeDir << "/ydb/bin/config.json";
+    const TString defaultTempFile = TStringBuilder() << homeDir << "/ydb/install/" << binaryName;
 }
 
-TYdbUpdater::TYdbUpdater()
+TYdbUpdater::TYdbUpdater(std::string storageUrl)
     : MyVersion(StripString(NResource::Find(TStringBuf(VersionResourceName))))
+    , StorageUrl(storageUrl)
 {
     LoadConfig();
 }
@@ -80,19 +96,19 @@ int TYdbUpdater::Update(bool forceUpdate) {
         return EXIT_FAILURE;
     }
 
-    TFsPath tmpPathToBinary(DefaultTempFile);
+    TFsPath tmpPathToBinary(defaultTempFile);
     tmpPathToBinary.Fix();
     TString corrPath = tmpPathToBinary.GetPath();
     if (!tmpPathToBinary.Parent().Exists()) {
         tmpPathToBinary.Parent().MkDirs();
     }
-    const TString DownloadUrl = TStringBuilder() << StorageUrl << LatestVersion << "/" << OsVersion << "/amd64/"
-        << BinaryName;
-    Cout << "Downloading binary from url " << DownloadUrl << Endl;
-    TShellCommand curlCmd(TStringBuilder() << "curl --max-time 60 " << DownloadUrl << " -o " << tmpPathToBinary.GetPath());
+    const TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
+        << '/' << osArch << '/' << binaryName;
+    Cout << "Downloading binary from url " << downloadUrl << Endl;
+    TShellCommand curlCmd(TStringBuilder() << "curl --max-time 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
     curlCmd.Run().Wait();
     if (curlCmd.GetExitCode() != 0) {
-        Cerr << "Failed to download from url \"" << DownloadUrl << "\". " << curlCmd.GetError() << Endl;
+        Cerr << "Failed to download from url \"" << downloadUrl << "\". " << curlCmd.GetError() << Endl;
         return EXIT_FAILURE;
     }
     Cout << "Downloaded to " << tmpPathToBinary.GetPath() << Endl;
@@ -144,7 +160,7 @@ void TYdbUpdater::SetConfigValue(const TString& name, const T& value) {
 }
 
 void TYdbUpdater::LoadConfig() {
-    TFsPath configFilePath(DefaultConfigFile);
+    TFsPath configFilePath(defaultConfigFile);
     configFilePath.Fix();
     try {
         if (configFilePath.Exists()) {
@@ -164,7 +180,7 @@ void TYdbUpdater::LoadConfig() {
 
 void TYdbUpdater::SaveConfig() {
     try {
-        TFsPath configFilePath(DefaultConfigFile);
+        TFsPath configFilePath(defaultConfigFile);
         configFilePath.Fix();
         if (!configFilePath.Parent().Exists()) {
             configFilePath.Parent().MkDirs();
@@ -201,15 +217,15 @@ bool TYdbUpdater::GetLatestVersion() {
     if (LatestVersion) {
         return true;
     }
-
-    TShellCommand curlCmd(TStringBuilder() << "curl --silent --max-time 10 " << VersionUrl);
+    std::string versionUrl = StorageUrl + "/stable";
+    TShellCommand curlCmd(TStringBuilder() << "curl --silent --max-time 10 " << versionUrl);
     curlCmd.Run().Wait();
 
     if (curlCmd.GetExitCode() == 0) {
         LatestVersion = StripString(curlCmd.GetOutput());
         return true;
     }
-    Cerr << "(!) Couldn't get latest version from url \"" << VersionUrl << "\". " << curlCmd.GetError() << Endl;
+    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl;
     return false;
 }
 

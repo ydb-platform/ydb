@@ -13,7 +13,11 @@ static constexpr ui64 RWFAppendCheck = (ui64)RWF_APPEND;
 #undef RWF_APPEND
 #endif
 
+#if !defined(_musl_)
 #include <linux/fs.h>
+#else
+#include <sys/mount.h>
+#endif
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>

@@ -13,6 +13,8 @@
 
 #include <yt/yt/core/logging/log.h>
 
+#include <yt/yt/core/misc/backoff_strategy.h>
+
 #include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NApi::NRpcProxy {
@@ -33,8 +35,8 @@ public:
 
     // IConnection implementation.
     TClusterTag GetClusterTag() const override;
-    const TString& GetLoggingTag() const override;
-    const TString& GetClusterId() const override;
+    const std::string& GetLoggingTag() const override;
+    const std::string& GetClusterId() const override;
     const std::optional<std::string>& GetClusterName() const override;
 
     bool IsSameCluster(const IConnectionPtr& other) const override;
@@ -61,28 +63,30 @@ private:
     const TConnectionConfigPtr Config_;
 
     std::atomic<bool> Terminated_ = false;
+    std::atomic<bool> ProxyListUpdateStarted_ = false;
 
     const TGuid ConnectionId_;
-    const TString LoggingTag_;
-    const TString ClusterId_;
+    const std::string LoggingTag_;
+    const std::string ClusterId_;
     const NLogging::TLogger Logger;
     const NRpc::IChannelFactoryPtr ChannelFactory_;
     const NRpc::IChannelFactoryPtr CachingChannelFactory_;
     const NRpc::TDynamicChannelPoolPtr ChannelPool_;
 
-    NConcurrency::TActionQueuePtr ActionQueue_;
-    IInvokerPtr ConnectionInvoker_;
+    const NConcurrency::TActionQueuePtr ActionQueue_;
+    const IInvokerPtr ConnectionInvoker_;
 
-    NConcurrency::TPeriodicExecutorPtr UpdateProxyListExecutor_;
+    TBackoffStrategy UpdateProxyListBackoffStrategy_;
+
+    const NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 
     // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-    NThreading::TAtomicObject<TString> DiscoveryToken_;
-
-    NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
+    NThreading::TAtomicObject<std::string> DiscoveryToken_;
 
     std::vector<std::string> DiscoverProxiesViaHttp();
     std::vector<std::string> DiscoverProxiesViaServiceDiscovery();
 
+    void ScheduleProxyListUpdate(TDuration delay);
     void OnProxyListUpdate();
 };
 

@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
         THashMap<ui64, ui64> Data;
     };
 
-    void DoBasics(bool deliverDropLease, bool enableInitialLease) {
+    void DoBasics(bool deliverDropLease, bool enableInitialLease, bool sleepAfterInitialWrite = false) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
         runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, NActors::NLog::PRI_DEBUG);
@@ -246,6 +246,11 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvLeasesTablet::TEvWriteAck>(sender);
         }
+
+        if (sleepAfterInitialWrite) {
+            runtime.SimulateSleep(TDuration::Seconds(5));
+        }
+
         runtime.SendToPipe(pipe1, sender, new TEvLeasesTablet::TEvRead(1));
         {
             auto ev = runtime.GrabEdgeEventRethrow<TEvLeasesTablet::TEvReadResult>(sender);
@@ -352,6 +357,14 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
 
     Y_UNIT_TEST(BasicsInitialLeaseTimeout) {
         DoBasics(false, true);
+    }
+
+    Y_UNIT_TEST(BasicsInitialLeaseSleep) {
+        DoBasics(true, true, true);
+    }
+
+    Y_UNIT_TEST(BasicsInitialLeaseSleepTimeout) {
+        DoBasics(false, true, true);
     }
 }
 

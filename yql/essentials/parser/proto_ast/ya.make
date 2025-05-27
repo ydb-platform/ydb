@@ -2,10 +2,7 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/protobuf
-)
-
-SRCS(
-    common.cpp
+    yql/essentials/parser/common
 )
 
 END()

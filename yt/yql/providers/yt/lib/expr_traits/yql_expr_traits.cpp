@@ -49,8 +49,11 @@ namespace NYql {
                         (*memoryUsage)["CommonJoinCore"] += FromString<ui64>(memLimitSetting->Child(1)->Content());
                     }
                 } else if (node.IsCallable("WideCombiner")) {
-                    (*memoryUsage)["WideCombiner"] += FromString<ui64>(node.Child(1U)->Content());
-                } else if (NNodes::TCoCombineCore::Match(&node)) {
+                    i64 memLimit = 0LL;
+                    if (TryFromString<i64>(node.Child(1U)->Content(), memLimit)) {
+                        (*memoryUsage)["WideCombiner"] += memLimit;
+                    }
+                } else if (NNodes::TCoCombineCore::Match(&node) && NNodes::TCoCombineCore::idx_MemLimit < node.ChildrenSize()) {
                     (*memoryUsage)["CombineCore"] += FromString<ui64>(node.Child(NNodes::TCoCombineCore::idx_MemLimit)->Content());
                 }
             }
@@ -70,11 +73,26 @@ namespace NYql {
                 if (memoryUsage && node.Child(0)->Content().StartsWith("UserSessions.")) {
                     (*memoryUsage)["UserSessions module"] = 512_MB; // Take into account only once
                 }
+
+                if (cpuUsage) {
+                    if (auto cpuSetting = GetSetting(*node.Child(7), "cpu")) {
+                        double usage = FromString<double>(cpuSetting->Child(1)->Content());
+                        if (auto prev = cpuUsage->FindPtr("Udf from settings arg")) {
+                            usage *= *prev;
+                        }
+                        (*cpuUsage)["Udf from settings arg"] = usage;
+                    }
+                }
+                if (memoryUsage) {
+                    if (auto extraMemSetting = GetSetting(*node.Child(7), "extraMem")) {
+                        (*memoryUsage)["Udf from settings arg"] += FromString<ui64>(extraMemSetting->Child(1)->Content());
+                    }
+                }
             }
 
-            if (NNodes::TYtTableContent::Match(&node)) {
+            if (auto maybeContent = NNodes::TMaybeNode<NNodes::TYtTableContentBase>(&node)) {
+                auto content = maybeContent.Cast();
                 if (files) {
-                    auto content = NNodes::TYtTableContent(&node);
                     if (auto read = content.Input().Maybe<NNodes::TYtReadTable>()) {
                         for (auto section: read.Cast().Input()) {
                             *files += section.Paths().Size();
@@ -85,14 +103,14 @@ namespace NYql {
                     }
                 }
                 if (memoryUsage) {
-                    if (auto setting = NYql::GetSetting(*node.Child(NNodes::TYtTableContent::idx_Settings), "memUsage")) {
-                        (*memoryUsage)["YtTableContent"] += FromString<ui64>(setting->Child(1)->Content());
+                    if (auto setting = NYql::GetSetting(content.Settings().Ref(), "memUsage")) {
+                        (*memoryUsage)[node.Content()] += FromString<ui64>(setting->Child(1)->Content());
                     }
                 }
                 // Increase CPU only for CROSS JOIN. Check "rowFactor" as CROSS JOIN flag
-                if (cpuUsage && HasSetting(*node.Child(NNodes::TYtTableContent::idx_Settings), "rowFactor")) {
-                    if (auto setting = NYql::GetSetting(*node.Child(NNodes::TYtTableContent::idx_Settings), "itemsCount")) {
-                        (*cpuUsage)["YtTableContent"] = double(FromString<ui64>(setting->Child(1)->Content()));
+                if (cpuUsage && HasSetting(content.Settings().Ref(), "rowFactor")) {
+                    if (auto setting = NYql::GetSetting(content.Settings().Ref(), "itemsCount")) {
+                        (*cpuUsage)[node.Content()] = double(FromString<ui64>(setting->Child(1)->Content()));
                     }
                 }
             }
@@ -357,6 +375,8 @@ namespace NYql {
             TStringBuf("Last"),
             TStringBuf("ToDict"),
             TStringBuf("SqueezeToDict"),
+            TStringBuf("BlockStorage"),
+            TStringBuf("BlockMapJoinIndex"),
             TStringBuf("Iterator"), //  Why?
             TStringBuf("Collect"),
             TStringBuf("Length"),
@@ -412,28 +432,30 @@ namespace NYql {
         for (const auto& parent : parents->second) {
             if (parent == &rootNode) {
                 continue;
-            }
-            else if (parent->Type() == TExprNode::Arguments) {
+            } else if (parent->Type() == TExprNode::Arguments) {
                 continue;
-            }
-            else if (parent->IsCallable("DependsOn")) {
+            } else if (parent->IsCallable("DependsOn")) {
                 continue;
-            }
-            else if (parent->IsCallable(TABLE_CONTENT_CONSUMER)) {
+            } else if (parent->IsCallable(TABLE_CONTENT_CONSUMER)) {
                 if (HasExternalArgs(*parent)) {
                     return false;
                 }
                 consumers.insert(parent);
-            }
-            else if (const auto kind = parent->GetTypeAnn()->GetKind(); ETypeAnnotationKind::Flow == kind || ETypeAnnotationKind::List == kind || ETypeAnnotationKind::Stream == kind) {
+                if (parent->IsCallable("BlockStorage") && !GetTableContentConsumerNodes(*parent, rootNode, parentsMap, consumers)) {
+                    return false;
+                }
+            } else if (parent->IsCallable("BlockMapJoinCore")) {
+                if (HasExternalArgs(*parent)) {
+                    return false;
+                }
+            } else if (const auto kind = parent->GetTypeAnn()->GetKind(); ETypeAnnotationKind::Flow == kind || ETypeAnnotationKind::List == kind || ETypeAnnotationKind::Stream == kind) {
                 if (HasExternalArgs(*parent)) {
                     return false;
                 }
                 if (!GetTableContentConsumerNodes(*parent, rootNode, parentsMap, consumers)) {
                     return false;
                 }
-            }
-            else {
+            } else {
                 return false;
             }
         }

@@ -23,11 +23,6 @@ namespace NKikimr {
         using THandoffMap = NKikimr::THandoffMap<TKey, TMemRec>;
         using THandoffMapPtr = TIntrusivePtr<THandoffMap>;
 
-        // garbage collector map
-        using TGcMap = NKikimr::TGcMap<TKey, TMemRec>;
-        using TGcMapPtr = TIntrusivePtr<TGcMap>;
-        using TGcMapIterator = typename TGcMap::TIterator;
-
         // compaction record merger
         using TCompactRecordMerger = NKikimr::TCompactRecordMerger<TKey, TMemRec>;
 
@@ -37,6 +32,7 @@ namespace NKikimr {
 
         // level index
         using TLevelIndex = NKikimr::TLevelIndex<TKey, TMemRec>;
+        using TLevelIndexSnapshot = NKikimr::TLevelIndexSnapshot<TKey, TMemRec>;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // DEFERRED ITEM QUEUE PROCESSOR
@@ -48,10 +44,10 @@ namespace NKikimr {
             friend class TDeferredItemQueueBase<TDeferredItemQueue>;
 
             void StartImpl(THullCompactionWorker *worker) {
-                Y_ABORT_UNLESS(!Worker);
+                Y_VERIFY_S(!Worker, this->VDiskLogPrefix);
                 Worker = worker;
-                Y_ABORT_UNLESS(Worker);
-                Y_ABORT_UNLESS(Worker->WriterPtr);
+                Y_VERIFY_S(Worker, this->VDiskLogPrefix);
+                Y_VERIFY_S(Worker->WriterPtr, this->VDiskLogPrefix);
             }
 
             void ProcessItemImpl(const TDiskPart& preallocatedLocation, TRope&& buffer, bool isInline) {
@@ -59,9 +55,9 @@ namespace NKikimr {
 
                 if (isInline) {
                     const TDiskPart writtenLocation = Worker->WriterPtr->PushDataOnly(std::move(buffer));
-                    Y_ABORT_UNLESS(writtenLocation == preallocatedLocation);
+                    Y_VERIFY_S(writtenLocation == preallocatedLocation, this->VDiskLogPrefix);
                 } else {
-                    Y_ABORT_UNLESS(preallocatedLocation.Size == buffer.GetSize());
+                    Y_VERIFY_S(preallocatedLocation.Size == buffer.GetSize(), this->VDiskLogPrefix);
                     size_t fullSize = buffer.GetSize();
                     if (const size_t misalign = fullSize % Worker->PDiskCtx->Dsk->AppendBlockSize) {
                         fullSize += Worker->PDiskCtx->Dsk->AppendBlockSize - misalign;
@@ -76,13 +72,13 @@ namespace NKikimr {
             }
 
             void FinishImpl() {
-                Y_ABORT_UNLESS(Worker);
+                Y_VERIFY_S(Worker, this->VDiskLogPrefix);
                 Worker = nullptr;
             }
 
         public:
-            TDeferredItemQueue(TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
-                : TDeferredItemQueueBase<TDeferredItemQueue>(arena, gtype, addHeader)
+            TDeferredItemQueue(const TString& prefix, TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
+                : TDeferredItemQueueBase<TDeferredItemQueue>(prefix, arena, gtype, addHeader)
             {}
         };
 
@@ -128,7 +124,7 @@ namespace NKikimr {
         THandoffMapPtr Hmp;
 
         // garbage collector iterator
-        TGcMapIterator GcmpIt;
+        TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> Barriers;
 
         // LSN range
         const ui64 FirstLsn = 0;
@@ -218,6 +214,9 @@ namespace NKikimr {
         TKey Key; // current key
         std::optional<TKey> PreviousKey; // previous key (nullopt for the first iteration)
 
+        TLevelIndexSnapshot *LevelSnap = nullptr;
+        std::optional<typename TLevelIndexSnapshot::TForwardIterator> LevelSnapIt;
+
     public:
         struct TStatistics {
             THullCtxPtr HullCtx;
@@ -284,6 +283,8 @@ namespace NKikimr {
         // is used for compaction policy implementation to limit number of intermediate chunks durint compaction.
         std::optional<TKey> PartitionKey;
 
+        const bool AllowGarbageCollection;
+
         std::deque<std::unique_ptr<NPDisk::TEvChunkWrite>> PendingWrites;
 
     public:
@@ -297,7 +298,8 @@ namespace NKikimr {
                               ui64 firstLsn,
                               ui64 lastLsn,
                               TDuration restoreDeadline,
-                              std::optional<TKey> partitionKey)
+                              std::optional<TKey> partitionKey,
+                              bool allowGarbageCollection)
             : HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , HugeBlobCtx(std::move(hugeBlobCtx))
@@ -309,14 +311,16 @@ namespace NKikimr {
             , It(it)
             , IsFresh(isFresh)
             , IndexMerger(GType, HullCtx->AddHeader)
-            , ReadBatcher(PDiskCtx->Dsk->ReadBlockSize,
+            , ReadBatcher(HullCtx->VCtx->VDiskLogPrefix,
+                    PDiskCtx->Dsk->ReadBlockSize,
                     PDiskCtx->Dsk->SeekTimeUs * PDiskCtx->Dsk->ReadSpeedBps / 1000000,
                     HullCtx->HullCompReadBatchEfficiencyThreshold)
             , Arena(&TRopeArenaBackend::Allocate)
-            , DeferredItems(Arena, HullCtx->VCtx->Top->GType, HullCtx->AddHeader)
+            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->AddHeader)
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
+            , AllowGarbageCollection(allowGarbageCollection)
         {
             if (IsFresh) {
                 ChunksToUse = HullCtx->HullSstSizeInChunksFresh;
@@ -333,9 +337,11 @@ namespace NKikimr {
             }
         }
 
-        void Prepare(THandoffMapPtr hmp, TGcMapIterator gcmpIt) {
+        void Prepare(THandoffMapPtr hmp, TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriers,
+                TLevelIndexSnapshot *levelSnap) {
             Hmp = std::move(hmp);
-            GcmpIt = gcmpIt;
+            Barriers = std::move(barriers);
+            LevelSnap = levelSnap;
             State = EState::GetNextItem;
         }
 
@@ -350,12 +356,11 @@ namespace NKikimr {
                     case EState::GetNextItem:
                         if (It.Valid()) {
                             Key = It.GetCurKey();
-                            Y_ABORT_UNLESS(!PreviousKey || *PreviousKey < Key, "duplicate keys: %s -> %s",
-                                PreviousKey->ToString().data(), Key.ToString().data());
+                            Y_VERIFY_S(!PreviousKey || *PreviousKey < Key, HullCtx->VCtx->VDiskLogPrefix
+                                << "duplicate keys: " << PreviousKey->ToString() << " -> " << Key.ToString());
 
                             // iterator is valid and we have one more item to process; instruct merger whether we want
                             // data or not and proceed to TryProcessItem state
-                            Y_ABORT_UNLESS(GcmpIt.Valid());
                             It.PutToMerger(&IndexMerger);
 
                             const bool haveToProcessItem = PreprocessItem();
@@ -383,7 +388,7 @@ namespace NKikimr {
 
                     case EState::TryProcessItem:
                         // ensure we have transformed item
-                        Y_ABORT_UNLESS(MemRec);
+                        Y_VERIFY_S(MemRec, HullCtx->VCtx->VDiskLogPrefix);
                         // try to process it
                         switch (TryProcessItem()) {
                             case ETryProcessItemStatus::Success:
@@ -400,7 +405,7 @@ namespace NKikimr {
                                 if (auto msg = CheckForReservation()) {
                                     msgsForYard.push_back(std::move(msg));
                                 } else {
-                                    Y_ABORT_UNLESS(ChunkReservePending);
+                                    Y_VERIFY_S(ChunkReservePending, HullCtx->VCtx->VDiskLogPrefix);
                                 }
                                 return false;
 
@@ -427,10 +432,10 @@ namespace NKikimr {
                         State = !finished ? State : MemRec ? EState::TryProcessItem : EState::GetNextItem;
                         ProcessPendingMessages(msgsForYard); // issue any generated messages
                         if (finished) {
-                            Y_ABORT_UNLESS(!WriterPtr->GetPendingMessage());
+                            Y_VERIFY_S(!WriterPtr->GetPendingMessage(), HullCtx->VCtx->VDiskLogPrefix);
                             WriterPtr.reset();
                         } else {
-                            Y_ABORT_UNLESS(InFlightWrites == MaxInFlightWrites);
+                            Y_VERIFY_S(InFlightWrites == MaxInFlightWrites, HullCtx->VCtx->VDiskLogPrefix);
                             return false;
                         }
                         break;
@@ -464,7 +469,7 @@ namespace NKikimr {
 
         TEvRestoreCorruptedBlob *Apply(NPDisk::TEvChunkReadResult *msg, TInstant now) {
             AtomicDecrement(*ReadsInFlight);
-            Y_ABORT_UNLESS(InFlightReads > 0);
+            Y_VERIFY_S(InFlightReads > 0, HullCtx->VCtx->VDiskLogPrefix);
             --InFlightReads;
 
             // apply read result to batcher
@@ -475,8 +480,8 @@ namespace NKikimr {
         bool ExpectingBlobRestoration = false;
 
         TEvRestoreCorruptedBlob *Apply(TEvRestoreCorruptedBlobResult *msg, bool *isAborting, TInstant now) {
-            Y_ABORT_UNLESS(msg->Items.size() == 1);
-            Y_ABORT_UNLESS(ExpectingBlobRestoration);
+            Y_VERIFY_S(msg->Items.size() == 1, HullCtx->VCtx->VDiskLogPrefix);
+            Y_VERIFY_S(ExpectingBlobRestoration, HullCtx->VCtx->VDiskLogPrefix);
             ExpectingBlobRestoration = false;
             auto& item = msg->Items.front();
             switch (item.Status) {
@@ -493,7 +498,7 @@ namespace NKikimr {
                     return nullptr;
 
                 default:
-                    Y_ABORT();
+                    Y_ABORT_S(HullCtx->VCtx->VDiskLogPrefix);
             }
         }
 
@@ -513,7 +518,7 @@ namespace NKikimr {
                     TEvRestoreCorruptedBlob::TItem item(payload.BlobId, needed, GType, payload.Location, payload.Id);
                     return new TEvRestoreCorruptedBlob(now + RestoreDeadline, {1u, item}, false, true);
                 } else {
-                    Y_ABORT_UNLESS(status == NKikimrProto::OK);
+                    Y_VERIFY_S(status == NKikimrProto::OK, HullCtx->VCtx->VDiskLogPrefix);
                     DeferredItems.AddReadDiskBlob(payload.Id, TRope(std::move(buffer)), payload.PartIdx);
                 }
             }
@@ -522,7 +527,7 @@ namespace NKikimr {
 
         void Apply(NPDisk::TEvChunkWriteResult * /*msg*/) {
             // adjust number of in flight messages
-            Y_ABORT_UNLESS(InFlightWrites > 0);
+            Y_VERIFY_S(InFlightWrites > 0, HullCtx->VCtx->VDiskLogPrefix);
             --InFlightWrites;
             AtomicDecrement(*WritesInFlight);
         }
@@ -568,35 +573,60 @@ namespace NKikimr {
         // start item processing; this function transforms item using handoff map and adds collected huge blobs, if any
         // it returns true if we should keep this item; otherwise it returns false
         bool PreprocessItem() {
-            // finish merging data for this item
+            NGc::TKeepStatus keep(true);
+
             if constexpr (LogoBlobs) {
-                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinHugeBlobInBytes));
+                if (!LevelSnapIt) {
+                    LevelSnapIt.emplace(HullCtx, LevelSnap);
+                    LevelSnapIt->Seek(Key);
+                } else {
+                    for (ui32 i = 0; i < 6 && LevelSnapIt->Valid() && LevelSnapIt->GetCurKey() < Key; ++i) {
+                        LevelSnapIt->Next();
+                    }
+                    if (LevelSnapIt->Valid() && LevelSnapIt->GetCurKey() < Key) {
+                        LevelSnapIt->Seek(Key);
+                    }
+                }
+                Y_VERIFY_S(LevelSnapIt->Valid(), HullCtx->VCtx->VDiskLogPrefix);
+                Y_VERIFY_S(LevelSnapIt->GetCurKey() == Key, HullCtx->VCtx->VDiskLogPrefix);
+
+                const ui32 subsKeep = IndexMerger.GetNumKeepFlags();
+                const ui32 subsDoNotKeep = IndexMerger.GetNumDoNotKeepFlags();
+
+                IndexMerger.SetExternalDataStage();
+                LevelSnapIt->PutToMerger(&IndexMerger);
+
+                const ui32 wholeKeep = IndexMerger.GetNumKeepFlags() - subsKeep; // they are counted too
+                const ui32 wholeDoNotKeep = IndexMerger.GetNumDoNotKeepFlags() - subsDoNotKeep; // so are they
+
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {subsKeep, subsDoNotKeep, wholeKeep,
+                    wholeDoNotKeep}, HullCtx->AllowKeepFlags, AllowGarbageCollection);
+
+                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinHugeBlobInBytes), keep.KeepData);
             } else {
-                IndexMerger.Finish(false);
+                keep = Barriers->Keep(Key, IndexMerger.GetMemRecForBarriers(), {}, HullCtx->AllowKeepFlags,
+                    AllowGarbageCollection);
+
+                IndexMerger.Finish(false, false);
             }
 
-            // reset transformed item and try to create new one if we want to keep this item
-            const bool keepData = GcmpIt.KeepData();
-            const bool keepItem = GcmpIt.KeepItem();
-            if (keepItem) {
-                ++(keepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
+            Y_VERIFY_S(keep.KeepIndex || !keep.KeepData, HullCtx->VCtx->VDiskLogPrefix); // either we keep the item, or we drop it along with data
+
+            if (keep.KeepIndex) {
+                ++(keep.KeepData ? Statistics.KeepItemsWithData : Statistics.KeepItemsWOData);
             } else {
                 ++Statistics.DontKeepItems;
             }
 
-            TDataMerger& dataMerger = IndexMerger.GetDataMerger();
-            if (keepItem) {
-                Hmp->Transform(Key, MemRec.emplace(IndexMerger.GetMemRec()), dataMerger, keepData);
+            if (keep.KeepIndex) {
+                Hmp->Transform(Key, MemRec.emplace(IndexMerger.GetMemRec()), IndexMerger.GetDataMerger());
             }
 
             if constexpr (LogoBlobs) {
-                if (!keepItem) { // we are deleting this item too, so we drop saved huge blobs here
-                    CollectRemovedHugeBlobs(dataMerger.GetSavedHugeBlobs());
-                }
-                CollectRemovedHugeBlobs(dataMerger.GetDeletedHugeBlobs());
+                CollectRemovedHugeBlobs(IndexMerger.GetDataMerger().GetDeletedHugeBlobs());
             }
 
-            return keepItem;
+            return keep.KeepIndex;
         }
 
         ETryProcessItemStatus TryProcessItem() {
@@ -614,10 +644,9 @@ namespace NKikimr {
 
                 // create new instance of writer
                 WriterPtr = std::make_unique<TWriter>(HullCtx->VCtx, IsFresh ? EWriterDataType::Fresh : EWriterDataType::Comp,
-                        ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
-                        (ui32)PDiskCtx->Dsk->ChunkSize, PDiskCtx->Dsk->AppendBlockSize,
-                        (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(), false, ReservedChunks, Arena,
-                        HullCtx->AddHeader);
+                    ChunksToUse, PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound, (ui32)PDiskCtx->Dsk->ChunkSize,
+                    PDiskCtx->Dsk->AppendBlockSize, (ui32)PDiskCtx->Dsk->BulkWriteBlockSize, LevelIndex->AllocSstId(),
+                    false, ReservedChunks, Arena, HullCtx->AddHeader);
 
                 WriterHasPendingOperations = false;
             }
@@ -649,11 +678,11 @@ namespace NKikimr {
                         WriterHasPendingOperations = true;
                     } else { // we can and will produce this inline blob now
                         const TDiskPart writtenLocation = WriterPtr->PushDataOnly(dataMerger.CreateDiskBlob(Arena));
-                        Y_ABORT_UNLESS(writtenLocation == preallocatedLocation);
+                        Y_VERIFY_S(writtenLocation == preallocatedLocation, HullCtx->VCtx->VDiskLogPrefix);
                     }
                 } else {
-                    Y_ABORT_UNLESS(collectTask.BlobMerger.Empty());
-                    Y_ABORT_UNLESS(collectTask.Reads.empty());
+                    Y_VERIFY_S(collectTask.BlobMerger.Empty(), HullCtx->VCtx->VDiskLogPrefix);
+                    Y_VERIFY_S(collectTask.Reads.empty(), HullCtx->VCtx->VDiskLogPrefix);
                 }
 
                 for (const auto& [partIdx, from, to] : dataMerger.GetHugeBlobWrites()) {
@@ -677,7 +706,6 @@ namespace NKikimr {
             // clear merger and on-disk record list and advance both iterators synchronously
             IndexMerger.Clear();
             It.Next();
-            GcmpIt.Next();
             MemRec.reset();
         }
 
@@ -698,9 +726,9 @@ namespace NKikimr {
 
         void ProcessPendingMessages(TVector<std::unique_ptr<IEventBase>>& msgsForYard) {
             // ensure that we have writer
-            Y_ABORT_UNLESS(WriterPtr);
-            Y_ABORT_UNLESS(MaxInFlightWrites);
-            Y_ABORT_UNLESS(MaxInFlightReads);
+            Y_VERIFY_S(WriterPtr, HullCtx->VCtx->VDiskLogPrefix);
+            Y_VERIFY_S(MaxInFlightWrites, HullCtx->VCtx->VDiskLogPrefix);
+            Y_VERIFY_S(MaxInFlightReads, HullCtx->VCtx->VDiskLogPrefix);
 
             // send new messages until we reach in flight limit
             std::unique_ptr<NPDisk::TEvChunkWrite> msg;

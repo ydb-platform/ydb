@@ -4,7 +4,6 @@
 
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
-#include <yql/essentials/public/udf/tz/udf_tz.h>
 #include <yql/essentials/utils/parse_double.h>
 #include <yql/essentials/utils/swap_bytes.h>
 #include <yql/essentials/utils/utf8.h>
@@ -15,6 +14,8 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+
+#include <library/cpp/type_info/tz/tz.h>
 
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/consumer.h>
@@ -49,7 +50,7 @@ struct TTimezones {
         NResource::TResources resList;
         const TStringBuf prefix = "/cctz/tzdata/";
         NResource::FindMatch(prefix, &resList);
-        const auto allTimezones = NUdf::GetTimezones();
+        const auto allTimezones = NTi::GetTimezones();
         for (ui16 id = 0; id < allTimezones.size(); ++id) {
             const auto& t = allTimezones[id];
             if (!t.empty()) {
@@ -136,22 +137,22 @@ bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value) {
         return bool(value) && (ui64)std::abs(value.Get<i64>()) <= NUdf::MAX_INTERVAL64;
 
     case NUdf::EDataSlot::TzDate:
-        return bool(value) && value.Get<ui16>() < NUdf::MAX_DATE && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<ui16>() < NUdf::MAX_DATE && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::TzDatetime:
-        return bool(value) && value.Get<ui32>() < NUdf::MAX_DATETIME && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<ui32>() < NUdf::MAX_DATETIME && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::TzTimestamp:
-        return bool(value) && value.Get<ui64>() < NUdf::MAX_TIMESTAMP && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<ui64>() < NUdf::MAX_TIMESTAMP && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::TzDate32:
-        return bool(value) && value.Get<i32>() >= NUdf::MIN_DATE32 && value.Get<i32>() <= NUdf::MAX_DATE32 && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<i32>() >= NUdf::MIN_DATE32 && value.Get<i32>() <= NUdf::MAX_DATE32 && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::TzDatetime64:
-        return bool(value) && value.Get<i64>() >= NUdf::MIN_DATETIME64 && value.Get<i64>() <= NUdf::MAX_DATETIME64 && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<i64>() >= NUdf::MIN_DATETIME64 && value.Get<i64>() <= NUdf::MAX_DATETIME64 && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::TzTimestamp64:
-        return bool(value) && value.Get<i64>() >= NUdf::MIN_TIMESTAMP64 && value.Get<i64>() <= NUdf::MAX_TIMESTAMP64 && value.GetTimezoneId() < NUdf::GetTimezones().size();
+        return bool(value) && value.Get<i64>() >= NUdf::MIN_TIMESTAMP64 && value.Get<i64>() <= NUdf::MAX_TIMESTAMP64 && value.GetTimezoneId() < NTi::GetTimezones().size();
 
     case NUdf::EDataSlot::Utf8:
         return bool(value) && IsUtf8(value.AsStringRef());
@@ -894,8 +895,7 @@ public:
     {
         if (tzId) {
             ui32 hour, min, sec;
-            i64 utcSeconds = (date >= 0) ? ((date + 1) * 86400ll - 1) : (date * 86400ll);
-            ToLocalTime64(utcSeconds, tzId, year, month, day, hour, min, sec);
+            ToLocalTime64(86400ll * ++date - 1, tzId, year, month, day, hour, min, sec);
             if (year <= 0) {
                 year--;
             }
@@ -924,7 +924,7 @@ public:
             if (year <= 0) {
                 year--;
             }
-            if (!MakeDate32(year, month, day, date)) {
+            if (!GetDate32Offset(year, month, day, date)) {
                 return false;
             }
             SplitDate32(date, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek);
@@ -986,8 +986,12 @@ public:
         return true;
     }
 
-    bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value) const {
-        if (Y_UNLIKELY(year == 0 || year < NUdf::MIN_YEAR32 || year >= NUdf::MAX_YEAR32)) {
+    bool GetDate32Offset(i32 year, ui32 month, ui32 day, i32& value) const {
+        if (Y_UNLIKELY(year < NUdf::MIN_YEAR32 - 1 || year > NUdf::MAX_YEAR32
+            || (year == NUdf::MAX_YEAR32 && (day > 1U || month > 1U))
+            || (year == NUdf::MIN_YEAR32 - 1 && (day < 31U || month < 12U))
+            || year == 0))
+        {
             return false;
         }
         auto isLeap = IsLeapYear(year);
@@ -1005,11 +1009,23 @@ public:
         if (Y_LIKELY(year%SOLAR_CYCLE_YEARS >= 0)) {
             val = (year / SOLAR_CYCLE_YEARS) * SOLAR_CYCLE_DAYS + Years_[year % SOLAR_CYCLE_YEARS];
         } else {
-            val = (year / SOLAR_CYCLE_YEARS - 1) * SOLAR_CYCLE_DAYS + Years_[SOLAR_CYCLE_YEARS + year % SOLAR_CYCLE_YEARS];
+            i32 index = SOLAR_CYCLE_YEARS + year % SOLAR_CYCLE_YEARS;
+            Y_ASSERT(index < SOLAR_CYCLE_YEARS && index >= 0);
+            val = (year / SOLAR_CYCLE_YEARS - 1) * SOLAR_CYCLE_DAYS + Years_[index];
         }
         val += isLeap ? LeapMonths_[month] : Months_[month];
         val += day - 1;
         value = val;
+        return true;
+    }
+
+    bool MakeDate32(i32 year, ui32 month, ui32 day, i32& value) const {
+        if (Y_UNLIKELY(year == 0 || year < NUdf::MIN_YEAR32 || year >= NUdf::MAX_YEAR32)) {
+            return false;
+        }
+        if (Y_UNLIKELY(!GetDate32Offset(year, month, day, value))) {
+            return false;
+        }
         return true;
     }
 
@@ -1764,7 +1780,7 @@ NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
     }
 
     bool waiting_for_z = true;
-    
+
     ui32 offset_hours = 0;
     ui32 offset_minutes = 0;
     bool is_offset_negative = false;
@@ -1774,12 +1790,12 @@ NUdf::TUnboxedValuePod ParseDatetime(NUdf::TStringRef buf) {
         // Skip sign
         ++pos;
 
-        if (!ParseNumber(pos, buf, offset_hours, 2) || 
+        if (!ParseNumber(pos, buf, offset_hours, 2) ||
             pos == buf.Size() || buf.Data()[pos] != ':')
         {
             return NUdf::TUnboxedValuePod();
         }
- 
+
         // Skip ':'
         ++pos;
 
@@ -2047,12 +2063,12 @@ NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
         // Skip sign
         ++pos;
 
-        if (!ParseNumber(pos, buf, offset_hours, 2) || 
+        if (!ParseNumber(pos, buf, offset_hours, 2) ||
             pos == buf.Size() || buf.Data()[pos] != ':')
         {
             return NUdf::TUnboxedValuePod();
         }
- 
+
         // Skip ':'
         ++pos;
 
@@ -2083,7 +2099,7 @@ NUdf::TUnboxedValuePod ParseTimestamp(NUdf::TStringRef buf) {
     }
 
     ui64 value = dateValue * 86400000000ull + timeValue * 1000000ull + microseconds;
-    
+
     if (is_offset_negative) {
         if (UINT64_MAX - value < offset_value) {
             return NUdf::TUnboxedValuePod();
@@ -2208,8 +2224,8 @@ NUdf::TUnboxedValuePod ParseTzTimestamp(NUdf::TStringRef str) {
     }
 }
 
-template <bool DecimalPart = false, i8 MaxDigits = 6>
-bool ParseNumber(std::string_view::const_iterator& pos, const std::string_view& buf, ui32& value) {
+template <bool DecimalPart, ui8 MaxDigits>
+bool ParseNumber(std::string_view::const_iterator& pos, const std::string_view& buf, ui64& value) {
     value = 0U;
 
     if (buf.cend() == pos || !std::isdigit(*pos)) {
@@ -2248,22 +2264,45 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
         return NUdf::TUnboxedValuePod();
     }
 
-    std::optional<ui32> days, hours, minutes, seconds, microseconds;
-    ui32 num;
+    std::optional<ui64> weeks, days, hours, minutes, seconds, microseconds;
+    ui64 num;
 
-    if (*pos != 'T') {
+    while (buf.cend() != pos) {
+        if (*pos == 'T') {
+            break;
+        }
+        // Estimated upper bound for number of digits in the
+        // numeric representation of days (weeks need less).
+        // * Interval:   MAX_DATE (49673)                    = 5 digits.
+        // * Interval64: MAX_DATE32 - MIN_DATE32 (106751616) = 9 digits.
+        // So, 9 digits is maximum for any interval component with
+        // granularity more than a day.
         if (!ParseNumber<false, 9>(pos, buf, num)) {
             return NUdf::TUnboxedValuePod();
         }
 
         switch (*pos++) {
-            case 'D': days = num; break;
-            case 'W': days = 7U * num; break;
+            case 'W':
+                if (weeks || days) {
+                    return NUdf::TUnboxedValuePod();
+                }
+                weeks = num;
+                break;
+            case 'D':
+                if (days) {
+                    return NUdf::TUnboxedValuePod();
+                }
+                days = num;
+                break;
             default: return NUdf::TUnboxedValuePod();
         }
     }
 
-    if (days > MaxDays) {
+    const ui32 dvalue
+        = weeks.value_or(0U) * 7ull
+        + days.value_or(0U);
+
+    if (dvalue > MaxDays) {
         return NUdf::TUnboxedValuePod();
     }
 
@@ -2274,7 +2313,14 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
 
         if (buf.cend() != pos) // TODO: Remove this line later.
         do {
-            if (!ParseNumber(pos, buf, num)) {
+            // Estimated upper bound for number of digits in the
+            // numeric representation of seconds (hours, minutes,
+            // microseconds need less).
+            // * Interval:   MAX_DATETIME (4291747200)                       = 10 digits.
+            // * Interval64: MAX_DATETIME64 - MIN_DATETIME64 (9223339708799) = 13 digits.
+            // So, 13 digits is maximum for any interval component with
+            // granularity less than a day.
+            if (!ParseNumber<false, 13>(pos, buf, num)) {
                 return NUdf::TUnboxedValuePod();
             }
 
@@ -2302,7 +2348,8 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
                         return NUdf::TUnboxedValuePod();
                     }
                     seconds = num;
-                    if (!ParseNumber<true>(pos, buf, num) || *pos++ != 'S') {
+                    // 6 digits is maximum for microseconds representation.
+                    if (!ParseNumber<true, 6>(pos, buf, num) || *pos++ != 'S') {
                         return NUdf::TUnboxedValuePod();
                     }
                     microseconds = num;
@@ -2313,7 +2360,7 @@ NUdf::TUnboxedValuePod ParseInterval(const std::string_view& buf) {
     }
 
     const ui64 value
-        = days.value_or(0U) * 86400000000ull
+        = dvalue * 86400000000ull
         + hours.value_or(0U) * 3600000000ull
         + minutes.value_or(0U) * 60000000ull
         + seconds.value_or(0U) * 1000000ull
@@ -2743,12 +2790,12 @@ ui16 GetTimezoneId(TStringBuf ianaName) {
 }
 
 bool IsValidTimezoneId(ui16 id) {
-    const auto zones = NUdf::GetTimezones();
+    const auto zones = NTi::GetTimezones();
     return id < zones.size() && !zones[id].empty();
 }
 
 TMaybe<TStringBuf> FindTimezoneIANAName(ui16 id) {
-    const auto zones = NUdf::GetTimezones();
+    const auto zones = NTi::GetTimezones();
     if (id >= zones.size() || zones[id].empty()) {
         return Nothing();
     }
@@ -2757,14 +2804,14 @@ TMaybe<TStringBuf> FindTimezoneIANAName(ui16 id) {
 }
 
 TStringBuf GetTimezoneIANAName(ui16 id) {
-    const auto zones = NUdf::GetTimezones();
+    const auto zones = NTi::GetTimezones();
     MKQL_ENSURE(id < zones.size() && !zones[id].empty(), "Invalid time zone id: " << id);
     return TStringBuf(zones[id]);
 }
 
 std::vector<ui16> GetTzBlackList() {
     std::vector<ui16> result;
-    const auto& zones = NUdf::GetTimezones();
+    const auto& zones = NTi::GetTimezones();
     for (ui16 id = 0; id < zones.size(); ++id) {
         if (zones[id].empty()) {
             result.emplace_back(id);

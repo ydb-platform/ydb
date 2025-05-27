@@ -178,7 +178,7 @@ void THttpRequest::DoAnalyze(const TNavigate::TEntry& entry) {
     record.SetOperationId(operationId.ToBinary());
 
     const auto& pathId = entry.TableId.PathId;
-    PathIdFromPathId(pathId, record.AddTables()->MutablePathId());
+    pathId.ToProto(record.AddTables()->MutablePathId());
 
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(analyze.release(), statisticsAggregatorId, true));
     HttpReply("Analyze sent. OperationId: " + operationId.ToString());

@@ -5,7 +5,6 @@
 #include <util/system/filemap.h>
 
 #include "actor_bootstrapped.h"
-#include "executor_thread.h"
 #include "event_local.h"
 
 #include <thread>

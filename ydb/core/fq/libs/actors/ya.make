@@ -2,12 +2,10 @@ LIBRARY()
 
 SRCS(
     clusters_from_connections.cpp
-    database_resolver.cpp
     error.cpp
     nodes_health_check.cpp
     nodes_manager.cpp
     pending_fetcher.cpp
-    proxy.cpp
     proxy_private.cpp
     rate_limiter.cpp
     rate_limiter_resources.cpp
@@ -44,11 +42,13 @@ PEERDIR(
     ydb/core/fq/libs/db_schema
     ydb/core/fq/libs/events
     ydb/core/fq/libs/grpc
+    ydb/core/fq/libs/metrics
     ydb/core/fq/libs/private_client
     ydb/core/fq/libs/rate_limiter/utils
     ydb/core/fq/libs/result_formatter
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/signer
+    ydb/core/kqp/federated_query
     ydb/core/protos
     ydb/core/util
     ydb/library/mkql_proto
@@ -86,9 +86,9 @@ PEERDIR(
     ydb/library/yql/utils/actor_log
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/sdk/cpp/client/ydb_query
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/table
 )
 
 YQL_LAST_ABI_VERSION()

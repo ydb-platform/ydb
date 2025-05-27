@@ -136,7 +136,7 @@ namespace NKikimr {
                     Impl.reset(new TCustomCodecFragmentReader(data));
                     break;
                 default:
-                    Y_ABORT("Unknwon codec");
+                    Y_ABORT("Unknown codec");
             }
         }
 

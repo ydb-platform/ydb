@@ -33,15 +33,15 @@ $a = [
     ),
 ];
 
-$a =
+$a = (
     SELECT
         x AS bar,
         y AS foo
     FROM
         AS_TABLE($a)
-;
+);
 
-$b =
+$b = (
     SELECT
         a.bar AS bar,
         count(*) AS cnt
@@ -59,7 +59,7 @@ $b =
     USING (foo, bar)
     GROUP BY
         a.bar
-;
+);
 
 SELECT
     *

@@ -8,9 +8,12 @@
 
 #include <yt/yt/client/security_client/public.h>
 
+#include <yt/yt/client/signature/public.h>
+
 #include <yt/yt/core/concurrency/async_stream.h>
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/net/address.h>
 
@@ -66,7 +69,7 @@ struct TDriverRequest
     std::optional<TString> ServiceTicket;
 
     //! Additional logging tags.
-    std::optional<TString> LoggingTags;
+    std::optional<std::string> LoggingTags;
 
     //! Provides means to return arbitrary structured data from any command.
     //! Must be filled before writing data to output stream.
@@ -75,6 +78,9 @@ struct TDriverRequest
     //! Invoked after driver is done producing response parameters and
     //! before first write to output stream.
     std::function<void()> ResponseParametersFinishedCallback;
+
+    //! Memory usage tracker.
+    IMemoryUsageTrackerPtr MemoryUsageTracker = GetNullMemoryUsageTracker();
 
     void Reset();
 
@@ -150,6 +156,8 @@ struct IDriver
     //! Returns the underlying connection.
     virtual NApi::IConnectionPtr GetConnection() = 0;
 
+    virtual NSignature::ISignatureValidatorPtr GetSignatureValidator() = 0;
+
     //! Terminates the underlying connection.
     virtual void Terminate() = 0;
 };
@@ -160,7 +168,8 @@ DEFINE_REFCOUNTED_TYPE(IDriver)
 
 IDriverPtr CreateDriver(
     NApi::IConnectionPtr connection,
-    TDriverConfigPtr config);
+    TDriverConfigPtr config,
+    NSignature::ISignatureValidatorPtr signatureValidator);
 
 ////////////////////////////////////////////////////////////////////////////////
 

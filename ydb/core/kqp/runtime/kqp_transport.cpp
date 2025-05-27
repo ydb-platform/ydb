@@ -46,7 +46,8 @@ TKqpProtoBuilder::~TKqpProtoBuilder() {
     }
 }
 
-Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
+void TKqpProtoBuilder::BuildYdbResultSet(
+    Ydb::ResultSet& resultSet,
     TVector<NYql::NDq::TDqSerializedBatch>&& data,
     NKikimr::NMiniKQL::TType* mkqlSrcRowType,
     const TVector<ui32>* columnOrder,
@@ -55,7 +56,6 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
     YQL_ENSURE(mkqlSrcRowType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
     const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(mkqlSrcRowType);
 
-    Ydb::ResultSet resultSet;
     TColumnOrder order = columnHints ? TColumnOrder(*columnHints) : TColumnOrder{};
     for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
         auto* column = resultSet.add_columns();
@@ -75,7 +75,7 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
     }
     NDq::TDqDataSerializer dataSerializer(*TypeEnv, *HolderFactory, transportVersion);
     for (auto& part : data) {
-        if (part.RowCount()) {
+        if (part.ChunkCount()) {
             TUnboxedValueBatch rows(mkqlSrcRowType);
             dataSerializer.Deserialize(std::move(part), mkqlSrcRowType, rows);
             rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
@@ -83,8 +83,6 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
             });
         }
     }
-
-    return resultSet;
 }
 
 } // namespace NKqp

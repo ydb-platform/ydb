@@ -102,24 +102,20 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             }
             TCoAtomList additionalColumnsToRead = MakeColumnsList(columnsToReadSet, ctx, pos);
 
+            TVector<TString> extraColumnsToReadInLookup(columnsToReadSet.begin(), columnsToReadSet.end());
             TCoArgument existingRow = Build<TCoArgument>(ctx, node.Pos())
                 .Name("existing_row")
                 .Done();
+
             auto prepareUpdateStage = Build<TDqStage>(ctx, pos)
                 .Inputs()
-                    .Add(inputDictAndKeys.KeysPrecompute)
+                    .Add(BuildStreamLookupOverPrecompute(tableDesc, inputDictAndKeys.KeysPrecompute, input.Cast(), returning.Table(), pos, ctx, extraColumnsToReadInLookup))
                     .Add(inputDictAndKeys.DictPrecompute)
                     .Build()
                 .Program()
                     .Args({"keys_list", "dict"})
                     .Body<TCoFlatMap>()
-                        .Input<TKqpLookupTable>()
-                            .Table(returning.Table())
-                            .LookupKeys<TCoIterator>()
-                                .List("keys_list")
-                                .Build()
-                            .Columns(MakeColumnsList(columnsToLookup, ctx, pos))
-                            .Build()
+                        .Input("keys_list")
                         .Lambda()
                             .Args({existingRow})
                             .Body<TCoJust>()
@@ -151,14 +147,30 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                     .Index().Build("0")
                     .Build()
                 .Done();
+        } else if (NDq::IsDqPureExpr(input.Cast())) {
+            input = Build<TDqCnUnionAll>(ctx, pos)
+                .Output()
+                    .Stage<TDqStage>()
+                        .Inputs().Build()
+                        .Program()
+                            .Args({})
+                            .Body<TCoToFlow>()
+                                .Input(input.Cast())
+                                .Build()
+                            .Build()
+                        .Settings().Build()
+                    .Build()
+                    .Index().Build("0")
+                    .Build()
+                .Done();
         }
 
         auto inputExpr = Build<TCoExtractMembers>(ctx, pos)
             .Input(input.Cast())
             .Members(returning.Columns())
-            .Done().Ptr();
+            .Done();
 
-        return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, std::move(inputExpr)));
+        return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, inputExpr.Ptr()));
     };
 
     if (auto maybeList = returning.Update().Maybe<TExprList>()) {
@@ -173,6 +185,10 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                     return buildReturningRows(del.Input().Cast(), MakeColumnsList(tableDesc.Metadata->KeyColumnNames, ctx, node.Pos()), returning.Columns());
                 }
             }
+
+            if (item.Maybe<TKqlTableEffect>()) {
+                return node;
+            }
         }
     }
 
@@ -181,6 +197,10 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
     if (auto del = returning.Update().Maybe<TKqlDeleteRows>()) {
         return buildReturningRows(del.Input().Cast(), MakeColumnsList(tableDesc.Metadata->KeyColumnNames, ctx, node.Pos()), returning.Columns());
+    }
+
+    if (returning.Update().Maybe<TKqlTableEffect>()) {
+        return node;
     }
 
     TExprNode::TPtr result = returning.Update().Ptr();
@@ -215,8 +235,9 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
                 .Build()
             .Table(upsert.Table())
             .Columns(upsert.Columns())
+            .IsBatch(upsert.IsBatch())
             .Settings(upsert.Settings())
-            .ReturningColumns<TCoAtomList>().Build()
+            .ReturningColumns(upsert.ReturningColumns())
             .Done();
 }
 
@@ -236,7 +257,8 @@ TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKq
                 .Input(del.Input())
                 .Build()
             .Table(del.Table())
-            .ReturningColumns<TCoAtomList>().Build()
+            .IsBatch(del.IsBatch())
+            .ReturningColumns(del.ReturningColumns())
             .Done();
 }
 

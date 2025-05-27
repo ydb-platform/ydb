@@ -42,7 +42,7 @@ void TValueConsumerBase::InitializeIdToTypeMapping()
     const auto& nameTable = GetNameTable();
     for (const auto& column : Schema_->Columns()) {
         int id = nameTable->GetIdOrRegisterName(column.Name());
-        if (id >= static_cast<int>(NameTableIdToType_.size())) {
+        if (id >= std::ssize(NameTableIdToType_)) {
             NameTableIdToType_.resize(id + 1, EValueType::Any);
         }
         NameTableIdToType_[id] = column.GetWireType();
@@ -316,11 +316,16 @@ struct TWritingValueConsumerBufferTag
 TWritingValueConsumer::TWritingValueConsumer(
     IUnversionedWriterPtr writer,
     TTypeConversionConfigPtr typeConversionConfig,
-    i64 maxRowBufferSize)
+    i64 maxRowBufferSize,
+    IMemoryUsageTrackerPtr tracker)
     : TValueConsumerBase(writer->GetSchema(), std::move(typeConversionConfig))
     , Writer_(std::move(writer))
     , MaxRowBufferSize_(maxRowBufferSize)
-    , RowBuffer_(New<TRowBuffer>(TWritingValueConsumerBufferTag()))
+    , RowBuffer_(New<TRowBuffer>(
+        TWritingValueConsumerBufferTag(),
+        TChunkedMemoryPool::DefaultStartChunkSize,
+        std::move(tracker),
+        /*allowMemoryOvercommit*/ true))
 {
     YT_VERIFY(Writer_);
     InitializeIdToTypeMapping();

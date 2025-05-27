@@ -838,9 +838,9 @@ public:
         return TRcBuf(res, res.data() + headroom, size);
     }
 
-    static TRcBuf UninitializedPageAligned(size_t size) {
+    static TRcBuf UninitializedPageAligned(size_t size, size_t tailroom = 0) {
         const size_t pageSize = NSystemInfo::GetPageSize();
-        TRcBuf res = Uninitialized(size + pageSize - 1);
+        TRcBuf res = Uninitialized(size + pageSize - 1, 0, tailroom);
         const size_t misalign = (pageSize - reinterpret_cast<uintptr_t>(res.data())) & (pageSize - 1);
         return TRcBuf(Piece, res.data() + misalign, size, res);
     }

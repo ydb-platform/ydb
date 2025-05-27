@@ -137,6 +137,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             : SizeGenerator(proto.GetBlobSizes())
             , SizeToWrite(proto.GetTotalSize())
             , BlobsToWrite(proto.GetBlobsNumber())
+            , CollectedBlobsPerMille(std::min(proto.GetCollectedBlobsPerMille(), (ui32)1000))
             , InFlightTracker(proto.GetMaxWritesInFlight(), proto.GetMaxWriteBytesInFlight())
         {
             if (proto.HasPutHandleClass()) {
@@ -193,17 +194,30 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
         std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> ManageKeepFlags(ui64 tabletId, ui32 gen, ui32 step,
                 ui32 channel, bool keep) {
-            auto blobsWritten = std::make_unique<TVector<TLogoBlobID>>(ConfirmedBlobs);
+            auto blobsToKeep = std::make_unique<TVector<TLogoBlobID>>();
+            auto blobsToCollect = std::make_unique<TVector<TLogoBlobID>>();
 
             if (keep) {
-                return std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, gen, step, channel,
-                        false, gen, step, blobsWritten.release(), nullptr, TInstant::Max(), false);
+                for (const TLogoBlobID& blobId : ConfirmedBlobs) {
+                    if (RandomNumber<ui32>(1000) < CollectedBlobsPerMille) {
+                        blobsToCollect->push_back(blobId);
+                    } else {
+                        blobsToKeep->push_back(blobId);
+                    }
+                }
             } else {
-                ConfirmedDataSize = 0;
-                ConfirmedBlobs.clear();
-                return std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, gen, step, channel,
-                        true, gen, step, nullptr, blobsWritten.release(), TInstant::Max(), false);
+                blobsToCollect->assign(ConfirmedBlobs.begin(), ConfirmedBlobs.end());
             }
+
+            ConfirmedDataSize = 0;
+            ConfirmedBlobs.clear();
+            ConfirmedBlobs.assign(blobsToKeep->begin(), blobsToKeep->end());
+            for (const TLogoBlobID& blobId : ConfirmedBlobs) {
+                ConfirmedDataSize += blobId.BlobSize();
+            }
+
+            return std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, gen, step, channel,
+                    !keep, gen, step, blobsToKeep.release(), blobsToCollect.release(), TInstant::Max(), false);
         }
 
         TLogoBlobID GetRandomBlobId() {
@@ -226,10 +240,11 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         TSizeGenerator SizeGenerator;
         NKikimrBlobStorage::EPutHandleClass PutHandleClass = NKikimrBlobStorage::EPutHandleClass::UserData;
 
-        uint64_t SizeToWrite = 0;
-        uint64_t BlobsToWrite = 0;
-        uint64_t ConfirmedDataSize = 0;
+        ui64 SizeToWrite = 0;
+        ui32 BlobsToWrite = 0;
+        ui64 ConfirmedDataSize = 0;
         TVector<TLogoBlobID> ConfirmedBlobs;
+        ui32 CollectedBlobsPerMille = 0; 
 
         TInFlightTracker InFlightTracker;
 

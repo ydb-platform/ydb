@@ -10,7 +10,7 @@ struct TPartitionWriter {
     TPartitionWriter() = default;
 
     void OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev);
-    void OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev, const TActorContext& ctx);
+    void OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev, NWilson::TTraceId traceId, const TActorContext& ctx);
     void OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx);
     void OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev);
 

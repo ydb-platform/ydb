@@ -968,10 +968,10 @@ Y_UNIT_TEST(TestMapAsObject) {
 
     auto& items = *proto.MutableItems();
     items["key1"] = "value1";
-    items["key2"] = "value2";
+    items[""] = "value2";
     items["key3"] = "value3";
 
-    TString modelStr(R"_({"Items":{"key3":"value3","key2":"value2","key1":"value1"}})_");
+    TString modelStr(R"_({"Items":{"key3":"value3","":"value2","key1":"value1"}})_");
 
     TStringStream jsonStr;
     TProto2JsonConfig config;

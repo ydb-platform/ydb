@@ -61,25 +61,25 @@ namespace NPageCollection {
             return meta;
         }
 
-        TVector<TGlob> Grab() noexcept
+        TVector<TGlob> Grab()
         {
             return std::exchange(Blobs, TVector<TGlob>());
         }
 
     private:
-        void Flush() noexcept
+        void Flush()
         {
             if (Buffer) {
                 auto glob = CookieAllocator.Do(Channel, Buffer.size());
 
-                Y_ABORT_UNLESS(glob.Group == Record.Group, "Unexpected BS group");
+                Y_ENSURE(glob.Group == Record.Group, "Unexpected BS group");
 
                 Blobs.emplace_back(glob, TakeBuffer());
                 Record.Push(glob.Logo);
             }
         }
 
-        TString TakeBuffer() noexcept
+        TString TakeBuffer()
         {
             TString data;
 

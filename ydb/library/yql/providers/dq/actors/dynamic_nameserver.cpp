@@ -119,8 +119,8 @@ namespace NYql::NDqs {
                     const TActorContext& ctx)
         {
             const TEvInterconnect::TEvResolveNode* request = ev->Get();
-            const ui32 nodeId = request->Record.GetNodeId();
-            const TInstant deadline = request->Record.HasDeadline() ? TInstant::FromValue(request->Record.GetDeadline()) : TInstant::Max();
+            const ui32 nodeId = request->NodeId;
+            const TMonotonic deadline = request->Deadline;
             auto it = NodeTable.find(nodeId);
 
             if (it == NodeTable.end()) {
@@ -149,7 +149,7 @@ namespace NYql::NDqs {
                                              request->Port,
                                              ev->Sender,
                                              SelfId(),
-                                             TInstant::Max()));
+                                             TMonotonic::Max()));
         }
 
         TVector<NActors::TEvInterconnect::TNodeInfo> GetNodesInfo()
@@ -166,10 +166,8 @@ namespace NYql::NDqs {
 
         void ReplyListNodes(const NActors::TActorId sender, const TActorContext& ctx)
         {
-            THolder<TEvInterconnect::TEvNodesInfo>
-                reply(new TEvInterconnect::TEvNodesInfo());
-            reply->Nodes = GetNodesInfo();
-            ctx.Send(sender, reply.Release());
+            auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>(GetNodesInfo());
+            ctx.Send(sender, new TEvInterconnect::TEvNodesInfo(nodes));
         }
 
         void Handle(TEvInterconnect::TEvListNodes::TPtr& ev,

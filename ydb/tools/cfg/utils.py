@@ -3,10 +3,14 @@
 import os
 import random
 import string
+import yaml as pyyaml
 
 import six
-from google.protobuf import text_format
+from google.protobuf import text_format, json_format
 from google.protobuf.pyext._message import FieldDescriptor
+
+from ruamel.yaml import YAML
+from io import StringIO
 
 from library.python import resource
 from ydb.tools.cfg import types
@@ -152,3 +156,143 @@ def apply_config_changes(target, changes, fix_names=None):
 def random_int(low, high, *seed):
     random.seed(''.join(map(str, seed)))
     return random.randint(low, high)
+
+
+def wrap_parse_dict(dictionary, proto):
+    def get_camel_case_string(snake_str):
+        components = snake_str.split('_')
+        camelCased = ''.join(x.capitalize() for x in components)
+        abbreviations = {
+            'Uuid': 'UUID',
+            'Pdisk': 'PDisk',
+            'Vdisk': 'VDisk',
+            'NtoSelect': 'NToSelect',
+            'Ssid': 'SSId',
+            'Sids': 'SIDs',
+            'GroupId': 'GroupID',
+            'NodeId': 'NodeID',
+            'DiskId': 'DiskID',
+            'SlotId': 'SlotID',
+        }
+        for k, v in abbreviations.items():
+            camelCased = camelCased.replace(k, v)
+        return camelCased
+
+    def convert_keys(data):
+        if isinstance(data, dict):
+            return {get_camel_case_string(k): convert_keys(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [convert_keys(item) for item in data]
+        else:
+            return data
+
+    json_format.ParseDict(convert_keys(dictionary), proto)
+
+
+# This function does some extra work, text processing to ensure no extra diff is
+# created when backporting sections like blob_storage_config. If we parse
+# template file and dump it again, there will be a lot of meaningless diff
+# in formatting, which is undesirable.
+def backport(template_path, config_yaml, backported_sections):
+    config_data = pyyaml.safe_load(config_yaml)
+
+    with open(template_path, 'r') as file:
+        lines = file.readlines()
+
+    for section_key in backported_sections:
+        section = config_data.get(section_key)
+
+        if section is None:
+            raise KeyError(f"The key '{section_key}' was not found in config_yaml")
+
+        new_section_yaml = pyyaml.safe_dump({section_key: section}, default_flow_style=False).splitlines(True)
+        new_section_yaml.append(os.linesep)
+
+        start_index = None
+        end_index = None
+
+        for i, line in enumerate(lines):
+            if line.startswith(f"{section_key}:"):
+                start_index = i
+                break
+
+        if start_index is not None:
+            end_index = start_index + 1
+            while end_index < len(lines):
+                line = lines[end_index]
+                if line.strip() and not line.startswith(' ') and not line.startswith('#'):  # Check for a top-level key
+                    break
+                end_index += 1
+
+            lines = lines[:start_index] + new_section_yaml + lines[end_index:]
+        else:
+            lines.extend(new_section_yaml)
+
+    with open(template_path, 'w') as file:
+        file.writelines(lines)
+
+
+def need_generate_bs_config(template_bs_config):
+    # We need to generate blob_storage_config if template file does not contain static group:
+    # blob_storage_config.service_set.groups
+
+    if template_bs_config is None:
+        return True
+
+    return template_bs_config.get("service_set", {}).get("groups") is None
+
+
+use_alternative_yaml_parser = False
+
+
+def determine_yaml_parsing(yaml_template_file):
+    ruamel_yaml = YAML()
+    with open(yaml_template_file, "r") as yaml_template:
+        data = ruamel_yaml.load(yaml_template)
+        return data.get("use_alternative_yaml_parser", False)
+
+
+def load_yaml(yaml_template_file):
+    global use_alternative_yaml_parser
+    use_alternative_yaml_parser = determine_yaml_parsing(yaml_template_file)
+
+    if use_alternative_yaml_parser:
+        ruamel_yaml = YAML()
+
+        with open(yaml_template_file, "r") as yaml_template:
+            data = ruamel_yaml.load(yaml_template)
+
+        return data
+    else:
+        with open(yaml_template_file, "r") as yaml_template:
+            return pyyaml.safe_load(yaml_template)
+
+
+def sort_dict_recursively(obj):
+    if isinstance(obj, dict):
+        return dict(sorted((k, sort_dict_recursively(v)) for k, v in obj.items()))
+    elif isinstance(obj, list):
+        return [sort_dict_recursively(i) for i in obj]
+    else:
+        return obj
+
+
+def dump_yaml(data, sort=True):
+    global use_alternative_yaml_parser
+
+    if use_alternative_yaml_parser:
+        yaml = YAML()
+
+        yaml.default_flow_style = False
+        yaml.indent(mapping=2, sequence=2, offset=0)
+        yaml.sort_base_mapping_type_on_output = True
+
+        stream = StringIO()
+
+        if sort:
+            data = sort_dict_recursively(data)
+
+        yaml.dump(data, stream)
+        return stream.getvalue()
+    else:
+        return pyyaml.safe_dump(data, sort_keys=True, default_flow_style=False, indent=2)

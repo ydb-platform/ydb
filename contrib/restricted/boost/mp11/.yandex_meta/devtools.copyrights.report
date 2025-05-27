@@ -59,6 +59,17 @@ BELONGS ya.make
     Files with this license:
         include/boost/mp11/bind.hpp [4:4]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 4afd26cff28ac99a2d42f9a0e1ed0a8e
+BELONGS ya.make
+    License text:
+        // Copyright 2015, 2019, 2024 Peter Dimov.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mp11/set.hpp [4:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 4fa3ff095c8f917b4727472f2302a615
 BELONGS ya.make
     License text:
@@ -81,7 +92,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/mp11.hpp [4:4]
         include/boost/mp11/detail/mp_map_find.hpp [4:4]
         include/boost/mp11/detail/mp_plus.hpp [4:4]
         include/boost/mp11/integral.hpp [4:4]
@@ -136,6 +146,17 @@ BELONGS ya.make
         include/boost/mp11/detail/mp_count.hpp [4:4]
         include/boost/mp11/detail/mp_list.hpp [4:4]
 
+KEEP     COPYRIGHT_SERVICE_LABEL aa53a493e659c97cf28c1683cd4be365
+BELONGS ya.make
+    License text:
+        //  Copyright 2015-2024 Peter Dimov.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mp11.hpp [4:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL b280e59de7ebe0b280acf5004569984f
 BELONGS ya.make
     License text:
@@ -159,6 +180,17 @@ BELONGS ya.make
         include/boost/mp11/detail/mp_front.hpp [4:4]
         include/boost/mp11/detail/mp_rename.hpp [4:4]
         include/boost/mp11/list.hpp [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c2c38b6a2143de73450b97fc281564d1
+BELONGS ya.make
+    License text:
+        //  Copyright 2024 Joaquin M Lopez Munoz.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/mp11/lambda.hpp [4:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL cd293b74a3df4ce171f943aaee35b153
 BELONGS ya.make
@@ -199,17 +231,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/mp11/detail/mp_with_index.hpp [4:4]
-
-KEEP     COPYRIGHT_SERVICE_LABEL e53c2d13e0a107641bbfd6b157ce66ac
-BELONGS ya.make
-    License text:
-        // Copyright 2015, 2019 Peter Dimov.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/mp11/set.hpp [4:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e7b274a7f530f5db416c8d692d4270c7
 BELONGS ya.make

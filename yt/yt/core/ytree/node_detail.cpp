@@ -112,21 +112,28 @@ void TNodeBase::RemoveSelf(
     TRspRemove* /*response*/,
     const TCtxRemovePtr& context)
 {
-    context->SetRequestInfo("Recursive: %v, Force: %v", request->recursive(), request->force());
+    bool recursive = request->recursive();
+    bool force = request->force();
+
+    context->SetRequestInfo("Recursive: %v, Force: %v",
+        recursive,
+        force);
 
     ValidatePermission(
-        EPermissionCheckScope::This | EPermissionCheckScope::Descendants,
+        EPermissionCheckScope::Subtree,
         EPermission::Remove);
     ValidatePermission(
         EPermissionCheckScope::Parent,
         EPermission::Write | EPermission::ModifyChildren);
 
     bool isComposite = (GetType() == ENodeType::Map || GetType() == ENodeType::List);
-    if (!request->recursive() && isComposite && AsComposite()->GetChildCount() > 0) {
-        THROW_ERROR_EXCEPTION("Cannot remove non-empty composite node");
+    if (!recursive && isComposite && AsComposite()->GetChildCount() > 0) {
+        THROW_ERROR_EXCEPTION(
+            NYTree::EErrorCode::CannotRemoveNonemptyCompositeNode,
+            "Cannot remove non-empty composite node");
     }
 
-    DoRemoveSelf(request->recursive(), request->force());
+    DoRemoveSelf(recursive, force);
 
     context->Reply();
 }
@@ -285,7 +292,8 @@ IYPathService::TResolveResult TMapNodeMixin::ResolveRecursive(
                     method == "Set" ||
                     method == "Create" ||
                     method == "Copy" ||
-                    method == "EndCopy")
+                    method == "LockCopyDestination" ||
+                    method == "AssembleTreeCopy")
                 {
                     return IYPathService::TResolveResultHere{"/" + path};
                 } else {
@@ -307,13 +315,11 @@ void TMapNodeMixin::ListSelf(
     TRspList* response,
     const TCtxListPtr& context)
 {
-    ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
-
     auto attributeFilter = request->has_attributes()
         ? FromProto<TAttributeFilter>(request->attributes())
         : TAttributeFilter();
 
-    auto limit = YT_PROTO_OPTIONAL(*request, limit);
+    auto limit = YT_OPTIONAL_FROM_PROTO(*request, limit);
 
     context->SetRequestInfo("Limit: %v, AttributeFilter: %v",
         limit,
@@ -323,6 +329,8 @@ void TMapNodeMixin::ListSelf(
         THROW_ERROR_EXCEPTION("Limit is negative")
             << TErrorAttribute("limit", limit);
     }
+
+    ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
 
     TAsyncYsonWriter writer;
 
@@ -565,6 +573,7 @@ void TSupportsSetSelfMixin::SetSelf(
     const TCtxSetPtr& context)
 {
     bool force = request->force();
+
     context->SetRequestInfo("Force: %v", force);
 
     ValidateSetSelf(force);

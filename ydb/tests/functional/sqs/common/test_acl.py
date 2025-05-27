@@ -6,26 +6,22 @@ import time
 import pytest
 from hamcrest import assert_that, none, is_not, is_, raises
 
+import re
 import yatest
 
-from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_sqs_client_path, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
 from ydb.tests.library.sqs.test_base import TABLES_FORMAT_PARAMS
 
 
 class SqsACLTest(KikimrSqsTestBase):
-    def _modify_permissions(self, resource, action, permissions_string, clear_acl_flag=False):
+    def _modify_permissions(self, resource, action, subject, permissions_string):
         cmd = [
-            get_sqs_client_path(),
-            'permissions',
-            '--resource', resource,
-            '--{}'.format(action),
-            '{}'.format(permissions_string)
+            'curl',
+            '-v',
+            'localhost:'+str(self._http_port)+'?Action='+action+'Permissions&UserName=metauser&Subject='+subject+permissions_string+'&Path='+resource,
+            '-H',
+            'authorization: aaa credential=abacaba/20220830/ec2/aws4_request'
         ]
-        if clear_acl_flag:
-            cmd.append('--clear-acl')
-
-        cmd += self._sqs_server_opts
-
         retries_count = 1
         while retries_count:
             logging.debug("Running {}".format(' '.join(cmd)))
@@ -41,10 +37,12 @@ class SqsACLTest(KikimrSqsTestBase):
 
     def _list_permissions(self, path, retries_count=1):
         cmd = [
-            get_sqs_client_path(),
-            'list-permissions',
-            '--path', path,
-        ] + self._sqs_server_opts
+            'curl',
+            '-v',
+            'localhost:'+str(self._http_port)+'?Action=ListPermissions&UserName=metauser&Path='+path,
+            '-H',
+            'authorization: aaa credential=abacaba/20220830/ec2/aws4_request'
+        ]
 
         while retries_count:
             logging.debug("Running {}".format(' '.join(cmd)))
@@ -60,14 +58,20 @@ class SqsACLTest(KikimrSqsTestBase):
 
     def _extract_permissions_for(self, sid, message):
         permissions = set()
-        for part in message.decode('utf-8').split('Subject'):
+        for part in message.decode('utf-8').split('<Subject>'):
             if sid not in part:
                 continue
 
-            for probably_name in part.split('PermissionNames:'):
-                if 'EffectivePermissions' in probably_name:
+            for probably_name in re.split('<|>', part):
+                logging.debug("PARSED {}".format(probably_name))
+                if 'Subject' in probably_name:
                     continue
-
+                if 'Resource' in probably_name:
+                    break
+                if 'Permission' in probably_name:
+                    continue
+                if 'Response' in probably_name:
+                    continue
                 if sid in probably_name:
                     continue
 
@@ -84,7 +88,6 @@ class SqsACLTest(KikimrSqsTestBase):
         self._send_message_and_assert(queue_url, 'data')
 
         alkonavt_sid = 'alkonavt@builtin'
-        berkanavt_sid = 'berkanavt@builtin'
 
         create_queue_permission = 'CreateQueue'
         send_message_permission = 'SendMessage'
@@ -96,30 +99,24 @@ class SqsACLTest(KikimrSqsTestBase):
         # two permissions expected
         self._modify_permissions(
             self._username,
-            'grant',
-            alkonavt_sid + ':' + ','.join([create_queue_permission, send_message_permission])
+            'Grant',
+            alkonavt_sid,
+            '&Permission.1=CreateQueue&Permission.2=SendMessage'
         )
         description = self._list_permissions(self._username)
         assert sorted(self._extract_permissions_for(alkonavt_sid, description)) == [create_queue_permission, send_message_permission]
 
         # single permission expected
-        self._modify_permissions(self._username, 'revoke', alkonavt_sid + ':' + create_queue_permission)
+        self._modify_permissions(self._username, 'Revoke', alkonavt_sid, '&Permission.1=CreateQueue')
         description = self._list_permissions(self._username)
         assert self._extract_permissions_for(alkonavt_sid, description) == [send_message_permission]
 
         receive_message_permission = 'ReceiveMessage'
 
         # other single permission expected
-        self._modify_permissions(self._username, 'set', alkonavt_sid + ':' + receive_message_permission)
+        self._modify_permissions(self._username, 'Set', alkonavt_sid, '&Permission.1=ReceiveMessage')
         description = self._list_permissions(self._username)
         assert self._extract_permissions_for(alkonavt_sid, description) == [receive_message_permission]
-
-        # clear all permissions
-        self._modify_permissions(self._username, 'set', berkanavt_sid + ':' + receive_message_permission)
-        self._modify_permissions(self._username, 'revoke', alkonavt_sid + ':' + create_queue_permission, True)
-        description = self._list_permissions(self._username)
-        assert self._extract_permissions_for(alkonavt_sid, description) == []
-        assert self._extract_permissions_for(berkanavt_sid, description) == []
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_apply_permissions(self, tables_format):
@@ -149,8 +146,9 @@ class SqsACLTest(KikimrSqsTestBase):
 
         self._modify_permissions(
             self._username,
-            'grant',
-            berkanavt_sid + ':' + ','.join(['ModifyPermissions'])
+            'Grant',
+            berkanavt_sid,
+            '&Permission.1=ModifyPermissions'
         )
 
         result = self._sqs_api.modify_permissions('Grant', berkanavt_sid, self._username, ['SendMessage', 'DescribePath'])

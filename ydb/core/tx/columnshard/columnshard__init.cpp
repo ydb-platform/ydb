@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
+#include <ydb/core/tx/tiering/manager.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -68,6 +69,7 @@ std::shared_ptr<ITxReader> TTxInit::BuildReader() {
     result->AddChildren(std::make_shared<NLoading::TBackgroundSessionsInitializer>("bg_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TSharingSessionsInitializer>("sharing_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TInFlightReadsInitializer>("in_flight_reads", Self));
+    result->AddChildren(std::make_shared<NLoading::TTiersManagerInitializer>("tiers_manager", Self));
     return result;
 }
 
@@ -103,9 +105,14 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
 void TTxInit::Complete(const TActorContext& ctx) {
     Self->Counters.GetCSCounters().Initialization.OnTxInitFinished(TMonotonic::Now() - StartInstant);
-    Self->ProgressTxController->OnTabletInit();
-    Self->SwitchToWork(ctx);
-    NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*Self);
+    AFL_VERIFY(!Self->IsTxInitFinished);
+    Self->IsTxInitFinished = true;
+    Self->TrySwitchToWork(ctx);
+    if (Self->SpaceWatcher->SubDomainPathId) {
+        Self->SpaceWatcher->StartWatchingSubDomainPathId();
+    } else {
+        Self->SpaceWatcher->StartFindSubDomainPathId();
+    }
 }
 
 class TTxUpdateSchema: public TTransactionBase<TColumnShard> {

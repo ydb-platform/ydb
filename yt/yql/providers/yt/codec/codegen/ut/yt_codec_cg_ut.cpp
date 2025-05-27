@@ -9,7 +9,7 @@
 #include <yt/yql/providers/yt/codec/yt_codec_io.h>
 #include <yql/essentials/minikql/codegen/codegen.h>
 
-#include <llvm/IR/Module.h>
+#include <llvm/IR/Module.h> // Y_IGNORE
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -135,6 +135,7 @@ struct TReadSetup {
     TInputBuf Buf_;
 };
 
+#ifndef _win_
 Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
     Y_UNIT_TEST(TestWriteJust) {
         TWriteSetup setup("WriteJust");
@@ -953,6 +954,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
     }
 #endif
 }
+#endif
 
 }
 #endif

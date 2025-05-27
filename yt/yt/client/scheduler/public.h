@@ -8,9 +8,23 @@ namespace NYT::NScheduler {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NProto {
+
+class TSpecPatch;
+
+} // namespace NProto
+
+////////////////////////////////////////////////////////////////////////////////
+
 YT_DEFINE_STRONG_TYPEDEF(TJobTraceId, TGuid);
 
 extern const TJobTraceId NullJobTraceId;
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DEFINE_STRONG_TYPEDEF(TAllocationId, TGuid);
+
+extern const TAllocationId NullAllocationId;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -69,6 +83,8 @@ YT_DEFINE_ERROR_ENUM(
     ((JobResourceLimitsRestrictionsViolated)  (220))
     ((CannotUseBothAclAndAco)                 (221))
     ((GangOperationsAllowedOnlyInFifoPools)   (222))
+    ((OperationLaunchedInNonexistentPool)     (223))
+    ((OperationHasNoController)               (224))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,
@@ -144,6 +160,8 @@ DEFINE_ENUM(EAbortReason,
     ((OperationIncarnationChanged)     ( 56))
     ((AddressResolveFailed)            ( 57))
     ((UnexpectedNodeJobPhase)          ( 58))
+    ((JobCountChangedByUserRequest)    ( 59))
+    ((NbdErrors)                       ( 60))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))
@@ -157,7 +175,7 @@ DEFINE_ENUM(EAbortReason,
 
 DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);
 
-DEFINE_ENUM(EInterruptReason,
+DEFINE_ENUM(EInterruptionReason,
     ((None)               (0))
     ((Preemption)         (1))
     ((UserRequest)        (2))
@@ -166,7 +184,7 @@ DEFINE_ENUM(EInterruptReason,
     ((JobsDisabledOnNode) (5))
 );
 
-DEFINE_ENUM_UNKNOWN_VALUE(EInterruptReason, Unknown);
+DEFINE_ENUM_UNKNOWN_VALUE(EInterruptionReason, Unknown);
 
 DEFINE_ENUM(EAutoMergeMode,
     (Disabled)
@@ -176,6 +194,9 @@ DEFINE_ENUM(EAutoMergeMode,
 );
 
 DECLARE_REFCOUNTED_CLASS(TOperationCache)
+
+DECLARE_REFCOUNTED_STRUCT(TSpecPatch);
+using TSpecPatchList = std::vector<TSpecPatchPtr>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -27,7 +27,7 @@ public:
 
     void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters,
                     const TString& group, const TString& subgroup, const TString& name,
-                    const TVector<float> &thresholds, 
+                    const TVector<float> &thresholds,
                     NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public) {
         Tracker.Initialize(counters, group, subgroup, name, thresholds, visibility);
     }
@@ -73,6 +73,7 @@ struct TPDiskMon {
             Booting,
             OK,
             Error,
+            Stopped
         };
 
         enum EDetailedState {
@@ -101,6 +102,7 @@ struct TPDiskMon {
             ErrorDeviceSerialMismatch,
             ErrorFake,
             BootingReencryptingFormat,
+            StoppedByYardControl,
         };
 
         static TString StateToStr(i64 val) {
@@ -112,6 +114,7 @@ struct TPDiskMon {
                 case Booting: return "Booting";
                 case OK: return "OK";
                 case Error: return "Error";
+                case Stopped: return "Stopped";
                 default: return "Unknown";
             }
         }
@@ -143,6 +146,7 @@ struct TPDiskMon {
                 case ErrorDeviceSerialMismatch: return "ErrorDeviceSerialMismatch";
                 case ErrorFake: return "ErrorFake";
                 case BootingReencryptingFormat: return "BootingReencryptingFormat";
+                case StoppedByYardControl: return "StoppedByYardControl";
                 default: return "Unknown";
             }
         }
@@ -400,6 +404,8 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkReadPayload;
     ::NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkReadSectorFooter;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteBufferCompactedBytes;
+
     struct TIoCounters {
         ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
         ::NMonitoring::TDynamicCounters::TCounterPtr Bytes;
@@ -465,12 +471,17 @@ struct TPDiskMon {
     TReqCounters YardSlay;
     TReqCounters YardControl;
 
+    TReqCounters ShredPDisk;
+    TReqCounters PreShredCompactVDisk;
+    TReqCounters ShredVDiskResult;
+    TReqCounters MarkDirty;
+
     TIoCounters WriteSyncLog;
     TIoCounters WriteFresh;
     TIoCounters WriteHuge;
     TIoCounters WriteComp;
     TIoCounters Trim;
-
+    TIoCounters ChunkShred;
     TIoCounters ReadSyncLog;
     TIoCounters ReadComp;
     TIoCounters ReadOnlineRt;
@@ -498,6 +509,10 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr TrimThreadCPU;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU;
 
+    // counter subgroup
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CounterGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PDiskCount;
+
     TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui32 pdiskId, TPDiskConfig *cfg);
 
     ::NMonitoring::TDynamicCounters::TCounterPtr GetBusyPeriod(const TString& owner, const TString& queue);
@@ -512,4 +527,3 @@ struct TPDiskMon {
 };
 
 } // NKikimr
-

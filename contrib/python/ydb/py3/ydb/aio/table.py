@@ -563,7 +563,14 @@ class SessionPool:
     async def _get_session_from_queue(self, timeout: float):
         task_wait = asyncio.ensure_future(asyncio.wait_for(self._active_queue.get(), timeout=timeout))
         task_should_stop = asyncio.ensure_future(self._should_stop.wait())
-        done, _ = await asyncio.wait((task_wait, task_should_stop), return_when=asyncio.FIRST_COMPLETED)
+        try:
+            done, _ = await asyncio.wait((task_wait, task_should_stop), return_when=asyncio.FIRST_COMPLETED)
+        except asyncio.CancelledError:
+            cancelled = task_wait.cancel()
+            if not cancelled:
+                priority, session = task_wait.result()
+                self._active_queue.put_nowait((priority, session))
+            raise
         if task_should_stop in done:
             task_wait.cancel()
             return self._create()

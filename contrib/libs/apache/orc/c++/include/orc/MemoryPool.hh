@@ -36,50 +36,50 @@ namespace orc {
   template <class T>
   class DataBuffer {
    private:
-    MemoryPool& memoryPool;
-    T* buf;
+    MemoryPool& memoryPool_;
+    T* buf_;
     // current size
-    uint64_t currentSize;
+    uint64_t currentSize_;
     // maximal capacity (actual allocated memory)
-    uint64_t currentCapacity;
+    uint64_t currentCapacity_;
 
     // not implemented
     DataBuffer(DataBuffer& buffer);
     DataBuffer& operator=(DataBuffer& buffer);
 
    public:
-    DataBuffer(MemoryPool& pool, uint64_t _size = 0);
+    DataBuffer(MemoryPool& pool, uint64_t size = 0);
 
     DataBuffer(DataBuffer<T>&& buffer) noexcept;
 
     virtual ~DataBuffer();
 
     T* data() {
-      return buf;
+      return buf_;
     }
 
     const T* data() const {
-      return buf;
+      return buf_;
     }
 
     uint64_t size() const {
-      return currentSize;
+      return currentSize_;
     }
 
     uint64_t capacity() const {
-      return currentCapacity;
+      return currentCapacity_;
     }
 
     const T& operator[](uint64_t i) const {
-      return buf[i];
+      return buf_[i];
     }
 
     T& operator[](uint64_t i) {
-      return buf[i];
+      return buf_[i];
     }
 
-    void reserve(uint64_t _size);
-    void resize(uint64_t _size);
+    void reserve(uint64_t size);
+    void resize(uint64_t size);
     void zeroOut();
   };
 

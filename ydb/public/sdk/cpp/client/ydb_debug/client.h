@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
-namespace NYdb::NDebug {
+namespace NYdb::inline V2::NDebug {
 
 ////////////////////////////////////////////////////////////////////////////////
 

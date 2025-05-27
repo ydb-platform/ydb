@@ -46,8 +46,8 @@ public:
             return ColumnIds;
         }
 
-        TMaybe<ui64> GetNextMessageOffset() const override {
-            return Nothing();
+        std::optional<ui64> GetNextMessageOffset() const override {
+            return std::nullopt;
         }
 
         void OnFilterStarted() override {
@@ -61,6 +61,13 @@ public:
                 CheckError(status, CompileError->first, CompileError->second);
             } else {
                 UNIT_FAIL("Filtering failed: " << status.GetErrorMessage());
+            }
+        }
+
+        void OnFilteredBatch(ui64 firstRow, ui64 lastRow) override {
+            UNIT_ASSERT_C(Started, "Unexpected data for not started filter");
+            for (ui64 rowId = firstRow; rowId <= lastRow; ++rowId) {
+                Callback(rowId);
             }
         }
 
@@ -85,7 +92,7 @@ public:
     virtual void SetUp(NUnitTest::TTestContext& ctx) override {
         TBase::SetUp(ctx);
 
-        CompileServiceActorId = Runtime.Register(CreatePurecalcCompileService());
+        CompileServiceActorId = Runtime.Register(CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>()));
     }
 
     virtual void TearDown(NUnitTest::TTestContext& ctx) override {
@@ -345,11 +352,11 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
     }
 
     Y_UNIT_TEST_F(CompilationValidation, TFiterFixture) {
-        CompileError = {EStatusId::INTERNAL_ERROR, "Failed to compile purecalc program subissue: { <main>: Error: Compile issues: generated.sql:2:36: Error: Unexpected token '.' : cannot match to any predicted input... } subissue: { <main>: Error: Final yql:"};
+        CompileError = {EStatusId::INTERNAL_ERROR, "Error: mismatched input '.'"};
         MakeFilter(
             {{"a1", "[DataType; String]"}},
             "where a2 ... 50",
-            [&](ui64 offset) {}
+            [&](ui64 /* offset */) {}
         );
     }
 }
@@ -404,22 +411,23 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         CheckSuccess(MakeFilter(
             {{"a1", "[DataType; String]"}},
             "where a1 = \"str1\"",
-            [&](ui64 offset) {}
+            [&](ui64 /* offset */) {}
         ));
 
         CheckError(
-            FiltersSet->AddFilter(MakeIntrusive<TFilterSetConsumer>(FilterIds.back(), TVector<ui64>(), TVector<TSchemaColumn>(), TString(), [&](ui64 offset) {}, CompileError)),
+            FiltersSet->AddFilter(MakeIntrusive<TFilterSetConsumer>(FilterIds.back(), TVector<ui64>(), TVector<TSchemaColumn>(), TString(), [&](ui64 /* offset */) {}, CompileError)),
             EStatusId::INTERNAL_ERROR,
             "Failed to create new filter, filter with id [0:0:0] already exists"
         );
     }
 
     Y_UNIT_TEST_F(CompilationValidation, TFilterSetFixture) {
-        CompileError = {EStatusId::INTERNAL_ERROR, "Failed to compile client filter subissue: { <main>: Error: Failed to compile purecalc program subissue: { <main>: Error: Compile issues: generated.sql:2:36: Error: Unexpected token '.' : cannot match to any predicted input... } subissue: { <main>: Error: Final yql:"};
+        CompileError = {EStatusId::INTERNAL_ERROR, "Error: mismatched input '.'"};
+        
         MakeFilter(
             {{"a1", "[DataType; String]"}},
             "where a2 ... 50",
-            [&](ui64 offset) {}
+            [&](ui64 /* offset */) {}
         );
     }
 }

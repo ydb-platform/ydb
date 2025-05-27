@@ -49,7 +49,7 @@ std::exception_ptr WrapSystemError(
     }
 
     auto message = NYT::Format("Request %qv to %qv failed", context.RequestId, context.HostName + context.Method);
-    TYtError outer(1, message, {TYtError(NClusterErrorCodes::Generic, ex.what())}, {
+    TYtError outer(NClusterErrorCodes::NBus::TransportError, message, {TYtError(NClusterErrorCodes::Generic, ex.what())}, {
         {"request_id", context.RequestId},
         {"host", context.HostName},
         {"method", context.Method},
@@ -229,8 +229,9 @@ bool THttpHeader::HasMutationId() const
     return Parameters_.contains("mutation_id");
 }
 
-void THttpHeader::SetMutationId(TMutationId mutationId) {
-    AddParameter("mutation_id", GetGuidAsString(mutationId), /* overwrite */ true);
+void THttpHeader::SetMutationId(TMutationId mutationId)
+{
+    AddParameter("mutation_id", GetGuidAsString(mutationId), /*overwrite*/ true);
 }
 
 void THttpHeader::SetToken(const TString& token)
@@ -498,7 +499,7 @@ void TAddressCache::AddAddress(TString hostName, TAddressPtr address)
 
     {
         TWriteGuard guard(Lock_);
-        Cache_.emplace(std::move(hostName), std::move(entry));
+        Cache_[std::move(hostName)] = std::move(entry);
     }
 }
 
@@ -544,7 +545,7 @@ TConnectionPtr TConnectionPool::Connect(
     TSocketHolder socket(DoConnect(networkAddress));
     SetNonBlock(socket, false);
 
-    connection->Socket.Reset(new TSocket(socket.Release()));
+    connection->Socket = std::make_unique<TSocket>(socket.Release());
 
     connection->DeadLine = TInstant::Now() + socketTimeout;
     connection->Socket->SetSocketTimeout(socketTimeout.Seconds());
@@ -753,7 +754,7 @@ private:
 THttpResponse::THttpResponse(
     TRequestContext context,
     IInputStream* socketStream)
-    : HttpInput_(MakeHolder<THttpInputWrapped>(context, socketStream))
+    : HttpInput_(std::make_unique<THttpInputWrapped>(context, socketStream))
     , Unframe_(HttpInput_->Headers().HasHeader("X-YT-Framing"))
     , Context_(std::move(context))
 {
@@ -765,23 +766,25 @@ THttpResponse::THttpResponse(
         return;
     }
 
-    ErrorResponse_ = TErrorResponse(HttpCode_, Context_.RequestId);
-
-    auto logAndSetError = [&] (const TString& rawError) {
+    auto logAndSetError = [&] (int code, const TString& rawError) {
         YT_LOG_ERROR("RSP %v - HTTP %v - %v",
             Context_.RequestId,
             HttpCode_,
             rawError.data());
-        ErrorResponse_->SetRawError(rawError);
+        ErrorResponse_ = TErrorResponse(TYtError(code, rawError), Context_.RequestId);
     };
 
     switch (HttpCode_) {
         case 429:
-            logAndSetError("request rate limit exceeded");
+            logAndSetError(NClusterErrorCodes::NSecurityClient::RequestQueueSizeLimitExceeded, "request rate limit exceeded");
             break;
 
         case 500:
-            logAndSetError(::TStringBuilder() << "internal error in proxy " << Context_.HostName);
+            logAndSetError(NClusterErrorCodes::NRpc::Unavailable, ::TStringBuilder() << "internal error in proxy " << Context_.HostName);
+            break;
+
+        case 503:
+            logAndSetError(NClusterErrorCodes::NBus::TransportError, "service unavailable");
             break;
 
         default: {
@@ -803,8 +806,7 @@ THttpResponse::THttpResponse(
             if (auto parsedResponse = ParseError(HttpInput_->Headers())) {
                 ErrorResponse_ = parsedResponse.GetRef();
             } else {
-                ErrorResponse_->SetRawError(
-                    errorString + " - X-YT-Error is missing in headers");
+                ErrorResponse_ = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), Context_.RequestId);
             }
             break;
         }
@@ -850,8 +852,9 @@ TMaybe<TErrorResponse> THttpResponse::ParseError(const THttpHeaders& headers)
 {
     for (const auto& header : headers) {
         if (header.Name() == "X-YT-Error") {
-            TErrorResponse errorResponse(HttpCode_, Context_.RequestId);
-            errorResponse.ParseFromJsonError(header.Value());
+            TYtError error;
+            error.ParseFrom(header.Value());
+            TErrorResponse errorResponse(std::move(error), Context_.RequestId);
             if (errorResponse.IsOk()) {
                 return Nothing();
             }
@@ -934,7 +937,7 @@ bool THttpResponse::RefreshFrameIfNecessary()
             case EFrameType::KeepAlive:
                 break;
             case EFrameType::Data:
-                RemainingFrameSize_ = ReadDataFrameSize(HttpInput_.Get());
+                RemainingFrameSize_ = ReadDataFrameSize(HttpInput_.get());
                 break;
             default:
                 ythrow yexception() << "Bad frame type " << static_cast<int>(frameTypeByte);
@@ -1026,10 +1029,10 @@ IOutputStream* THttpRequest::StartRequestImpl(bool includeParameters)
         LogResponse_ = true;
     }
 
-    RequestStream_ = MakeHolder<TRequestStream>(this, *Connection_->Socket.Get());
+    RequestStream_ = std::make_unique<TRequestStream>(this, *Connection_->Socket.get());
 
     RequestStream_->Write(strHeader.data(), strHeader.size());
-    return RequestStream_.Get();
+    return RequestStream_.get();
 }
 
 IOutputStream* THttpRequest::StartRequest()
@@ -1063,16 +1066,16 @@ void THttpRequest::SmallRequest(TMaybe<TStringBuf> body)
 THttpResponse* THttpRequest::GetResponseStream()
 {
     if (!Input_) {
-        SocketInput_.Reset(new TSocketInput(*Connection_->Socket.Get()));
+        SocketInput_ = std::make_unique<TSocketInput>(*Connection_->Socket.get());
         if (TConfig::Get()->UseAbortableResponse) {
             Y_ABORT_UNLESS(!Url_.empty());
-            Input_.Reset(new TAbortableHttpResponse(Context_, SocketInput_.Get(), Url_));
+            Input_ = std::make_unique<TAbortableHttpResponse>(Context_, SocketInput_.get(), Url_);
         } else {
-            Input_.Reset(new THttpResponse(Context_, SocketInput_.Get()));
+            Input_ = std::make_unique<THttpResponse>(Context_, SocketInput_.get());
         }
         Input_->CheckErrorResponse();
     }
-    return Input_.Get();
+    return Input_.get();
 }
 
 TString THttpRequest::GetResponse()

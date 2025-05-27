@@ -3,7 +3,7 @@ import shutil
 from devtools.yamaker.arcpath import ArcPath
 from devtools.yamaker import fileutil
 from devtools.yamaker import pathutil
-from devtools.yamaker.modules import Program, Linkable, Recursable, Switch
+from devtools.yamaker.modules import Program, Linkable, Switch
 from devtools.yamaker.project import CMakeNinjaNixProject
 
 
@@ -27,6 +27,12 @@ def post_install(self):
         # (`ya make --maps-mobile --target-platform=local-iossim-arm64' at the time)
         m.CFLAGS.remove("-DELF")
         m.CFLAGS.remove("-D__x86_64__")
+        m.after(
+            "CFLAGS",
+            """
+            CHECK_CONFIG_H(jconfigint.h)
+            """,
+        )
 
         m.ADDINCL.remove(self.arcdir + "/simd/x86_64")
         m.ADDINCL.remove(self.arcdir + "/simd/nasm")
@@ -39,14 +45,20 @@ def post_install(self):
         def is_direct_source(src):
             return pathutil.is_source(src) and "ext" not in src
 
+        def list_simd_sources(arch):
+            # fmt: off
+            return [
+                src
+                for src in fileutil.listdir(f"{self.dstdir}/simd/{arch}", rel=self.dstdir)
+                if is_direct_source(src)
+            ]
+            # fmt: on
+
         amd64 = {s for s in m.SRCS if s.startswith("simd/")}
-        i386 = fileutil.files(self.dstdir + "/simd/i386", rel=self.dstdir, test=is_direct_source)
-        arm = fileutil.files(self.dstdir + "/simd/arm/aarch32", rel=self.dstdir, test=is_direct_source)
-        arm64 = [
-            src for src in fileutil.listdir(f"{self.dstdir}/simd/arm", rel=self.dstdir) if is_direct_source(src)
-        ] + [
-            src for src in fileutil.listdir(f"{self.dstdir}/simd/arm/aarch64", rel=self.dstdir) if is_direct_source(src)
-        ]
+        i386 = list_simd_sources("i386")
+        arm32 = list_simd_sources("arm/aarch32")
+        arm32_neon = list_simd_sources("arm")
+        arm64 = list_simd_sources("arm/aarch64")
         simd_none = ["jsimd_none.c"]
 
         # This file contains the older GNU Assembler implementation of the Neon SIMD
@@ -62,24 +74,25 @@ def post_install(self):
                     ("OS_ANDROID", Linkable(SRCS=simd_none)),
                     ("ARCH_I386", Linkable(SRCS=i386)),
                     ("ARCH_X86_64", Linkable(SRCS=amd64)),
-                    ("ARCH_ARM7 AND NOT MSVC", Linkable(SRCS=arm)),
+                    (
+                        "ARCH_ARM7_NEON AND NOT MSVC",
+                        Linkable(
+                            SRCS=arm32 + arm32_neon,
+                            ADDINCL=[f"{self.arcdir}/simd/arm"],
+                        ),
+                    ),
+                    (
+                        "ARCH_ARM7 AND NOT MSVC",
+                        Linkable(SRCS=arm32),
+                    ),
                     (
                         "ARCH_ARM64 AND NOT MSVC",
-                        Linkable(SRCS=arm64, ADDINCL=[f"{self.arcdir}/simd/arm"]),
+                        Linkable(
+                            SRCS=arm32_neon + arm64,
+                            ADDINCL=[f"{self.arcdir}/simd/arm"],
+                        ),
                     ),
                     ("default", Linkable(SRCS=simd_none)),
-                ]
-            ),
-        )
-
-        m.after(
-            "RECURSE",
-            Switch(
-                [
-                    (
-                        "NOT OS_ANDROID AND NOT OS_IOS",
-                        Recursable(RECURSE_FOR_TESTS=["ut"]),
-                    ),
                 ]
             ),
         )
@@ -90,13 +103,18 @@ libjpeg_turbo = CMakeNinjaNixProject(
     nixattr="libjpeg",
     owners=["g:cpp-contrib", "g:avatars"],
     ignore_commands={"bash", "sed"},
-    install_targets={"turbojpeg", "cjpeg", "djpeg", "tjunittest", "jpegtran"},
+    use_full_libnames=True,
+    install_targets={
+        "libturbojpeg",
+        "cjpeg",
+        "djpeg",
+        "jpegtran",
+    },
     put={
-        "turbojpeg": ".",
+        "libturbojpeg": ".",
         "cjpeg": "cjpeg",
         "djpeg": "djpeg",
         "jpegtran": "jpegtran",
-        "tjunittest": "tjunittest",
     },
     platform_dispatchers=["jconfigint.h"],
     copy_sources=[
@@ -106,12 +124,6 @@ libjpeg_turbo = CMakeNinjaNixProject(
         "simd/x86_64/",
         "jsimd_none.c",
     ],
-    keep_paths={
-        "ut/*.py",
-        "ut/canondata/",
-        "ut/ya.make",
-        "testimages/",
-    },
     post_build=post_build,
     post_install=post_install,
 )

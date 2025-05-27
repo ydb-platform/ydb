@@ -223,12 +223,13 @@ public:
     }
 
     void ForceSize(ui64 size) {
-        DeviceSize = size;
-        if (DeviceSize < size) {
+        if (size < DeviceSize) {
             for (const auto& [offset, data] : Map) {
                 Y_VERIFY_S(offset + 4096 <= DeviceSize, "It is not possible to shrink TSectorMap with data");
             }
         }
+        
+        DeviceSize = size;
 
         InitSectorOperationThrottler();
     }
@@ -354,6 +355,10 @@ public:
     // Requires proto information, so should be defined in cpp
     void LoadFromFile(const TString& path);
     void StoreToFile(const TString& path);
+
+    ui64 GetDeviceSize() const {
+        return DeviceSize;
+    }
 
     NSectorMap::TSectorOperationThrottler::TDiskModeParams* GetDiskModeParams() {
         if (SectorOperationThrottler) {

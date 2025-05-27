@@ -1,11 +1,11 @@
 /* postgres can not */
 /* syntax version 1 */
-PRAGMA warning("disable", "1107");
+PRAGMA warning('disable', '1107');
 
 SELECT
     ListExtend([2u], [3s], [4l]),
-    ListExtend(1, "String", 123, NULL),
-    ListExtendStrict(1, "String", 123, NULL),
+    ListExtend(1, 'String', 123, NULL),
+    ListExtendStrict(1, 'String', 123, NULL),
     ListExtend([3s], [4], Just([5l])),
     ListExtend([1u], [2u], Nothing(List<Int32>?)),
     ListExtendStrict([1u], [2u], Nothing(List<UInt32>?)),

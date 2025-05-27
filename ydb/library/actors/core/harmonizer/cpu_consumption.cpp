@@ -38,7 +38,7 @@ namespace {
             poolConsumption->LastSecondCpu += threadLastSecondCpu;
             LWPROBE_WITH_DEBUG(HarmonizeCheckPoolByThread, pool.Pool->PoolId, pool.Pool->GetName(), threadIdx, threadElapsed, threadCpu, threadLastSecondElapsed, threadLastSecondCpu);
         }
-        for (ui32 sharedIdx = 0; sharedIdx < pool.SharedInfo.size(); ++sharedIdx) {
+        for (i16 sharedIdx = 0; sharedIdx < static_cast<i16>(pool.SharedInfo.size()); ++sharedIdx) {
             float sharedElapsed = Rescale(pool.GetSharedElapsed(sharedIdx));
             float sharedLastSecondElapsed = Rescale(pool.GetLastSecondSharedElapsed(sharedIdx));
             float sharedCpu = Rescale(pool.GetSharedCpu(sharedIdx));
@@ -62,8 +62,7 @@ namespace {
 } // namespace
 
 
-void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, const TSharedInfo& sharedInfo) {
-    FreeHalfThread.clear();
+void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, const TSharedInfo&) {
     NeedyPools.clear();
     HoggishPools.clear();
     IsNeedyByPool.clear();
@@ -96,20 +95,13 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
             IsStarvedPresent = true;
         }
 
-        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && (PoolConsumption[poolIdx].Cpu >= currentThreadCount);
+        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && (PoolConsumption[poolIdx].LastSecondCpu >= currentThreadCount);
         IsNeedyByPool.push_back(isNeedy);
         if (isNeedy) {
             NeedyPools.push_back(poolIdx);
         }
 
-        if (currentThreadCount - PoolConsumption[poolIdx].Elapsed > 0.5) {
-            if (sharedInfo.HasBorrowedSharedThread[poolIdx] || sharedInfo.HasSharedThreadWhichWasNotBorrowed[poolIdx]) {
-                FreeHalfThread.push_back(poolIdx);
-            }
-        }
-
-        bool isHoggish = IsHoggish(PoolConsumption[poolIdx].Elapsed, currentThreadCount)
-                || IsHoggish(PoolConsumption[poolIdx].LastSecondElapsed, currentThreadCount);
+        bool isHoggish = IsHoggish(PoolConsumption[poolIdx].Elapsed, currentThreadCount);
         if (isHoggish) {
             float freeCpu = std::max(currentThreadCount - PoolConsumption[poolIdx].Elapsed, currentThreadCount - PoolConsumption[poolIdx].LastSecondElapsed);
             HoggishPools.push_back({poolIdx, freeCpu});
@@ -145,16 +137,7 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
         });
     }
 
-    if (FreeHalfThread.size()) {
-        Sort(FreeHalfThread.begin(), FreeHalfThread.end(), [&] (i16 lhs, i16 rhs) {
-            if (pools[lhs]->Priority != pools[rhs]->Priority)  {
-                return pools[lhs]->Priority > pools[rhs]->Priority;
-            }
-            return pools[lhs]->Pool->PoolId < pools[rhs]->Pool->PoolId;
-        });
-    }
-
-    HARMONIZER_DEBUG_PRINT("NeedyPools", NeedyPools.size(), "FreeHalfThread", FreeHalfThread.size(), "HoggishPools", HoggishPools.size());
+    HARMONIZER_DEBUG_PRINT("NeedyPools", NeedyPools.size(), "HoggishPools", HoggishPools.size());
 
     Budget = TotalCores - Max(Elapsed, LastSecondElapsed);
     BudgetInt = static_cast<i16>(Max(Budget, 0.0f));

@@ -1,3 +1,4 @@
+# This set of sysincls corresponds to clang ${CLANG_RESOURCE_GLOBAL}/lib/clang/Headers
 - includes:
   - Intrin.h
   - altivec.h
@@ -22,6 +23,7 @@
   - bmi2intrin.h
   - bmiintrin.h
   - cmnintrin.h
+  - cuda_wrappers/new
   - e2kbuiltin.h
   - emmintrin.h
   - f16cintrin.h
@@ -33,6 +35,8 @@
   - intrin.h
   - intrin0.h
   - intrinsics.h
+  - lasxintrin.h
+  - lsxintrin.h
   - lzcntintrin.h
   - mm_malloc.h
   - mm3dnow.h
@@ -51,6 +55,7 @@
   - tbmintrin.h
   - tmmintrin.h
   - varargs.h
+  - wasm_simd128.h
   - wmmintrin.h
   - x86intrin.h
   - xmmintrin.h

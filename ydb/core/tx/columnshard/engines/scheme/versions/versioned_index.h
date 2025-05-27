@@ -1,5 +1,9 @@
 #pragma once
 #include "abstract_scheme.h"
+
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema_version.h>
+#include <ydb/core/tx/columnshard/engines/scheme/common/cache.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NOlap {
@@ -11,10 +15,10 @@ private:
     YDB_READONLY_DEF(NSharding::TGranuleShardingLogicContainer, ShardingInfo);
     YDB_READONLY(TSnapshot, SinceSnapshot, TSnapshot::Zero());
     YDB_READONLY(ui64, SnapshotVersion, 0);
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
 
 public:
-    TGranuleShardingInfo(const NSharding::TGranuleShardingLogicContainer& shardingInfo, const TSnapshot& sinceSnapshot, const ui64 version, const ui64 pathId)
+    TGranuleShardingInfo(const NSharding::TGranuleShardingLogicContainer& shardingInfo, const TSnapshot& sinceSnapshot, const ui64 version, const TInternalPathId pathId)
         : ShardingInfo(shardingInfo)
         , SinceSnapshot(sinceSnapshot)
         , SnapshotVersion(version)
@@ -24,7 +28,7 @@ public:
 };
 
 class TVersionedIndex {
-    THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> ShardingInfo;
+    THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> ShardingInfo;
     std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
     std::shared_ptr<arrow::Schema> PrimaryKey;
     std::map<ui64, ISnapshotSchema::TPtr> SnapshotByVersion;
@@ -47,7 +51,7 @@ public:
         return result ? result : defaultSchema;
     }
 
-    std::optional<TGranuleShardingInfo> GetShardingInfoOptional(const ui64 pathId, const TSnapshot& ss) const {
+    std::optional<TGranuleShardingInfo> GetShardingInfoOptional(const TInternalPathId pathId, const TSnapshot& ss) const {
         auto it = ShardingInfo.find(pathId);
         if (it == ShardingInfo.end() || it->second.empty()) {
             return std::nullopt;
@@ -64,7 +68,7 @@ public:
         }
     }
 
-    std::optional<TGranuleShardingInfo> GetShardingInfoActual(const ui64 pathId) const;
+    std::optional<TGranuleShardingInfo> GetShardingInfoActual(const TInternalPathId pathId) const;
 
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
         AFL_VERIFY(ShardingInfo[shardingInfo.GetPathId()].emplace(shardingInfo.GetSinceSnapshot(), shardingInfo).second);
@@ -123,7 +127,7 @@ public:
         return PrimaryKey;
     }
 
-    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
+    const TIndexInfo* AddIndex(const TSnapshot& snapshot, TObjectCache<TSchemaVersionId, TIndexInfo>::TEntryGuard&& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);
 };

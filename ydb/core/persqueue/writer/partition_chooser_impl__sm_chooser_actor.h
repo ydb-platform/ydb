@@ -32,8 +32,9 @@ public:
                            const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                            NPersQueue::TTopicConverterPtr& fullConverter,
                            const TString& sourceId,
-                           std::optional<ui32> preferedPartition)
-        : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition)
+                           std::optional<ui32> preferedPartition,
+                           NWilson::TTraceId traceId)
+        : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId))
         , Graph(graph) {
     }
 

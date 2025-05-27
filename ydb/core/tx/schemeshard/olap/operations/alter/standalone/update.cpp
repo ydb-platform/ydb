@@ -1,7 +1,6 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
-#include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -65,7 +64,7 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         }
         *description.MutableTtlSettings() = ttl.SerializeToProto();
     }
-    if (!targetSchema.ValidateTtlSettings(ttl.GetData(), collector)) {
+    if (!targetSchema.ValidateTtlSettings(ttl.GetData(), *context.GetSSOperationContext(), collector)) {
         return TConclusionStatus::Fail("ttl update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
     }
     auto saSharding = originalTable.GetTableInfoVerified().GetStandaloneShardingVerified();

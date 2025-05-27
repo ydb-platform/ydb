@@ -402,7 +402,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         CheckSuccess(MakeParser({{"a1", "[OptionalType; [DataType; Json]]"}, {"a2", "[OptionalType; [DataType; String]]"}}));
         CheckColumnError(R"({"a1": {"key": "value"}, "a2": {"key2": "value2"}})", 1, EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET << ", got parsing error for column 'a2' with type [OptionalType; [DataType; String]] subissue: { <main>: Error: Found unexpected nested value (raw: '{\"key2\": \"value2\"}'), expected data type String, please use Json type for nested values }");
         CheckColumnError(R"({"a1": {"key": "value", "nested": {"a": "b", "c":}}, "a2": "str"})", 0, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET + 1 << ", got parsing error for column 'a1' with type [OptionalType; [DataType; Json]] subissue: { <main>: Error: Found bad json value: '{\"key\": \"value\", \"nested\": {\"a\": \"b\", \"c\":}}' }");
-        CheckColumnError(R"({"a1": {"key" "value"}, "a2": "str"})", 0, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET + 2 << ", got parsing error for column 'a1' with type [OptionalType; [DataType; Json]] subissue: { <main>: Error: Failed to extract json value, current token: '{', error: TAPE_ERROR: The JSON document has an improper structure: missing or superfluous commas, braces, missing keys, etc. }");
+        CheckColumnError(R"({"a1": {"key" "value"}, "a2": "str"})", 0, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET + 2 << ", got parsing error for column 'a1' with type [OptionalType; [DataType; Json]] subissue: { <main>: Error: Failed to extract json value, current token: '{', error: TAPE_ERROR: The JSON document has an improper structure");
     }
 
     Y_UNIT_TEST_F(BoolsValidation, TJsonParserFixture) {
@@ -413,10 +413,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
 
     Y_UNIT_TEST_F(JsonStructureValidation, TJsonParserFixture) {
         CheckSuccess(MakeParser({{"a1", "[OptionalType; [DataType; String]]"}}));
-        CheckColumnError(R"({"a1": Yelse})", 0, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET << ", got parsing error for column 'a1' with type [OptionalType; [DataType; String]] subissue: { <main>: Error: Failed to determine json value type, current token: 'Yelse', error: TAPE_ERROR: The JSON document has an improper structure: missing or superfluous commas, braces, missing keys, etc. }");
-        CheckBatchError(R"({"a1": "st""r"})", EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1 << ", json item was corrupted: TAPE_ERROR: The JSON document has an improper structure: missing or superfluous commas, braces, missing keys, etc.");
-        CheckBatchError(R"({"a1": "x"} {"a1": "y"})", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 2 << " but got 2");
-        CheckBatchError(R"({)", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 3 << " but got 0");
+        CheckColumnError(R"({"a1": Yelse})", 0, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET << ", got parsing error for column 'a1' with type [OptionalType; [DataType; String]] subissue: { <main>: Error: Failed to determine json value type, current token: 'Yelse', error: TAPE_ERROR: The JSON document has an improper structure");
+        CheckBatchError(R"({"a1": "st""r"})", EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1 << ", json item was corrupted: TAPE_ERROR: The JSON document has an improper structure");
+        CheckBatchError(R"({"a1": "x"} {"a1": "y"})", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 2 << " but got 2 (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: {\"a1\": \"x\"} {\"a1\": \"y\"}");
+        CheckBatchError(R"({)", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 3 << " but got 0 (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: {");
     }
 }
 

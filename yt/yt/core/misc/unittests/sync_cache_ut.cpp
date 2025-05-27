@@ -44,7 +44,7 @@ TSharedRef CreateRandomReference(TFastRng64& rnd, i64 size)
     }
 
     auto output = TSharedRef::FromString(s);
-    YT_ASSERT(static_cast<i64>(output.Size()) == size);
+    YT_ASSERT(std::ssize(output) == size);
     return output;
 }
 

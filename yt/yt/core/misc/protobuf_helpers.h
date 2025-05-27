@@ -3,7 +3,6 @@
 #include "guid.h"
 #include "mpl.h"
 #include "object_pool.h"
-#include "range.h"
 #include "serialize.h"
 
 #include <yt/yt/core/compression/public.h>
@@ -16,6 +15,9 @@
 #include <library/cpp/yt/misc/optional.h>
 #include <library/cpp/yt/misc/preprocessor.h>
 #include <library/cpp/yt/misc/strong_typedef.h>
+#include <library/cpp/yt/misc/static_initializer.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/message.h>
@@ -121,6 +123,11 @@ void ToProto(
     ::google::protobuf::RepeatedField<TSerialized>* serializedArray,
     const TOriginalArray& originalArray);
 
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void ToProto(
+    ::google::protobuf::Map<TSerializedKey, TSerializedValue>* serializedMap,
+    const THashMap<TKey, TValue>& originalMap);
+
 template <class TOriginalArray, class TSerialized, class... TArgs>
 void FromProto(
     TOriginalArray* originalArray,
@@ -141,6 +148,11 @@ template <class TOriginal, class TSerialized>
 void CheckedHashSetFromProto(
     THashSet<TOriginal>* originalHashSet,
     const ::google::protobuf::RepeatedField<TSerialized>& serializedHashSet);
+
+template <class TKey, class TValue, class TSerializedKey, class TSerializedValue>
+void FromProto(
+    THashMap<TKey, TValue>* originalMap,
+    const ::google::protobuf::Map<TSerializedKey, TSerializedValue>& serializedMap);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -373,17 +385,15 @@ struct IProtobufExtensionRegistry
 };
 
 #define REGISTER_PROTO_EXTENSION(type, tag, name) \
-    YT_ATTRIBUTE_USED static const void* PP_ANONYMOUS_VARIABLE(RegisterProtoExtension) = [] { \
+    YT_STATIC_INITIALIZER( \
         NYT::IProtobufExtensionRegistry::Get()->AddAction([] { \
             const auto* descriptor = type::default_instance().GetDescriptor(); \
-            NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
+            ::NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
                 .MessageDescriptor = descriptor, \
                 .Tag = tag, \
-                .Name = #name \
+                .Name = #name, \
             });\
-        }); \
-        return nullptr; \
-    } ();
+        }));
 
 //! Finds and deserializes an extension of the given type. Fails if no matching
 //! extension is found.
@@ -464,13 +474,33 @@ google::protobuf::Timestamp GetProtoNow();
 //! field. Macro accepts desired target type as optional third parameter.
 //! Usage:
 //!     // Get as is.
-//!     int instantInt = YT_PROTO_OPTIONAL(message, instant);
+//!     int instantInt = YT_OPTIONAL_FROM_PROTO(message, instant);
 //!     // Get with conversion.
-//!     TInstant instant = YT_PROTO_OPTIONAL(message, instant, TInstant);
-#define YT_PROTO_OPTIONAL(message, field, ...) \
+//!     TInstant instant = YT_OPTIONAL_FROM_PROTO(message, instant, TInstant);
+#define YT_OPTIONAL_FROM_PROTO(message, field, ...) \
     (((message).has_##field()) \
-        ? std::optional(YT_PROTO_OPTIONAL_CONVERT(__VA_ARGS__)((message).field())) \
+        ? std::optional(YT_OPTIONAL_FROM_PROTO_CONVERT(__VA_ARGS__)((message).field())) \
         : std::nullopt)
+
+#define YT_OPTIONAL_TO_PROTO(message, field, original) \
+    do {\
+        if (original.has_value()) {\
+            ToProto((message)->mutable_##field(), *original);\
+        } else {\
+            (message)->clear_##field();\
+        }\
+    } while (false)
+
+#define YT_OPTIONAL_SET_PROTO(message, field, original) \
+    do {\
+        /* Avoid unnecessary computation if <original> is a return value of a call*/\
+        const auto& originalRef = (original);\
+        if (originalRef.has_value()) {\
+            (message)->set_##field(ToProto(*originalRef));\
+        } else {\
+            (message)->clear_##field();\
+        }\
+    } while (false)
 
 // TODO(cherepashka): to remove after std::optional::and_then is here.
 //! This macro may be used to extract std::optional<T> from protobuf message field of type T and to apply some function to value if it is present.
@@ -562,8 +592,9 @@ public:
 
 private:
     IZeroCopyOutput* const Stream_;
+
     std::exception_ptr Error_;
-    int64_t ByteCount_ = 0;
+    i64 ByteCount_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

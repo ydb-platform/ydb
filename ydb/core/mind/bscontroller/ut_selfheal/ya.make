@@ -18,10 +18,12 @@ SRCS(
 PEERDIR(
     ydb/apps/version
     ydb/core/blobstorage/dsproxy/mock
+    ydb/core/blobstorage/nodewarden
+    ydb/core/mind
     ydb/core/blobstorage/pdisk/mock
     ydb/core/mind/bscontroller
     ydb/core/tx/scheme_board
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
 )

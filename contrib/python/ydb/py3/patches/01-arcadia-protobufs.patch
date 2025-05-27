@@ -1,6 +1,6 @@
 --- contrib/python/ydb/py3/ydb/_grpc/common/__init__.py	(index)
 +++ contrib/python/ydb/py3/ydb/_grpc/common/__init__.py	(working tree)
-@@ -1,46 +0,0 @@
+@@ -1,55 +0,0 @@
 -import sys
 -
 -import google.protobuf
@@ -39,7 +39,7 @@
 -        from ydb._grpc.v3 import protos  # noqa
 -
 -        sys.modules["ydb._grpc.common.protos"] = sys.modules["ydb._grpc.v3.protos"]
--    else:
+-    elif protobuf_version < Version("5.0"):
 -        from ydb._grpc.v4 import *  # noqa
 -
 -        sys.modules["ydb._grpc.common"] = sys.modules["ydb._grpc.v4"]
@@ -47,3 +47,12 @@
 -        from ydb._grpc.v4 import protos  # noqa
 -
 -        sys.modules["ydb._grpc.common.protos"] = sys.modules["ydb._grpc.v4.protos"]
+-
+-    else:
+-        from ydb._grpc.v5 import *  # noqa
+-
+-        sys.modules["ydb._grpc.common"] = sys.modules["ydb._grpc.v5"]
+-
+-        from ydb._grpc.v5 import protos  # noqa
+-
+-        sys.modules["ydb._grpc.common.protos"] = sys.modules["ydb._grpc.v5.protos"]

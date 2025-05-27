@@ -49,6 +49,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_select.test_plan/foo",
                                                         "ReadColumns": [
                                                             "f1"
                                                         ],
@@ -57,6 +58,7 @@
                                                             "f1 (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
+                                                        "Reverse": false,
                                                         "Scan": "Sequential",
                                                         "Table": "postgres_select.test_plan/foo"
                                                     }

@@ -107,7 +107,8 @@ namespace NKikimr {
         void MainCycle(const TActorContext &ctx) {
             TQuery *query = nullptr;
             while ((query = FetchNextQuery()) && !ResultSize.IsOverflow()) {
-                Y_ABORT_UNLESS(query->PartId == 0); // only full blobs (w/o specifying a part) are allowed
+                // only full blobs (w/o specifying a part) are allowed
+                Y_VERIFY_S(query->PartId == 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix); 
                 const ui64 *cookiePtr = query->HasCookie ? &query->CookieVal : nullptr;
                 ResultSize.AddLogoBlobIndex();
                 if (!BlobInIndex) {
@@ -213,19 +214,19 @@ namespace NKikimr {
                 NReadBatcher::TDataItem::EType t = it->GetType();
                 switch (t) {
                     case NReadBatcher::TDataItem::ET_CLEAN:
-                        Y_ABORT("Impossible case");
+                        Y_ABORT_S(QueryCtx->HullCtx->VCtx->VDiskLogPrefix << "Impossible case");
                     case NReadBatcher::TDataItem::ET_NODATA:
                         // put NODATA
                         Result->AddResult(NKikimrProto::NODATA, it->Id, cookiePtr, pingr);
                         break;
                     case NReadBatcher::TDataItem::ET_ERROR:
                         // put ERROR
-                        Y_ABORT_UNLESS(it->Id.PartId() > 0);
+                        Y_VERIFY_S(it->Id.PartId() > 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
                         Result->AddResult(NKikimrProto::ERROR, it->Id, cookiePtr, pingr);
                         break;
                     case NReadBatcher::TDataItem::ET_NOT_YET:
                         // put NOT_YET
-                        Y_ABORT_UNLESS(it->Id.PartId() > 0);
+                        Y_VERIFY_S(it->Id.PartId() > 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
                         Result->AddResult(NKikimrProto::NOT_YET, it->Id, query->Shift, static_cast<ui32>(query->Size),
                             cookiePtr, pingr, keep, doNotKeep);
                         break;
@@ -233,7 +234,7 @@ namespace NKikimr {
                     case NReadBatcher::TDataItem::ET_SETMEM:
                     {
                         // GOOD
-                        Y_ABORT_UNLESS(it->Id.PartId() > 0);
+                        Y_VERIFY_S(it->Id.PartId() > 0, QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
                         struct TProcessor {
                             std::unique_ptr<TEvBlobStorage::TEvVGetResult>& Result;
                             TLogoBlobID Id;
@@ -294,7 +295,7 @@ namespace NKikimr {
                 if (res.GetStatus() == NKikimrProto::CORRUPTED) {
                     const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(res.GetBlobID());
                     const auto it = map.find(id.FullID());
-                    Y_ABORT_UNLESS(it != map.end());
+                    Y_VERIFY_S(it != map.end(), QueryCtx->HullCtx->VCtx->VDiskLogPrefix);
                     if (it->second->Status == NKikimrProto::OK) {
                         const TRope& buffer = it->second->GetPartData(id);
                         const ui32 shift = res.GetShift();

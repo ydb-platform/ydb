@@ -14,4 +14,6 @@ PEERDIR(
     yql/essentials/core/expr_nodes
 )
 
+YQL_LAST_ABI_VERSION()
+
 END()

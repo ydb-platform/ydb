@@ -41,7 +41,7 @@ using namespace NLogging;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = SolomonLogger;
+constinit const auto Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -88,6 +88,7 @@ TSolomonExporter::TSolomonExporter(
 
         return shard->GridStep->GetValue() / config->GridStep.GetValue();
     });
+    Registry_->SetLabelSanitizationPolicy(Config_->LabelSanitizationPolicy);
 
     if (Config_->ReportBuildInfo) {
         TProfiler profiler{registry, ""};
@@ -599,7 +600,7 @@ void TSolomonExporter::DoHandleShard(
             YT_LOG_DEBUG("Timestamp query arguments are missing; returning last value");
 
             int gridFactor = gridStep / Config_->GridStep;
-            for (auto i = static_cast<int>(Window_.size()) - 1; i >= 0; --i) {
+            for (auto i = std::ssize(Window_) - 1; i >= 0; --i) {
                 auto [iteration, time] = Window_[i];
                 if (iteration % gridFactor == 0) {
                     readWindow.emplace_back(std::vector<int>{Registry_->IndexOf(iteration / gridFactor)}, time);
@@ -635,11 +636,15 @@ void TSolomonExporter::DoHandleShard(
         if (Config_->ConvertCountersToDeltaGauge && outputEncodingContext.IsSolomonPull) {
             options.ConvertCountersToDeltaGauge = true;
         }
+        if (Config_->EnableHistogramCompat && outputEncodingContext.IsSolomonPull) {
+            options.EnableHistogramCompat = true;
+        }
 
         options.EnableSolomonAggregationWorkaround = outputEncodingContext.IsSolomonPull;
         options.Times = readWindow;
         options.SummaryPolicy = Config_->GetSummaryPolicy();
         options.MarkAggregates = Config_->MarkAggregates;
+        options.ReportTimestampsForRateMetrics = Config_->ReportTimestampsForRateMetrics;
         options.StripSensorsNamePrefix = Config_->StripSensorsNamePrefix;
         options.LingerWindowSize = Config_->LingerTimeout / gridStep;
 

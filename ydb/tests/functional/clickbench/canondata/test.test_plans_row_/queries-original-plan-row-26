@@ -45,7 +45,7 @@
                                                         ],
                                                         "Limit": "10",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": ""
+                                                        "TopSortBy": "[$5.EventTime,$5.SearchPhrase]"
                                                     },
                                                     {
                                                         "Inputs": [
@@ -59,6 +59,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
+                                                        "Path": "/local/clickbench/plans/row/hits",
                                                         "ReadColumns": [
                                                             "EventTime",
                                                             "SearchPhrase"

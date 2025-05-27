@@ -5,7 +5,6 @@
 #include <yt/yt/client/cache/cache.h>
 #include <yt/yt/client/cache/config.h>
 
-
 namespace NYT::NClient::NFederated {
 
 ////////////////////////////////////////////////////////////////////////////////

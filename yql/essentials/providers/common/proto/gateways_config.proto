@@ -103,6 +103,11 @@ message TYtClusterConfig {
     repeated TAttr Settings = 100;
 }
 
+message TFileWithMd5 {
+    optional string File = 1;
+    optional string Md5 = 2;
+}
+
 message TYtGatewayConfig {
     optional uint32 GatewayThreads = 1 [default = 0]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
     optional EYtLogLevel YtLogLevel = 2 [default = YL_ERROR]; // The verbosity level of YT log
@@ -117,6 +122,7 @@ message TYtGatewayConfig {
     optional uint64 YtDebugLogSize = 11 [default = 0]; // Max YT debug log size
     optional bool YtDebugLogAlwaysWrite = 12 [default = false]; // Write YT debug log always or on error only
     optional string LocalChainFile = 14; // File to dump table contet in test mode
+    repeated TFileWithMd5 MrJobSystemLibsWithMd5 = 15; // Paths to linux dynamic libraries required for running mrjob.
 
     repeated TRemoteFilePattern RemoteFilePatterns = 100;
     repeated TYtClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected
@@ -388,7 +394,7 @@ message TS3GatewayConfig {
     repeated TS3FormatSizeLimit FormatSizeLimit = 6; // Format limits (override FileSizeLimit)
     optional uint64 BlockFileSizeLimit = 10;         // Global limit for block readers (overrides FormatSizeLimit)
     optional uint64 MaxFilesPerQuery = 3;
-    optional uint64 MaxReadSizePerQuery = 4;
+    reserved 4;
     optional uint64 MaxDiscoveryFilesPerQuery = 5;
     optional uint64 MaxInflightListsPerQuery = 7;
     optional uint64 MaxDirectoriesAndFilesPerQuery = 8;
@@ -516,6 +522,7 @@ message TCoreAttr {
 message TYqlCoreConfig {
     repeated TCoreAttr Flags = 1;
     optional TActivationPercentage QPlayerActivation = 2;
+    optional uint32 QPlayerRobotPercentage = 3 [default = 0];
 }
 
 /////////////////////////////// Sql Core ///////////////////////////////
@@ -588,6 +595,11 @@ enum EGenericDataSourceKind {
     GREENPLUM = 7;
     ORACLE = 8;
     LOGGING = 9;
+    MONGO_DB = 10;
+    REDIS = 11;
+    PROMETHEUS = 12;
+    ICEBERG = 13;
+    OPENSEARCH = 14;
 }
 
 // EGenericProtocol generalizes various kinds of network protocols supported by different databases.
@@ -634,6 +646,86 @@ message TLoggingDataSourceOptions {
     optional string folder_id = 1;
 }
 
+// TMongoDbDataSourceOptions represents settings specific to MongoDB
+message TMongoDbDataSourceOptions {
+    enum EReadingMode {
+        READING_MODE_UNSPECIFIED = 0;
+        // Returns each top level field of the document deserialized into the corresponding YQL type; if the type of some field is ambiguous / inconsistent across several documents it is returned serialized as an YQL Utf8 value
+        TABLE = 1;
+    };
+      
+    // Ways of dealing with values read in ReadSplit whose types are inconsistent with types that were deduced in DescribeTable
+    enum EUnexpectedTypeDisplayMode {
+        UNEXPECTED_UNSPECIFIED = 0;
+        UNEXPECTED_AS_NULL = 1;
+        UNEXPECTED_AS_STRING = 2;
+    };
+
+    // Ways of dealing with unsupported data types
+    enum EUnsupportedTypeDisplayMode {
+        UNSUPPORTED_UNSPECIFIED = 0;
+        UNSUPPORTED_OMIT = 1;
+        UNSUPPORTED_AS_STRING = 2;
+    };
+    
+    optional EReadingMode reading_mode = 1;
+    optional EUnexpectedTypeDisplayMode unexpected_type_display_mode = 2;
+    optional EUnsupportedTypeDisplayMode unsupported_type_display_mode = 3;
+}
+
+// TIcebergCatalog represents settings specific to iceberg catalog
+message TIcebergCatalog {
+    // Hadoop Iceberg Catalog which is built on top of a storage
+    message THadoop {
+    }
+
+    // Hive Iceberg Catalog which is based on a Hive Metastore
+    message THiveMetastore {
+        // Location of a hive metastore
+        // e.g., thrift://host:9083/
+        optional string uri = 1;
+    }
+
+    oneof payload {
+        THadoop hadoop = 1;
+        THiveMetastore hive_metastore = 3;
+    }
+
+    reserved 2;
+}
+
+// TIcebergWarehouse represents settings specific to iceberg warehouse
+message TIcebergWarehouse {
+    // Iceberg data located in a S3 storage
+    message TS3 {
+        // Data location in a storage
+        // e.g., s3a://iceberg-bucket/storage
+        optional string uri = 1;
+
+        // Endpoint to access a storage
+        // e.g., https://storage.yandexcloud.net
+        optional string endpoint = 2;
+
+        // Region where a storage is located
+        // e.g., ru-central1
+        optional string region = 3;
+    }
+
+    oneof payload {
+        TS3 s3 = 1;
+    }
+}
+
+// TIcebergDataSourceOptions represents settings specific
+// to Iceberg data source
+message TIcebergDataSourceOptions {
+    // Iceberg catalog
+    optional TIcebergCatalog catalog = 1;
+
+    // Iceberg warehouse
+    optional TIcebergWarehouse warehouse = 2;
+}
+
 // TGenericDataSourceInstance helps to identify the instance of a data source to redirect request to.
 message TGenericDataSourceInstance {
     // Data source kind
@@ -658,6 +750,8 @@ message TGenericDataSourceInstance {
         TGreenplumDataSourceOptions gp_options = 10;
         TOracleDataSourceOptions oracle_options = 11;
         TLoggingDataSourceOptions logging_options = 12;
+        TMongoDbDataSourceOptions mongodb_options = 13;
+        TIcebergDataSourceOptions iceberg_options = 14;
     }
 }
 
@@ -705,6 +799,17 @@ message TGenericClusterConfig {
     reserved 2, 3, 5;
 }
 
+// Connection factory type
+enum EConnectionFactory {
+    FACTORY_UNSPECIFIED = 0;
+
+    // Single connection for all requests
+    SINGLE = 1;
+
+    // Create new connection for each request
+    NEW_FOR_EACH_REQUEST = 2;
+}
+
 message TGenericConnectorConfig {
     // There are two options to configure Connector network address:
     // 1. Set address statically via `Endpoint.Host` and `Endpoint.Port`;
@@ -719,13 +824,35 @@ message TGenericConnectorConfig {
     // If empty, the default system CA certificate pool will be used.
     optional string SslCaCrt = 5;
 
+    // Сonnection factory to use
+    // Default = SINGLE
+    optional EConnectionFactory Factory = 7;
+
+    // List of DataSourceKinds for which this connector can be used
+    // Default = empty
+    repeated EGenericDataSourceKind ForKinds = 8;
+
     reserved 1, 2;
 }
 
 message TGenericGatewayConfig {
-    // Connector service network endpoint
-    // TODO: replace with map<DataSourceKind, TGenericConnectorConfig>
+    //
+    // Default Connector service network endpoint.
+    //
+    // This field is interpreted as a "Default Connector".
+    // Used when "Connectors" does not contain an appropriate connector for a request's.
+    // EGenericDataSourceKind. The value of a field "Connector.ForKinds" is ignored.
+    //
     optional TGenericConnectorConfig Connector = 5;
+
+    //
+    // The list of Connectors.
+    // 
+    // When a request is served, firstly this list is checked.
+    // If the list has a connector for a request's EGenericDataSourceKind it will
+    // be applied to that request; otherwise, the "Default Connector" is used.
+    //
+    repeated TGenericConnectorConfig Connectors = 8;
 
     // Database clusters supported by this particular instance
     repeated TGenericClusterConfig ClusterMapping = 3;
@@ -764,6 +891,13 @@ message TRevisionFilterConfig {
     repeated TRevisionException RevisionException = 1;
 }
 
+///////////////////////////// Ytflow /////////////////////////////
+
+message TYtflowGatewayConfig {
+    optional uint32 GatewayThreads = 1 [default = 1]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
+}
+
+
 /////////////////////////////// Root ///////////////////////////////
 
 message TGatewaysConfig {
@@ -790,4 +924,5 @@ message TGatewaysConfig {
     optional TGenericGatewayConfig Generic = 21;
     optional TRevisionFilterConfig RevisionFilter = 22;
     optional TDbResolverConfig DbResolver = 23;
+    optional TYtflowGatewayConfig Ytflow = 24;
 }

@@ -1,6 +1,7 @@
 #include "rpc_execute_mkql.h"
 #include "service_tablet.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/grpc_services/rpc_request_base.h>
 #include <ydb/core/grpc_services/audit_dml_operations.h>
 #include <ydb/core/base/tablet.h>
@@ -24,7 +25,7 @@ public:
     using TBase::TBase;
 
     void Bootstrap() {
-        if (!CheckAccess()) {
+        if (!IsAdministrator(AppData(), this->UserToken.Get())) {
             auto error = TStringBuilder() << "Access denied";
             if (this->UserToken) {
                 error << ": '" << this->UserToken->GetUserSID() << "' is not an admin";
@@ -83,25 +84,6 @@ public:
         Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup);
 
         Become(&TThis::StateWork);
-    }
-
-private:
-    bool CheckAccess() const {
-        if (AppData()->AdministrationAllowedSIDs.empty()) {
-            return true;
-        }
-
-        if (!this->UserToken) {
-            return false;
-        }
-
-        for (const auto& sid : AppData()->AdministrationAllowedSIDs) {
-            if (this->UserToken->IsExist(sid)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
 private:

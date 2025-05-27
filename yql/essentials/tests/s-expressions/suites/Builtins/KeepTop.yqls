@@ -1,0 +1,12 @@
+(
+#comment
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+(let list (AsList (Int32 '1) (Int32 '3)))
+(let keyExtractor (lambda '(x) x))
+(let item (Int32 '2))
+(let data (Sort (KeepTop (Uint64 '2) list item (Bool 'true) keyExtractor) (Bool 'true) keyExtractor))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

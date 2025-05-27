@@ -9,7 +9,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 
-#include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
@@ -163,6 +163,7 @@ void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
                                            TPDiskCategory(deviceType, 0).GetRaw()));
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+        pDiskConfig->ReadOnly = inst.ReadOnly;
         const NPDisk::TMainKey mainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence }, .IsInitialized = true };
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
                     mainKey, counters), TMailboxType::Revolving, 0);
@@ -250,7 +251,7 @@ bool TDefaultVDiskSetup::SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pd
 
     NKikimr::TVDiskConfig::TBaseInfo baseInfo(vdisk.VDiskID, pdisk.PDiskActorID, pdisk.PDiskGuid,
             pdisk.PDiskID, NKikimr::NPDisk::DEVICE_TYPE_ROT, slotId,
-            NKikimrBlobStorage::TVDiskKind::Default, initOwnerRound, {});
+            NKikimrBlobStorage::TVDiskKind::Default, initOwnerRound, {}, false, {}, 0, 0, pdisk.ReadOnly);
     vdisk.Cfg = MakeIntrusive<NKikimr::TVDiskConfig>(baseInfo);
 
     for (auto &modifier : ConfigModifiers) {
@@ -367,13 +368,12 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     //////////////////////////////////////////////////////////////////////////////
 
     ///////////////////////// MONITORING SETTINGS /////////////////////////////////
-    Monitoring.reset(new NActors::TSyncHttpMon({
+    Monitoring.reset(new NActors::TMon({
         .Port = 8088,
         .Title = "at"
     }));
     NMonitoring::TIndexMonPage *actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
     Monitoring->RegisterCountersPage("counters", "Counters", Counters);
-    Monitoring->Start();
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Monitoring settings set up");
     //////////////////////////////////////////////////////////////////////////////
 
@@ -390,11 +390,13 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Actor system created");
 
     ActorSystem1->Start();
+    Monitoring->Start(ActorSystem1.get());
     LOG_NOTICE(*ActorSystem1, NActorsServices::TEST, "Actor system started");
 
 }
 
 void TConfiguration::Shutdown() {
+    Monitoring->Stop();
     ActorSystem1->Stop();
     ActorSystem1.reset();
 }

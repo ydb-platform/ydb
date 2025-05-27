@@ -1,0 +1,118 @@
+--- a/include/boost/xpressive/detail/core/matcher/alternate_matcher.hpp	(index)
++++ b/include/boost/xpressive/detail/core/matcher/alternate_matcher.hpp	(working tree)
+@@ -98,6 +98,8 @@ namespace boost { namespace xpressive { namespace detail
+         {
+         }
+ 
++        alternate_matcher(const alternate_matcher& other) = default;
++
+         template<typename BidiIter, typename Next>
+         bool match(match_state<BidiIter> &state, Next const &next) const
+         {
+@@ -119,7 +121,7 @@ namespace boost { namespace xpressive { namespace detail
+         }
+ 
+     private:
+-        alternate_matcher &operator =(alternate_matcher const &);
++        alternate_matcher &operator =(alternate_matcher const &) = delete;
+ 
+         bool can_match_(char_type ch, Traits const &tr) const
+         {
+--- a/include/boost/xpressive/detail/core/matcher/attr_matcher.hpp	(index)
++++ b/include/boost/xpressive/detail/core/matcher/attr_matcher.hpp	(working tree)
+@@ -42,7 +42,7 @@ namespace boost { namespace xpressive { namespace detail
+             return this->traits_.translate(ch1);
+         }
+     private:
+-        char_translate &operator =(char_translate const &);
++        char_translate &operator =(char_translate const &) = delete;
+     };
+ 
+     ///////////////////////////////////////////////////////////////////////////////
+@@ -63,7 +63,7 @@ namespace boost { namespace xpressive { namespace detail
+             return this->traits_.translate_nocase(ch1);
+         }
+     private:
+-        char_translate &operator =(char_translate const &);
++        char_translate &operator =(char_translate const &) = delete;
+     };
+ 
+     ///////////////////////////////////////////////////////////////////////////////
+--- a/include/boost/xpressive/detail/core/matcher/optional_matcher.hpp	(index)
++++ b/include/boost/xpressive/detail/core/matcher/optional_matcher.hpp	(working tree)
+@@ -34,6 +34,8 @@ namespace boost { namespace xpressive { namespace detail
+         {
+         }
+ 
++        optional_matcher(const optional_matcher& other) = default;
++
+         template<typename BidiIter, typename Next>
+         bool match(match_state<BidiIter> &state, Next const &next) const
+         {
+@@ -55,7 +57,7 @@ namespace boost { namespace xpressive { namespace detail
+                 || this->xpr_.BOOST_NESTED_TEMPLATE push_match<Next>(state);
+         }
+ 
+-        optional_matcher &operator =(optional_matcher const &);
++        optional_matcher &operator =(optional_matcher const &) = delete;
+     };
+ 
+     ///////////////////////////////////////////////////////////////////////////////
+@@ -98,6 +100,8 @@ namespace boost { namespace xpressive { namespace detail
+             return this->match_(state, next, Greedy());
+         }
+ 
++        optional_mark_matcher(const optional_mark_matcher& other) = default;
++
+     private:
+         template<typename BidiIter, typename Next>
+         bool match_(match_state<BidiIter> &state, Next const &next, mpl::true_) const // Greedy
+@@ -113,7 +117,7 @@ namespace boost { namespace xpressive { namespace detail
+                 || this->xpr_.BOOST_NESTED_TEMPLATE push_match<Next>(state);
+         }
+ 
+-        optional_mark_matcher &operator =(optional_mark_matcher const &);
++        optional_mark_matcher &operator =(optional_mark_matcher const &) = delete;
+     };
+ 
+ }}}
+--- a/include/boost/xpressive/detail/core/matcher/simple_repeat_matcher.hpp	(index)
++++ b/include/boost/xpressive/detail/core/matcher/simple_repeat_matcher.hpp	(working tree)
+@@ -82,6 +82,8 @@ namespace boost { namespace xpressive { namespace detail
+             BOOST_ASSERT(Xpr::width == unknown_width() || Xpr::width == width);
+         }
+ 
++        simple_repeat_matcher(const simple_repeat_matcher& other) = default;
++
+         template<typename BidiIter, typename Next>
+         bool match(match_state<BidiIter> &state, Next const &next) const
+         {
+@@ -216,7 +218,7 @@ namespace boost { namespace xpressive { namespace detail
+         }
+ 
+     private:
+-        simple_repeat_matcher &operator =(simple_repeat_matcher const &);
++        simple_repeat_matcher &operator =(simple_repeat_matcher const &) = delete;
+     };
+ 
+     // BUGBUG can all non-greedy quantification be done with the fixed width quantifier?
+--- a/include/boost/xpressive/detail/static/static.hpp	(index)
++++ b/include/boost/xpressive/detail/static/static.hpp	(working tree)
+@@ -128,6 +128,8 @@ struct static_xpression
+     {
+     }
+ 
++    static_xpression(static_xpression const &other) = default;
++
+     // match
+     //  delegates to the Matcher
+     template<typename BidiIter>
+@@ -176,7 +178,7 @@ struct static_xpression
+ 
+ private:
+ 
+-    static_xpression &operator =(static_xpression const &);
++    static_xpression &operator =(static_xpression const &) = delete;
+ 
+     template<typename Char>
+     void peek_next_(mpl::true_, xpression_peeker<Char> &peeker) const

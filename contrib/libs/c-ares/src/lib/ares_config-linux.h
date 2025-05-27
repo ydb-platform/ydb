@@ -145,6 +145,9 @@
 /* Define to 1 if you have the `if_nametoindex' function. */
 #define HAVE_IF_NAMETOINDEX 1
 
+/* Define to 1 if you have the `GetBestRoute2' function. */
+/* #undef HAVE_GETBESTROUTE2 */
+
 /* Define to 1 if you have the `ConvertInterfaceIndexToLuid' function. */
 /* #undef HAVE_CONVERTINTERFACEINDEXTOLUID */
 
@@ -256,6 +259,9 @@
 
 /* Define to 1 if you have the <signal.h> header file. */
 #define HAVE_SIGNAL_H 1
+
+/* Define to 1 if you have the strnlen function. */
+#define HAVE_STRNLEN 1
 
 /* Define to 1 if your struct sockaddr_in6 has sin6_scope_id. */
 #define HAVE_STRUCT_SOCKADDR_IN6_SIN6_SCOPE_ID 1

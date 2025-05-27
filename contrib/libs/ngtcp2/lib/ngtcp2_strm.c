@@ -32,10 +32,6 @@
 #include "ngtcp2_vec.h"
 #include "ngtcp2_frame_chain.h"
 
-static int offset_less(const ngtcp2_ksl_key *lhs, const ngtcp2_ksl_key *rhs) {
-  return *(int64_t *)lhs < *(int64_t *)rhs;
-}
-
 void ngtcp2_strm_init(ngtcp2_strm *strm, int64_t stream_id, uint32_t flags,
                       uint64_t max_rx_offset, uint64_t max_tx_offset,
                       void *stream_user_data, ngtcp2_objalloc *frc_objalloc,
@@ -180,7 +176,8 @@ static int strm_streamfrq_init(ngtcp2_strm *strm) {
     return NGTCP2_ERR_NOMEM;
   }
 
-  ngtcp2_ksl_init(streamfrq, offset_less, sizeof(uint64_t), strm->mem);
+  ngtcp2_ksl_init(streamfrq, ngtcp2_ksl_uint64_less,
+                  ngtcp2_ksl_uint64_less_search, sizeof(uint64_t), strm->mem);
 
   strm->tx.streamfrq = streamfrq;
 

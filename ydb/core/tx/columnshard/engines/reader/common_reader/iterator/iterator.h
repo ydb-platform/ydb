@@ -55,7 +55,7 @@ public:
 
 class TColumnShardScanIterator: public TScanIteratorBase {
 private:
-    virtual void DoOnSentDataFromInterval(const ui32 intervalIdx) const override;
+    virtual void DoOnSentDataFromInterval(const TPartialSourceAddress& address) override;
 
 protected:
     ui64 ItemsRead = 0;
@@ -66,7 +66,7 @@ protected:
     std::shared_ptr<IDataReader> IndexedData;
 
 public:
-    TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const std::shared_ptr<const TReadMetadata>& readMetadata);
+    TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context);
     ~TColumnShardScanIterator();
 
     virtual TConclusionStatus Start() override {

@@ -136,7 +136,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     //client request
     void Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx);
-#define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, const TActorId& partActor, \
+#define DESCRIBE_HANDLE(A) void A(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx);
     DESCRIBE_HANDLE(HandleGetMaxSeqNoRequest)
     DESCRIBE_HANDLE(HandleSetClientOffsetRequest)
@@ -148,7 +148,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     DESCRIBE_HANDLE(HandleSplitMessageGroupRequest)
 #undef DESCRIBE_HANDLE
 
-#define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, const TActorId& partActor, \
+#define DESCRIBE_HANDLE_WITH_SENDER(A) void A(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor, \
                                   const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx,\
                                   const TActorId& pipeClient, const TActorId& sender);
 
@@ -359,11 +359,22 @@ private:
     void EndWriteTabletState(const NKikimrClient::TResponse& resp,
                              const TActorContext& ctx);
 
+    void SendProposeTransactionResult(const TActorId& target,
+                                      ui64 txId,
+                                      NKikimrPQ::TEvProposeTransactionResult::EStatus status,
+                                      NKikimrPQ::TError::EKind kind,
+                                      const TString& reason,
+                                      const TActorContext& ctx);
     void SendProposeTransactionAbort(const TActorId& target,
                                      ui64 txId,
                                      NKikimrPQ::TError::EKind kind,
                                      const TString& reason,
                                      const TActorContext& ctx);
+    void SendProposeTransactionOverloaded(const TActorId& target,
+                                          ui64 txId,
+                                          NKikimrPQ::TError::EKind kind,
+                                          const TString& reason,
+                                          const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx);
     void HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> event,
@@ -407,7 +418,7 @@ private:
 
     void SendToPipe(ui64 tabletId,
                     TDistributedTransaction& tx,
-                    std::unique_ptr<IEventBase> event,
+                    std::unique_ptr<TEvTxProcessing::TEvReadSet> event,
                     const TActorContext& ctx);
 
     void InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
@@ -443,6 +454,10 @@ private:
     void DeleteExpiredTransactions(const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
 
+    void SetTxCounters();
+    void SetTxCompleteLagCounter();
+    void SetTxInFlyCounter();
+
     bool CanProcessProposeTransactionQueue() const;
     bool CanProcessPlanStepQueue() const;
     bool CanProcessWriteTxs() const;
@@ -472,18 +487,22 @@ private:
                                            const TActorId& sender,
                                            const TActorContext& ctx);
     void HandleEventForSupportivePartition(const ui64 responseCookie,
+                                           NWilson::TTraceId traceId,
                                            const NKikimrClient::TPersQueuePartitionRequest& req,
                                            const TActorId& sender,
                                            const TActorContext& ctx);
     void HandleGetOwnershipRequestForSupportivePartition(const ui64 responseCookie,
+                                                         NWilson::TTraceId traceId,
                                                          const NKikimrClient::TPersQueuePartitionRequest& req,
                                                          const TActorId& sender,
                                                          const TActorContext& ctx);
     void HandleReserveBytesRequestForSupportivePartition(const ui64 responseCookie,
+                                                         NWilson::TTraceId traceId,
                                                          const NKikimrClient::TPersQueuePartitionRequest& req,
                                                          const TActorId& sender,
                                                          const TActorContext& ctx);
     void HandleWriteRequestForSupportivePartition(const ui64 responseCookie,
+                                                  NWilson::TTraceId traceId,
                                                   const NKikimrClient::TPersQueuePartitionRequest& req,
                                                   const TActorContext& ctx);
 
@@ -553,6 +572,13 @@ private:
     void ResendEvReadSetToReceiversForState(const TActorContext& ctx, NKikimrPQ::TTransaction::EState state);
 
     void DeleteSupportivePartitions(const TActorContext& ctx);
+
+    TDeque<TAutoPtr<IEventHandle>> PendingEvents;
+
+    void AddPendingEvent(IEventHandle* ev);
+    void ProcessPendingEvents();
+
+    void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
 };
 
 

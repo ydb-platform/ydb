@@ -6,7 +6,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 class TReadSession : public IReadSession {
 public:

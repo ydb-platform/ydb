@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <library/cpp/json/writer/json.h>
 
 #include <util/generic/flags.h>
 #include <util/generic/strbuf.h>
@@ -64,12 +65,12 @@ enum class EYtSettingType: ui64 {
     WarnNonExisting          /* "warn_non_existing" "warnnonexisting" */,
     XLock                    /* "xlock" */,
     Unordered                /* "unordered" */,
-    NonUnique                /* "nonUnique" */,
+    NonUnique                /* "non_unique" "nonUnique" */,
     UserSchema               /* "userschema" */,
     UserColumns              /* "usercolumns" */,
     StatColumns              /* "statcolumns" */,
     SysColumns               /* "syscolumns" */,
-    IgnoreTypeV3             /* "ignoretypev3" "ignore_type_v3" */,
+    IgnoreTypeV3             /* "ignore_type_v3" "ignoretypev3" */,
     // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
@@ -87,7 +88,7 @@ enum class EYtSettingType: ui64 {
     ReduceBy                 /* "reduceBy" */,                 // hybrid supported
     ReduceFilterBy           /* "reduceFilterBy" */,
     ForceTransform           /* "forceTransform" */,           // hybrid supported
-    TransformColGroups       /* "transformColGroups" */,       // hybrid supported
+    SoftTransform            /* "softTransform" */,            // hybrid supported
     WeakFields               /* "weakFields" */,
     Sharded                  /* "sharded" */,
     CombineChunks            /* "combineChunks" */,
@@ -99,6 +100,9 @@ enum class EYtSettingType: ui64 {
     KeySwitch                /* "keySwitch" */,                // hybrid supported
     BlockInputReady          /* "blockInputReady" */,          // hybrid supported
     BlockInputApplied        /* "blockInputApplied" */,        // hybrid supported
+    BlockOutputReady         /* "blockOutputReady" */,         // hybrid supported
+    BlockOutputApplied       /* "blockOutputApplied" */,       // hybrid supported
+    QLFilter                 /* "qlFilter" */,
     // Out tables
     UniqueBy                 /* "uniqueBy" */,
     OpHash                   /* "opHash" */,
@@ -168,8 +172,8 @@ EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right);
 const auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
 const auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
-                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied | EYtSettingType::KeepSorted | EYtSettingType::KeySwitch |
-                                       EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::TransformColGroups;
+                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputReady | EYtSettingType::BlockOutputApplied |
+                                       EYtSettingType::KeepSorted | EYtSettingType::KeySwitch | EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::SoftTransform;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -187,6 +191,7 @@ TExprNode::TPtr ToAtomList(const TContainer& columns, TPositionHandle pos, TExpr
 
 bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowType, TExprContext& ctx);
 TString NormalizeColumnGroupSpec(const TStringBuf spec);
+bool ExpandDefaultColumnGroup(const TStringBuf colGroupSpec, const TStructExprType& rowType, TString& expandedSpec);
 const TString& GetSingleColumnGroupSpec();
 
 TExprNode::TPtr ToColumnPairList(const TVector<std::pair<TString, bool>>& columns, TPositionHandle pos, TExprContext& ctx);
@@ -224,6 +229,7 @@ TMaybe<ui64> GetMaxJobSizeForFirstAsPrimary(const TExprNode& settings);
 bool UseJoinReduceForSecondAsPrimary(const TExprNode& settings);
 
 ui32 GetMinChildrenForIndexedKeyFilter(EYtSettingType type);
+void YtWriteStmtContext(std::string_view ctxName, NJsonWriter::TBuf& json);
 
 } // NYql
 

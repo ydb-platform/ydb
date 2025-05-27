@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-$src =
+$src = (
     SELECT
         1,
         2,
@@ -10,7 +10,7 @@ $src =
         1,
         2,
         3
-;
+);
 
 SELECT DISTINCT
     *

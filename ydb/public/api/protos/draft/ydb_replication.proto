@@ -45,6 +45,13 @@ message ConnectionParams {
     }
 }
 
+message ConsistencyLevelRow {
+}
+
+message ConsistencyLevelGlobal {
+    google.protobuf.Duration commit_interval = 1;
+}
+
 message DescribeReplicationResult {
     message Stats {
         optional google.protobuf.Duration lag = 1;
@@ -70,14 +77,23 @@ message DescribeReplicationResult {
     message DoneState {
     }
 
+    message PausedState {
+    }
+
     // Description of scheme object.
     Ydb.Scheme.Entry self = 1;
+
     ConnectionParams connection_params = 2;
+    oneof consistency_level {
+        ConsistencyLevelRow row_consistency = 7;
+        ConsistencyLevelGlobal global_consistency = 8;
+    }
     repeated Item items = 3;
     oneof state {
         RunningState running = 4;
         ErrorState error = 5;
         DoneState done = 6;
+        PausedState paused = 9;
     }
 }
 

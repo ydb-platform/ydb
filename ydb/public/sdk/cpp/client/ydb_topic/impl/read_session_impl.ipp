@@ -24,7 +24,7 @@
 #include <utility>
 #include <variant>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 static const bool RangesMode = !GetEnv("PQ_OFFSET_RANGES_MODE").empty();
 
@@ -71,6 +71,9 @@ void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(TMaybe<ui64> readOffset, TMaybe<ui64> commitOffset) {
     if (auto sessionShared = CbContext->LockShared()) {
+        if (commitOffset.Defined()) {
+            SetFirstNotReadOffset(*commitOffset);
+        }
         sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset);
     }
 }

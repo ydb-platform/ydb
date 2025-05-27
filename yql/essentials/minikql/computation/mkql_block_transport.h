@@ -11,6 +11,11 @@
 
 namespace NKikimr::NMiniKQL {
 
+struct TBlockSerializerParams {
+    arrow::MemoryPool* Pool;
+    TMaybe<ui8> MinFillPercentage;
+};
+
 class IBlockSerializer {
 public:
     virtual ~IBlockSerializer() = default;
@@ -32,7 +37,7 @@ public:
 };
 
 
-std::unique_ptr<IBlockSerializer> MakeBlockSerializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type);
+std::unique_ptr<IBlockSerializer> MakeBlockSerializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type, const TBlockSerializerParams& params);
 std::unique_ptr<IBlockDeserializer> MakeBlockDeserializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type);
 
 }

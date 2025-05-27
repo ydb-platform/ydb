@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
             return Writer.Add(key), *this;
         }
 
-        TIntrusiveConstPtr<NPage::TBloom> Flush() noexcept
+        TIntrusiveConstPtr<NPage::TBloom> Flush()
         {
             return new NPage::TBloom(Writer.Make());
         }

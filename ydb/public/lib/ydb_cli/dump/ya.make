@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/re2
     library/cpp/bucket_quoter
     library/cpp/logger
     library/cpp/regex/pcre
@@ -18,7 +19,9 @@ PEERDIR(
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/dump/util
-    ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/query
+    ydb/public/sdk/cpp/src/client/topic
 )
 
 GENERATE_ENUM_SERIALIZATION(dump.h)

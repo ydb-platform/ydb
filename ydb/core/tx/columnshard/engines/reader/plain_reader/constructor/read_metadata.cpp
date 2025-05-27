@@ -7,7 +7,7 @@
 namespace NKikimr::NOlap::NReader::NPlain {
 
 std::unique_ptr<TScanIteratorBase> TReadMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext) const {
-    return std::make_unique<TColumnShardScanIterator>(readContext, readContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>());
+    return std::make_unique<TColumnShardScanIterator>(readContext);
 }
 
 TConclusionStatus TReadMetadata::DoInitCustom(

@@ -329,6 +329,7 @@ BELONGS ya.make
         lib/curl_ntlm_wb.c [8:8]
         lib/curl_ntlm_wb.h [10:10]
         lib/curl_path.c [8:8]
+        lib/curl_path.h [10:10]
         lib/curl_printf.h [10:10]
         lib/curl_range.c [8:8]
         lib/curl_range.h [10:10]

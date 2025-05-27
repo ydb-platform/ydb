@@ -129,6 +129,7 @@ public:
     void SetGridFactor(std::function<int(const std::string&)> gridFactor);
     void SetWindowSize(int windowSize);
     void SetProducerCollectionBatchSize(int batchSize);
+    void SetLabelSanitizationPolicy(ELabelSanitizationPolicy LabelSanitizationPolicy);
     void ProcessRegistrations();
     void Collect(IInvokerPtr offloadInvoker = GetSyncInvoker());
     void ReadSensors(
@@ -179,8 +180,11 @@ private:
     TSensorSet* FindSet(const std::string& name, const TSensorOptions& options);
 
     TCounter RegistrationCount_;
-    TEventTimer SensorCollectDuration_, ReadDuration_;
-    TGauge SensorCount_, ProjectionCount_, TagCount_;
+    TEventTimer SensorCollectDuration_;
+    TEventTimer ReadDuration_;
+    TGauge SensorCount_;
+    TGauge ProjectionCount_;
+    TGauge TagCount_;
 
     friend class TRemoteRegistry;
 };

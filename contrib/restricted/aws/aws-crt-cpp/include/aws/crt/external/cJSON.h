@@ -44,8 +44,6 @@
 #ifndef cJSON__h
 #define cJSON__h
 
-namespace Aws {
-
 #if !defined(__WINDOWS__) && (defined(WIN32) || defined(WIN64) || defined(_MSC_VER) || defined(_WIN32))
 #define __WINDOWS__
 #endif
@@ -116,6 +114,8 @@ then using the CJSON_API_VISIBILITY flag to "export" the same symbols the way CJ
 
 #define cJSON_IsReference 256
 #define cJSON_StringIsConst 512
+
+namespace Aws {
 
 /* The cJSON structure: */
 typedef struct cJSON

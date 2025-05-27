@@ -10,6 +10,7 @@
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/ytree/helpers.h>
 
 #include <yt/yt_proto/yt/core/tracing/proto/tracing_ext.pb.h>
 
@@ -44,7 +45,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = TracingLogger;
+constinit const auto Logger = TracingLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -110,20 +111,13 @@ void SetCurrentTraceContext(TTraceContext* context)
     std::atomic_signal_fence(std::memory_order::seq_cst);
 }
 
-TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc)
+TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext)
 {
-    if (NConcurrency::NDetail::PerThreadFls() == NConcurrency::NDetail::CurrentFls() && newContext) {
-        YT_LOG_TRACE("Writing propagating storage in thread FLS (Location: %v)",
-            loc);
-    }
-
-    auto& propagatingStorage = GetCurrentPropagatingStorage();
+    auto& propagatingStorage = CurrentPropagatingStorage();
 
     auto oldContext = newContext
         ? propagatingStorage.Exchange<TTraceContextPtr>(newContext).value_or(nullptr)
         : propagatingStorage.Remove<TTraceContextPtr>().value_or(nullptr);
-
-    propagatingStorage.RecordLocation(loc);
 
     auto now = GetApproximateCpuInstant();
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
@@ -154,31 +148,7 @@ TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation l
     return oldContext;
 }
 
-void OnContextSwitchOut()
-{
-    if (auto* context = TryGetCurrentTraceContext()) {
-        auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
-        auto now = GetApproximateCpuInstant();
-        context->IncrementElapsedCpuTime(now - traceContextTimingCheckpoint);
-        SetCurrentTraceContext(nullptr);
-        traceContextTimingCheckpoint = 0;
-    }
-}
-
-void OnContextSwitchIn()
-{
-    if (auto* context = TryGetTraceContextFromPropagatingStorage(GetCurrentPropagatingStorage())) {
-        SetCurrentTraceContext(context);
-        TraceContextTimingCheckpoint() = GetApproximateCpuInstant();
-    } else {
-        SetCurrentTraceContext(nullptr);
-        TraceContextTimingCheckpoint() = 0;
-    }
-}
-
-void OnPropagatingStorageSwitch(
-    const TPropagatingStorage& oldStorage,
-    const TPropagatingStorage& newStorage)
+void OnPropagatingStorageBeforeSwitch(const TPropagatingStorage& oldStorage)
 {
     TCpuInstant now = 0;
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
@@ -189,6 +159,12 @@ void OnPropagatingStorageSwitch(
         now = GetApproximateCpuInstant();
         oldContext->IncrementElapsedCpuTime(now - traceContextTimingCheckpoint);
     }
+}
+
+void OnPropagatingStorageAfterSwitch(const TPropagatingStorage& newStorage)
+{
+    TCpuInstant now = 0;
+    auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
 
     if (auto* newContext = TryGetTraceContextFromPropagatingStorage(newStorage)) {
         SetCurrentTraceContext(newContext);
@@ -200,6 +176,24 @@ void OnPropagatingStorageSwitch(
         SetCurrentTraceContext(nullptr);
         traceContextTimingCheckpoint = 0;
     }
+}
+
+void OnPropagatingStorageSwitch(
+    const TPropagatingStorage& oldStorage,
+    const TPropagatingStorage& newStorage)
+{
+    OnPropagatingStorageBeforeSwitch(oldStorage);
+    OnPropagatingStorageAfterSwitch(newStorage);
+}
+
+void OnContextSwitchOut()
+{
+    OnPropagatingStorageBeforeSwitch(GetCurrentPropagatingStorage());
+}
+
+void OnContextSwitchIn()
+{
+    OnPropagatingStorageAfterSwitch(GetCurrentPropagatingStorage());
 }
 
 void InitializeTraceContexts()
@@ -253,7 +247,7 @@ TTraceContext::TTraceContext(
     NDetail::InitializeTraceContexts();
 }
 
-void TTraceContext::SetTargetEndpoint(const std::optional<TString>& targetEndpoint)
+void TTraceContext::SetTargetEndpoint(const std::optional<std::string>& targetEndpoint)
 {
     TargetEndpoint_ = targetEndpoint;
 }
@@ -263,7 +257,7 @@ void TTraceContext::SetRequestId(TRequestId requestId)
     RequestId_ = requestId;
 }
 
-void TTraceContext::SetLoggingTag(const TString& loggingTag)
+void TTraceContext::SetLoggingTag(const std::string& loggingTag)
 {
     LoggingTag_ = loggingTag;
 }
@@ -315,7 +309,7 @@ void TTraceContext::SetAllocationTagList(TAllocationTagListPtr list) noexcept
 
 void TTraceContext::DoSetAllocationTags(TAllocationTags&& tags)
 {
-    VERIFY_SPINLOCK_AFFINITY(AllocationTagsLock_);
+    YT_ASSERT_SPINLOCK_AFFINITY(AllocationTagsLock_);
     auto holder = tags.empty() ? nullptr : New<TAllocationTagList>(std::move(tags));
     AllocationTagList_.Store(std::move(holder));
 }
@@ -491,7 +485,7 @@ void TTraceContext::AddErrorTag()
     AddTag(ErrorAnnotationName, ErrorAnnotationValue);
 }
 
-void TTraceContext::AddLogEntry(TCpuInstant at, TString message)
+void TTraceContext::AddLogEntry(TCpuInstant at, std::string message)
 {
     if (!IsRecorded()) {
         return;
@@ -637,7 +631,7 @@ TTraceContextPtr TTraceContext::NewRoot(const std::string& spanName, TTraceId tr
 TTraceContextPtr TTraceContext::NewChildFromSpan(
     TSpanContext parentSpanContext,
     const std::string& spanName,
-    std::optional<TString> endpoint,
+    std::optional<std::string> endpoint,
     TYsonString baggage)
 {
     auto result = New<TTraceContext>(

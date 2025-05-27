@@ -8,7 +8,7 @@ $test = ($c) -> {
 
 SELECT
     ListShuffle(NULL) IS NULL AS mustBeTrue1,
-    ListShuffle(Nothing(OptionalType(ListType(DataType("Uint64"))))) IS NULL AS mustBeTrue2,
+    ListShuffle(Nothing(OptionalType(ListType(DataType('Uint64'))))) IS NULL AS mustBeTrue2,
     ListShuffle([]) == [] AS mustBeTrue3,
     ListShuffle($list, 123) == ListShuffle($list, 123) AS mustBeTrue4,
     $test(1) AS result1,

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import datetime
 import http.client as http_client
 import json
@@ -36,6 +37,9 @@ with open(os.path.join(DATA_DIR, "privatekey.pem"), "rb") as fh:
     PRIVATE_KEY_BYTES = fh.read()
 
 SERVICE_ACCOUNT_JSON_FILE = os.path.join(DATA_DIR, "service_account.json")
+IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_FILE = os.path.join(
+    DATA_DIR, "impersonated_service_account_authorized_user_source.json"
+)
 
 ID_TOKEN_DATA = (
     "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRmMzc1ODkwOGI3OTIyOTNhZDk3N2Ew"
@@ -49,6 +53,9 @@ ID_TOKEN_EXPIRY = 1564475051
 
 with open(SERVICE_ACCOUNT_JSON_FILE, "rb") as fh:
     SERVICE_ACCOUNT_INFO = json.load(fh)
+
+with open(IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_FILE, "rb") as fh:
+    IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO = json.load(fh)
 
 SIGNER = crypt.RSASigner.from_string(PRIVATE_KEY_BYTES, "1")
 TOKEN_URI = "https://example.com/oauth2/token"
@@ -66,6 +73,17 @@ def mock_donor_credentials():
     with mock.patch("google.oauth2._client.jwt_grant", autospec=True) as grant:
         grant.return_value = (
             "source token",
+            _helpers.utcnow() + datetime.timedelta(seconds=500),
+            {},
+        )
+        yield grant
+
+
+@pytest.fixture
+def mock_dwd_credentials():
+    with mock.patch("google.oauth2._client.jwt_grant", autospec=True) as grant:
+        grant.return_value = (
+            "1/fFAGRNJasdfz70BzhT3Zg",
             _helpers.utcnow() + datetime.timedelta(seconds=500),
             {},
         )
@@ -124,6 +142,7 @@ class TestImpersonatedCredentials(object):
         source_credentials=SOURCE_CREDENTIALS,
         lifetime=LIFETIME,
         target_principal=TARGET_PRINCIPAL,
+        subject=None,
         iam_endpoint_override=None,
     ):
 
@@ -133,8 +152,41 @@ class TestImpersonatedCredentials(object):
             target_scopes=self.TARGET_SCOPES,
             delegates=self.DELEGATES,
             lifetime=lifetime,
+            subject=subject,
             iam_endpoint_override=iam_endpoint_override,
         )
+
+    def test_from_impersonated_service_account_info(self):
+        credentials = impersonated_credentials.Credentials.from_impersonated_service_account_info(
+            IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO
+        )
+        assert isinstance(credentials, impersonated_credentials.Credentials)
+
+    def test_from_impersonated_service_account_info_with_invalid_source_credentials_type(
+        self
+    ):
+        info = copy.deepcopy(IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO)
+        assert "source_credentials" in info
+        # Set the source_credentials to an invalid type
+        info["source_credentials"]["type"] = "invalid_type"
+        with pytest.raises(exceptions.DefaultCredentialsError) as excinfo:
+            impersonated_credentials.Credentials.from_impersonated_service_account_info(
+                info
+            )
+        assert excinfo.match(
+            "source credential of type {} is not supported".format("invalid_type")
+        )
+
+    def test_from_impersonated_service_account_info_with_invalid_impersonation_url(
+        self
+    ):
+        info = copy.deepcopy(IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO)
+        info["service_account_impersonation_url"] = "invalid_url"
+        with pytest.raises(exceptions.DefaultCredentialsError) as excinfo:
+            impersonated_credentials.Credentials.from_impersonated_service_account_info(
+                info
+            )
+        assert excinfo.match(r"Cannot extract target principal from")
 
     def test_get_cred_info(self):
         credentials = self.make_credentials()
@@ -238,6 +290,28 @@ class TestImpersonatedCredentials(object):
             request.call_args.kwargs["headers"]["x-goog-api-client"]
             == ACCESS_TOKEN_REQUEST_METRICS_HEADER_VALUE
         )
+
+    @pytest.mark.parametrize("use_data_bytes", [True, False])
+    def test_refresh_with_subject_success(self, use_data_bytes, mock_dwd_credentials):
+        credentials = self.make_credentials(subject="test@email.com", lifetime=None)
+
+        response_body = {"signedJwt": "example_signed_jwt"}
+
+        request = self.make_request(
+            data=json.dumps(response_body),
+            status=http_client.OK,
+            use_data_bytes=use_data_bytes,
+        )
+
+        with mock.patch(
+            "google.auth.metrics.token_request_access_token_impersonate",
+            return_value=ACCESS_TOKEN_REQUEST_METRICS_HEADER_VALUE,
+        ):
+            credentials.refresh(request)
+
+        assert credentials.valid
+        assert not credentials.expired
+        assert credentials.token == "1/fFAGRNJasdfz70BzhT3Zg"
 
     @pytest.mark.parametrize("use_data_bytes", [True, False])
     def test_refresh_success_nonGdu(self, use_data_bytes, mock_donor_credentials):
@@ -415,6 +489,33 @@ class TestImpersonatedCredentials(object):
             credentials.refresh(request)
 
         assert excinfo.match(impersonated_credentials._REFRESH_ERROR)
+
+        assert not credentials.valid
+        assert credentials.expired
+
+    def test_refresh_failure_subject_with_nondefault_domain(
+        self, mock_donor_credentials
+    ):
+        source_credentials = service_account.Credentials(
+            SIGNER, "some@email.com", TOKEN_URI, universe_domain="foo.bar"
+        )
+        credentials = self.make_credentials(
+            source_credentials=source_credentials, subject="test@email.com"
+        )
+
+        expire_time = (_helpers.utcnow().replace(microsecond=0)).isoformat("T") + "Z"
+        response_body = {"accessToken": "token", "expireTime": expire_time}
+        request = self.make_request(
+            data=json.dumps(response_body), status=http_client.OK
+        )
+
+        with pytest.raises(exceptions.GoogleAuthError) as excinfo:
+            credentials.refresh(request)
+
+        assert excinfo.match(
+            "Domain-wide delegation is not supported in universes other "
+            + "than googleapis.com"
+        )
 
         assert not credentials.valid
         assert credentials.expired
@@ -811,3 +912,61 @@ class TestImpersonatedCredentials(object):
         id_creds.refresh(request)
 
         assert id_creds.quota_project_id == "project-foo"
+
+    def test_sign_jwt_request_success(self):
+        principal = "foo@example.com"
+        expected_signed_jwt = "correct_signed_jwt"
+
+        response_body = {"keyId": "1", "signedJwt": expected_signed_jwt}
+        request = self.make_request(
+            data=json.dumps(response_body), status=http_client.OK
+        )
+
+        signed_jwt = impersonated_credentials._sign_jwt_request(
+            request=request, principal=principal, headers={}, payload={}
+        )
+
+        assert signed_jwt == expected_signed_jwt
+        request.assert_called_once_with(
+            url="https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/foo@example.com:signJwt",
+            method="POST",
+            headers={},
+            body=json.dumps({"delegates": [], "payload": json.dumps({})}).encode(
+                "utf-8"
+            ),
+        )
+
+    def test_sign_jwt_request_http_error(self):
+        principal = "foo@example.com"
+
+        request = self.make_request(
+            data="error_message", status=http_client.BAD_REQUEST
+        )
+
+        with pytest.raises(exceptions.RefreshError) as excinfo:
+            _ = impersonated_credentials._sign_jwt_request(
+                request=request, principal=principal, headers={}, payload={}
+            )
+
+        assert excinfo.match(impersonated_credentials._REFRESH_ERROR)
+
+        assert excinfo.value.args[0] == "Unable to acquire impersonated credentials"
+        assert excinfo.value.args[1] == "error_message"
+
+    def test_sign_jwt_request_invalid_response_error(self):
+        principal = "foo@example.com"
+
+        request = self.make_request(data="invalid_data", status=http_client.OK)
+
+        with pytest.raises(exceptions.RefreshError) as excinfo:
+            _ = impersonated_credentials._sign_jwt_request(
+                request=request, principal=principal, headers={}, payload={}
+            )
+
+        assert excinfo.match(impersonated_credentials._REFRESH_ERROR)
+
+        assert (
+            excinfo.value.args[0]
+            == "Unable to acquire impersonated credentials: No signed JWT in response."
+        )
+        assert excinfo.value.args[1] == "invalid_data"

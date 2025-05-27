@@ -60,7 +60,7 @@ namespace NKikimr {
                     TBulkSegmentLoadQueueItem& item = BulkSegmentLoadQueue.front();
                     auto loader = std::make_unique<TLevelSegmentLoader<TKeyLogoBlob, TMemRecLogoBlob>>(VCtx,
                             PDiskCtx, item.Segment.Get(), ctx.SelfID, "BulkSegsLoader");
-                    TActorId loaderId = ctx.ExecutorThread.RegisterActor(loader.release());
+                    TActorId loaderId = ctx.Register(loader.release());
                     ActiveActors.Insert(loaderId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                     BulkSegmentLoadInFlight.emplace(loaderId, std::move(item));
                     BulkSegmentLoadQueue.pop();
@@ -73,11 +73,11 @@ namespace NKikimr {
             void Handle(THullSegLoaded::TPtr& ev, const TActorContext& ctx) {
                 ActiveActors.Erase(ev->Sender);
                 auto i = BulkSegmentLoadInFlight.find(ev->Sender);
-                Y_ABORT_UNLESS(i != BulkSegmentLoadInFlight.end());
+                Y_VERIFY_S(i != BulkSegmentLoadInFlight.end(), VCtx->VDiskLogPrefix);
                 TBulkSegmentLoadQueueItem& item = i->second;
 
                 // check that we have loaded correct segment :)
-                Y_ABORT_UNLESS(ev->Get()->LevelSegment == item.Segment.Get());
+                Y_VERIFY_S(ev->Get()->LevelSegment == item.Segment.Get(), VCtx->VDiskLogPrefix);
 
                 // fill in loaded segment's LSN range
                 TLevelSegment& seg = *item.Segment;

@@ -1,4 +1,5 @@
 //  Copyright (c) 2006 Xiaogang Zhang, 2015 John Maddock
+//  Copyright (c) 2024 Matt Borland
 //  Use, modification and distribution are subject to the
 //  Boost Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -17,8 +18,9 @@
 #pragma once
 #endif
 
-#include <boost/math/special_functions/math_fwd.hpp>
 #include <boost/math/tools/config.hpp>
+#include <boost/math/tools/numeric_limits.hpp>
+#include <boost/math/special_functions/math_fwd.hpp>
 #include <boost/math/constants/constants.hpp>
 #include <boost/math/policies/error_handling.hpp>
 #include <boost/math/special_functions/ellint_rc.hpp>
@@ -30,21 +32,20 @@
 namespace boost { namespace math { namespace detail{
 
    template <typename T, typename Policy>
-   T ellint_rf_imp(T x, T y, T z, const Policy& pol)
+   BOOST_MATH_GPU_ENABLED T ellint_rf_imp(T x, T y, T z, const Policy& pol)
    {
       BOOST_MATH_STD_USING
       using namespace boost::math;
-      using std::swap;
 
-      static const char* function = "boost::math::ellint_rf<%1%>(%1%,%1%,%1%)";
+      constexpr auto function = "boost::math::ellint_rf<%1%>(%1%,%1%,%1%)";
 
       if(x < 0 || y < 0 || z < 0)
       {
-         return policies::raise_domain_error<T>(function, "domain error, all arguments must be non-negative, only sensible result is %1%.", std::numeric_limits<T>::quiet_NaN(), pol);
+         return policies::raise_domain_error<T>(function, "domain error, all arguments must be non-negative, only sensible result is %1%.", boost::math::numeric_limits<T>::quiet_NaN(), pol);
       }
       if(x + y == 0 || y + z == 0 || z + x == 0)
       {
-         return policies::raise_domain_error<T>(function, "domain error, at most one argument can be zero, only sensible result is %1%.", std::numeric_limits<T>::quiet_NaN(), pol);
+         return policies::raise_domain_error<T>(function, "domain error, at most one argument can be zero, only sensible result is %1%.", boost::math::numeric_limits<T>::quiet_NaN(), pol);
       }
       //
       // Special cases from http://dlmf.nist.gov/19.20#i
@@ -80,9 +81,9 @@ namespace boost { namespace math { namespace detail{
             return ellint_rc_imp(x, y, pol);
       }
       if(x == 0)
-         swap(x, z);
+         BOOST_MATH_GPU_SAFE_SWAP(x, z);
       else if(y == 0)
-         swap(y, z);
+         BOOST_MATH_GPU_SAFE_SWAP(y, z);
       if(z == 0)
       {
          //
@@ -105,7 +106,7 @@ namespace boost { namespace math { namespace detail{
       T zn = z;
       T An = (x + y + z) / 3;
       T A0 = An;
-      T Q = pow(3 * boost::math::tools::epsilon<T>(), T(-1) / 8) * (std::max)((std::max)(fabs(An - xn), fabs(An - yn)), fabs(An - zn));
+      T Q = pow(3 * boost::math::tools::epsilon<T>(), T(-1) / 8) * BOOST_MATH_GPU_SAFE_MAX(BOOST_MATH_GPU_SAFE_MAX(fabs(An - xn), fabs(An - yn)), fabs(An - zn));
       T fn = 1;
 
 
@@ -143,7 +144,7 @@ namespace boost { namespace math { namespace detail{
 } // namespace detail
 
 template <class T1, class T2, class T3, class Policy>
-inline typename tools::promote_args<T1, T2, T3>::type 
+BOOST_MATH_GPU_ENABLED inline typename tools::promote_args<T1, T2, T3>::type 
    ellint_rf(T1 x, T2 y, T3 z, const Policy& pol)
 {
    typedef typename tools::promote_args<T1, T2, T3>::type result_type;
@@ -156,7 +157,7 @@ inline typename tools::promote_args<T1, T2, T3>::type
 }
 
 template <class T1, class T2, class T3>
-inline typename tools::promote_args<T1, T2, T3>::type 
+BOOST_MATH_GPU_ENABLED inline typename tools::promote_args<T1, T2, T3>::type 
    ellint_rf(T1 x, T2 y, T3 z)
 {
    return ellint_rf(x, y, z, policies::policy<>());

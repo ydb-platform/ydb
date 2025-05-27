@@ -39,17 +39,17 @@ namespace orc {
   }
 
   PositionProvider::PositionProvider(const std::list<uint64_t>& posns) {
-    position = posns.begin();
+    position_ = posns.begin();
   }
 
   uint64_t PositionProvider::next() {
-    uint64_t result = *position;
-    ++position;
+    uint64_t result = *position_;
+    ++position_;
     return result;
   }
 
   uint64_t PositionProvider::current() {
-    return *position;
+    return *position_;
   }
 
   SeekableInputStream::~SeekableInputStream() {
@@ -62,26 +62,26 @@ namespace orc {
 
   SeekableArrayInputStream::SeekableArrayInputStream(const unsigned char* values, uint64_t size,
                                                      uint64_t blkSize)
-      : data(reinterpret_cast<const char*>(values)) {
-    length = size;
-    position = 0;
-    blockSize = blkSize == 0 ? length : static_cast<uint64_t>(blkSize);
+      : data_(reinterpret_cast<const char*>(values)) {
+    length_ = size;
+    position_ = 0;
+    blockSize_ = blkSize == 0 ? length_ : static_cast<uint64_t>(blkSize);
   }
 
   SeekableArrayInputStream::SeekableArrayInputStream(const char* values, uint64_t size,
                                                      uint64_t blkSize)
-      : data(values) {
-    length = size;
-    position = 0;
-    blockSize = blkSize == 0 ? length : static_cast<uint64_t>(blkSize);
+      : data_(values) {
+    length_ = size;
+    position_ = 0;
+    blockSize_ = blkSize == 0 ? length_ : static_cast<uint64_t>(blkSize);
   }
 
   bool SeekableArrayInputStream::Next(const void** buffer, int* size) {
-    uint64_t currentSize = std::min(length - position, blockSize);
+    uint64_t currentSize = std::min(length_ - position_, blockSize_);
     if (currentSize > 0) {
-      *buffer = data + position;
+      *buffer = data_ + position_;
       *size = static_cast<int>(currentSize);
-      position += currentSize;
+      position_ += currentSize;
       return true;
     }
     *size = 0;
@@ -91,8 +91,8 @@ namespace orc {
   void SeekableArrayInputStream::BackUp(int count) {
     if (count >= 0) {
       uint64_t unsignedCount = static_cast<uint64_t>(count);
-      if (unsignedCount <= blockSize && unsignedCount <= position) {
-        position -= unsignedCount;
+      if (unsignedCount <= blockSize_ && unsignedCount <= position_) {
+        position_ -= unsignedCount;
       } else {
         throw std::logic_error("Can't backup that much!");
       }
@@ -102,27 +102,27 @@ namespace orc {
   bool SeekableArrayInputStream::Skip(int count) {
     if (count >= 0) {
       uint64_t unsignedCount = static_cast<uint64_t>(count);
-      if (unsignedCount + position <= length) {
-        position += unsignedCount;
+      if (unsignedCount + position_ <= length_) {
+        position_ += unsignedCount;
         return true;
       } else {
-        position = length;
+        position_ = length_;
       }
     }
     return false;
   }
 
   int64_t SeekableArrayInputStream::ByteCount() const {
-    return static_cast<google::protobuf::int64>(position);
+    return static_cast<google::protobuf::int64>(position_);
   }
 
   void SeekableArrayInputStream::seek(PositionProvider& seekPosition) {
-    position = seekPosition.next();
+    position_ = seekPosition.next();
   }
 
   std::string SeekableArrayInputStream::getName() const {
     std::ostringstream result;
-    result << "SeekableArrayInputStream " << position << " of " << length;
+    result << "SeekableArrayInputStream " << position_ << " of " << length_;
     return result.str();
   }
 
@@ -131,16 +131,16 @@ namespace orc {
   }
 
   SeekableFileInputStream::SeekableFileInputStream(InputStream* stream, uint64_t offset,
-                                                   uint64_t byteCount, MemoryPool& _pool,
-                                                   uint64_t _blockSize)
-      : pool(_pool),
-        input(stream),
-        start(offset),
-        length(byteCount),
-        blockSize(computeBlock(_blockSize, length)) {
-    position = 0;
-    buffer.reset(new DataBuffer<char>(pool));
-    pushBack = 0;
+                                                   uint64_t byteCount, MemoryPool& pool,
+                                                   uint64_t blockSize)
+      : pool_(pool),
+        input_(stream),
+        start_(offset),
+        length_(byteCount),
+        blockSize_(computeBlock(blockSize, length_)) {
+    position_ = 0;
+    buffer_.reset(new DataBuffer<char>(pool_));
+    pushBack_ = 0;
   }
 
   SeekableFileInputStream::~SeekableFileInputStream() {
@@ -149,19 +149,19 @@ namespace orc {
 
   bool SeekableFileInputStream::Next(const void** data, int* size) {
     uint64_t bytesRead;
-    if (pushBack != 0) {
-      *data = buffer->data() + (buffer->size() - pushBack);
-      bytesRead = pushBack;
+    if (pushBack_ != 0) {
+      *data = buffer_->data() + (buffer_->size() - pushBack_);
+      bytesRead = pushBack_;
     } else {
-      bytesRead = std::min(length - position, blockSize);
-      buffer->resize(bytesRead);
+      bytesRead = std::min(length_ - position_, blockSize_);
+      buffer_->resize(bytesRead);
       if (bytesRead > 0) {
-        input->read(buffer->data(), bytesRead, start + position);
-        *data = static_cast<void*>(buffer->data());
+        input_->read(buffer_->data(), bytesRead, start_ + position_);
+        *data = static_cast<void*>(buffer_->data());
       }
     }
-    position += bytesRead;
-    pushBack = 0;
+    position_ += bytesRead;
+    pushBack_ = 0;
     *size = static_cast<int>(bytesRead);
     return bytesRead != 0;
   }
@@ -171,14 +171,14 @@ namespace orc {
       throw std::logic_error("can't backup negative distances");
     }
     uint64_t count = static_cast<uint64_t>(signedCount);
-    if (pushBack > 0) {
+    if (pushBack_ > 0) {
       throw std::logic_error("can't backup unless we just called Next");
     }
-    if (count > blockSize || count > position) {
+    if (count > blockSize_ || count > position_) {
       throw std::logic_error("can't backup that far");
     }
-    pushBack = static_cast<uint64_t>(count);
-    position -= pushBack;
+    pushBack_ = static_cast<uint64_t>(count);
+    position_ -= pushBack_;
   }
 
   bool SeekableFileInputStream::Skip(int signedCount) {
@@ -186,27 +186,27 @@ namespace orc {
       return false;
     }
     uint64_t count = static_cast<uint64_t>(signedCount);
-    position = std::min(position + count, length);
-    pushBack = 0;
-    return position < length;
+    position_ = std::min(position_ + count, length_);
+    pushBack_ = 0;
+    return position_ < length_;
   }
 
   int64_t SeekableFileInputStream::ByteCount() const {
-    return static_cast<int64_t>(position);
+    return static_cast<int64_t>(position_);
   }
 
   void SeekableFileInputStream::seek(PositionProvider& location) {
-    position = location.next();
-    if (position > length) {
-      position = length;
+    position_ = location.next();
+    if (position_ > length_) {
+      position_ = length_;
       throw std::logic_error("seek too far");
     }
-    pushBack = 0;
+    pushBack_ = 0;
   }
 
   std::string SeekableFileInputStream::getName() const {
     std::ostringstream result;
-    result << input->getName() << " from " << start << " for " << length;
+    result << input_->getName() << " from " << start_ << " for " << length_;
     return result.str();
   }
 

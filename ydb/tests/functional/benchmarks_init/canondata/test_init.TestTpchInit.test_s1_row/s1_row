@@ -13,6 +13,8 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/customer` (
     PRIMARY KEY (c_custkey)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -36,6 +38,8 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
     PRIMARY KEY (l_orderkey, l_linenumber)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -47,6 +51,8 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/nation` (
     PRIMARY KEY (n_nationkey)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
 );
 
@@ -63,6 +69,8 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/orders` (
     PRIMARY KEY (o_orderkey)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -79,6 +87,8 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/part` (
     PRIMARY KEY (p_partkey)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -91,6 +101,8 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
     PRIMARY KEY (ps_partkey, ps_suppkey)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
@@ -101,6 +113,8 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/region` (
     PRIMARY KEY (r_regionkey)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
 );
 
@@ -115,6 +129,8 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/supplier` (
     PRIMARY KEY (s_suppkey)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 

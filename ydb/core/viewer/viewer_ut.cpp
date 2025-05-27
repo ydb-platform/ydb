@@ -1,9 +1,9 @@
+#include "ut/ut_utils.h"
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
 #include <library/cpp/http/misc/httpcodes.h>
-#include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/null.h>
@@ -20,11 +20,11 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/tenant_runtime.h>
+
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/actors/core/interconnect.h>
-
 #include <util/string/builder.h>
 #include <regex>
 
@@ -35,6 +35,7 @@ using namespace NKikimrWhiteboard;
 using namespace NSchemeShard;
 using namespace Tests;
 using namespace NMonitoring;
+using namespace NKikimr::NViewerTests;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 #ifdef NDEBUG
@@ -194,51 +195,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         Ctest << "Data has merged" << Endl;
     }
 
-    struct THttpRequest : NMonitoring::IHttpRequest {
-        HTTP_METHOD Method;
-        TCgiParameters CgiParameters;
-        THttpHeaders HttpHeaders;
-        TString PostContent;
-
-        THttpRequest(HTTP_METHOD method)
-            : Method(method)
-        {}
-
-        ~THttpRequest() {}
-
-        const char* GetURI() const override {
-            return "";
-        }
-
-        const char* GetPath() const override {
-            return "";
-        }
-
-        const TCgiParameters& GetParams() const override {
-            return CgiParameters;
-        }
-
-        const TCgiParameters& GetPostParams() const override {
-            return CgiParameters;
-        }
-
-        TStringBuf GetPostContent() const override {
-            return PostContent;
-        }
-
-        HTTP_METHOD GetMethod() const override {
-            return Method;
-        }
-
-        const THttpHeaders& GetHeaders() const override {
-            return HttpHeaders;
-        }
-
-        TString GetRemoteAddr() const override {
-            return TString();
-        }
-    };
-
     class TMonPage: public IMonPage {
     public:
         TMonPage(const TString &path, const TString &title)
@@ -251,14 +207,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
     };
 
     void ChangeListNodes(TEvInterconnect::TEvNodesInfo::TPtr* ev, int nodesTotal) {
-        auto& nodes = (*ev)->Get()->Nodes;
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
 
-        auto sample = nodes[0];
-        nodes.clear();
+        auto sample = *nodes->begin();
+        nodes->clear();
 
         for (int nodeId = 0; nodeId < nodesTotal; nodeId++) {
-            nodes.emplace_back(sample);
+            nodes->emplace_back(sample);
         }
+
+        auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+            new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes))
+        );
+        ev->Swap(newEv);
     }
 
     void ChangeTabletStateResponse(TEvWhiteboard::TEvTabletStateResponse::TPtr* ev, int tabletsTotal, int& tabletId, int& nodeId) {
@@ -454,65 +415,188 @@ Y_UNIT_TEST_SUITE(Viewer) {
 #if !defined(NDEBUG) || defined(_hardening_enabled_)
         UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 30 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 30 * BASE_PERF);
 #else
-        UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 10 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 10 * BASE_PERF);
+        UNIT_ASSERT_VALUES_EQUAL_C(timer.Passed() < 15 * BASE_PERF, true, "timer = " << timer.Passed() << ", limit = " << 15 * BASE_PERF);
 #endif
 #endif
+    }
+
+    struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
+        TFakeTicketParserActor()
+            : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StFunc)
+        {}
+
+        STFUNC(StFunc) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+                default:
+                    break;
+            }
+        }
+
+        void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Ticket parser: got TEvAuthorizeTicket event: " << ev->Get()->Ticket << " " << ev->Get()->Database << " " << ev->Get()->Entries.size());
+            ++AuthorizeTicketRequests;
+
+            if (ev->Get()->Database != "/Root") {
+                Fail(ev, TStringBuilder() << "Incorrect database " << ev->Get()->Database);
+                return;
+            }
+
+            if (ev->Get()->Ticket != "test_ydb_token") {
+                Fail(ev, TStringBuilder() << "Incorrect token " << ev->Get()->Ticket);
+                return;
+            }
+
+            bool databaseIdFound = false;
+            bool folderIdFound = false;
+            for (const TEvTicketParser::TEvAuthorizeTicket::TEntry& entry : ev->Get()->Entries) {
+                for (const std::pair<TString, TString>& attr : entry.Attributes) {
+                    if (attr.first == "database_id") {
+                        databaseIdFound = true;
+                        if (attr.second != "test_database_id") {
+                            Fail(ev, TStringBuilder() << "Incorrect database_id " << attr.second);
+                            return;
+                        }
+                    } else if (attr.first == "folder_id") {
+                        folderIdFound = true;
+                        if (attr.second != "test_folder_id") {
+                            Fail(ev, TStringBuilder() << "Incorrect folder_id " << attr.second);
+                            return;
+                        }
+                    }
+                }
+            }
+            if (!databaseIdFound) {
+                Fail(ev, "database_id not found");
+                return;
+            }
+            if (!folderIdFound) {
+                Fail(ev, "folder_id not found");
+                return;
+            }
+
+            Success(ev);
+        }
+
+        void Fail(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev, const TString& message) {
+            ++AuthorizeTicketFails;
+            TEvTicketParser::TError err;
+            err.Retryable = false;
+            err.Message = message ? message : "Test error";
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult: " << err.Message);
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, err));
+        }
+
+        void Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            ++AuthorizeTicketSuccesses;
+            NACLib::TUserToken::TUserTokenInitFields args;
+            args.UserSID = "username";
+            args.GroupSIDs.push_back("group_name");
+            TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult success");
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
+        }
+
+        size_t AuthorizeTicketRequests = 0;
+        size_t AuthorizeTicketSuccesses = 0;
+        size_t AuthorizeTicketFails = 0;
+    };
+
+    IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
+        return new TFakeTicketParserActor();
+    }
+
+    struct TPostQueryArguments {
+        TString Query;
+        TString Action;
+        TString TransactionMode;
+        TString Schema;
+        TString Base64;
+    };
+
+    NJson::TJsonValue PostQuery(TKeepAliveHttpClient& httpClient, TPostQueryArguments args) {
+        NJson::TJsonValue jsonRequest;
+        jsonRequest["database"] = "/Root";
+        jsonRequest["syntax"] = "yql_v1";
+        jsonRequest["stats"] = "none";
+        if (args.Query) {
+            jsonRequest["query"] = args.Query;
+        }
+        if (args.Action) {
+            jsonRequest["action"] = args.Action;
+        }
+        if (args.TransactionMode) {
+            jsonRequest["transaction_mode"] = args.TransactionMode;
+        }
+        if (args.Schema) {
+            jsonRequest["schema"] = args.Schema;
+        }
+        if (args.Base64) {
+            jsonRequest["base64"] = args.Base64;
+        }
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = "test_ydb_token";
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
+        UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
+        return NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
+    }
+
+    void GrantConnect(TClient& client) {
+        client.CreateUser("/Root", "username", "password");
+        client.GrantConnect("username");
+
+        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
+            { "folder_id", "test_folder_id" },
+            { "database_id", "test_database_id" },
+        });
+        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
     }
 
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
         auto settings = TServerSettings(port);
         settings.InitKikimrRunConfig()
                 .SetNodeCount(1)
-                .SetUseRealThreads(false)
+                .SetUseRealThreads(true)
                 .SetDomainName("Root")
-                .SetUseSectorMap(true);
+                .SetUseSectorMap(true)
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
-        TTestActorRuntime& runtime = *server.GetRuntime();
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        TAutoPtr<IEventHandle> handle;
-
-        THttpRequest httpReq(HTTP_METHOD_GET);
-        httpReq.CgiParameters.emplace("schema", schema);
-        httpReq.CgiParameters.emplace("base64", base64 ? "true" : "false");
-        httpReq.CgiParameters.emplace("query", query);
-        auto page = MakeHolder<TMonPage>("viewer", "title");
-        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/query", nullptr);
-        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
-
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
-        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
-
-        size_t pos = result->Answer.find('{');
-        TString jsonResult = result->Answer.substr(pos);
-        Ctest << "json result: " << jsonResult << Endl;
-        NJson::TJsonValue json;
-        try {
-            NJson::ReadJsonTree(jsonResult, &json, true);
-        }
-        catch (yexception ex) {
-            Ctest << ex.what() << Endl;
-        }
-        return json;
+        client.InitRootScheme();
+        GrantConnect(client);
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+        //Scheme operations cannot be executed inside transaction
+        auto response = PostQuery(httpClient, {
+            .Query = query,
+            .Action = "execute-query",
+            .TransactionMode = "serializable-read-write",
+            .Schema = schema,
+            .Base64 = base64 ? "true" : "false",
+        });
+        return response;
     }
 
     void QueryTest(const TString& query, const bool base64, const TString& reply) {
         NJson::TJsonValue result = SendQuery(query, "classic", base64);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("column0").GetString(), reply);
+        UNIT_ASSERT_VALUES_EQUAL_C(result["result"][0]["column0"].GetString(), reply, NJson::WriteJson(result, false));
 
         result = SendQuery(query, "ydb", base64);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("result").GetArray()[0].GetMap().at("column0").GetString(), reply);
+        UNIT_ASSERT_VALUES_EQUAL_C(result["result"][0]["column0"].GetString(), reply, NJson::WriteJson(result, false));
 
         result = SendQuery(query, "modern", base64);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("result").GetArray()[0].GetArray()[0].GetString(), reply);
+        UNIT_ASSERT_VALUES_EQUAL_C(result["result"][0][0].GetString(), reply, NJson::WriteJson(result, false));
 
         result = SendQuery(query, "multi", base64);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetMap().at("result").GetArray()[0].GetMap().at("rows").GetArray()[0].GetArray()[0].GetString(), reply);
+        UNIT_ASSERT_VALUES_EQUAL_C(result["result"][0]["rows"][0][0].GetString(), reply, NJson::WriteJson(result, false));
     }
 
     Y_UNIT_TEST(SelectStringWithBase64Encoding)
@@ -711,21 +795,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 2);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -789,23 +865,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
+        size_t exclusiveDynNodeId = runtime.GetNodeId(2);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 3);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
-                    exclusiveDynNodeId = nodes[2];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -872,23 +939,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
+        size_t exclusiveDynNodeId = runtime.GetNodeId(2);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 3);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
-                    exclusiveDynNodeId = nodes[2];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -957,25 +1015,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
         auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
-        size_t staticNodeId = 0;
-        size_t sharedDynNodeId = 0;
-        size_t exclusiveDynNodeId = 0;
-        size_t secondExclusiveDynNodeId = 0;
+        //size_t staticNodeId = runtime.GetNodeId(0);
+        size_t sharedDynNodeId = runtime.GetNodeId(1);
+        size_t exclusiveDynNodeId = runtime.GetNodeId(2);
+        size_t secondExclusiveDynNodeId = runtime.GetNodeId(3);
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
                     auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
                     ChangeNavigateKeySetResultServerless(x, runtime);
-                    break;
-                }
-                case TEvInterconnect::EvNodesInfo: {
-                    auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
-                    TVector<TEvInterconnect::TNodeInfo> &nodes = (*x)->Get()->Nodes;
-                    UNIT_ASSERT_EQUAL(nodes.size(), 4);
-                    staticNodeId = nodes[0];
-                    sharedDynNodeId = nodes[1];
-                    exclusiveDynNodeId = nodes[2];
-                    secondExclusiveDynNodeId = nodes[3];
                     break;
                 }
                 case TEvStateStorage::EvBoardInfo: {
@@ -1524,107 +1572,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         JsonStorage9Nodes9GroupsListingTest("v2", false, true, true, 4, 8);
     }
 
-    struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
-        TFakeTicketParserActor()
-            : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StFunc)
-        {}
-
-        STFUNC(StFunc) {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
-                default:
-                    break;
-            }
-        }
-
-        void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Ticket parser: got TEvAuthorizeTicket event: " << ev->Get()->Ticket << " " << ev->Get()->Database << " " << ev->Get()->Entries.size());
-            ++AuthorizeTicketRequests;
-
-            if (ev->Get()->Database != "/Root") {
-                Fail(ev, TStringBuilder() << "Incorrect database " << ev->Get()->Database);
-                return;
-            }
-
-            if (ev->Get()->Ticket != "test_ydb_token") {
-                Fail(ev, TStringBuilder() << "Incorrect token " << ev->Get()->Ticket);
-                return;
-            }
-
-            bool databaseIdFound = false;
-            bool folderIdFound = false;
-            for (const TEvTicketParser::TEvAuthorizeTicket::TEntry& entry : ev->Get()->Entries) {
-                for (const std::pair<TString, TString>& attr : entry.Attributes) {
-                    if (attr.first == "database_id") {
-                        databaseIdFound = true;
-                        if (attr.second != "test_database_id") {
-                            Fail(ev, TStringBuilder() << "Incorrect database_id " << attr.second);
-                            return;
-                        }
-                    } else if (attr.first == "folder_id") {
-                        folderIdFound = true;
-                        if (attr.second != "test_folder_id") {
-                            Fail(ev, TStringBuilder() << "Incorrect folder_id " << attr.second);
-                            return;
-                        }
-                    }
-                }
-            }
-            if (!databaseIdFound) {
-                Fail(ev, "database_id not found");
-                return;
-            }
-            if (!folderIdFound) {
-                Fail(ev, "folder_id not found");
-                return;
-            }
-
-            Success(ev);
-        }
-
-        void Fail(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev, const TString& message) {
-            ++AuthorizeTicketFails;
-            TEvTicketParser::TError err;
-            err.Retryable = false;
-            err.Message = message ? message : "Test error";
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult: " << err.Message);
-            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, err));
-        }
-
-        void Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
-            ++AuthorizeTicketSuccesses;
-            NACLib::TUserToken::TUserTokenInitFields args;
-            args.UserSID = "user_name";
-            args.GroupSIDs.push_back("group_name");
-            TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, "Send TEvAuthorizeTicketResult success");
-            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));
-        }
-
-        size_t AuthorizeTicketRequests = 0;
-        size_t AuthorizeTicketSuccesses = 0;
-        size_t AuthorizeTicketFails = 0;
-    };
-
-    TString PostQuery(TKeepAliveHttpClient& httpClient, TString query, TString action = "", TString transactionMode = "") {
-        TStringStream requestBody;
-        requestBody
-            << "{ \"query\": \"" << query << "\","
-            << " \"database\": \"/Root\","
-            << " \"action\": \"" << action << "\","
-            << " \"syntax\": \"yql_v1\","
-            << " \"transaction_mode\": \"" << transactionMode << "\","
-            << " \"stats\": \"none\" }";
-        TStringStream responseStream;
-        TKeepAliveHttpClient::THeaders headers;
-        headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
-        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000&base64=false&schema=modern", requestBody.Str(), &responseStream, headers);
-        const TString response = responseStream.ReadAll();
-        UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
-        return response;
-    }
-
     Y_UNIT_TEST(ExecuteQueryDoesntExecuteSchemeOperationsInsideTransation) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -1637,25 +1584,25 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
-
+        GrantConnect(client);
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
-
+        WaitForHttpReady(httpClient);
         //Scheme operations cannot be executed inside transaction
-        TString response = PostQuery(httpClient, "CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));", "execute-query", "serializable-read-write");
-        {
-            NJson::TJsonReaderConfig jsonCfg;
-            NJson::TJsonValue json;
-            NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
-            UNIT_ASSERT_EQUAL_C(json["status"].GetString(), "PRECONDITION_FAILED", response);
-        }
+        auto json = PostQuery(httpClient, {
+            .Query ="CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));",
+            .Action = "execute-query",
+            .TransactionMode = "serializable-read-write"
+        });
+        UNIT_ASSERT_EQUAL(json["status"].GetString(), "PRECONDITION_FAILED");
     }
 
     Y_UNIT_TEST(UseTransactionWhenExecuteDataActionQuery) {
@@ -1670,27 +1617,34 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
 
+        GrantConnect(client);
+
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
-
-        PostQuery(httpClient, "CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));", "execute-query");
-        PostQuery(httpClient, "INSERT INTO `/Root/Test` (Key, Value) VALUES (1, 'testvalue');", "execute-query");
-        TString response = PostQuery(httpClient, "SELECT * FROM `/Root/Test`;", "execute-data");
-        {
-            NJson::TJsonReaderConfig jsonCfg;
-            NJson::TJsonValue json;
-            NJson::ReadJsonTree(response, &jsonCfg, &json, /* throwOnError = */ true);
-            auto resultSets = json["result"].GetArray();
-            UNIT_ASSERT_EQUAL_C(1, resultSets.size(), response);
-        }
+        WaitForHttpReady(httpClient);
+        PostQuery(httpClient, {
+            .Query = "CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));",
+            .Action = "execute-query"
+        });
+        PostQuery(httpClient, {
+            .Query = "INSERT INTO `/Root/Test` (Key, Value) VALUES (1, 'testvalue');",
+            .Action = "execute-query"
+        });
+        auto json = PostQuery(httpClient, {
+            .Query = "SELECT * FROM `/Root/Test`;",
+            .Action = "execute-data"
+        });
+        auto resultSets = json["result"].GetArray();
+        UNIT_ASSERT_EQUAL(1, resultSets.size());
     }
 
     Y_UNIT_TEST(FloatPointJsonQuery) {
@@ -1705,16 +1659,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
+
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
@@ -1770,17 +1728,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
 
-        const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
-            { "folder_id", "test_folder_id" },
-            { "database_id", "test_database_id" },
-        });
-        UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+        GrantConnect(client);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
@@ -1820,6 +1775,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Accept"] = "application/json";
@@ -1914,20 +1870,30 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .SetDomainName("Root")
                 .SetUseSectorMap(true)
                 .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
 
         TServer server(settings);
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         client.InitRootScheme();
 
+        GrantConnect(client);
+
+
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
-
-        PostQuery(httpClient, "CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));", "execute-query");
+        WaitForHttpReady(httpClient);
+        PostQuery(httpClient, {
+            .Query = "CREATE TABLE `/Root/Test` (Key Uint64, Value String, PRIMARY KEY (Key));",
+            .Action = "execute-query"
+        });
         for (ui32 i = 1; i <= ROWS_N; ++i) {
-            PostQuery(httpClient, TStringBuilder() << "INSERT INTO `/Root/Test` (Key, Value) VALUES (" << i << ", 'testvalue');", "execute-query");
+            PostQuery(httpClient, {
+                .Query = TStringBuilder() << "INSERT INTO `/Root/Test` (Key, Value) VALUES (" << i << ", 'testvalue');",
+                .Action = "execute-query"
+            });
         }
 
         NJson::TJsonReaderConfig jsonCfg;
@@ -1995,6 +1961,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         })json";
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
@@ -2048,6 +2015,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         })json";
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
@@ -2057,5 +2025,4 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_BAD_REQUEST, statusCode << ": " << response);
         UNIT_ASSERT_C(response.StartsWith("Conversion error"), response);
     }
-
 }

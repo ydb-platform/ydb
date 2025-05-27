@@ -50,6 +50,11 @@ namespace NActors {
             TDuration Ping;
             i64 ClockSkew;
             TString Encryption;
+            enum XDCFlags {
+                NONE = 0,
+                MSG_ZERO_COPY_SEND = 1,
+            };
+            ui8 XDCFlags;
         };
 
         struct TEvStats : TEventLocal<TEvStats, EvStats> {
@@ -422,12 +427,7 @@ namespace NActors {
         TActorId SessionVirtualId;
         TActorId RemoteSessionVirtualId;
 
-        TActorId GenerateSessionVirtualId() {
-            ICPROXY_PROFILED;
-
-            const ui64 localId = TlsActivationContext->ExecutorThread.ActorSystem->AllocateIDSpace(1);
-            return NActors::TActorId(SelfId().NodeId(), 0, localId, 0);
-        }
+        TActorId GenerateSessionVirtualId();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

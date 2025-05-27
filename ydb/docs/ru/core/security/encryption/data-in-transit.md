@@ -8,11 +8,11 @@
   * [gRPC](../../reference/ydb-sdk/overview-grpc-api.md) — для внешнего взаимодействия с клиентскими приложениями, разработанными для нативной работы с {{ ydb-short-name }} через [SDK](../../reference/ydb-sdk/index.md) или [CLI](../../reference/ydb-cli/index.md).
   * [Протокол PostgreSQL](../../postgresql/intro.md) — для внешнего взаимодействия с клиентскими приложениями, изначально разработанными для работы с [PostgreSQL](https://www.postgresql.org/).
   * [Протокол Kafka](../../reference/kafka-api/index.md) — для внешнего взаимодействия с клиентскими приложениями, изначально разработанными для работы с [Apache Kafka](https://kafka.apache.org/).
-  * HTTP — для работы с [встроенным UI](../../reference/embedded-ui/index.md), публикации [метрик](../../devops/manual/monitoring.md) и других вспомогательных конечных эндпоинтов.
+  * HTTP — для работы с [встроенным UI](../../reference/embedded-ui/index.md), публикации [метрик](../../devops/observability/monitoring.md) и других вспомогательных конечных эндпоинтов.
 
 * {{ ydb-short-name }} в роли клиента:
 
-  * [LDAP](../../concepts/auth.md#ldap) — для аутентификации пользователей.
+  * [LDAP](../authentication.md#ldap) — для аутентификации пользователей.
   * [Федеративные запросы](../../concepts/federated_query/index.md) — функциональность, позволяющая {{ ydb-short-name }} выполнять запросы к различным внешним источникам данных. Запросы к некоторым источникам отправляются напрямую из процесса `ydbd`, в то время как другие проксируются через отдельный процесс-коннектор.
   * [Трассировочные](../../reference/observability/tracing/setup.md) данные отправляются во внешний сборщик через gRPC.
 

@@ -32,6 +32,8 @@ using namespace NYson;
 using namespace NConcurrency;
 using namespace NBus;
 
+using NYT::ToProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TGrpcCallTracer final
@@ -127,7 +129,7 @@ DEFINE_ENUM(EClientCallStage,
 );
 
 class TChannel
-    : public NYT::NRpc::NGrpc::IGrpcChannel
+    : public NRpc::NGrpc::IGrpcChannel
 {
 public:
     explicit TChannel(TChannelConfigPtr config)
@@ -172,11 +174,13 @@ public:
             responseHandler->HandleError(std::move(error));
             return nullptr;
         }
-        return New<TCallHandler>(
+        auto callHandler = New<TCallHandler>(
             this,
             options,
             std::move(request),
             std::move(responseHandler));
+        callHandler->Initialize();
+        return callHandler;
     }
 
     void Terminate(const TError& error) override
@@ -229,7 +233,7 @@ public:
 
 private:
     const TChannelConfigPtr Config_;
-    const TString EndpointAddress_;
+    const std::string EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 
@@ -258,6 +262,9 @@ private:
             , Request_(std::move(request))
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
+        { }
+
+        void Initialize()
         {
             YT_LOG_DEBUG("Sending request (RequestId: %v, Method: %v.%v, Timeout: %v)",
                 Request_->GetRequestId(),
@@ -291,11 +298,9 @@ private:
                 NYT::Ref(Tracer_.Get());
             }
             InitialMetadataBuilder_.Add(RequestIdMetadataKey, ToString(Request_->GetRequestId()));
-            // TODO(babenko): switch to std::string
-            InitialMetadataBuilder_.Add(UserMetadataKey, TString(Request_->GetUser()));
+            InitialMetadataBuilder_.Add(UserMetadataKey, Request_->GetUser());
             if (!Request_->GetUserTag().empty()) {
-                // TODO(babenko): switch to std::string
-                InitialMetadataBuilder_.Add(UserTagMetadataKey, TString(Request_->GetUserTag()));
+                InitialMetadataBuilder_.Add(UserTagMetadataKey, Request_->GetUserTag());
             }
 
             TProtocolVersion protocolVersion{
@@ -324,7 +329,7 @@ private:
                 }
             }
 
-            if (const auto traceContext = NTracing::TryGetCurrentTraceContext()) {
+            if (const auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
                 InitialMetadataBuilder_.Add(TracingTraceIdMetadataKey, ToString(traceContext->GetTraceId()));
                 InitialMetadataBuilder_.Add(TracingSpanIdMetadataKey, ToString(traceContext->GetSpanId()));
                 if (traceContext->IsSampled()) {
@@ -633,8 +638,8 @@ private:
 
             NRpc::NProto::TResponseHeader responseHeader;
             ToProto(responseHeader.mutable_request_id(), Request_->GetRequestId());
-            NYT::ToProto(responseHeader.mutable_service(), Request_->GetService());
-            NYT::ToProto(responseHeader.mutable_method(), Request_->GetMethod());
+            ToProto(responseHeader.mutable_service(), Request_->GetService());
+            ToProto(responseHeader.mutable_method(), Request_->GetMethod());
             if (Request_->Header().has_response_codec()) {
                 responseHeader.set_codec(Request_->Header().response_codec());
             }

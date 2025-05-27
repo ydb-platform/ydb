@@ -148,7 +148,7 @@ static int receiver(int queue_flags)
 		io_uring_prep_recv(sqe, fd, buffer, BUF_SIZE, 0);
 
 		ret = io_uring_submit(&ring);
-		if (ret != 1) {
+		if (ret < 0) {
 			fprintf(stderr, "io_uring_submit: %i\n", ret);
 			return 1;
 		}

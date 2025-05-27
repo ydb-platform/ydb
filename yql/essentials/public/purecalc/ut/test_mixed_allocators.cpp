@@ -51,7 +51,7 @@ namespace {
 
                 // Clear graph after each object because
                 // values allocated on another allocator and should be released
-                Worker_->GetGraph().Invalidate();
+                Worker_->Invalidate();
             }
         }
 

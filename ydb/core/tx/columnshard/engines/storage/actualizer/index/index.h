@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TVersionedIndex;
@@ -20,8 +21,9 @@ private:
     std::shared_ptr<TTieringActualizer> TieringActualizer;
     std::shared_ptr<TSchemeActualizer> SchemeActualizer;
 
-    const ui64 PathId;
+    const TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
+    std::shared_ptr<IStoragesManager> StoragesManager;
 
 public:
     std::vector<TCSMetadataRequest> CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions);
@@ -31,7 +33,7 @@ public:
     }
 
     void Start();
-    TGranuleActualizationIndex(const ui64 pathId, const TVersionedIndex& versionedIndex);
+    TGranuleActualizationIndex(const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager);
 
     void ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const;
 

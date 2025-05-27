@@ -64,11 +64,7 @@ private:
 
     using TBase = NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexStats>;
 
-    virtual bool IsReadyForBatch() const override {
-        return IndexGranules.size() && IndexGranules.front().GetPortions().size() &&
-               FetchedAccessors.contains(IndexGranules.front().GetPortions().front()->GetPortionId());
-    }
-
+    virtual bool IsReadyForBatch() const override;
     virtual bool AppendStats(
         const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;
@@ -111,6 +107,7 @@ private:
         const NActors::TActorId OwnerId;
         const std::shared_ptr<NReader::TReadContext> Context;
 
+        virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override;
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*selfPtr*/) override {
             Guard = std::move(guard);

@@ -32,6 +32,7 @@ private:
     const ui64 FreeSpace = (ui64)8 << 20;
     bool NeedAck = true;
     bool Finished = false;
+    bool AllowPings = false;
 
     void DoAck() {
         if (Finished) {
@@ -72,6 +73,10 @@ public:
             new TEvPipeCache::TEvForward(ev.release(), TabletId, !subscribed), IEventHandle::FlagTrackDelivery);
     }
 
+    ui64 GetTabletId() const {
+        return TabletId;
+    }
+
     TString ToString() const {
         TStringBuilder builder;
 
@@ -97,10 +102,21 @@ public:
         }
     }
 
-    void Start(const TActorId& actorId) {
+    bool Stopped() {
+        return !ActorId.has_value();
+    }
+
+    void PingIfNeeded() {
+        if (AllowPings && !!ActorId) {
+            NActors::TActivationContext::AsActorContext().Send(*ActorId, new TEvKqpCompute::TEvScanPing());
+        }
+    }
+
+    void Start(const TActorId& actorId, bool allowPings) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("actor_id", actorId);
         AFL_ENSURE(!ActorId);
         ActorId = actorId;
+        AllowPings = allowPings;
         DoAck();
     }
 
@@ -276,6 +292,12 @@ public:
         }
     }
 
+    void PingAllScanners() {
+        for (auto&& itTablet : ShardScanners) {
+            itTablet.second->PingIfNeeded();
+        }
+    }
+
     std::shared_ptr<TShardState> GetShardStateByActorId(const NActors::TActorId& actorId) const {
         auto it = ShardsByActorId.find(actorId);
         if (it == ShardsByActorId.end()) {
@@ -299,7 +321,7 @@ public:
         }
     }
 
-    void RegisterScannerActor(const ui64 tabletId, const ui64 generation, const TActorId& scanActorId) {
+    void RegisterScannerActor(const ui64 tabletId, const ui64 generation, const TActorId& scanActorId, bool allowPings) {
         auto state = GetShardState(tabletId);
         if (!state || generation != state->Generation) {
             AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "register_scanner_actor_dropped")
@@ -318,7 +340,7 @@ public:
         state->ResetRetry();
         AFL_ENSURE(ShardsByActorId.emplace(scanActorId, state).second);
 
-        GetShardScannerVerified(tabletId)->Start(scanActorId);
+        GetShardScannerVerified(tabletId)->Start(scanActorId, allowPings);
     }
 
     void StartScanner(TShardState& state) {

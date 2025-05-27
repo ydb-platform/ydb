@@ -92,9 +92,9 @@ void TController::DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard&
     AFL_VERIFY(ShardActuals.erase(shard.TabletID()));
 }
 
-std::vector<ui64> TController::GetPathIds(const ui64 tabletId) const {
+std::vector<NKikimr::NColumnShard::TInternalPathId> TController::GetPathIds(const ui64 tabletId) const {
     TGuard<TMutex> g(Mutex);
-    std::vector<ui64> result;
+    std::vector<NKikimr::NColumnShard::TInternalPathId> result;
     for (auto&& i : ShardActuals) {
         if (i.first == tabletId) {
             const auto& index = i.second->GetIndexAs<NOlap::TColumnEngineForLogs>();
@@ -143,6 +143,12 @@ bool TController::IsTrivialLinks() const {
     ::NKikimr::NColumnShard::TBlobPutResult::TPtr result = std::make_shared<::NKikimr::NColumnShard::TBlobPutResult>(*original);
     result->SetPutStatus(NKikimrProto::EReplyStatus::ERROR);
     return result;
+}
+
+void TController::OnAfterLocalTxCommitted(const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) {
+    if (RestartOnLocalDbTxCommitted == txInfo) {
+        ctx.Send(shard.SelfId(), new TEvents::TEvPoisonPill{});
+    }
 }
 
 }   // namespace NKikimr::NYDBTest::NColumnShard

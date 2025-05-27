@@ -67,6 +67,12 @@ bool IsTableReplicaType(EObjectType type);
 //! Checks if the given type is a chaos replica.
 bool IsChaosTableReplicaType(EObjectType type);
 
+//! Checks if the given type is a replication card.
+bool IsReplicationCardType(EObjectType type);
+
+//! Checks if the given type is a chaos lease.
+bool IsChaosLeaseType(EObjectType type);
+
 //! Checks if the given type is a collocation.
 bool IsCollocationType(EObjectType type);
 
@@ -125,7 +131,7 @@ EObjectType SchemaTypeFromType(EObjectType type);
 EObjectType TypeFromSchemaType(EObjectType type);
 
 //! Formats object type into string (taking schemas into account).
-TString FormatObjectType(EObjectType type);
+std::string FormatObjectType(EObjectType type);
 
 //! Constructs the id from its parts.
 TObjectId MakeId(
@@ -150,6 +156,9 @@ bool IsWellKnownId(TObjectId id);
  *  This method checks the second highest bit of counter part.
  */
 bool IsSequoiaId(TObjectId id);
+
+//! Returns |true| if a given #id corresponds to cypress transaction that is mirrored to Sequoia.
+bool IsCypressTransactionMirroredToSequoia(TTransactionId transactionId);
 
 //! Constructs the id for a regular object.
 TObjectId MakeRegularId(

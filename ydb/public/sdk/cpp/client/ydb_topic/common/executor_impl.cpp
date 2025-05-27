@@ -1,6 +1,6 @@
 #include "executor_impl.h"
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 void IAsyncExecutor::Post(TFunction&& f) {
     PostImpl(std::move(f));

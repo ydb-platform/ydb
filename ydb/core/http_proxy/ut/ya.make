@@ -19,8 +19,8 @@ PEERDIR(
     ydb/library/testlib/service_mocks
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
-    ydb/public/sdk/cpp/client/ydb_discovery
-    ydb/public/sdk/cpp/client/ydb_types
+    ydb/public/sdk/cpp/src/client/discovery
+    ydb/public/sdk/cpp/src/client/types
     ydb/services/datastreams
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery

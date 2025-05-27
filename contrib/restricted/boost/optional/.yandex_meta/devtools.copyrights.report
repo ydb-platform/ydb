@@ -81,7 +81,17 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/none.hpp [1:2]
-        include/boost/none_t.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 49502cfd99d9b7c0c64b960a8260c6e9
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2024 Ryan Malcolm Underwood.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/optional_utility.hpp [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 75f254658639d6099b8a2607570e97af
 BELONGS ya.make
@@ -93,7 +103,6 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/optional/detail/old_optional_implementation.hpp [1:2]
         include/boost/optional/detail/optional_aligned_storage.hpp [1:2]
         include/boost/optional/detail/optional_config.hpp [1:2]
         include/boost/optional/detail/optional_factory_support.hpp [1:2]
@@ -102,16 +111,17 @@ BELONGS ya.make
         include/boost/optional/optional.hpp [1:2]
         include/boost/optional/optional_fwd.hpp [1:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 915672e3644591e88da568c16864a106
+KEEP     COPYRIGHT_SERVICE_LABEL 9011a14a0693638672595b3219eab47e
 BELONGS ya.make
     License text:
-        // Copyright (C) 2015-2018 Andrzej Krzemienski.
+        // Copyright (C) 2003, 2008 Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2015, 2024 Andrzej Krzemienski.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/optional/detail/optional_reference_spec.hpp [1:1]
+        include/boost/optional/detail/optional_relops.hpp [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 97a90988e6e57fde8f8f24870992405e
 BELONGS ya.make
@@ -150,18 +160,6 @@ BELONGS ya.make
         include/boost/none_t.hpp [1:2]
         include/boost/optional.hpp [1:1]
 
-KEEP     COPYRIGHT_SERVICE_LABEL bda851fc939db851e4440dc9806f0d16
-BELONGS ya.make
-    License text:
-        // Copyright (C) 2003, 2008 Fernando Luis Cacciola Carballal.
-        // Copyright (C) 2014-2016 Andrzej Krzemienski.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/optional/detail/old_optional_implementation.hpp [1:2]
-
 KEEP     COPYRIGHT_SERVICE_LABEL c8d4e667a2b45ad481c6365ab8ff146a
 BELONGS ya.make
     License text:
@@ -172,8 +170,19 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/optional/detail/optional_relops.hpp [1:2]
         include/boost/optional/detail/optional_swap.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL db3e30044d1f01643d8ed0bc550521ef
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2003, Fernando Luis Cacciola Carballal.
+        // Copyright (C) 2014, 2024 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/none_t.hpp [1:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL db7c109214a40b15282917536ab96515
 BELONGS ya.make
@@ -197,3 +206,14 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/optional/optional_io.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe0444c22ecc3ff736a4eefe9c896df5
+BELONGS ya.make
+    License text:
+        // Copyright (C) 2015-2024 Andrzej Krzemienski.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/optional/detail/optional_reference_spec.hpp [1:1]

@@ -2,24 +2,51 @@
 
 #include "table_client.h"
 
+#include <yt/yt/client/signature/public.h>
+
 #include <yt/yt/client/table_client/config.h>
 
-#include <library/cpp/yt/memory/non_null_ptr.h>
+#include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TDistributedWriteSessionWithCookies
+    : public NYTree::TYsonStructLite
+{
+    // TDistributedWriteSession.
+    TSignedDistributedWriteSessionPtr Session;
+    // std::vector<TWriteFragmentCookie>.
+    std::vector<TSignedWriteFragmentCookiePtr> Cookies;
+
+    REGISTER_YSON_STRUCT_LITE(TDistributedWriteSessionWithCookies)
+
+    static void Register(TRegistrar registrar);
+};
+
+struct TDistributedWriteSessionWithResults
+{
+    // TDistributedWriteSession.
+    TSignedDistributedWriteSessionPtr Session;
+    // std::vector<TWriteFragmentResult>.
+    std::vector<TSignedWriteFragmentResultPtr> Results;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TDistributedWriteSessionStartOptions
     : public TTransactionalOptions
-{ };
+{
+    int CookieCount = 0;
+};
 
 struct TDistributedWriteSessionFinishOptions
 {
     int MaxChildrenPerAttachRequest = 10'000;
 };
 
-struct TFragmentTableWriterOptions
+struct TTableFragmentWriterOptions
     : public TTableWriterOptions
 { };
 
@@ -27,23 +54,15 @@ struct TFragmentTableWriterOptions
 
 struct IDistributedTableClientBase
 {
-public:
     virtual ~IDistributedTableClientBase() = default;
 
-    virtual TFuture<TDistributedWriteSessionPtr> StartDistributedWriteSession(
+    virtual TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options = {}) = 0;
 
     virtual TFuture<void> FinishDistributedWriteSession(
-        TDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options = {}) = 0;
-
-    // Helper used to implement FinishDistributedWriteSession efficiently
-    // without compromising privacy of session fields.
-    // defined in yt/yt/client/api/distributed_table_session.cpp.
-    void* GetOpaqueDistributedWriteResults(Y_LIFETIME_BOUND const TDistributedWriteSessionPtr& session);
-    // Used in chunk writer for results recording
-    void RecordOpaqueWriteResult(const TFragmentWriteCookiePtr& cookie, void* opaqueWriteResult);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -52,10 +71,17 @@ struct IDistributedTableClient
 {
     virtual ~IDistributedTableClient() = default;
 
-    virtual TFuture<ITableWriterPtr> CreateFragmentTableWriter(
-        const TFragmentWriteCookiePtr& cookie,
-        const TFragmentTableWriterOptions& options = {}) = 0;
+    virtual TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(
+        const TSignedWriteFragmentCookiePtr& cookie,
+        const TTableFragmentWriterOptions& options = {}) = 0;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Defined in distributed_table_session.cpp.
+TFuture<void> PingDistributedWriteSession(
+    const TSignedDistributedWriteSessionPtr& session,
+    const IClientPtr& client);
 
 ////////////////////////////////////////////////////////////////////////////////
 

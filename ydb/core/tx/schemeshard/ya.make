@@ -13,6 +13,8 @@ RECURSE_FOR_TESTS(
     ut_column_build
     ut_compaction
     ut_continuous_backup
+    ut_data_erasure
+    ut_data_erasure_reboots
     ut_export
     ut_export_reboots_s3
     ut_external_data_source
@@ -26,6 +28,7 @@ RECURSE_FOR_TESTS(
     ut_index_build
     ut_index_build_reboots
     ut_login
+    ut_login_large
     ut_move
     ut_move_reboots
     ut_olap
@@ -47,11 +50,14 @@ RECURSE_FOR_TESTS(
     ut_stats
     ut_subdomain
     ut_subdomain_reboots
+    ut_sysview
+    ut_sysview_reboots
     ut_topic_splitmerge
     ut_transfer
     ut_ttl
     ut_user_attributes
     ut_user_attributes_reboots
+    ut_vector_index_build_reboots
     ut_view
 )
 
@@ -67,6 +73,7 @@ SRCS(
     schemeshard__borrowed_compaction.cpp
     schemeshard__clean_pathes.cpp
     schemeshard__conditional_erase.cpp
+    schemeshard__data_erasure_manager.cpp
     schemeshard__delete_tablet_reply.cpp
     schemeshard__describe_scheme.cpp
     schemeshard__find_subdomain_path_id.cpp
@@ -75,6 +82,7 @@ SRCS(
     schemeshard__init_populator.cpp
     schemeshard__init_root.cpp
     schemeshard__init_schema.cpp
+    schemeshard__list_users.cpp
     schemeshard__login.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
@@ -144,6 +152,7 @@ SRCS(
     schemeshard__operation_create_sequence.cpp
     schemeshard__operation_create_solomon.cpp
     schemeshard__operation_create_subdomain.cpp
+    schemeshard__operation_create_sysview.cpp
     schemeshard__operation_create_table.cpp
     schemeshard__operation_create_view.cpp
     schemeshard__operation_db_changes.cpp
@@ -165,6 +174,7 @@ SRCS(
     schemeshard__operation_drop_sequence.cpp
     schemeshard__operation_drop_solomon.cpp
     schemeshard__operation_drop_subdomain.cpp
+    schemeshard__operation_drop_sysview.cpp
     schemeshard__operation_drop_table.cpp
     schemeshard__operation_drop_unsafe.cpp
     schemeshard__operation_drop_view.cpp
@@ -193,8 +203,11 @@ SRCS(
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
+    schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
+    schemeshard__root_data_erasure_manager.cpp
+    schemeshard__tenant_data_erasure_manager.cpp
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
@@ -231,6 +244,7 @@ SRCS(
     schemeshard_import__get.cpp
     schemeshard_import__list.cpp
     schemeshard_import_flow_proposals.cpp
+    schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
     schemeshard_path.cpp
@@ -267,16 +281,20 @@ PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
     library/cpp/json
+    library/cpp/protobuf/json
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base
     ydb/core/blob_depot
+    ydb/core/blobstorage/base
     ydb/core/blockstore/core
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/external_sources
     ydb/core/filestore/core
     ydb/core/kesus/tablet
+    ydb/core/keyvalue
+    ydb/core/keyvalue/protos
     ydb/core/metering
     ydb/core/persqueue
     ydb/core/persqueue/config
@@ -305,21 +323,26 @@ PEERDIR(
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer
+    ydb/public/lib/ydb_cli/dump/files
+    ydb/public/lib/ydb_cli/dump/util
     yql/essentials/minikql
     yql/essentials/providers/common/proto
     ydb/services/bg_tasks
     ydb/core/tx/columnshard/bg_tasks/manager
+    ydb/core/tx/tiering/tier
 )
 
 YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(
-        schemeshard_import_scheme_getter_fallback.cpp
+        schemeshard_export_uploaders_fallback.cpp
+        schemeshard_import_getters_fallback.cpp
     )
 ELSE()
     SRCS(
-        schemeshard_import_scheme_getter.cpp
+        schemeshard_export_uploaders.cpp
+        schemeshard_import_getters.cpp
     )
 ENDIF()
 

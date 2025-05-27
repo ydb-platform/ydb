@@ -6,7 +6,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>
@@ -141,6 +141,7 @@ TString ToString(const THashMap<TString, TQuotaCachedUsage>& usageMap) {
 }
 
 class TQuotaManagementService : public NActors::TActorBootstrapped<TQuotaManagementService> {
+    using TLimits = decltype(TEvQuotaService::TQuotaSetRequest::Limits);
 public:
     TQuotaManagementService(
         const NConfig::TQuotasManagerConfig& config,
@@ -261,23 +262,23 @@ private:
 
         if (it == subjectMap.end()) {
             ReadQuota(subjectType, subjectId,
-                [this, ev=ev](TReadQuotaExecuter& executer) {
+                [this, allowStaleUsage=ev->Get()->AllowStaleUsage, sender=ev->Sender, cookie=ev->Cookie](TReadQuotaExecuter& executer) {
                     // This block is executed in correct self-context, no locks/syncs required
                     auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];
                     auto& cache = subjectMap[executer.State.SubjectId];
                     LOG_D(executer.State.SubjectType << "." << executer.State.SubjectId << ToString(cache.UsageMap) << " LOADED");
-                    CheckUsageMaybeReply(executer.State.SubjectType, executer.State.SubjectId, cache, ev);
+                    CheckUsageMaybeReply(executer.State.SubjectType, executer.State.SubjectId, cache, allowStaleUsage, sender, cookie);
                 }
             );
         } else {
-            CheckUsageMaybeReply(subjectType, subjectId, it->second, ev);
+            CheckUsageMaybeReply(subjectType, subjectId, it->second, ev->Get()->AllowStaleUsage, ev->Sender, ev->Cookie);
         }
     }
 
-    void CheckUsageMaybeReply(const TString& subjectType, const TString& subjectId, TQuotaCache& cache, const TEvQuotaService::TQuotaGetRequest::TPtr& ev) {
+    void CheckUsageMaybeReply(const TString& subjectType, const TString& subjectId, TQuotaCache& cache, bool allowStaleUsage, const TActorId& sender, ui64 cookie) {
         bool pended = false;
         auto& infoMap = QuotaInfoMap[subjectType];
-        if (!ev->Get()->AllowStaleUsage) {
+        if (!allowStaleUsage) {
             // Refresh usage
             for (auto& itUsage : cache.UsageMap) {
                 auto metricName = itUsage.first;
@@ -293,7 +294,7 @@ private:
                                 cachedUsage.RequestedAt = Now();
                             }
                             if (!pended) {
-                                cache.PendingUsageRequests.emplace(ev->Sender, ev->Cookie);
+                                cache.PendingUsageRequests.emplace(sender, cookie);
                                 pended = true;
                             }
                         }
@@ -303,16 +304,16 @@ private:
         }
 
         if (!pended) {
-            SendQuota(ev->Sender, ev->Cookie, subjectType, subjectId, cache);
-            cache.PendingUsageRequests.erase(ev->Sender);
+            SendQuota(sender, cookie, subjectType, subjectId, cache);
+            cache.PendingUsageRequests.erase(sender);
         }
     }
 
-    void ChangeLimitsAndReply(const TString& subjectType, const TString& subjectId, TQuotaCache& cache, const TEvQuotaService::TQuotaSetRequest::TPtr& ev) {
+    void ChangeLimitsAndReply(const TString& subjectType, const TString& subjectId, TQuotaCache& cache, const TLimits& limits, const TActorId& sender, ui64 cookie) {
 
         auto pended = false;
         auto& infoMap = QuotaInfoMap[subjectType];
-        for (auto metricLimit : ev->Get()->Limits) {
+        for (auto metricLimit : limits) {
             auto& metricName = metricLimit.first;
 
             auto it = cache.UsageMap.find(metricName);
@@ -332,8 +333,8 @@ private:
 
                     if (info.QuotaController != NActors::TActorId{}) {
                         pended = true;
-                        cache.PendingLimitRequest = ev->Sender;
-                        cache.PendingLimitCookie = ev->Cookie;
+                        cache.PendingLimitRequest = sender;
+                        cache.PendingLimitCookie = cookie;
                         cache.PendingLimit.insert(metricName);
                         Send(info.QuotaController, new TEvQuotaService::TQuotaLimitChangeRequest(subjectType, subjectId, metricName, cached.Usage.Limit.Value, limit));
                         continue;
@@ -354,7 +355,7 @@ private:
             for (auto it : cache.UsageMap) {
                 response->Limits.emplace(it.first, it.second.Usage.Limit.Value);
             }
-            Send(ev->Sender, response.Release());
+            Send(sender, response.Release());
         }
     }
 
@@ -416,7 +417,7 @@ private:
                 builder.AddString("subject", executer.State.SubjectType);
                 builder.AddString("id", executer.State.SubjectId);
             },
-            [](TReadQuotaExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
+            [](TReadQuotaExecuter& executer, const std::vector<NYdb::TResultSet>& resultSets) {
                 TResultSetParser parser(resultSets.front());
                 while (parser.TryNextRow()) {
                     auto name = *parser.ColumnParser(METRIC_NAME_COLUMN_NAME).GetOptionalString();
@@ -570,7 +571,7 @@ private:
                 builder.AddString("id", executer.State.SubjectId);
                 builder.AddString("metric", executer.State.MetricName);
             },
-            [](TSyncQuotaExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
+            [](TSyncQuotaExecuter& executer, const std::vector<NYdb::TResultSet>& resultSets) {
                 TResultSetParser parser(resultSets.front());
                 if (parser.TryNextRow()) {
                     auto limitUpdatedAt = parser.ColumnParser(LIMIT_UPDATED_AT_COLUMN_NAME).GetOptionalTimestamp();
@@ -723,16 +724,16 @@ private:
         auto it = subjectMap.find(subjectId);
         if (it == subjectMap.end()) {
             ReadQuota(subjectType, subjectId,
-                [this, ev=ev](TReadQuotaExecuter& executer) {
+                [this, limits=std::move(ev->Get()->Limits), sender=ev->Sender, cookie=ev->Cookie](TReadQuotaExecuter& executer) {
                     // This block is executed in correct self-context, no locks/syncs required
                     auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];
                     auto& cache = subjectMap[executer.State.SubjectId];
                     LOG_D(executer.State.SubjectType << "." << executer.State.SubjectId << ToString(cache.UsageMap) << " LOADED");
-                    ChangeLimitsAndReply(executer.State.SubjectType, executer.State.SubjectId, cache, ev);
+                    ChangeLimitsAndReply(executer.State.SubjectType, executer.State.SubjectId, cache, limits, sender, cookie);
                 }
             );
         } else {
-            ChangeLimitsAndReply(subjectType, subjectId, it->second, ev);
+            ChangeLimitsAndReply(subjectType, subjectId, it->second, ev->Get()->Limits, ev->Sender, ev->Cookie);
         }
     }
 

@@ -105,11 +105,15 @@ public:
         Functions["Iterator"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ForwardList"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["LazyList"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["TableSource"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["WideTableSource"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToFlow"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["FromFlow"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToStream"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToSequence"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["Collect"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["PruneAdjacentKeys"] = &TCallableConstraintTransformer::PruneKeysWrap<true>;
+        Functions["PruneKeys"] = &TCallableConstraintTransformer::PruneKeysWrap<false>;
         Functions["FilterNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode>;
         Functions["SkipNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode>;
         Functions["FilterNullElements"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode>;
@@ -199,6 +203,7 @@ public:
         Functions["Visit"] = &TCallableConstraintTransformer::VisitWrap;
         Functions["VariantItem"] = &TCallableConstraintTransformer::VariantItemWrap;
         Functions["Variant"] = &TCallableConstraintTransformer::VariantWrap;
+        Functions["DynamicVariant"] = &TCallableConstraintTransformer::DynamicVariantWrap;
         Functions["Guess"] = &TCallableConstraintTransformer::GuessWrap;
         Functions["Mux"] = &TCallableConstraintTransformer::MuxWrap;
         Functions["Nth"] = &TCallableConstraintTransformer::NthWrap;
@@ -240,13 +245,14 @@ public:
         Functions["WideTopSortBlocks"] = &TCallableConstraintTransformer::WideTopWrap<true>;
         Functions["WideSortBlocks"] = &TCallableConstraintTransformer::WideTopWrap<true>;
         Functions["WideToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["ListToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["WideFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
-        Functions["BlockExpandChunked"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["ListFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ReplicateScalars"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["MultiHoppingCore"] = &TCallableConstraintTransformer::MultiHoppingCoreWrap;
-        Functions["StablePickle"] = &TCallableConstraintTransformer::FromFirst<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode>;
+        Functions["StablePickle"] = &TCallableConstraintTransformer::PickleWrap;
         Functions["Unpickle"] = &TCallableConstraintTransformer::FromSecond<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode>;
     }
 
@@ -400,6 +406,14 @@ private:
         }
 
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
+    }
+
+    TStatus PickleWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        if (IsDataOrOptionalOfDataOrPg(input->Head().GetTypeAnn())) {
+            TApplyConstraintFromInput<0, TPartOfChoppedConstraintNode, TPartOfUniqueConstraintNode, TPartOfDistinctConstraintNode>::Do(input);
+        }
+
+        return FromFirst<TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
     TStatus AssumeConstraintsWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
@@ -651,12 +665,18 @@ private:
         };
 
         const auto filterForUnique = [inItemType, outItemType](const TPartOfConstraintBase::TPathType& path) {
-            const auto castResult = CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType));
-            return NUdf::ECastOptions::Complete == castResult || NUdf::ECastOptions::MayFail == castResult;
+            if (const auto outType = TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType)) {
+                const auto castResult = CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), outType);
+                return NUdf::ECastOptions::Complete == castResult || NUdf::ECastOptions::MayFail == castResult;
+            }
+            return false;
         };
 
         const auto filterForDistinct = [inItemType, outItemType](const TPartOfConstraintBase::TPathType& path) {
-            return NUdf::ECastOptions::Complete == CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType));
+            if (const auto outType = TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType)) {
+                return NUdf::ECastOptions::Complete == CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), outType);
+            }
+            return false;
         };
 
         FilterFromHead<TSortedConstraintNode>(input, filter, ctx);
@@ -667,6 +687,43 @@ private:
         FilterFromHead<TPartOfChoppedConstraintNode>(input, filter, ctx);
         FilterFromHead<TPartOfUniqueConstraintNode>(input, filterForUnique, ctx);
         FilterFromHead<TPartOfDistinctConstraintNode>(input, filterForDistinct, ctx);
+
+        const auto unwrapedOutItemType = RemoveOptionalType(outItemType);
+        const auto unwrapedInItemType = RemoveOptionalType(inItemType);
+        if (unwrapedInItemType->GetKind() == ETypeAnnotationKind::Variant && unwrapedOutItemType->GetKind() == ETypeAnnotationKind::Variant
+            && unwrapedOutItemType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+
+            const auto tupleUnderInType = unwrapedInItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
+            const auto tupleUnderOutType = unwrapedOutItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
+            if (auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
+                if (tupleUnderOutType->GetSize() < tupleUnderInType->GetSize()) {
+                    TMultiConstraintNode::TMapType multiItems;
+                    std::copy_if(multi->GetItems().cbegin(), multi->GetItems().cend(),
+                        std::back_inserter(multiItems),
+                        [&](const auto& item) { return item.first < tupleUnderOutType->GetSize(); }
+                    );
+                    if (!multiItems.empty()) {
+                        input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
+                    }
+                } else {
+                    input->AddConstraint(multi);
+                }
+            }
+            if (auto varItem = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
+                if (tupleUnderOutType->GetSize() < tupleUnderInType->GetSize()) {
+                    TVarIndexConstraintNode::TMapType filteredItems;
+                    std::copy_if(varItem->GetIndexMapping().cbegin(), varItem->GetIndexMapping().cend(),
+                        std::back_inserter(filteredItems),
+                        [&](const auto& item) { return item.second < tupleUnderOutType->GetSize(); }
+                    );
+                    if (!filteredItems.empty()) {
+                        input->AddConstraint(ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(filteredItems)));
+                    }
+                } else {
+                    input->AddConstraint(varItem);
+                }
+            }
+        }
         return TStatus::Ok;
     }
 
@@ -756,6 +813,32 @@ private:
         }
 
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
+    }
+
+    template <bool Adjacent>
+    TStatus PruneKeysWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        if (const auto status = UpdateLambdaConstraints(*input->Child(1)); status != TStatus::Ok) {
+            return status;
+        }
+
+        if constexpr (Adjacent) {
+            if (const auto status = CopyAllFrom<0>(input, output, ctx); status != TStatus::Ok) {
+                return status;
+            }
+
+            TPartOfConstraintBase::TSetType keys = GetPathsToKeys<true>(input->Child(1)->Tail(), input->Child(1)->Head().Head());
+            TPartOfConstraintBase::TSetOfSetsType uniqueKeys;
+            for (const auto& elem : keys) {
+                uniqueKeys.insert(TPartOfConstraintBase::TSetType{elem});
+            }
+            if (!keys.empty()) {
+                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(TUniqueConstraintNode::TContentType{uniqueKeys}));
+                input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(TDistinctConstraintNode::TContentType{uniqueKeys}));
+            }
+            return TStatus::Ok;
+        }
+
+        return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
     template<class TConstraint>
@@ -1977,6 +2060,28 @@ private:
                 TVarIndexConstraintNode::TMapType filteredItems;
                 for (auto& item: varIndex->GetIndexMapping()) {
                     filteredItems.push_back(std::make_pair(index, item.second));
+                }
+                input->AddConstraint(ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(filteredItems)));
+            }
+        }
+        return TStatus::Ok;
+    }
+
+    TStatus DynamicVariantWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+        if (auto underlyingType = RemoveOptionalType(input->GetTypeAnn())->Cast<TVariantExprType>()->GetUnderlyingType(); underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
+            TConstraintSet target;
+            CopyExcept(target, input->Head().GetConstraintSet(), TVarIndexConstraintNode::Name());
+            TMultiConstraintNode::TMapType items;
+            for (ui32 i = 0; i < underlyingType->Cast<TTupleExprType>()->GetSize(); ++i) {
+                items.emplace_back(i, target);
+            }
+            input->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(items)));
+            if (auto varIndex = input->Head().GetConstraint<TVarIndexConstraintNode>()) {
+                TVarIndexConstraintNode::TMapType filteredItems;
+                for (ui32 i = 0; i < underlyingType->Cast<TTupleExprType>()->GetSize(); ++i) {
+                    for (auto& item: varIndex->GetIndexMapping()) {
+                        filteredItems.push_back(std::make_pair(i, item.second));
+                    }
                 }
                 input->AddConstraint(ctx.MakeConstraint<TVarIndexConstraintNode>(std::move(filteredItems)));
             }

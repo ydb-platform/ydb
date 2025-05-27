@@ -160,6 +160,9 @@ NYql::NLog::EComponent ConvertComponent(NYql::NProto::TLoggingConfig::EComponent
     case TLoggingConfig::HTTP_GATEWAY: return EComponent::HttpGateway;
     case TLoggingConfig::PROVIDER_GENERIC: return EComponent::ProviderGeneric;
     case TLoggingConfig::PROVIDER_PG: return EComponent::ProviderPg;
+    case TLoggingConfig::PROVIDER_PURE: return EComponent::ProviderPure;
+    case TLoggingConfig::FAST_MAP_REDUCE: return EComponent::FastMapReduce;
+    case TLoggingConfig::PROVIDER_YTFLOW: return EComponent::ProviderYtflow;
     }
 
     ythrow yexception() << "unknown log component: "

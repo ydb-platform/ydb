@@ -33,11 +33,25 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     COPYRIGHT_SERVICE_LABEL aad3a26c5dd6db876008a9bb69f2861a
+BELONGS ya.make
+    License text:
+        //  (C) Copyright Boris Rasin, 2014-2021.
+        //  (C) Copyright Antony Polukhin, 2014-2025.
+        //  Distributed under the Boost
+        //  Software License, Version 1.0. (See accompanying file
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/polymorphic_pointer_cast.hpp [2:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL bb3eb4b4e302dcb6634d591111603d92
 BELONGS ya.make
     License text:
         //  (C) Copyright Boris Rasin, 2014-2021.
-        //  (C) Copyright Antony Polukhin, 2014-2024.
+        //  (C) Copyright Antony Polukhin, 2014-2025.
         //  Distributed under the Boost
         //  Software License, Version 1.0. (See accompanying file
     Scancode info:
@@ -60,20 +74,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/polymorphic_cast.hpp [3:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL f00e05e104061d3694899e6a7035fb29
-BELONGS ya.make
-    License text:
-        //  (C) Copyright Boris Rasin, 2014-2021.
-        //  (C) Copyright Antony Polukhin, 2014-2024.
-        //  Distributed under the Boost
-        //  Software License, Version 1.0. (See accompanying file
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/polymorphic_pointer_cast.hpp [2:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f737ed06addb0e3798f6d97ca33809b1
 BELONGS ya.make

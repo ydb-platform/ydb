@@ -49,6 +49,12 @@ size_t TLockFreeHashTable<T>::GetByteSize() const
 }
 
 template <class T>
+size_t TLockFreeHashTable<T>::GetByteSize(size_t capacity)
+{
+    return sizeof(std::atomic<TEntry>) * capacity * HashTableExpansionFactor;
+}
+
+template <class T>
 typename TLockFreeHashTable<T>::TItemRef TLockFreeHashTable<T>::Insert(TFingerprint fingerprint, TValuePtr value)
 {
     using TItemRef = typename TLockFreeHashTable<T>::TItemRef;

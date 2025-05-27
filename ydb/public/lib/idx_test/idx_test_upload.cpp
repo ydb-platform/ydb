@@ -35,7 +35,7 @@ private:
     };
 
     void CreateTable(TTableDescription tableDesc) {
-        ThrowOnError(Client_.RetryOperationSync([this, tableDesc](TSession session) {
+        NStatusHelpers::ThrowOnError(Client_.RetryOperationSync([this, tableDesc](TSession session) {
             TTableDescription desc(tableDesc);
             return session.CreateTable(
                 Table_,
@@ -71,12 +71,12 @@ private:
         return [this, dataProvider, id](TSession session) -> TAsyncStatus {
 
             if (FinishedByError)
-                return NThreading::MakeFuture<NYdb::TStatus>(TStatus(EStatus::INTERNAL_ERROR, NYql::TIssues()));
+                return NThreading::MakeFuture<NYdb::TStatus>(TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues()));
 
             auto maybeParamsList = CreateParams(dataProvider, id);
             if (!maybeParamsList) {
                 UploadStatuses_[id] = EUploadStatus::Done;
-                return NThreading::MakeFuture<NYdb::TStatus>(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+                return NThreading::MakeFuture<NYdb::TStatus>(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
             }
 
             auto paramsList = maybeParamsList.GetRef();
@@ -133,7 +133,7 @@ private:
 
         NThreading::WaitExceptionOrAll(resultFutures).Wait();
         if (errStatus)
-            ThrowOnError(errStatus.GetRef());
+            NStatusHelpers::ThrowOnError(errStatus.GetRef());
     }
 
     TTableClient Client_;

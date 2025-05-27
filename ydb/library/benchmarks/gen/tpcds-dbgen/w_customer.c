@@ -90,7 +90,9 @@ mk_w_customer (void * row, ds_key_t index)
 
     if (!bInit)
     {            
-        nBaseDate = dttoj (strtodate (DATE_MINIMUM));
+        date_t* minDate = strtodate (DATE_MINIMUM);
+        nBaseDate = dttoj (minDate);
+        free(minDate);
         strtodt(&dtBirthMax, "1992-12-31");
         strtodt(&dtBirthMin, "1924-01-01");
         strtodt(&dtToday, TODAYS_DATE);

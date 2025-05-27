@@ -4,6 +4,8 @@
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_opt_rewrite_io.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_func_stack.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/utils/log/log.h>
 #include <util/datetime/cputimer.h>
@@ -47,6 +49,10 @@ public:
         output = input;
         if (Mode == ETypeCheckMode::Initial && IsComplete) {
             return TStatus::Ok;
+        }
+
+        if (IsOptimizerEnabled<KeepWorldOptName>(Types) && !IsOptimizerDisabled<KeepWorldOptName>(Types)) {
+            KeepWorldEnabled = true;
         }
 
         auto status = TransformNode(input, output, ctx);
@@ -123,7 +129,7 @@ public:
         Processed.clear();
         HasRenames = false;
         RepeatCallableCount.clear();
-        CurrentFunctions = {};
+        FunctionStack.Reset();
         CallableTimes.clear();
         IsComplete = false;
     }
@@ -200,58 +206,9 @@ private:
 
         auto input = start;
         for (size_t transformCount = 0; true; ++transformCount) {
-            TIssueScopeGuard issueScope(ctx.IssueManager, [this, input, &ctx]() -> TIssuePtr {
-                TStringBuilder str;
-                str << "At ";
-                switch (input->Type()) {
-                case TExprNode::Callable:
-                    if (!CurrentFunctions.empty() && CurrentFunctions.top().second) {
-                        return nullptr;
-                    }
-
-                    if (!CurrentFunctions.empty()) {
-                        CurrentFunctions.top().second = true;
-                    }
-
-                    str << "function: " << NormalizeCallableName(input->Content());
-                    break;
-                case TExprNode::List:
-                    if (CurrentFunctions.empty()) {
-                        str << "tuple";
-                    } else if (!CurrentFunctions.top().second) {
-                        CurrentFunctions.top().second = true;
-                        str << "function: " << CurrentFunctions.top().first;
-                    } else {
-                        return nullptr;
-                    }
-                    break;
-                case TExprNode::Lambda:
-                    if (CurrentFunctions.empty()) {
-                        str << "lambda";
-                    } else if (!CurrentFunctions.top().second) {
-                        CurrentFunctions.top().second = true;
-                        str << "function: " << CurrentFunctions.top().first;
-                    } else {
-                        return nullptr;
-                    }
-                    break;
-                default:
-                    str << "unknown";
-                }
-
-                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), str);
-            });
-
-            if (input->Type() == TExprNode::Callable) {
-                CurrentFunctions.push(std::make_pair(input->Content(), false));
-            }
-            Y_SCOPE_EXIT(this, input) {
-                if (input->Type() == TExprNode::Callable) {
-                    CurrentFunctions.pop();
-                    if (!CurrentFunctions.empty() && CurrentFunctions.top().first.EndsWith('!')) {
-                        CurrentFunctions.top().second = true;
-                    }
-                }
+            FunctionStack.EnterFrame(*input, ctx);
+            Y_DEFER {
+                FunctionStack.LeaveFrame(*input, ctx);
             };
 
             TStatus retStatus = TStatus::Error;
@@ -299,6 +256,7 @@ private:
             {
                 input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
                 CheckExpected(*input, ctx);
+                CalculateWorld(*input);
                 return TStatus::Ok;
             }
 
@@ -349,6 +307,7 @@ private:
                     (const TTypeAnnotationNode*)ctx.MakeType<TUnitExprType>() :
                     ctx.MakeType<TTupleExprType>(children));
                 CheckExpected(*input, ctx);
+                CalculateWorld(*input);
                 return TStatus::Ok;
             }
 
@@ -411,6 +370,7 @@ private:
 
                 if (input->GetTypeAnn()) {
                     CheckExpected(*input, ctx);
+                    CalculateWorld(*input);
                 }
 
                 return TStatus::Ok;
@@ -460,7 +420,7 @@ private:
                     }
                 }
 
-                CurrentFunctions.top().second = true;
+                FunctionStack.MarkUsed();
                 auto cyclesBefore = PrintCallableTimes ? GetCycleCount() : 0;
                 auto status = CallableTransformer->Transform(input, output, ctx);
                 auto cyclesAfter = PrintCallableTimes ? GetCycleCount() : 0;
@@ -484,6 +444,7 @@ private:
 
                     input->SetState(TExprNode::EState::TypeComplete);
                     CheckExpected(*input, ctx);
+                    CalculateWorld(*input);
                 }
                 else if (status == TStatus::Async) {
                     CallableInputs.push_back(input);
@@ -506,6 +467,7 @@ private:
             {
                 input->SetTypeAnn(ctx.MakeType<TWorldExprType>());
                 CheckExpected(*input, ctx);
+                CalculateWorld(*input);
                 return TStatus::Ok;
             }
 
@@ -563,6 +525,58 @@ private:
         CheckExpectedTypeAndColumnOrder(input, ctx, Types);
     }
 
+    void CalculateWorld(TExprNode& input) {
+        if (!KeepWorldEnabled) {
+            return;
+        }
+
+        YQL_ENSURE(!input.GetWorldLinks());
+        if (input.IsAtom() || input.IsWorld() || input.IsArgument()) {
+            return;
+        }
+
+        TExprNode::TListType candidates;
+        bool hasWorlds = false;
+        for (const auto& child : input.Children()) {
+            if (!child->GetTypeAnn()) {
+                continue;
+            }
+
+            if (child->GetTypeAnn()->ReturnsWorld()) {
+                if (!child->IsWorld()) {
+                    hasWorlds = true;
+                    candidates.push_back(child);
+                }
+            } else {
+                auto inner = child->GetWorldLinks();
+                if (inner) {
+                    candidates.insert(candidates.end(), inner->begin(), inner->end());
+                }
+            }
+        }
+
+        SortUniqueBy(candidates, [](const auto& p){ return p->UniqueId(); });
+        if (!candidates.empty()) {
+            if (!hasWorlds) {
+                for (const auto& child : input.Children()) {
+                    if (!child->GetTypeAnn()) {
+                        continue;
+                    }
+
+                    if (!child->GetTypeAnn()->ReturnsWorld()) {
+                        auto inner = child->GetWorldLinks();
+                        if (inner && *inner == candidates) {
+                            input.SetWorldLinks(std::move(inner));
+                            return;
+                        }
+                    }
+                }
+            }
+
+            input.SetWorldLinks(std::make_shared<TExprNode::TListType>(std::move(candidates)));
+        }
+    }
+
 private:
     TAutoPtr<IGraphTransformer> CallableTransformer;
     TTypeAnnotationContext& Types;
@@ -572,8 +586,9 @@ private:
     TNodeOnNodeOwnedMap Processed;
     bool HasRenames = false;
     THashMap<TString, ui64> RepeatCallableCount;
-    TStack<std::pair<TStringBuf, bool>> CurrentFunctions;
+    TFunctionStack FunctionStack;
     THashMap<TStringBuf, std::pair<ui64, ui64>> CallableTimes;
+    bool KeepWorldEnabled = false;
 };
 
 } // namespace

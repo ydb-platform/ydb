@@ -25,7 +25,7 @@ TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& 
 TUserTable::TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr)
     : TUserTable(table)
 {
-    Y_VERIFY_S(Name == descr.GetName(), "Name: " << Name << " descr.Name: " << descr.GetName());
+    Y_ENSURE(Name == descr.GetName(), "Name: " << Name << " descr.Name: " << descr.GetName());
     ParseProto(descr);
     AlterSchema();
 }
@@ -64,7 +64,7 @@ bool TUserTable::ResetTableSchemaVersion()
 }
 
 void TUserTable::AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc) {
-    Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
+    Y_ENSURE(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
     const auto addIndexPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
 
     auto it = Indexes.lower_bound(addIndexPathId);
@@ -103,7 +103,7 @@ void TUserTable::SwitchIndexState(const TPathId& indexPathId, TTableIndex::EStat
         }
     }
 
-    Y_ABORT("unreachable");
+    Y_ENSURE(false, "unreachable");
 }
 
 void TUserTable::DropIndex(const TPathId& indexPathId) {
@@ -127,7 +127,7 @@ void TUserTable::DropIndex(const TPathId& indexPathId) {
         }
     }
 
-    Y_ABORT("unreachable");
+    Y_ENSURE(false, "unreachable");
 }
 
 bool TUserTable::HasAsyncIndexes() const {
@@ -146,8 +146,8 @@ static bool IsJsonCdcStream(TUserTable::TCdcStream::EFormat format) {
 }
 
 void TUserTable::AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) {
-    Y_ABORT_UNLESS(streamDesc.HasPathId());
-    const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
+    Y_ENSURE(streamDesc.HasPathId());
+    const auto streamPathId = TPathId::FromProto(streamDesc.GetPathId());
 
     if (CdcStreams.contains(streamPathId)) {
         return;
@@ -175,7 +175,7 @@ void TUserTable::SwitchCdcStreamState(const TPathId& streamPathId, TCdcStream::E
     GetSchema(schema);
 
     for (auto it = schema.MutableCdcStreams()->begin(); it != schema.MutableCdcStreams()->end(); ++it) {
-        if (streamPathId != PathIdFromPathId(it->GetPathId())) {
+        if (streamPathId != TPathId::FromProto(it->GetPathId())) {
             continue;
         }
 
@@ -185,7 +185,7 @@ void TUserTable::SwitchCdcStreamState(const TPathId& streamPathId, TCdcStream::E
         return;
     }
 
-    Y_ABORT("unreachable");
+    Y_ENSURE(false, "unreachable");
 }
 
 void TUserTable::DropCdcStream(const TPathId& streamPathId) {
@@ -201,7 +201,7 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
     GetSchema(schema);
 
     for (auto it = schema.GetCdcStreams().begin(); it != schema.GetCdcStreams().end(); ++it) {
-        if (streamPathId != PathIdFromPathId(it->GetPathId())) {
+        if (streamPathId != TPathId::FromProto(it->GetPathId())) {
             continue;
         }
 
@@ -211,7 +211,7 @@ void TUserTable::DropCdcStream(const TPathId& streamPathId) {
         return;
     }
 
-    Y_ABORT("unreachable");
+    Y_ENSURE(false, "unreachable");
 }
 
 bool TUserTable::HasCdcStreams() const {
@@ -277,15 +277,15 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     for (const auto& col : descr.GetDropColumns()) {
         ui32 colId = col.GetId();
         auto it = Columns.find(colId);
-        Y_ABORT_UNLESS(it != Columns.end());
-        Y_ABORT_UNLESS(!it->second.IsKey);
+        Y_ENSURE(it != Columns.end());
+        Y_ENSURE(!it->second.IsKey);
         Columns.erase(it);
     }
 
     if (descr.KeyColumnIdsSize()) {
-        Y_ABORT_UNLESS(descr.KeyColumnIdsSize() >= KeyColumnIds.size());
+        Y_ENSURE(descr.KeyColumnIdsSize() >= KeyColumnIds.size());
         for (ui32 i = 0; i < KeyColumnIds.size(); ++i) {
-            Y_ABORT_UNLESS(KeyColumnIds[i] == descr.GetKeyColumnIds(i));
+            Y_ENSURE(KeyColumnIds[i] == descr.GetKeyColumnIds(i));
         }
 
         KeyColumnIds.clear();
@@ -296,16 +296,16 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
             KeyColumnIds.push_back(keyColId);
 
             TUserColumn * col = Columns.FindPtr(keyColId);
-            Y_ABORT_UNLESS(col);
+            Y_ENSURE(col);
             col->IsKey = true;
             KeyColumnTypes[i] = col->Type;
         }
 
-        Y_ABORT_UNLESS(KeyColumnIds.size() == KeyColumnTypes.size());
+        Y_ENSURE(KeyColumnIds.size() == KeyColumnTypes.size());
     }
 
     if (descr.HasPartitionRangeBegin()) {
-        Y_ABORT_UNLESS(descr.HasPartitionRangeEnd());
+        Y_ENSURE(descr.HasPartitionRangeEnd());
         Range = TSerializedTableRange(descr.GetPartitionRangeBegin(),
                                       descr.GetPartitionRangeEnd(),
                                       descr.GetPartitionRangeBeginIsInclusive(),
@@ -320,14 +320,14 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     CheckSpecialColumns();
 
     for (const auto& indexDesc : descr.GetTableIndexes()) {
-        Y_ABORT_UNLESS(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
+        Y_ENSURE(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
         Indexes.emplace(TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId()), TTableIndex(indexDesc, Columns));
         AsyncIndexCount += ui32(indexDesc.GetType() == TTableIndex::EType::EIndexTypeGlobalAsync);
     }
 
     for (const auto& streamDesc : descr.GetCdcStreams()) {
-        Y_ABORT_UNLESS(streamDesc.HasPathId());
-        CdcStreams.emplace(PathIdFromPathId(streamDesc.GetPathId()), TCdcStream(streamDesc));
+        Y_ENSURE(streamDesc.HasPathId());
+        CdcStreams.emplace(TPathId::FromProto(streamDesc.GetPathId()), TCdcStream(streamDesc));
         JsonCdcStreamCount += ui32(IsJsonCdcStream(streamDesc.GetFormat()));
     }
 }
@@ -426,7 +426,7 @@ void TUserTable::DoApplyCreate(
 {
     const ui32 tid = shadow ? ShadowTid : LocalTid;
 
-    Y_ABORT_UNLESS(tid != 0 && tid != Max<ui32>(), "Creating table %s with bad id %" PRIu32, tableName.c_str(), tid);
+    Y_ENSURE(tid != 0 && tid != Max<ui32>(), "Creating table " << tableName << " with bad id " << tid);
 
     auto &alter = txc.DB.Alter();
     alter.AddTable(tableName, tid);
@@ -565,9 +565,9 @@ void TUserTable::ApplyAlter(
     for (const auto& col : delta.GetDropColumns()) {
         ui32 colId = col.GetId();
         const TUserTable::TUserColumn * oldCol = oldTable.Columns.FindPtr(colId);
-        Y_ABORT_UNLESS(oldCol);
-        Y_ABORT_UNLESS(oldCol->Name == col.GetName());
-        Y_ABORT_UNLESS(!Columns.contains(colId));
+        Y_ENSURE(oldCol);
+        Y_ENSURE(oldCol->Name == col.GetName());
+        Y_ENSURE(!Columns.contains(colId));
 
         for (ui32 tid : tids) {
             alter.DropColumn(tid, colId);

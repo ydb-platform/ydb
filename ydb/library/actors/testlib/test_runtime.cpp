@@ -15,7 +15,7 @@
 #include <ydb/library/actors/util/queue_oneone_inplace.h>
 
 #include <util/generic/maybe.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/random/mersenne.h>
 #include <util/string/printf.h>
 #include <typeinfo>
@@ -296,14 +296,25 @@ namespace NActors {
         }
 
         // for threads
-        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override {
-            Y_UNUSED(wctx);
+        TMailbox* GetReadyActivation(ui64 revolvingCounter) override {
             Y_UNUSED(revolvingCounter);
             Y_ABORT();
         }
 
         TMailbox* ResolveMailbox(ui32 hint) override {
             return Node->MailboxTable->Get(hint);
+        }
+
+        TMailboxTable* GetMailboxTable() const override {
+            return Node->MailboxTable.Get();
+        }
+
+        ui64 TimePerMailboxTs() const override {
+            return NHPTimer::GetClockRate() * TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat();
+        }
+
+        ui32 EventsPerMailbox() const override {
+            return TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
         }
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override {
@@ -436,6 +447,14 @@ namespace NActors {
             return Runtime->Register(actor, NodeIndex, PoolId, mailbox, parentId);
         }
 
+        TActorId RegisterAlias(TMailbox* mailbox, IActor* actor) override {
+            return Runtime->RegisterAlias(mailbox, actor, NodeIndex, PoolId);
+        }
+
+        void UnregisterAlias(TMailbox* mailbox, const TActorId& actorId) override {
+            mailbox->DetachAlias(actorId.LocalId());
+        }
+
         // lifecycle stuff
         void Prepare(TActorSystem *actorSystem, NSchedulerQueue::TReader **scheduleReaders, ui32 *scheduleSz) override {
             Y_UNUSED(actorSystem);
@@ -533,7 +552,7 @@ namespace NActors {
             node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));
             node->MailboxTable.Reset(new TMailboxTable());
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
-            node->ExecutorThread.Reset(new TExecutorThread(0, 0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), "TestExecutor"));
+            node->ExecutorThread.Reset(new TExecutorThread(0, node->ActorSystem.Get(), node->SchedulerPool.Get(), "TestExecutor"));
         } else {
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
         }
@@ -547,6 +566,9 @@ namespace NActors {
         TMailbox* senderMailbox = node->MailboxTable->Get(senderMailboxHint);
         if (senderMailbox) {
             IActor* senderActor = senderMailbox->FindActor(senderLocalId);
+            if (!senderActor) {
+                senderActor = senderMailbox->FindAlias(senderLocalId);
+            }
             TTestDecorator *decorator = dynamic_cast<TTestDecorator*>(senderActor);
             return !decorator || decorator->BeforeSending(ev);
         }
@@ -957,6 +979,26 @@ namespace NActors {
         return actorId;
     }
 
+    TActorId TTestActorRuntimeBase::RegisterAlias(TMailbox* mailbox, IActor* actor, ui32 nodeIndex, ui32 poolId) {
+        Y_ABORT_UNLESS(nodeIndex < NodeCount);
+        TGuard<TMutex> guard(Mutex);
+        TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
+        if (UseRealThreads) {
+            Y_ABORT_UNLESS(node->ExecutorPools.contains(poolId));
+            return node->ExecutorPools[poolId]->RegisterAlias(mailbox, actor);
+        }
+
+        Y_ABORT_UNLESS(mailbox->FindActor(actor->SelfId().LocalId()) == actor);
+
+        const ui64 localActorId = AllocateLocalId();
+        if (VERBOSE) {
+            Cerr << "Register actor " << TypeName(*actor) << " with alias " << localActorId << "\n";
+        }
+
+        mailbox->AttachAlias(localActorId, actor);
+        return TActorId(FirstNodeId + nodeIndex, poolId, localActorId, mailbox->Hint);
+    }
+
     TActorId TTestActorRuntimeBase::RegisterService(const TActorId& serviceId, const TActorId& actorId, ui32 nodeIndex) {
         TGuard<TMutex> guard(Mutex);
         Y_ABORT_UNLESS(nodeIndex < NodeCount);
@@ -1251,7 +1293,7 @@ namespace NActors {
                                         case EEventAction::PROCESS:
                                             UpdateFinalEventsStatsForEachContext(*ev);
                                             SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
-                                            if (checkStopConditions(/* perMessage */ true)) {
+                                            if (AllowBreakOnStopCondition && checkStopConditions(/* perMessage */ true)) {
                                                 stopCondition = true;
                                             }
                                             break;
@@ -1557,7 +1599,7 @@ namespace NActors {
         if (!actor) {
             return {};
         }
-        return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(actor->GetActivityType());
+        return actor->GetActivityType().GetName();
     }
 
     void TTestActorRuntimeBase::EnableScheduleForActor(const TActorId& actorId, bool allow) {
@@ -1635,6 +1677,14 @@ namespace NActors {
 
         TMailbox* mailbox = node->MailboxTable->Get(mailboxHint);
         IActor* recipientActor = mailbox->FindActor(recipientLocalId);
+        if (!recipientActor) {
+            recipientActor = mailbox->FindAlias(recipientLocalId);
+            if (recipientActor) {
+                // Work as if some alias actor rewrites events and delivers them to the real actor id
+                ev->Rewrite(ev->GetTypeRewrite(), recipientActor->SelfId());
+                recipientLocalId = ev->GetRecipientRewrite().LocalId();
+            }
+        }
         if (recipientActor) {
             // Save actorId by value in order to prevent ctx from being invalidated during another Send call.
             TActorId actorId = ev->GetRecipientRewrite();
@@ -1669,6 +1719,12 @@ namespace NActors {
         ui64 localId = actorId.LocalId();
         TMailbox* mailbox = node->MailboxTable->Get(mailboxHint);
         IActor* actor = mailbox->FindActor(localId);
+        if (!actor) {
+            actor = mailbox->FindAlias(localId);
+        }
+        if (!actor && node->LocalServicesActors.contains(actorId)) {
+            actor = node->LocalServicesActors[actorId];
+        }
         return actor;
     }
 
@@ -1678,7 +1734,7 @@ namespace NActors {
 
         IHarmonizer* harmonizer = nullptr;
         if (node) {
-            node->Harmonizer.reset(MakeHarmonizer(GetCycleCountFast()));
+            node->Harmonizer = MakeHarmonizer(GetCycleCountFast());
             harmonizer = node->Harmonizer.get();
         }
 
@@ -1757,10 +1813,8 @@ namespace NActors {
 
         setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(), &InterconnectMock);
 
-        if (UseRealInterconnect) {
-            setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
-                NActors::TMailboxType::Simple, InterconnectPoolId()));
-        }
+        setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
+            NActors::TMailboxType::Simple, InterconnectPoolId()));
 
         if (!SingleSysEnv) { // Single system env should do this self
             if (LogBackendFactory) {
@@ -1912,7 +1966,7 @@ namespace NActors {
                 delete Context->Queue->Pop();
             }
             auto ctx(ActorContext());
-            ctx.ExecutorThread.Send(IEventHandle::Forward(ev, originalSender));
+            ctx.Send(IEventHandle::Forward(ev, originalSender));
             if (!IsSync && Context->Queue->Head()) {
                 SendHead(ctx);
             }
@@ -1921,18 +1975,17 @@ namespace NActors {
     private:
         void SendHead(const TActorContext& ctx) {
             if (!IsSync) {
-                ctx.ExecutorThread.Send(GetForwardedEvent().Release());
+                ctx.Send(GetForwardedEvent().Release());
             } else {
                 while (Context->Queue->Head()) {
-                    HasReply = false;
-                    ctx.ExecutorThread.Send(GetForwardedEvent().Release());
+                    ctx.Send(GetForwardedEvent().Release());
                     int count = 100;
                     while (!HasReply && count > 0) {
                         try {
                             Runtime->DispatchEvents(DelegateeOptions);
                         } catch (TEmptyEventQueueException&) {
                             count--;
-                            Cerr << "No reply" << Endl;
+                            Cerr << "No reply RequestType# " << RequestType << Endl;
                         }
                     }
 
@@ -1943,11 +1996,15 @@ namespace NActors {
 
         TAutoPtr<IEventHandle> GetForwardedEvent() {
             IEventHandle* ev = Context->Queue->Head();
-            ReplyChecker->OnRequest(ev);
+            RequestType = ev->GetTypeRewrite();
+            HasReply = !ReplyChecker->OnRequest(ev);
             TAutoPtr<IEventHandle> forwardedEv = ev->HasEvent()
                     ? new IEventHandle(Delegatee, ReplyId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie)
                     : new IEventHandle(ev->GetTypeRewrite(), ev->Flags, Delegatee, ReplyId, ev->ReleaseChainBuffer(), ev->Cookie);
 
+            if (HasReply) {
+                delete Context->Queue->Pop();
+            }
             return forwardedEv;
         }
     private:
@@ -1960,6 +2017,7 @@ namespace NActors {
         TDispatchOptions DelegateeOptions;
         TTestActorRuntimeBase* Runtime;
         THolder<IReplyChecker> ReplyChecker;
+        ui32 RequestType;
     };
 
     void TStrandingActorDecorator::TReplyActor::StateFunc(STFUNC_SIG) {

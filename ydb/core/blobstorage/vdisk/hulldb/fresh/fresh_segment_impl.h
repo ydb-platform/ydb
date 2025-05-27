@@ -216,7 +216,7 @@ namespace NKikimr {
         }
 
         // get the last extent and put the rope to its end
-        Y_ABORT_UNLESS(RopeExtents);
+        Y_VERIFY_S(RopeExtents, HullCtx->VCtx->VDiskLogPrefix);
         auto& extent = RopeExtents.back();
         TRope& rope = extent[LastRopeExtentSize++];
         rope = std::move(blob);
@@ -224,9 +224,9 @@ namespace NKikimr {
         // calculate buffer id from the rope address; the address is immutable during fresh segment lifetime, so we can
         // use it directly
         uintptr_t bufferId = reinterpret_cast<uintptr_t>(&rope);
-        Y_ABORT_UNLESS((bufferId & 0x7) == 0);
+        Y_VERIFY_S((bufferId & 0x7) == 0, HullCtx->VCtx->VDiskLogPrefix);
         bufferId >>= 3;
-        Y_ABORT_UNLESS(bufferId < (ui64(1) << 62));
+        Y_VERIFY_S(bufferId < (ui64(1) << 62), HullCtx->VCtx->VDiskLogPrefix);
         memRec.SetMemBlob(bufferId, blobSize);
 
         Put(lsn, key, memRec);
@@ -235,7 +235,7 @@ namespace NKikimr {
     template <>
     inline const TRope& TFreshIndexAndData<TKeyLogoBlob, TMemRecLogoBlob>::GetLogoBlobData(const TMemPart& memPart) const {
         const TRope& rope = *reinterpret_cast<const TRope*>(memPart.BufferId << 3);
-        Y_ABORT_UNLESS(rope.GetSize() == memPart.Size);
+        Y_VERIFY_S(rope.GetSize() == memPart.Size, HullCtx->VCtx->VDiskLogPrefix);
         return rope;
     }
 
@@ -250,14 +250,14 @@ namespace NKikimr {
         auto dataSize = memRec.DataSize();
         switch (type) {
             case TBlobType::MemBlob:
-                Y_ABORT_UNLESS(dataSize);
+                Y_VERIFY_S(dataSize, HullCtx->VCtx->VDiskLogPrefix);
                 MemDataSize += AlignUp(dataSize, 8u);
                 break;
             case TBlobType::DiskBlob:
-                Y_ABORT_UNLESS(!memRec.HasData());
+                Y_VERIFY_S(!memRec.HasData(), HullCtx->VCtx->VDiskLogPrefix);
                 break;
             case TBlobType::HugeBlob:
-                Y_ABORT_UNLESS(memRec.HasData());
+                Y_VERIFY_S(memRec.HasData(), HullCtx->VCtx->VDiskLogPrefix);
                 HugeDataSize += memRec.DataSize();
                 break;
             default:
@@ -277,7 +277,7 @@ namespace NKikimr {
                 TDiskDataExtractor extr;
                 const TDiskPart& part = memRec.GetDiskData(&extr, nullptr)->SwearOne();
                 if (part.Size) {
-                    Y_ABORT_UNLESS(part.ChunkIdx);
+                    Y_VERIFY_S(part.ChunkIdx, HullCtx->VCtx->VDiskLogPrefix);
                     chunks.insert(part.ChunkIdx);
                 }
             }
@@ -296,7 +296,7 @@ namespace NKikimr {
                 TDiskDataExtractor extr;
                 const TDiskPart& part = memRec.GetDiskData(&extr, nullptr)->SwearOne();
                 bool inserted = hugeBlobs.insert(part).second;
-                Y_ABORT_UNLESS(inserted);
+                Y_VERIFY_S(inserted, HullCtx->VCtx->VDiskLogPrefix);
             }
             it.Next();
         }
@@ -702,7 +702,7 @@ namespace NKikimr {
             struct {
                 std::vector<std::pair<TKey, TMemRec>>& Recs;
 
-                void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64) {
+                void AddFromSegment(const TMemRec&, const TDiskPart*, const TKey&, ui64, const void*) {
                     Y_DEBUG_ABORT("should not be called");
                 }
 

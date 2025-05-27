@@ -117,14 +117,13 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     }
 
     TPortionAccessorConstructor constructor = TPortionAccessorConstructor::BuildForRewriteBlobs(source.PortionInfo.GetPortionInfo());
-    constructor.MutablePortionConstructor().SetMinSnapshotDeprecated(to->GetSnapshot());
     constructor.MutablePortionConstructor().SetSchemaVersion(to->GetVersion());
     constructor.MutablePortionConstructor().MutableMeta().ResetTierName(targetTier);
 
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;
     for (auto&& i : to->GetIndexInfo().GetIndexes()) {
-        to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, secondaryData).Validate();
+        to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, source.PortionInfo.GetPortionInfo().GetRecordsCount(), secondaryData).Validate();
     }
 
     const NSplitter::TEntityGroups groups = source.PortionInfo.GetPortionInfo().GetEntityGroupsByStorageId(targetTier, *storages, to->GetIndexInfo());

@@ -1154,7 +1154,7 @@ class TWaitForSync : public TActorBootstrapped<TWaitForSync> {
                         ui64 syncedLsn = info.SyncStates[j].SyncedLsn;
                         auto ri = [] { return TString("no internals"); };
                         NSyncLog::EReadWhatsNext whatsNext;
-                        whatsNext = NSyncLog::WhatsNext(syncedLsn, 0, &InfoVec[j].SyncLogEssence, ri).WhatsNext;
+                        whatsNext = NSyncLog::WhatsNext("", syncedLsn, 0, &InfoVec[j].SyncLogEssence, ri).WhatsNext;
                         if (whatsNext != NSyncLog::EWnDiskSynced)
                             return false;
                     }
@@ -1819,7 +1819,7 @@ class TSyncRunActor : public TActor<TSyncRunActor> {
     std::shared_ptr<TSyncRunner::TReturnValue> ReturnValue;
 
     void Handle(TEvRunActor::TPtr &ev, const TActorContext &ctx) {
-        ctx.ExecutorThread.RegisterActor(ev->Get()->Actor.Release());
+        ctx.Register(ev->Get()->Actor.Release());
     }
 
     void HandleDone(TEvents::TEvCompleted::TPtr &ev, const TActorContext &ctx) {
@@ -1885,7 +1885,7 @@ TSyncTestBase::TSyncTestBase(TConfiguration *conf)
 {}
 
 void TSyncTestBase::Bootstrap(const TActorContext &ctx) {
-    SyncRunner.Reset(new TSyncRunner(ctx.ExecutorThread.ActorSystem, Conf));
+    SyncRunner.Reset(new TSyncRunner(ctx.ActorSystem(), Conf));
     Scenario(ctx);
     AtomicIncrement(Conf->SuccessCount);
     Conf->SignalDoneEvent();
@@ -2082,5 +2082,3 @@ NActors::IActor *ManyPutsToCorrespondingVDisks(const NActors::TActorId &notifyID
     return new TManyPutsToCorrespondingVDisksActor(notifyID, conf, dataSet, hndl, inFlight);
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-

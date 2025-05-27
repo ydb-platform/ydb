@@ -2,8 +2,7 @@
 
 #include "dump.h"
 
-namespace NYdb {
-namespace NDump {
+namespace NYdb::NDump {
 
 class TDumpClient {
 public:
@@ -11,11 +10,14 @@ public:
 
     TDumpResult Dump(const TString& dbPath, const TString& fsPath, const TDumpSettings& settings = {});
 
+    TDumpResult DumpCluster(const TString& fsPath);
+
+    TDumpResult DumpDatabase(const TString& database, const TString& fsPath);
+
 private:
     const TDriver& Driver;
     std::shared_ptr<TLog> Log;
 
 }; // TDumpClient
 
-} // NDump
-} // NYdb
+} // NYdb::NDump

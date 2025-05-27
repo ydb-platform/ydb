@@ -2,26 +2,35 @@
 
 #include <yt/cpp/mapreduce/common/retry_lib.h>
 
+#include <yt/cpp/mapreduce/common/retry_request.h>
+
 #include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
+
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <util/generic/singleton.h>
 
-namespace NYT {
-namespace NDetail {
-
-using namespace NRawClient;
+namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTransactionAbortable::TTransactionAbortable(const TClientContext& context, const TTransactionId& transactionId)
-    : Context_(context)
+TTransactionAbortable::TTransactionAbortable(
+    const IRawClientPtr& rawClient,
+    const TClientContext& context,
+    const TTransactionId& transactionId)
+    : RawClient_(rawClient)
+    , Context_(context)
     , TransactionId_(transactionId)
 { }
 
 void TTransactionAbortable::Abort()
 {
-    AbortTransaction(nullptr, Context_, TransactionId_);
+    RequestWithRetry<void>(
+        CreateDefaultRequestRetryPolicy(Context_.Config),
+        [this] (TMutationId& mutationId) {
+            RawClient_->AbortTransaction(mutationId, TransactionId_);
+        });
 }
 
 TString TTransactionAbortable::GetType() const
@@ -31,16 +40,22 @@ TString TTransactionAbortable::GetType() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TOperationAbortable::TOperationAbortable(IClientRetryPolicyPtr clientRetryPolicy, TClientContext context, const TOperationId& operationId)
-    : ClientRetryPolicy_(std::move(clientRetryPolicy))
-    , Context_(std::move(context))
+TOperationAbortable::TOperationAbortable(
+    IRawClientPtr rawClient,
+    IClientRetryPolicyPtr clientRetryPolicy,
+    const TOperationId& operationId)
+    : RawClient_(std::move(rawClient))
+    , ClientRetryPolicy_(std::move(clientRetryPolicy))
     , OperationId_(operationId)
 { }
 
-
 void TOperationAbortable::Abort()
 {
-    AbortOperation(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, OperationId_);
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this] (TMutationId& mutationId) {
+            RawClient_->AbortOperation(mutationId, OperationId_);
+        });
 }
 
 TString TOperationAbortable::GetType() const
@@ -121,5 +136,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NDetail
-} // namespace NYT
+} // namespace NYT::NDetail

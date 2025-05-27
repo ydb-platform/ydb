@@ -141,7 +141,7 @@ IClientRequestControlPtr TTestChannel::Send(
 void TTestChannel::Terminate(const TError& error)
 {
     YT_VERIFY(!error.IsOK());
-    VERIFY_THREAD_AFFINITY_ANY();
+    YT_ASSERT_THREAD_AFFINITY_ANY();
 
     if (TerminationFlag_.exchange(true)) {
         return;

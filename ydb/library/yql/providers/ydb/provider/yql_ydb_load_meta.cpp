@@ -12,6 +12,7 @@
 #include <yql/essentials/ast/yql_expr.h>
 
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 namespace NYql {
 
@@ -218,7 +219,7 @@ public:
                 const auto& config = State_->Configuration->Clusters[TString(client.first)];
                 ctx.AddError(TIssue({}, TStringBuilder() << "Failed to take snapshot for: `" << client.first << "`, endpoint: " << config.Endpoint << ", status: " << snapshot.GetStatus()));
                 for (const auto& issue : snapshot.GetIssues())
-                    ctx.AddError(issue);
+                    ctx.AddError(NYdb::NAdapters::ToYqlIssue(issue));
             }
         }
 
@@ -255,7 +256,7 @@ public:
                 failed = true;
                 ctx.AddError(TIssue({}, TStringBuilder() << "Failed to load table metadata for: `" << pair.first.second << ", status: " << result.GetStatus() << "`\n"));
                 for (const auto& issue : result.GetIssues())
-                    ctx.AddError(issue);
+                    ctx.AddError(NYdb::NAdapters::ToYqlIssue(issue));
             }
         }
 

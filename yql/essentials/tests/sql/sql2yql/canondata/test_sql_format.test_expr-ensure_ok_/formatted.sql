@@ -1,3 +1,3 @@
 SELECT
-    Ensure(42, TRUE, "message")
+    Ensure(42, TRUE, 'message')
 ;

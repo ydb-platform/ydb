@@ -1,7 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -670,7 +669,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId-2, t.TxId-1, t.TxId} );
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
-                                   {NLs::PathVersionEqual(5),
+                                   {NLs::PathVersionEqual(6),
                                     NLs::PathsInsideDomain(2),
                                     NLs::ShardsInsideDomain(3)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),

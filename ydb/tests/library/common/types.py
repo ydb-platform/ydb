@@ -248,6 +248,8 @@ class PType(AbstractTypeEnum):
     Double = _ptype_from(32, float_in(-100, 100), float, proto_field='Double')
     Float = _ptype_from(33, float_in(-100, 100), float, proto_field='Float')
 
+    Timestamp = _ptype_from(50, int_between(0, 2 ** 64 - 1), int, proto_field='Timestamp', min_value=0, max_value=2 ** 64 - 1)
+
     # Rework Pair later
     PairUi64Ui64 = _ptype_from(257, int_between(0, 2 ** 64 - 1), int)
 

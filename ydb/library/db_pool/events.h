@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 namespace NDbPool {
 
@@ -33,9 +33,9 @@ struct TEvents {
 
     struct TEvDbResponse : NActors::TEventLocal<TEvDbResponse, EvDbResponse> {
         NYdb::TStatus Status;
-        TVector<NYdb::TResultSet> ResultSets;
+        std::vector<NYdb::TResultSet> ResultSets;
 
-        TEvDbResponse(NYdb::TStatus status, const TVector<NYdb::TResultSet>& resultSets)
+        TEvDbResponse(NYdb::TStatus status, const std::vector<NYdb::TResultSet>& resultSets)
             : Status(status)
             , ResultSets(resultSets)
         {}

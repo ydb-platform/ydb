@@ -23,7 +23,7 @@ public:
 
     TPathId GetOlapStorePathIdVerified() const {
         AFL_VERIFY(!IsStandalone());
-        return PathIdFromPathId(Description.GetColumnStorePathId());
+        return TPathId::FromProto(Description.GetColumnStorePathId());
     }
 
     std::shared_ptr<NSharding::IShardingBase> GetShardingVerified(const TOlapSchema& olapSchema) const {
@@ -47,6 +47,16 @@ public:
         for (ui64 columnShard : columnShards) {
             Description.MutableSharding()->AddColumnShards(columnShard);
         }
+    }
+
+    THashSet<TString> GetUsedTiers() const {
+        THashSet<TString> tiers;
+        for (const auto& tier : Description.GetTtlSettings().GetEnabled().GetTiers()) {
+            if (tier.HasEvictToExternalStorage()) {
+                tiers.emplace(tier.GetEvictToExternalStorage().GetStorage());
+            }
+        }
+        return tiers;
     }
 
     NKikimrSchemeOp::TColumnTableDescription Description;

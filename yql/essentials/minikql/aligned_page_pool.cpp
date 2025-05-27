@@ -1,22 +1,37 @@
 #include "aligned_page_pool.h"
-#include "util/string/builder.h"
 
 #include <util/generic/yexception.h>
+#include <util/stream/file.h>
 #include <util/string/cast.h>
+#include <util/string/strip.h>
 #include <util/system/align.h>
 #include <util/system/compiler.h>
-#include <util/system/info.h>
 #include <util/system/error.h>
+#include <util/system/info.h>
 #include <util/thread/lfstack.h>
 
+#include <yql/essentials/minikql/asan_utils.h>
+
 #if defined(_win_)
-#include <util/system/winint.h>
+#   include <util/system/winint.h>
 #elif defined(_unix_)
-#include <sys/types.h>
-#include <sys/mman.h>
+#   include <sys/types.h>
+#   include <sys/mman.h>
 #endif
 
 namespace NKikimr {
+
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+#   if defined(PROFILE_MEMORY_ALLOCATIONS)
+static bool IsDefaultAllocator = true;
+#   else
+static bool IsDefaultAllocator = false;
+#   endif
+void UseDefaultAllocator() {
+    // TODO: check that we didn't already used the MKQL allocator
+    IsDefaultAllocator = true;
+}
+#endif
 
 static ui64 SYS_PAGE_SIZE = NSystemInfo::GetPageSize();
 
@@ -25,6 +40,20 @@ constexpr ui32 MaxMidSize = (1u << MidLevels) * TAlignedPagePool::POOL_PAGE_SIZE
 static_assert(MaxMidSize == 64 * 1024 * 1024, "Upper memory block 64 Mb");
 
 namespace {
+
+ui64 GetMaxMemoryMaps() {
+    ui64 maxMapCount = 0;
+#if defined(_unix_) && !defined(_darwin_)
+    maxMapCount = FromString<ui64>(Strip(TFileInput("/proc/sys/vm/max_map_count").ReadAll()));
+#endif
+    return maxMapCount;
+}
+
+TString GetMemoryMapsString() {
+    TStringStream ss;
+    ss << " (maps: " << GetMemoryMapsCount() << " vs " << GetMaxMemoryMaps() << ")";
+    return ss.Str();
+}
 
 template<typename T, bool SysAlign>
 class TGlobalPools;
@@ -49,6 +78,7 @@ public:
         void *page = nullptr;
         if (Pages.Dequeue(&page)) {
             --Count;
+            SanitizerMarkInvalid(page, PageSize);
             return page;
         }
 
@@ -70,19 +100,20 @@ public:
 private:
 
     size_t PushPage(void* addr) {
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-        FreePage(addr);
-        return GetPageSize();
-#else
+        if (Y_UNLIKELY(TAlignedPagePool::IsDefaultAllocatorUsed())) {
+            FreePage(addr);
+            return GetPageSize();
+        }
+        SanitizerMarkInvalid(addr, PageSize);
         ++Count;
         Pages.Enqueue(addr);
         return 0;
-#endif
     }
 
     void FreePage(void* addr) {
+        SanitizerMarkInvalid(addr, PageSize);
         auto res = T::Munmap(addr, PageSize);
-        Y_DEBUG_ABORT_UNLESS(0 == res, "Munmap failed: %s", LastSystemErrorText());
+        Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
     }
 
 private:
@@ -112,7 +143,10 @@ public:
     }
 
     void* DoMmap(size_t size) {
+        Y_DEBUG_ABORT_UNLESS(!TAlignedPagePoolImpl<T>::IsDefaultAllocatorUsed(), "No memory maps allowed while using default allocator");
+
         void* res = T::Mmap(size);
+        SanitizerMarkInvalid(res, size);
         TotalMmappedBytes += size;
         return res;
     }
@@ -146,9 +180,15 @@ public:
 
     void DoMunmap(void* addr, size_t size) {
         if (Y_UNLIKELY(0 != T::Munmap(addr, size))) {
+            TStringStream mmaps;
+            const auto lastError = LastSystemError();
+            if (lastError == ENOMEM) {
+                mmaps << GetMemoryMapsString();
+            }
+
             ythrow yexception() << "Munmap(0x"
                 << IntToString<16>(reinterpret_cast<uintptr_t>(addr))
-                << ", " << size << ") failed: " << LastSystemErrorText();
+                << ", " << size << ") failed: " << LastSystemErrorText(lastError) << mmaps.Str();
         }
 
         i64 prev = TotalMmappedBytes.fetch_sub(size);
@@ -211,42 +251,58 @@ inline int TSystemMmap::Munmap(void* addr, size_t size)
 {
     Y_DEBUG_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
     Y_DEBUG_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
-    return ::munmap(addr, size);
+
+    if (size > MaxMidSize) {
+        return ::munmap(addr, size);
+    }
+
+    // Unlock memory in case somewhere was called `mlockall(MCL_FUTURE)`.
+    if (::munlock(addr, size) == -1) {
+        switch(LastSystemError()) {
+            case EAGAIN: [[fallthrough]];
+                // The memory region was probably not locked - skip,
+                // also since we can't distinguish from other kernel problems that may cause EAGAIN (not enough memory for structures?)
+                // we rely on the failure of the following `madvise()` call.
+
+            case EPERM: [[fallthrough]];
+                // The most common case we get this error if we have no privileges, but also ignored error when called `mlockall()`
+                // somewhere earlier. So ignore this.
+
+            case EINVAL:
+                // Something wrong with `addr` and `size` - we'll see the same error from the following `madvise()` call.
+                break;
+
+            case ENOMEM:
+                // Locking or unlocking a region would result in the total number of mappings with distinct attributes
+                // (e.g., locked versus unlocked) exceeding the allowed maximum.
+                // NOTE: `madvise(MADV_DONTNEED)` can't return ENOMEM.
+                return -1;
+        }
+    }
+
+    /**
+        There is at least a couple of drawbacks of using madvise instead of munmap:
+        - more potential for use-after-free and memory corruption since we still may access unneeded regions by mistake,
+        - actual RSS memory may be freed later after kernel gets some memory-pressure, and it may confuse system monitoring tools.
+
+        But also there is a huge advantage: the number of memory maps used by process doesn't increase because of the "holes".
+
+        The main source of the growth of number of memory regions is a clean-up of freed pages from page pools.
+        Now we can safely invoke `TAlignedPagePool::DoCleanupGlobalFreeList()` whenever we want it.
+     */
+    return ::madvise(addr, size, MADV_DONTNEED);
 }
 #endif
 
-std::function<void(size_t size)> TFakeAlignedMmap::OnMmap = {};
-std::function<void(void* addr, size_t size)> TFakeAlignedMmap::OnMunmap = {};
+std::function<void*(size_t size)> TFakeMmap::OnMmap = {};
+std::function<void(void* addr, size_t size)> TFakeMmap::OnMunmap = {};
 
-void* TFakeAlignedMmap::Mmap(size_t size)
-{
-    if (OnMmap) {
-        OnMmap(size);
-    }
-    return reinterpret_cast<void*>(TAlignedPagePool::POOL_PAGE_SIZE);
+void* TFakeMmap::Mmap(size_t size) {
+    Y_DEBUG_ABORT_UNLESS(OnMmap, "mmap function must be provided");
+    return OnMmap(size);
 }
 
-int TFakeAlignedMmap::Munmap(void* addr, size_t size)
-{
-    if (OnMunmap) {
-        OnMunmap(addr, size);
-    }
-    return 0;
-}
-
-std::function<void(size_t size)> TFakeUnalignedMmap::OnMmap = {};
-std::function<void(void* addr, size_t size)> TFakeUnalignedMmap::OnMunmap = {};
-
-void* TFakeUnalignedMmap::Mmap(size_t size)
-{
-    if (OnMmap) {
-        OnMmap(size);
-    }
-    return reinterpret_cast<void*>(TAlignedPagePool::POOL_PAGE_SIZE+1);
-}
-
-int TFakeUnalignedMmap::Munmap(void* addr, size_t size)
-{
+int TFakeMmap::Munmap(void* addr, size_t size) {
     if (OnMunmap) {
         OnMunmap(addr, size);
     }
@@ -276,11 +332,13 @@ TAlignedPagePoolImpl<T>::~TAlignedPagePoolImpl() {
     size_t activeBlocksSize = 0;
     for (auto it = ActiveBlocks.cbegin(); ActiveBlocks.cend() != it; ActiveBlocks.erase(it++)) {
         activeBlocksSize += it->second;
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-        ReturnBlock(it->first, it->second);
-#else
+
+        if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
+            ReturnBlock(it->first, it->second);
+            return;
+        }
+
         Free(it->first, it->second);
-#endif
     }
 
     if (activeBlocksSize > 0 || FreePages.size() != AllPages.size() || OffloadedActiveBytes) {
@@ -360,7 +418,7 @@ void TAlignedPagePoolImpl<T>::OffloadFree(ui64 size) noexcept {
 }
 
 template<typename T>
-void* TAlignedPagePoolImpl<T>::GetPage() {
+void* TAlignedPagePoolImpl<T>::GetPageImpl() {
     ++PageAllocCount;
     if (!FreePages.empty()) {
         ++PageHitCount;
@@ -373,83 +431,91 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
         throw TMemoryLimitExceededException();
     }
 
-#ifndef PROFILE_MEMORY_ALLOCATIONS
-    if (const auto ptr = TGlobalPools<T, false>::Instance().Get(0).GetPage()) {
-        TotalAllocated += POOL_PAGE_SIZE;
-        if (AllocNotifyCallback) {
-            AllocNotifyCurrentBytes += POOL_PAGE_SIZE;
-        }
-        if (Counters.TotalBytesAllocatedCntr) {
-            (*Counters.TotalBytesAllocatedCntr) += POOL_PAGE_SIZE;
-        }
-        ++PageGlobalHitCount;
-        AllPages.emplace(ptr);
+    if (Y_LIKELY(!IsDefaultAllocatorUsed())) {
+        if (const auto ptr = TGlobalPools<T, false>::Instance().Get(0).GetPage()) {
+            TotalAllocated += POOL_PAGE_SIZE;
+            if (AllocNotifyCallback) {
+                AllocNotifyCurrentBytes += POOL_PAGE_SIZE;
+            }
+            if (Counters.TotalBytesAllocatedCntr) {
+                (*Counters.TotalBytesAllocatedCntr) += POOL_PAGE_SIZE;
+            }
+            ++PageGlobalHitCount;
+            AllPages.emplace(ptr);
 
-        UpdatePeaks();
-        return ptr;
+            UpdatePeaks();
+            return ptr;
+        }
+
+        ++PageMissCount;
     }
 
-    ++PageMissCount;
-#endif
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    const auto res = GetBlock(POOL_PAGE_SIZE);
-#else
-    const auto res = Alloc(POOL_PAGE_SIZE);
+    void* res;
+    if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
+        res = GetBlock(POOL_PAGE_SIZE);
+    } else {
+        res = Alloc(POOL_PAGE_SIZE);
+    }
     AllPages.emplace(res);
-#endif
 
     return res;
 }
 
+template <typename T>
+void* TAlignedPagePoolImpl<T>::GetPage() {
+    auto* page = GetPageImpl();
+    SanitizerMarkInvalid(page, POOL_PAGE_SIZE);
+    return page;
+};
+
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    ReturnBlock(addr, POOL_PAGE_SIZE);
-#else
+    if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
+        ReturnBlock(addr, POOL_PAGE_SIZE);
+        AllPages.erase(addr);
+        return;
+    }
+
+    SanitizerMarkInvalid(addr, POOL_PAGE_SIZE);
     Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
     FreePages.emplace(addr);
-#endif
 }
 
 template<typename T>
 void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
     Y_DEBUG_ABORT_UNLESS(size >= POOL_PAGE_SIZE);
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    OffloadAlloc(size);
-    auto ret = malloc(size);
-    if (!ret) {
-        throw TMemoryLimitExceededException();
-    }
+    if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
+        OffloadAlloc(size);
+        auto ret = malloc(size);
+        if (!ret) {
+            throw TMemoryLimitExceededException();
+        }
 
-    return ret;
-#else
-    if (size == POOL_PAGE_SIZE) {
-        return GetPage();
-    } else {
-        const auto ptr = Alloc(size);
-        Y_DEBUG_ABORT_UNLESS(ActiveBlocks.emplace(ptr, size).second);
-        return ptr;
+        return ret;
     }
-#endif
+    auto* block = GetBlockImpl(size);
+    SanitizerMarkInvalid(block, size);
+    return block;
 }
 
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReturnBlock(void* ptr, size_t size) noexcept {
     Y_DEBUG_ABORT_UNLESS(size >= POOL_PAGE_SIZE);
 
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    OffloadFree(size);
-    free(ptr);
-#else
+    if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
+        OffloadFree(size);
+        free(ptr);
+        UpdateMemoryYellowZone();
+        return;
+    }
+
     if (size == POOL_PAGE_SIZE) {
         ReturnPage(ptr);
     } else {
         Free(ptr, size);
         Y_DEBUG_ABORT_UNLESS(ActiveBlocks.erase(ptr));
     }
-#endif
     UpdateMemoryYellowZone();
 }
 
@@ -493,7 +559,14 @@ void* TAlignedPagePoolImpl<T>::Alloc(size_t size) {
         auto allocSize = size + ALLOC_AHEAD_PAGES * POOL_PAGE_SIZE;
         void* mem = globalPool.DoMmap(allocSize);
         if (Y_UNLIKELY(MAP_FAILED == mem)) {
-            ythrow yexception() << "Mmap failed to allocate " << (size + POOL_PAGE_SIZE) << " bytes: " << LastSystemErrorText();
+            TStringStream mmaps;
+            const auto lastError = LastSystemError();
+            if (lastError == ENOMEM) {
+                mmaps << GetMemoryMapsString();
+            }
+
+            ythrow yexception() << "Mmap failed to allocate " << (size + POOL_PAGE_SIZE) << " bytes: "
+                << LastSystemErrorText(lastError) << mmaps.Str();
         }
 
         res = AlignUp(mem, POOL_PAGE_SIZE);
@@ -593,6 +666,17 @@ bool TAlignedPagePoolImpl<T>::TryIncreaseLimit(ui64 required) {
     return Limit >= required;
 }
 
+template <typename T>
+void* TAlignedPagePoolImpl<T>::GetBlockImpl(size_t size) {
+    if (size == POOL_PAGE_SIZE) {
+        return GetPage();
+    } else {
+        const auto ptr = Alloc(size);
+        Y_DEBUG_ABORT_UNLESS(ActiveBlocks.emplace(ptr, size).second);
+        return ptr;
+    }
+}
+
 template<typename T>
 ui64 TAlignedPagePoolImpl<T>::GetGlobalPagePoolSize() {
     ui64 size = 0;
@@ -616,9 +700,16 @@ void TAlignedPagePoolImpl<T>::ResetGlobalsUT()
     TGlobalPools<T, false>::Instance().Reset();
 }
 
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+// static
+template<typename T>
+bool TAlignedPagePoolImpl<T>::IsDefaultAllocatorUsed() {
+    return IsDefaultAllocator;
+}
+#endif
+
 template class TAlignedPagePoolImpl<>;
-template class TAlignedPagePoolImpl<TFakeAlignedMmap>;
-template class TAlignedPagePoolImpl<TFakeUnalignedMmap>;
+template class TAlignedPagePoolImpl<TFakeMmap>;
 
 template<typename TMmap>
 void* GetAlignedPage(ui64 size) {
@@ -641,7 +732,13 @@ void* GetAlignedPage(ui64 size) {
     auto allocSize = Max<ui64>(MaxMidSize, size);
     void* mem = pool.DoMmap(allocSize);
     if (Y_UNLIKELY(MAP_FAILED == mem)) {
-        ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: " << LastSystemErrorText();
+        TStringStream mmaps;
+        const auto lastError = LastSystemError();
+        if (lastError == ENOMEM) {
+            mmaps << GetMemoryMapsString();
+        }
+
+        ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: " << LastSystemErrorText(lastError) << mmaps.Str();
     }
 
     if (size < MaxMidSize) {
@@ -660,6 +757,40 @@ void* GetAlignedPage(ui64 size) {
 }
 
 template<typename TMmap>
+void* GetAlignedPage() {
+    const auto size = TAlignedPagePool::POOL_PAGE_SIZE;
+    auto& globalPool = TGlobalPools<TMmap, false>::Instance();
+
+    if (auto* page = globalPool.Get(0).GetPage()) {
+        return page;
+    }
+
+    auto allocSize = size * 2;
+    void* unalignedPtr = globalPool.DoMmap(allocSize);
+    if (Y_UNLIKELY(MAP_FAILED == unalignedPtr)) {
+        TStringStream mmaps;
+        const auto lastError = LastSystemError();
+        if (lastError == ENOMEM) {
+            mmaps << GetMemoryMapsString();
+        }
+
+        ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: "
+            << LastSystemErrorText(lastError) << mmaps.Str();
+    }
+
+    void* page = AlignUp(unalignedPtr, size);
+
+    // Unmap unaligned prefix before offset and tail after aligned page
+    const size_t offset = (intptr_t)page - (intptr_t)unalignedPtr;
+    if (Y_UNLIKELY(offset)) {
+        globalPool.DoMunmap(unalignedPtr, offset);
+        globalPool.DoMunmap((ui8*)page + size, size - offset);
+    }
+
+    return page;
+}
+
+template<typename TMmap>
 void ReleaseAlignedPage(void* mem, ui64 size) {
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size < TAlignedPagePool::POOL_PAGE_SIZE) {
@@ -673,8 +804,12 @@ void ReleaseAlignedPage(void* mem, ui64 size) {
         TGlobalPools<TMmap, true>::Instance().PushPage(level, mem);
         return;
     }
-
     TGlobalPools<TMmap, true>::Instance().DoMunmap(mem, size);
+}
+
+template<typename TMmap>
+void ReleaseAlignedPage(void* ptr) {
+    TGlobalPools<TMmap, false>::Instance().PushPage(0, ptr);
 }
 
 template<typename TMmap>
@@ -688,19 +823,31 @@ i64 GetTotalFreeListBytes() {
 }
 
 template i64 GetTotalMmapedBytes<>();
-template i64 GetTotalMmapedBytes<TFakeAlignedMmap>();
-template i64 GetTotalMmapedBytes<TFakeUnalignedMmap>();
+template i64 GetTotalMmapedBytes<TFakeMmap>();
 
 template i64 GetTotalFreeListBytes<>();
-template i64 GetTotalFreeListBytes<TFakeAlignedMmap>();
-template i64 GetTotalFreeListBytes<TFakeUnalignedMmap>();
+template i64 GetTotalFreeListBytes<TFakeMmap>();
 
 template void* GetAlignedPage<>(ui64);
-template void* GetAlignedPage<TFakeAlignedMmap>(ui64);
-template void* GetAlignedPage<TFakeUnalignedMmap>(ui64);
+template void* GetAlignedPage<TFakeMmap>(ui64);
+
+template void* GetAlignedPage<>();
+template void* GetAlignedPage<TFakeMmap>();
 
 template void ReleaseAlignedPage<>(void*,ui64);
-template void ReleaseAlignedPage<TFakeAlignedMmap>(void*,ui64);
-template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*,ui64);
+template void ReleaseAlignedPage<TFakeMmap>(void*,ui64);
+
+template void ReleaseAlignedPage<>(void*);
+template void ReleaseAlignedPage<TFakeMmap>(void*);
+
+size_t GetMemoryMapsCount() {
+    size_t lineCount = 0;
+    TString line;
+#if defined(_unix_) && !defined(_darwin_)
+    TFileInput file("/proc/self/maps");
+    while (file.ReadLine(line)) ++lineCount;
+#endif
+    return lineCount;
+}
 
 } // NKikimr

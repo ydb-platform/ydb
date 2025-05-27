@@ -273,7 +273,7 @@ public:
         new StoreInst(init, fields, &ctx.Func->getEntryBlock().back());
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TKqpScanWideReadTableWrapperBase::DoCalculate));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TKqpScanWideReadTableWrapperBase::DoCalculate>());
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { self->getType(), ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
@@ -410,7 +410,7 @@ public:
         new StoreInst(init, fields, &ctx.Func->getEntryBlock().back());
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TKqpScanBlockReadTableWrapperBase::DoCalculate));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TKqpScanBlockReadTableWrapperBase::DoCalculate>());
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { self->getType(), ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);

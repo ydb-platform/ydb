@@ -42,6 +42,7 @@ namespace NKikimr {
         EnsureMonitoring(true);
         LWTRACK(DSProxyGetHandle, ev->Get()->Orbit);
         EnableWilsonTracing(ev, Mon->GetSamplePPM);
+
         if (ev->Get()->IsIndexOnly) {
             Mon->EventIndexRestoreGet->Inc();
             PushRequest(CreateBlobStorageGroupIndexRestoreGetRequest(
@@ -151,6 +152,29 @@ namespace NKikimr {
         EnsureMonitoring(true);
         const ui64 bytes = ev->Get()->Buffer.size();
         Mon->CountPutEvent(bytes);
+
+        auto replyError = [&](TString errorReason) {
+            std::unique_ptr<TEvBlobStorage::TEvPutResult> result(
+                    new TEvBlobStorage::TEvPutResult(NKikimrProto::ERROR, ev->Get()->Id, 0, GroupId, 0.f));
+            result->ErrorReason = errorReason;
+            result->ExecutionRelay = std::move(ev->Get()->ExecutionRelay);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                    "HandleNormal ev# " << ev->Get()->Print(false)
+                    << " result# " << result->Print(false)
+                    << " Marker# DSP54");
+            Send(ev->Sender, result.release(), 0, ev->Cookie);
+        };
+
+        // Make sure blob size is greater than 0
+        if (ev->Get()->Id.BlobSize() == 0) {
+            TStringStream str;
+            str << "Blob size must be greater than 0, LogoBlobId# " << ev->Get()->Id
+                << " Group# " << GroupId
+                << " Marker# DSP55";
+            replyError(str.Str());
+            return;
+        }
+
         // Make sure actual data size matches one in the logoblobid.
         if (bytes != ev->Get()->Id.BlobSize()) {
             TStringStream str;
@@ -158,15 +182,7 @@ namespace NKikimr {
                 << " does not match LogoBlobId# " << ev->Get()->Id
                 << " Group# " << GroupId
                 << " Marker# DSP53";
-            std::unique_ptr<TEvBlobStorage::TEvPutResult> result(
-                    new TEvBlobStorage::TEvPutResult(NKikimrProto::ERROR, ev->Get()->Id, 0, GroupId, 0.f));
-            result->ErrorReason = str.Str();
-            result->ExecutionRelay = std::move(ev->Get()->ExecutionRelay);
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
-                    "HandleNormal ev# " << ev->Get()->Print(false)
-                    << " result# " << result->Print(false)
-                    << " Marker# DSP54");
-            Send(ev->Sender, result.release(), 0, ev->Cookie);
+            replyError(str.Str());
             return;
         }
 
@@ -234,6 +250,30 @@ namespace NKikimr {
                 ev->Get()->Deadline
             );
         }
+    }
+
+    void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvCheckIntegrity::TPtr &ev) {
+        EnsureMonitoring(true);
+
+        Mon->EventCheckIntegrity->Inc();
+        PushRequest(CreateBlobStorageGroupCheckIntegrityRequest(
+            TBlobStorageGroupCheckIntegrityParameters{
+                .Common = {
+                    .GroupInfo = Info,
+                    .GroupQueues = Sessions->GroupQueues,
+                    .Mon = Mon,
+                    .Source = ev->Sender,
+                    .Cookie = ev->Cookie,
+                    .Now = TActivationContext::Monotonic(),
+                    .StoragePoolCounters = StoragePoolCounters,
+                    .RestartCounter = ev->Get()->RestartCounter,
+                    .TraceId = std::move(ev->TraceId),
+                    .Event = ev->Get(),
+                    .ExecutionRelay = ev->Get()->ExecutionRelay,
+                }
+            }),
+            ev->Get()->Deadline
+        );
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvBlock::TPtr &ev) {
@@ -448,7 +488,7 @@ namespace NKikimr {
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 }
             }),
-            ev->Get()->Deadline
+            TInstant::Max()
         );
     }
 
@@ -839,6 +879,7 @@ namespace NKikimr {
             XX(Status)
             XX(Patch)
             XX(Assimilate)
+            XX(CheckIntegrity)
             default:
                 Y_ABORT();
 #undef XX

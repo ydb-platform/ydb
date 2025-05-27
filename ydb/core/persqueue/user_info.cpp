@@ -95,7 +95,7 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
     Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
 
     if (!userInfo) {
-        Create(ctx, user, 0, false, session, 0, gen, step, static_cast<i64>(offset), 0, TInstant::Zero(), {});
+        Create(ctx, user, 0, false, session, 0, gen, step, static_cast<i64>(offset), 0, TInstant::Zero(), {}, false);
     } else {
         userInfo->Session = session;
         userInfo->Generation = gen;
@@ -123,7 +123,7 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
         Create(
             ctx, user, userData.GetReadRuleGeneration(), false, userData.GetSession(), userData.GetPartitionSessionId(),
             userData.GetGeneration(), userData.GetStep(), offset,
-            userData.GetOffsetRewindSum(), TInstant::Zero(),  {}
+            userData.GetOffsetRewindSum(), TInstant::Zero(),  {}, userData.GetAnyCommits()
         );
     } else {
         userInfo->Session = userData.GetSession();
@@ -150,7 +150,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
     if (it == UsersInfo.end()) {
         return Create(
                 ctx, user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration, false, "", 0,
-                0, 0, 0, 0, TInstant::Zero(), {}
+                0, 0, 0, 0, TInstant::Zero(), {}, false
         );
     }
     return it->second;
@@ -177,7 +177,7 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
                                             const TString& session,
                                             ui64 partitionSessionId,
                                             ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-                                            TInstant readFromTimestamp, const TActorId& pipeClient) const
+                                            TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits) const
 {
     TString defaultServiceType = AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName();
     TString userServiceType = "";
@@ -195,7 +195,7 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
         ctx, StreamCountersSubgroup,
         user, readRuleGeneration, important, TopicConverter, Partition,
         session, partitionSessionId, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
-        meterRead, pipeClient
+        meterRead, pipeClient, anyCommits
     };
 }
 
@@ -203,16 +203,16 @@ TUserInfoBase TUsersInfoStorage::CreateUserInfo(const TString& user,
                                             TMaybe<ui64> readRuleGeneration) const
 {
     return TUserInfoBase{user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration,
-                          "", 0, 0, 0, false,  {}, 0, {}};
+                          "", 0, 0, 0, false, false, {}, 0, {}};
 }
 
 TUserInfo& TUsersInfoStorage::Create(
         const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-        TInstant readFromTimestamp, const TActorId& pipeClient
+        TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits
 ) {
     auto userInfo = CreateUserInfo(ctx, user, readRuleGeneration, important, session, partitionSessionId,
-                                              gen, step, offset, readOffsetRewindSum, readFromTimestamp, pipeClient);
+                                              gen, step, offset, readOffsetRewindSum, readFromTimestamp, pipeClient, anyCommits);
     auto result = UsersInfo.emplace(user, std::move(userInfo));
     Y_ABORT_UNLESS(result.second);
     return result.first->second;

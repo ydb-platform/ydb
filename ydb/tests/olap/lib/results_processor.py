@@ -116,6 +116,10 @@ class ResultsProcessor:
         if report_url is not None:
             info['report_url'] = report_url
 
+        ci_launch_id = os.getenv('CI_LAUNCH_ID', None)
+        if ci_launch_id:
+            info['ci_launch_id'] = ci_launch_id
+
         data = {
             'Db': cls.get_cluster_id(),
             'Kind': kind,

@@ -1,18 +1,18 @@
 $data = [
-    <|dt: 1688910000, event: "A"|>,
-    <|dt: 1688910100, event: "B"|>,
-    <|dt: 1688910200, event: "C"|>,
-    <|dt: 1688910300, event: "A"|>,
-    <|dt: 1688910400, event: "C"|>,
-    <|dt: 1688910500, event: "D"|>,
-    <|dt: 1688910500, event: "C"|>,
-    <|dt: 1688910600, event: "B"|>,
-    <|dt: 1688910800, event: "A"|>,
-    <|dt: 1688910900, event: "C"|>,
-    <|dt: 1688911000, event: "B"|>,
+    <|dt: 1688910000, event: 'A'|>,
+    <|dt: 1688910100, event: 'B'|>,
+    <|dt: 1688910200, event: 'C'|>,
+    <|dt: 1688910300, event: 'A'|>,
+    <|dt: 1688910400, event: 'C'|>,
+    <|dt: 1688910500, event: 'D'|>,
+    <|dt: 1688910500, event: 'C'|>,
+    <|dt: 1688910600, event: 'B'|>,
+    <|dt: 1688910800, event: 'A'|>,
+    <|dt: 1688910900, event: 'C'|>,
+    <|dt: 1688911000, event: 'B'|>,
 ];
 
-PRAGMA FeatureR010 = "prototype";
+PRAGMA FeatureR010 = 'prototype';
 
 SELECT
     *
@@ -28,8 +28,8 @@ FROM
         AFTER MATCH SKIP TO NEXT ROW
         PATTERN (PERMUTE (A, B, C))
         DEFINE
-            A AS A.event == "A",
-            B AS B.event == "B",
-            C AS C.event == "C"
+            A AS A.event == 'A',
+            B AS B.event == 'B',
+            C AS C.event == 'C'
     ) AS MATCHED
 ;

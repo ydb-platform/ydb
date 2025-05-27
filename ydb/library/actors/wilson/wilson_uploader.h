@@ -41,6 +41,7 @@ namespace NWilson {
         ui64 MaxExportRequestsInflight = 1;
 
         TRegisterMonPageCallback RegisterMonPage;
+        NMonitoring::TDynamicCounterPtr Counters;
 
         NActors::IActor* CreateUploader() &&;
     };

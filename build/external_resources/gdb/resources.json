@@ -7,12 +7,10 @@
             "uri": "sbr:3833498694"
         },
         "linux-aarch64": {
-            "uri": "sbr:6682389529"
+            "uri": "sbr:8784096409"
         },
         "linux-x86_64": {
-            "uri": "sbr:6682380912"
+            "uri": "sbr:8784094118"
         }
-    },
-    "match": "GDB",
-    "platform_replacements": {}
+    }
 }

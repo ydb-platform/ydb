@@ -2,6 +2,8 @@
 
 #include "util.h"
 
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+
 #include <util/stream/str.h>
 #include <util/string/printf.h>
 
@@ -23,23 +25,29 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
+        DECLARE $pk AS String;
 
         SELECT %s, %s
         FROM %s
-        WHERE %s = "%s";
+        WHERE %s = $pk;
     )", context->TablePathPrefix.c_str(),
         context->PrimaryKeyColumn.c_str(),
         context->GenerationColumn.c_str(),
         context->Table.c_str(),
-        context->PrimaryKeyColumn.c_str(),
-        context->PrimaryKey.c_str());
+        context->PrimaryKeyColumn.c_str());
+
+    NYdb::TParamsBuilder params;
+    params
+        .AddParam("$pk")
+        .String(context->PrimaryKey)
+        .Build();
 
     auto ttxControl = TTxControl::BeginTx(TTxSettings::SerializableRW());
     if (context->OperationType == TGenerationContext::Check && context->CommitTx) {
         ttxControl.CommitTx();
     }
 
-    return context->Session.ExecuteDataQuery(query, ttxControl);
+    return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings);
 }
 
 TFuture<TStatus> CheckGeneration(
@@ -53,7 +61,7 @@ TFuture<TStatus> CheckGeneration(
 
     TResultSetParser parser(selectResult.GetResultSet(0));
     if (parser.TryNextRow()) {
-        context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().GetOrElse(0);
+        context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().value_or(0);
     }
 
     bool isOk = false;
@@ -82,6 +90,7 @@ TFuture<TStatus> CheckGeneration(
     }
 
     context->Transaction = selectResult.GetTransaction();
+    selectResult.GetTransaction().reset();
 
     if (!isOk) {
         RollbackTransaction(context); // don't care about result
@@ -124,23 +133,32 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
+        DECLARE $pk AS String;
+        DECLARE $generation AS Uint64;
 
         UPSERT INTO %s (%s, %s) VALUES
-            ("%s", %lu);
+            ($pk, $generation);
     )", context->TablePathPrefix.c_str(),
         context->Table.c_str(),
         context->PrimaryKeyColumn.c_str(),
-        context->GenerationColumn.c_str(),
-        context->PrimaryKey.c_str(),
-        context->Generation);
+        context->GenerationColumn.c_str());
+
+    NYdb::TParamsBuilder params;
+    params
+        .AddParam("$pk")
+        .String(context->PrimaryKey)
+        .Build()
+        .AddParam("$generation")
+        .Uint64(context->Generation)
+        .Build();
 
     auto ttxControl = TTxControl::Tx(*context->Transaction);
     if (context->CommitTx) {
         ttxControl.CommitTx();
-        context->Transaction.Clear();
+        context->Transaction.reset();
     }
 
-    return context->Session.ExecuteDataQuery(query, ttxControl).Apply(
+    return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -196,13 +214,18 @@ TStatus MakeErrorStatus(
     auto& issue = issues.back();
     issue.SetCode((ui32)code, severity);
 
-    return TStatus(code, std::move(issues));
+    return TStatus(code, NYdb::NAdapters::ToSdkIssues(std::move(issues)));
 }
 
 NYql::TIssues StatusToIssues(const NYdb::TStatus& status) {
     TIssues issues;
     if (!status.IsSuccess()) {
-        issues = status.GetIssues();
+        issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
+        if (!issues) {
+            TStringStream str;
+            str << "Internal error: empty issues with failed status (" << status.GetStatus() << ")";
+            issues.AddIssue(str.Str());
+        }
     }
     return issues;
 }
@@ -298,7 +321,7 @@ TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
     }
 
     auto future = context->Transaction->Rollback();
-    context->Transaction.Clear();
+    context->Transaction.reset();
     return future;
 }
 

@@ -9,6 +9,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
 
 #include <util/string/split.h>
@@ -23,7 +24,6 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
         enum EEv {
             EvUpdateRuntimeStats = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvCleanupDeadTablets,
-            EvUpdateClockSkew,
             EvEnd
         };
 
@@ -31,7 +31,6 @@ class TNodeWhiteboardService : public TActorBootstrapped<TNodeWhiteboardService>
 
         struct TEvUpdateRuntimeStats : TEventLocal<TEvUpdateRuntimeStats, EvUpdateRuntimeStats> {};
         struct TEvCleanupDeadTablets : TEventLocal<TEvCleanupDeadTablets, EvCleanupDeadTablets> {};
-        struct TEvUpdateClockSkew : TEventLocal<TEvUpdateClockSkew, EvUpdateClockSkew> {};
     };
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -48,23 +47,31 @@ public:
             SystemStateInfo.SetNodeName(nodeName);
         }
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
+        SystemStateInfo.SetRealNumberOfCpus(NKikimr::RealNumberOfCpus());
         auto version = GetProgramRevision();
         if (!version.empty()) {
             SystemStateInfo.SetVersion(version);
-            auto versionCounter = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("revision", version);
+            TIntrusivePtr<NMonitoring::TDynamicCounters> utils = GetServiceCounters(AppData(ctx)->Counters, "utils");
+            TIntrusivePtr<NMonitoring::TDynamicCounters> versionCounter = utils->GetSubgroup("revision", version);
             *versionCounter->GetCounter("version", false) = 1;
+            TIntrusivePtr<NMonitoring::TDynamicCounters> nodeCounter = utils->GetSubgroup("NodeCount", version);
+            *nodeCounter->GetCounter("NodeCount", false) = 1;
         }
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
 
-        auto group = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
-            ->GetSubgroup("subsystem", "whiteboard");
+        auto utils = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils");
+        UserTime = utils->GetCounter("Process/UserTime", true);
+        SysTime = utils->GetCounter("Process/SystemTime", true);
+        MinorPageFaults = utils->GetCounter("Process/MinorPageFaults", true);
+        MajorPageFaults = utils->GetCounter("Process/MajorPageFaults", true);
+        NumThreads = utils->GetCounter("Process/NumThreads", false);
+        auto group = utils->GetSubgroup("subsystem", "whiteboard");
         MaxClockSkewWithPeerUsCounter = group->GetCounter("MaxClockSkewWithPeerUs");
         MaxClockSkewPeerIdCounter = group->GetCounter("MaxClockSkewPeerId");
 
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
-        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
         Become(&TNodeWhiteboardService::StateFunc);
     }
 
@@ -76,11 +83,24 @@ protected:
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
     i64 MaxClockSkewWithPeerUs;
     ui32 MaxClockSkewPeerId;
+    float MaxNetworkUtilization = 0.0;
+    ui64 SumNetworkWriteThroughput = 0;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
-    ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr UserTime;
+    ui64 SavedUserTime = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr SysTime;
+    ui64 SavedSysTime = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
+    ui64 SavedMinorPageFaults = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
+    ui64 SavedMajorPageFaults = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr NumThreads;
+
+    TSystemThreadsMonitor ThreadsMonitor;
 
     template <typename PropertyType>
     static ui64 GetDifference(PropertyType a, PropertyType b) {
@@ -509,7 +529,6 @@ protected:
     STRICT_STFUNC(StateFunc,
         HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
-        HFunc(TEvWhiteboard::TEvClockSkewUpdate, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
         HFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
@@ -538,7 +557,6 @@ protected:
         HFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
         HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
         HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
-        HFunc(TEvPrivate::TEvUpdateClockSkew, Handle);
     )
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -549,14 +567,6 @@ protected:
         }
         if (CheckedMerge(tabletStateInfo, ev->Get()->Record) >= 100) {
             tabletStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-        }
-    }
-
-    void Handle(TEvWhiteboard::TEvClockSkewUpdate::TPtr &ev, const TActorContext &) {
-        i64 skew = ev->Get()->Record.GetClockSkewUs();
-        if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
-            MaxClockSkewWithPeerUs = skew;
-            MaxClockSkewPeerId = ev->Get()->Record.GetPeerNodeId();
         }
     }
 
@@ -571,6 +581,16 @@ protected:
         } else {
             nodeStateInfo.ClearWriteThroughput();
         }
+        if (ev->Get()->Record.GetSameScope()) {
+            i64 skew = ev->Get()->Record.GetClockSkewUs();
+            if (abs(skew) > abs(MaxClockSkewWithPeerUs)) {
+                MaxClockSkewWithPeerUs = skew;
+                MaxClockSkewPeerId = ev->Get()->Record.GetPeerNodeId();
+            }
+        }
+        // TODO: need better way to calculate network utilization
+        MaxNetworkUtilization = std::max(MaxNetworkUtilization, ev->Get()->Record.GetUtilization());
+        SumNetworkWriteThroughput += nodeStateInfo.GetWriteThroughput();
         nodeStateInfo.MergeFrom(ev->Get()->Record);
         nodeStateInfo.SetChangeTime(currentChangeTime);
     }
@@ -684,13 +704,10 @@ protected:
         // Note: copy stats to sys info fields for backward compatibility
         if (memoryStats.HasAnonRss()) {
             SystemStateInfo.SetMemoryUsed(memoryStats.GetAnonRss());
+        } else if (memoryStats.HasAllocatedMemory()) {
+            SystemStateInfo.SetMemoryUsed(memoryStats.GetAllocatedMemory());
         } else {
             SystemStateInfo.ClearMemoryUsed();
-        }
-        if (memoryStats.HasHardLimit()) {
-            SystemStateInfo.SetMemoryLimit(memoryStats.GetHardLimit());
-        } else {
-            SystemStateInfo.ClearMemoryLimit();
         }
         if (memoryStats.HasAllocatedMemory()) {
             SystemStateInfo.SetMemoryUsedInAlloc(memoryStats.GetAllocatedMemory());
@@ -720,6 +737,9 @@ protected:
         auto& endpoint = *SystemStateInfo.AddEndpoints();
         endpoint.SetName(ev->Get()->Name);
         endpoint.SetAddress(ev->Get()->Address);
+        std::sort(SystemStateInfo.MutableEndpoints()->begin(), SystemStateInfo.MutableEndpoints()->end(), [](const auto& a, const auto& b) {
+            return a.GetName() < b.GetName();
+        });
         SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
     }
 
@@ -837,46 +857,60 @@ protected:
         }
     }
 
+    static std::unordered_set<TTabletId> BuildIndex(const ::google::protobuf::RepeatedField<::NProtoBuf::uint64>& array) {
+        std::unordered_set<TTabletId> result;
+        result.reserve(array.size());
+        for (auto id : array) {
+            result.insert(id);
+        }
+        return result;
+    }
+
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
         auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
+        auto matchesFilter = [
+            changedSince = request.has_changedsince() ? request.changedsince() : 0,
+            filterTabletId = BuildIndex(request.filtertabletid()),
+            filterTenantId = request.has_filtertenantid() ? NKikimr::TSubDomainKey(request.filtertenantid()) : NKikimr::TSubDomainKey()
+        ](const NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo) {
+            return tabletStateInfo.changetime() >= changedSince
+                && (filterTabletId.empty() || filterTabletId.count(tabletStateInfo.tabletid()))
+                && (!filterTenantId || filterTenantId == NKikimr::TSubDomainKey(tabletStateInfo.tenantid()));
+        };
         std::unique_ptr<TEvWhiteboard::TEvTabletStateResponse> response = std::make_unique<TEvWhiteboard::TEvTabletStateResponse>();
         auto& record = response->Record;
         if (request.format() == "packed5") {
-            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(TabletStateInfo.size());
+            std::vector<const NKikimrWhiteboard::TTabletStateInfo*> matchedTablets;
             for (const auto& [tabletId, tabletInfo] : TabletStateInfo) {
-                ptr->TabletId = tabletInfo.tabletid();
-                ptr->FollowerId = tabletInfo.followerid();
-                ptr->Generation = tabletInfo.generation();
-                ptr->Type = tabletInfo.type();
-                ptr->State = tabletInfo.state();
+                if (matchesFilter(tabletInfo)) {
+                    matchedTablets.push_back(&tabletInfo);
+                }
+            }
+            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(matchedTablets.size());
+            for (auto tabletInfo : matchedTablets) {
+                ptr->TabletId = tabletInfo->tabletid();
+                ptr->FollowerId = tabletInfo->followerid();
+                ptr->Generation = tabletInfo->generation();
+                ptr->Type = tabletInfo->type();
+                ptr->State = tabletInfo->state();
                 ++ptr;
             }
         } else {
             if (request.groupby().empty()) {
-                ui64 changedSince = request.has_changedsince() ? request.changedsince() : 0;
-                if (request.filtertabletid_size() == 0) {
-                    for (const auto& pr : TabletStateInfo) {
-                        if (pr.second.changetime() >= changedSince) {
-                            NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                            Copy(tabletStateInfo, pr.second, request);
-                        }
-                    }
-                } else {
-                    for (auto tabletId : request.filtertabletid()) {
-                        auto it = TabletStateInfo.find({tabletId, 0});
-                        if (it != TabletStateInfo.end()) {
-                            if (it->second.changetime() >= changedSince) {
-                                NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                                Copy(tabletStateInfo, it->second, request);
-                            }
-                        }
+                for (const auto& pr : TabletStateInfo) {
+                    if (matchesFilter(pr.second)) {
+                        NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
+                        Copy(tabletStateInfo, pr.second, request);
                     }
                 }
             } else if (request.groupby() == "Type,State" || request.groupby() == "NodeId,Type,State") { // the only supported group-by for now
                 std::unordered_map<std::pair<NKikimrTabletBase::TTabletTypes::EType,
                     NKikimrWhiteboard::TTabletStateInfo::ETabletState>, NKikimrWhiteboard::TTabletStateInfo> stateGroupBy;
                 for (const auto& [id, stateInfo] : TabletStateInfo) {
+                    if (!matchesFilter(stateInfo)) {
+                        continue;
+                    }
                     NKikimrWhiteboard::TTabletStateInfo& state = stateGroupBy[{stateInfo.type(), stateInfo.state()}];
                     auto count = state.count();
                     if (count == 0) {
@@ -1081,16 +1115,54 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr &, const TActorContext &ctx) {
-        THolder<TEvWhiteboard::TEvSystemStateUpdate> systemStatsUpdate = MakeHolder<TEvWhiteboard::TEvSystemStateUpdate>();
-        TVector<double> loadAverage = GetLoadAverage();
-        for (double d : loadAverage) {
-            systemStatsUpdate->Record.AddLoadAverage(d);
+        static constexpr int UPDATE_PERIOD_SECONDS = 15;
+        static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(UPDATE_PERIOD_SECONDS);
+        auto now = TActivationContext::Now();
+
+        {
+            NKikimrWhiteboard::TSystemStateInfo systemStatsUpdate;
+            TVector<double> loadAverage = GetLoadAverage();
+            for (double d : loadAverage) {
+                systemStatsUpdate.AddLoadAverage(d);
+            }
+            if (CheckedMerge(SystemStateInfo, systemStatsUpdate)) {
+                SystemStateInfo.SetChangeTime(now.MilliSeconds());
+            }
         }
-        if (CheckedMerge(SystemStateInfo, systemStatsUpdate->Record)) {
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+
+        {
+            MaxClockSkewWithPeerUsCounter->Set(abs(MaxClockSkewWithPeerUs));
+            MaxClockSkewPeerIdCounter->Set(MaxClockSkewPeerId);
+
+            SystemStateInfo.SetMaxClockSkewWithPeerUs(MaxClockSkewWithPeerUs);
+            SystemStateInfo.SetMaxClockSkewPeerId(MaxClockSkewPeerId);
+            MaxClockSkewWithPeerUs = 0;
+        }
+
+        {
+            SystemStateInfo.SetNetworkUtilization(MaxNetworkUtilization);
+            MaxNetworkUtilization = 0;
+        }
+        {
+            SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD_SECONDS);
+            SumNetworkWriteThroughput = 0;
+        }
+        auto threadPools = ThreadsMonitor.GetThreadPools(now);
+        SystemStateInfo.ClearThreads();
+        for (const auto& threadPool : threadPools) {
+            auto* threadInfo = SystemStateInfo.AddThreads();
+            threadInfo->SetName(threadPool.Name);
+            threadInfo->SetThreads(threadPool.Threads);
+            threadInfo->SetSystemUsage(threadPool.SystemUsage);
+            threadInfo->SetUserUsage(threadPool.UserUsage);
+            threadInfo->SetMajorPageFaults(threadPool.MajorPageFaults);
+            threadInfo->SetMinorPageFaults(threadPool.MinorPageFaults);
+            for (const auto& state : threadPool.States) {
+                threadInfo->MutableStates()->emplace(state.first, state.second);
+            }
         }
         UpdateSystemState(ctx);
-        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateRuntimeStats());
+        ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
     }
 
     void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr &, const TActorContext &ctx) {
@@ -1121,16 +1193,6 @@ protected:
             }
         }
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
-    }
-
-    void Handle(TEvPrivate::TEvUpdateClockSkew::TPtr &, const TActorContext &ctx) {
-        MaxClockSkewWithPeerUsCounter->Set(abs(MaxClockSkewWithPeerUs));
-        MaxClockSkewPeerIdCounter->Set(MaxClockSkewPeerId);
-
-        SystemStateInfo.SetMaxClockSkewWithPeerUs(MaxClockSkewWithPeerUs);
-        SystemStateInfo.SetMaxClockSkewPeerId(MaxClockSkewPeerId);
-        MaxClockSkewWithPeerUs = 0;
-        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
     }
 };
 

@@ -1,0 +1,196 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0e29c20336773b79c29d48a3387695cf
+BELONGS ya.make
+    License text:
+        // Copyright 2022 Peter Dimov
+        // Copyright 2023 Matt Borland
+        // Copyright 2023 Junekey Jeon
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/charconv/to_chars.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 175f8970b1267cb559b66251e237f95e
+BELONGS ya.make
+    License text:
+        // Copyright 2020-2023 Junekey Jeon
+        // Copyright 2022 Peter Dimov
+        // Copyright 2023 Matt Borland
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/charconv/detail/to_chars_integer_impl.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5bea22e8da8464acc8d9ab38156e45ce
+BELONGS ya.make
+    License text:
+        // Copyright 2024 Matt Borland
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/charconv/detail/buffer_sizing.hpp [1:3]
+        include/boost/charconv/detail/fallback_routines.hpp [1:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6629d20784d6175b2277b7f2294eb136
+BELONGS ya.make
+    License text:
+        // Copyright 2020-2023 Daniel Lemire
+        // Copyright 2023 Matt Borland
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/charconv/detail/compute_float64.hpp [1:4]
+        include/boost/charconv/detail/emulated128.hpp [1:4]
+        include/boost/charconv/detail/fast_float/ascii_number.hpp [1:4]
+        include/boost/charconv/detail/fast_float/bigint.hpp [1:4]
+        include/boost/charconv/detail/fast_float/constexpr_feature_detect.hpp [1:4]
+        include/boost/charconv/detail/fast_float/decimal_to_binary.hpp [1:4]
+        include/boost/charconv/detail/fast_float/digit_comparison.hpp [1:4]
+        include/boost/charconv/detail/fast_float/fast_float.hpp [1:4]
+        include/boost/charconv/detail/fast_float/fast_table.hpp [1:4]
+        include/boost/charconv/detail/fast_float/float_common.hpp [1:4]
+        include/boost/charconv/detail/fast_float/parse_number.hpp [1:4]
+        include/boost/charconv/detail/significand_tables.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9ffe57ee27b8ed11f13a2ad92594afe9
+BELONGS ya.make
+    License text:
+        // Copyright 2018 - 2023 Ulf Adams
+        // Copyright 2023 Matt Borland
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/charconv/detail/ryu/generic_128.hpp [1:4]
+        include/boost/charconv/detail/ryu/ryu_generic_128.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL df56a08a51f11ebc1571263ab013bc25
+BELONGS ya.make
+    License text:
+        // Copyright 2022 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/charconv.hpp [4:6]
+        include/boost/charconv/config.hpp [4:7]
+        include/boost/charconv/detail/to_chars_integer_impl.hpp [1:5]
+        include/boost/charconv/from_chars.hpp [1:4]
+        include/boost/charconv/to_chars.hpp [1:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ed2a55914865861705ece89451296d32
+BELONGS ya.make
+    License text:
+        // Copyright 2020-2022 Junekey Jeon
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/charconv/detail/dragonbox/dragonbox.hpp [1:1]
+        include/boost/charconv/detail/dragonbox/dragonbox_common.hpp [1:1]
+        include/boost/charconv/detail/dragonbox/floff.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fdba0502771598acb9f3611d2cd4bb09
+BELONGS ya.make
+    License text:
+        // Copyright 2023 Matt Borland
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/charconv/chars_format.hpp [1:3]
+        include/boost/charconv/config.hpp [4:7]
+        include/boost/charconv/detail/apply_sign.hpp [1:3]
+        include/boost/charconv/detail/bit_layouts.hpp [1:3]
+        include/boost/charconv/detail/compute_float32.hpp [1:3]
+        include/boost/charconv/detail/compute_float64.hpp [1:4]
+        include/boost/charconv/detail/compute_float80.hpp [1:3]
+        include/boost/charconv/detail/config.hpp [1:3]
+        include/boost/charconv/detail/dragonbox/dragonbox.hpp [18:20]
+        include/boost/charconv/detail/dragonbox/dragonbox_common.hpp [20:22]
+        include/boost/charconv/detail/dragonbox/floff.hpp [20:22]
+        include/boost/charconv/detail/emulated128.hpp [1:4]
+        include/boost/charconv/detail/fast_float/ascii_number.hpp [1:4]
+        include/boost/charconv/detail/fast_float/bigint.hpp [1:4]
+        include/boost/charconv/detail/fast_float/constexpr_feature_detect.hpp [1:4]
+        include/boost/charconv/detail/fast_float/decimal_to_binary.hpp [1:4]
+        include/boost/charconv/detail/fast_float/digit_comparison.hpp [1:4]
+        include/boost/charconv/detail/fast_float/fast_float.hpp [1:4]
+        include/boost/charconv/detail/fast_float/fast_table.hpp [1:4]
+        include/boost/charconv/detail/fast_float/float_common.hpp [1:4]
+        include/boost/charconv/detail/fast_float/parse_number.hpp [1:4]
+        include/boost/charconv/detail/from_chars_integer_impl.hpp [1:3]
+        include/boost/charconv/detail/from_chars_result.hpp [1:3]
+        include/boost/charconv/detail/integer_search_trees.hpp [1:3]
+        include/boost/charconv/detail/issignaling.hpp [1:3]
+        include/boost/charconv/detail/memcpy.hpp [1:3]
+        include/boost/charconv/detail/parser.hpp [1:3]
+        include/boost/charconv/detail/ryu/generic_128.hpp [1:4]
+        include/boost/charconv/detail/ryu/ryu_generic_128.hpp [1:4]
+        include/boost/charconv/detail/significand_tables.hpp [1:4]
+        include/boost/charconv/detail/to_chars_integer_impl.hpp [1:5]
+        include/boost/charconv/detail/to_chars_result.hpp [1:3]
+        include/boost/charconv/detail/type_traits.hpp [1:3]
+        include/boost/charconv/from_chars.hpp [1:4]
+        include/boost/charconv/limits.hpp [1:3]
+        include/boost/charconv/to_chars.hpp [1:5]

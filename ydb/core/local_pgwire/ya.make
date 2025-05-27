@@ -1,5 +1,9 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
+
 SRCS(
     local_pgwire_auth_actor.cpp
     local_pgwire_connection.cpp
@@ -26,7 +30,8 @@ PEERDIR(
     ydb/core/pgproxy
     ydb/core/ydb_convert
     ydb/public/api/grpc
-    ydb/public/lib/operation_id/protos
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/library/operation_id
     ydb/services/persqueue_v1/actors
 )
 

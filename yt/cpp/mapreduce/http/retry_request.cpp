@@ -20,7 +20,7 @@ namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static TResponseInfo Request(
+static NHttpClient::IHttpResponsePtr Request(
     const TClientContext& context,
     THttpHeader& header,
     TMaybe<TStringBuf> body,
@@ -38,16 +38,30 @@ static TResponseInfo Request(
 
     auto url = GetFullUrlForProxy(hostName, context, header);
 
-    auto response = context.HttpClient->Request(url, requestId, config.HttpConfig, header, body);
-
-    TResponseInfo result;
-    result.RequestId = requestId;
-    result.Response = response->GetResponse();
-    result.HttpCode = response->GetStatusCode();
-    return result;
+    return context.HttpClient->Request(url, requestId, config.HttpConfig, header, body);
 }
 
-TResponseInfo RequestWithoutRetry(
+static NHttpClient::IHttpRequestPtr StartRequest(
+    const TClientContext& context,
+    THttpHeader& header,
+    const TString& requestId,
+    const TRequestConfig& config)
+{
+    TString hostName;
+    if (config.IsHeavy) {
+        hostName = GetProxyForHeavyRequest(context);
+    } else {
+        hostName = context.ServerName;
+    }
+
+    UpdateHeaderForProxyIfNeed(hostName, context, header);
+
+    auto url = GetFullUrlForProxy(hostName, context, header);
+
+    return context.HttpClient->StartRequest(url, requestId, config.HttpConfig, header);
+}
+
+NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     const TClientContext& context,
     TMutationId& mutationId,
     THttpHeader& header,
@@ -69,7 +83,7 @@ TResponseInfo RequestWithoutRetry(
             header.RemoveParameter("retry");
             mutationId = header.AddMutationId();
         } else {
-            header.AddParameter("retry", true, /* overwrite */ true);
+            header.AddParameter("retry", true, /*overwrite*/ true);
             header.SetMutationId(mutationId);
         }
     }
@@ -77,12 +91,9 @@ TResponseInfo RequestWithoutRetry(
     return Request(context, header, body, requestId, config);
 }
 
-
-TResponseInfo RetryRequestWithPolicy(
-    IRequestRetryPolicyPtr retryPolicy,
+NHttpClient::IHttpRequestPtr StartRequestWithoutRetry(
     const TClientContext& context,
     THttpHeader& header,
-    TMaybe<TStringBuf> body,
     const TRequestConfig& config)
 {
     if (context.ServiceTicketAuth) {
@@ -91,66 +102,12 @@ TResponseInfo RetryRequestWithPolicy(
         header.SetToken(context.Token);
     }
 
-    UpdateHeaderForProxyIfNeed(context.ServerName, context, header);
-
     if (context.ImpersonationUser) {
         header.SetImpersonationUser(*context.ImpersonationUser);
     }
 
-    bool useMutationId = header.HasMutationId();
-    bool retryWithSameMutationId = false;
-
-    if (!retryPolicy) {
-        retryPolicy = CreateDefaultRequestRetryPolicy(context.Config);
-    }
-
-    while (true) {
-        auto requestId = CreateGuidAsString();
-        try {
-            retryPolicy->NotifyNewAttempt();
-
-            if (useMutationId) {
-                if (retryWithSameMutationId) {
-                    header.AddParameter("retry", true, /* overwrite = */ true);
-                } else {
-                    header.RemoveParameter("retry");
-                    header.AddMutationId();
-                }
-            }
-
-            return Request(context, header, body, requestId, config);
-        } catch (const TErrorResponse& e) {
-            LogRequestError(requestId, header, e.what(), retryPolicy->GetAttemptDescription());
-            retryWithSameMutationId = e.IsTransportError();
-
-            if (!IsRetriable(e)) {
-                throw;
-            }
-
-            auto maybeRetryTimeout = retryPolicy->OnRetriableError(e);
-            if (maybeRetryTimeout) {
-                TWaitProxy::Get()->Sleep(*maybeRetryTimeout);
-            } else {
-                throw;
-            }
-        } catch (const std::exception& e) {
-            LogRequestError(requestId, header, e.what(), retryPolicy->GetAttemptDescription());
-            retryWithSameMutationId = true;
-
-            if (!IsRetriable(e)) {
-                throw;
-            }
-
-            auto maybeRetryTimeout = retryPolicy->OnGenericError(e);
-            if (maybeRetryTimeout) {
-                TWaitProxy::Get()->Sleep(*maybeRetryTimeout);
-            } else {
-                throw;
-            }
-        }
-    }
-
-    Y_ABORT("Retries must have either succeeded or thrown an exception");
+    auto requestId = CreateGuidAsString();
+    return StartRequest(context, header, requestId, config);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

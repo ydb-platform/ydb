@@ -26,7 +26,10 @@ from traitlets import (
     Any,
     validate,
     Float,
+    DottedObjectName,
 )
+from traitlets.utils.importstring import import_item
+
 
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.enums import DEFAULT_BUFFER, EditingMode
@@ -52,6 +55,7 @@ from .prompts import Prompts, ClassicPrompts, RichPromptDisplayHook
 from .ptutils import IPythonPTCompleter, IPythonPTLexer
 from .shortcuts import (
     KEY_BINDINGS,
+    UNASSIGNED_ALLOWED_COMMANDS,
     create_ipython_shortcuts,
     create_identifier,
     RuntimeBinding,
@@ -213,7 +217,9 @@ class TerminalInteractiveShell(InteractiveShell):
 
     pt_app: UnionType[PromptSession, None] = None
     auto_suggest: UnionType[
-        AutoSuggestFromHistory, NavigableAutoSuggestFromHistory, None
+        AutoSuggestFromHistory,
+        NavigableAutoSuggestFromHistory,
+        None,
     ] = None
     debugger_history = None
 
@@ -420,6 +426,37 @@ class TerminalInteractiveShell(InteractiveShell):
         allow_none=True,
     ).tag(config=True)
 
+    llm_provider_class = DottedObjectName(
+        None,
+        allow_none=True,
+        help="""\
+        Provisional:
+            This is a provisinal API in IPython 8.32, before stabilisation
+            in 9.0, it may change without warnings.
+
+        class to use for the `NavigableAutoSuggestFromHistory` to request
+        completions from a LLM, this should inherit from
+        `jupyter_ai_magics:BaseProvider` and implement
+        `stream_inline_completions`
+    """,
+    ).tag(config=True)
+
+    @observe("llm_provider_class")
+    def _llm_provider_class_changed(self, change):
+        provider_class = change.new
+        if provider_class is not None:
+            warn(
+                "TerminalInteractiveShell.llm_provider_class is a provisional"
+                "  API as of IPython 8.32, and may change without warnings."
+            )
+            if isinstance(self.auto_suggest, NavigableAutoSuggestFromHistory):
+                self.auto_suggest._llm_provider = provider_class()
+            else:
+                self.log.warn(
+                    "llm_provider_class only has effects when using"
+                    "`NavigableAutoSuggestFromHistory` as auto_suggest."
+                )
+
     def _set_autosuggestions(self, provider):
         # disconnect old handler
         if self.auto_suggest and isinstance(
@@ -431,7 +468,15 @@ class TerminalInteractiveShell(InteractiveShell):
         elif provider == "AutoSuggestFromHistory":
             self.auto_suggest = AutoSuggestFromHistory()
         elif provider == "NavigableAutoSuggestFromHistory":
+            # LLM stuff are all Provisional in 8.32
+            if self.llm_provider_class:
+                llm_provider_constructor = import_item(self.llm_provider_class)
+                llm_provider = llm_provider_constructor()
+            else:
+                llm_provider = None
             self.auto_suggest = NavigableAutoSuggestFromHistory()
+            # Provisinal in 8.32
+            self.auto_suggest._llm_provider = llm_provider
         else:
             raise ValueError("No valid provider.")
         if self.pt_app:
@@ -508,19 +553,25 @@ class TerminalInteractiveShell(InteractiveShell):
         # rebuild the bindings list from scratch
         key_bindings = create_ipython_shortcuts(self)
 
-        # for now we only allow adding shortcuts for commands which are already
-        # registered; this is a security precaution.
-        known_commands = {
+        # for now we only allow adding shortcuts for a specific set of
+        # commands; this is a security precution.
+        allowed_commands = {
             create_identifier(binding.command): binding.command
             for binding in KEY_BINDINGS
         }
+        allowed_commands.update(
+            {
+                create_identifier(command): command
+                for command in UNASSIGNED_ALLOWED_COMMANDS
+            }
+        )
         shortcuts_to_skip = []
         shortcuts_to_add = []
 
         for shortcut in user_shortcuts:
             command_id = shortcut["command"]
-            if command_id not in known_commands:
-                allowed_commands = "\n - ".join(known_commands)
+            if command_id not in allowed_commands:
+                allowed_commands = "\n - ".join(allowed_commands)
                 raise ValueError(
                     f"{command_id} is not a known shortcut command."
                     f" Allowed commands are: \n - {allowed_commands}"
@@ -544,7 +595,7 @@ class TerminalInteractiveShell(InteractiveShell):
             new_keys = shortcut.get("new_keys", None)
             new_filter = shortcut.get("new_filter", None)
 
-            command = known_commands[command_id]
+            command = allowed_commands[command_id]
 
             creating_new = shortcut.get("create", False)
             modifying_existing = not creating_new and (
@@ -586,12 +637,14 @@ class TerminalInteractiveShell(InteractiveShell):
                     RuntimeBinding(
                         command,
                         keys=new_keys or old_keys,
-                        filter=filter_from_string(new_filter)
-                        if new_filter is not None
-                        else (
-                            old_filter
-                            if old_filter is not None
-                            else filter_from_string("always")
+                        filter=(
+                            filter_from_string(new_filter)
+                            if new_filter is not None
+                            else (
+                                old_filter
+                                if old_filter is not None
+                                else filter_from_string("always")
+                            )
                         ),
                     )
                 )
@@ -806,7 +859,8 @@ class TerminalInteractiveShell(InteractiveShell):
                     & ~IsDone()
                     & Condition(
                         lambda: isinstance(
-                            self.auto_suggest, NavigableAutoSuggestFromHistory
+                            self.auto_suggest,
+                            NavigableAutoSuggestFromHistory,
                         )
                     ),
                 ),

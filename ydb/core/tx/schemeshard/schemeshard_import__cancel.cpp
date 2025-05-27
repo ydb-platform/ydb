@@ -54,6 +54,7 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         case TImportInfo::EState::Cancelled:
             return respond(Ydb::StatusIds::SUCCESS);
 
+        case TImportInfo::EState::DownloadExportMetadata:
         case TImportInfo::EState::Waiting:
         case TImportInfo::EState::Cancellation:
             importInfo->Issue = "Cancelled manually";
@@ -66,7 +67,7 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                 case TImportInfo::EState::Transferring:
                     if (item.WaitTxId != InvalidTxId) {
                         importInfo->State = TImportInfo::EState::Cancellation;
-                        Send(Self->SelfId(), CancelRestorePropose(importInfo, item.WaitTxId), 0, importInfo->Id);
+                        Send(Self->SelfId(), CancelRestoreTableDataPropose(*importInfo, item.WaitTxId), 0, importInfo->Id);
                     } else if (item.SubState == TImportInfo::TItem::ESubState::Proposed) {
                         importInfo->State = TImportInfo::EState::Cancellation;
                     }
@@ -75,7 +76,7 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                 case TImportInfo::EState::BuildIndexes:
                     if (item.WaitTxId != InvalidTxId) {
                         importInfo->State = TImportInfo::EState::Cancellation;
-                        Send(Self->SelfId(), CancelIndexBuildPropose(Self, importInfo, item.WaitTxId), 0, importInfo->Id);
+                        Send(Self->SelfId(), CancelIndexBuildPropose(Self, *importInfo, item.WaitTxId), 0, importInfo->Id);
                     } else if (item.SubState == TImportInfo::TItem::ESubState::Proposed) {
                         importInfo->State = TImportInfo::EState::Cancellation;
                     }
@@ -90,7 +91,7 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                 importInfo->EndTime = TAppData::TimeProvider->Now();
             }
 
-            Self->PersistImportState(db, importInfo);
+            Self->PersistImportState(db, *importInfo);
             SendNotificationsIfFinished(importInfo);
 
             if (importInfo->IsFinished()) {
@@ -186,7 +187,7 @@ struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
         }
 
         Self->TxIdToImport.erase(txId);
-        Self->PersistImportItemState(db, importInfo, itemIdx);
+        Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         if (cancelledItems != cancellableItems) {
             return true;
@@ -194,7 +195,7 @@ struct TSchemeShard::TImport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
 
         importInfo->State = TImportInfo::EState::Cancelled;
         importInfo->EndTime = TAppData::TimeProvider->Now();
-        Self->PersistImportState(db, importInfo);
+        Self->PersistImportState(db, *importInfo);
 
         SendNotificationsIfFinished(importInfo);
 

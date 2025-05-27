@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/iterator.h>
 #include <util/generic/yexception.h>
 
 #include <algorithm>
@@ -49,7 +50,7 @@ public:
 
     constexpr inline TArrayRef(T* begin Y_LIFETIME_BOUND, T* end Y_LIFETIME_BOUND) noexcept
         : T_(begin)
-        , S_(end - begin)
+        , S_(NonNegativeDistance(begin, end))
     {
     }
 
@@ -70,7 +71,7 @@ public:
     }
 
     template <size_t N>
-    constexpr inline TArrayRef(T (&array)[N] Y_LIFETIME_BOUND) noexcept
+    constexpr inline TArrayRef(T (&array Y_LIFETIME_BOUND)[N]) noexcept
         : T_(array)
         , S_(N)
     {

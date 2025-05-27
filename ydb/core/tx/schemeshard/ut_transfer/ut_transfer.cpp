@@ -15,9 +15,9 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
                 }
               }
               TransferSpecific {
-                Targets {
+                Target {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table"
+                  DstPath: "/MyRoot/Table"
                 }
               }
             }
@@ -36,12 +36,27 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         return r.GetControllerId();
     }
 
+    void CreateTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
+      TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+        Name: "Table"
+        ColumnShardCount: 1
+        Schema {
+            Columns { Name: "key" Type: "Uint32" NotNull: true }
+            Columns { Name: "data" Type: "Utf8" }
+            KeyColumnNames: [ "key" ]
+        }
+      )");
+      env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(Create) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
+
+        CreateTable(runtime, env, txId);
 
         TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"));
         env.TestWaitNotification(runtime, txId);
@@ -52,13 +67,33 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         });
     }
 
+    Y_UNIT_TEST(Create_Disabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(false));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        CreateTable(runtime, env, txId);
+
+        TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"),
+          {NKikimrScheme::StatusInvalidParameter});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {
+            NLs::PathNotExist
+        });
+    }
+
     Y_UNIT_TEST(CreateSequential) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
         THashSet<ui64> controllerIds;
+
+        CreateTable(runtime, env, txId);
 
         for (int i = 0; i < 2; ++i) {
             const auto name = Sprintf("Transfer%d", i);
@@ -80,11 +115,13 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(CreateInParallel) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
         THashSet<ui64> controllerIds;
+
+        CreateTable(runtime, env, txId);
 
         for (int i = 0; i < 2; ++i) {
             TVector<TString> names;
@@ -116,11 +153,13 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(CreateDropRecreate) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
         ui64 controllerId = 0;
+
+        CreateTable(runtime, env, txId);
 
         TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"));
         env.TestWaitNotification(runtime, txId);
@@ -145,18 +184,20 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(CreateWithoutCredentials) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
+
+        CreateTable(runtime, env, txId);
 
         TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
             Name: "Transfer"
             Config {
               TransferSpecific {
-                Targets {
+                Target {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table"
+                  DstPath: "/MyRoot/Table"
                 }
               }
             }
@@ -170,10 +211,12 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
 
     Y_UNIT_TEST(CreateWrongConfig) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
+
+        CreateTable(runtime, env, txId);
 
         TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
             Name: "Transfer"
@@ -181,7 +224,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
               Specific {
                 Targets {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table"
+                  DstPath: "/MyRoot/Table"
                 }
               }
             }
@@ -193,20 +236,112 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
         });
     }
 
+    Y_UNIT_TEST(CreateWrongBatchSize) {
+      TTestBasicRuntime runtime;
+      TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
+      ui64 txId = 100;
+
+      SetupLogging(runtime);
+
+      CreateTable(runtime, env, txId);
+
+      TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
+          Name: "Transfer"
+          Config {
+            TransferSpecific {
+              Target {
+                SrcPath: "/MyRoot1/Table"
+                DstPath: "/MyRoot/Table"
+              }
+              Batching {
+                BatchSizeBytes: 1073741825
+              }
+            }
+          }
+      )", {{NKikimrScheme::StatusInvalidParameter}});
+      env.TestWaitNotification(runtime, txId);
+
+      TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {
+          NLs::PathNotExist
+      });
+    }
+
+    Y_UNIT_TEST(CreateWrongFlushIntervalIsSmall) {
+      TTestBasicRuntime runtime;
+      TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
+      ui64 txId = 100;
+
+      SetupLogging(runtime);
+
+      CreateTable(runtime, env, txId);
+
+      TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
+          Name: "Transfer"
+          Config {
+            TransferSpecific {
+              Target {
+                SrcPath: "/MyRoot1/Table"
+                DstPath: "/MyRoot/Table"
+              }
+              Batching {
+                FlushIntervalMilliSeconds: 1
+              }
+            }
+          }
+      )", {{NKikimrScheme::StatusInvalidParameter}});
+      env.TestWaitNotification(runtime, txId);
+
+      TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {
+          NLs::PathNotExist
+      });
+    }
+
+    Y_UNIT_TEST(CreateWrongFlushIntervalIsBig) {
+      TTestBasicRuntime runtime;
+      TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
+      ui64 txId = 100;
+
+      SetupLogging(runtime);
+
+      CreateTable(runtime, env, txId);
+
+      TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
+          Name: "Transfer"
+          Config {
+            TransferSpecific {
+              Target {
+                SrcPath: "/MyRoot1/Table"
+                DstPath: "/MyRoot/Table"
+              }
+              Batching {
+                FlushIntervalMilliSeconds: 86400001
+              }
+            }
+          }
+      )", {{NKikimrScheme::StatusInvalidParameter}});
+      env.TestWaitNotification(runtime, txId);
+
+      TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {
+          NLs::PathNotExist
+      });
+    }
+
     Y_UNIT_TEST(ConsistencyLevel) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
+        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
         ui64 txId = 100;
 
         SetupLogging(runtime);
+
+        CreateTable(runtime, env, txId);
 
         TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
             Name: "Transfer1"
             Config {
               TransferSpecific {
-                Targets {
+                Target {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table"
+                  DstPath: "/MyRoot/Table"
                 }
               }
             }
@@ -222,9 +357,9 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
             Name: "Transfer2"
             Config {
               TransferSpecific {
-                Targets {
+                Target {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table"
+                  DstPath: "/MyRoot/Table"
                 }
               }
               ConsistencySettings {
@@ -243,9 +378,9 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
             Name: "Transfer3"
             Config {
               TransferSpecific {
-                Targets {
+                Target {
                   SrcPath: "/MyRoot1/Table"
-                  DstPath: "/MyRoot2/Table"
+                  DstPath: "/MyRoot/Table"
                 }
               }
               ConsistencySettings {
@@ -265,49 +400,36 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
     }
 
     Y_UNIT_TEST(Alter) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true));
-        ui64 txId = 100;
+      TTestBasicRuntime runtime;
+      TTestEnv env(runtime, TTestEnvOptions().InitYdbDriver(true).EnableTopicTransfer(true));
+      ui64 txId = 100;
 
-        SetupLogging(runtime);
+      SetupLogging(runtime);
 
-        TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"));
-        env.TestWaitNotification(runtime, txId);
-        {
-            const auto desc = DescribePath(runtime, "/MyRoot/Transfer");
-            TestDescribeResult(desc, {NLs::PathExist});
-        }
+      CreateTable(runtime, env, txId);
 
-        TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
-            Name: "Transfer"
-            State {
-              Paused {
-              }
+      TestCreateTransfer(runtime, ++txId, "/MyRoot", DefaultScheme("Transfer"));
+      env.TestWaitNotification(runtime, txId);
+      {
+          const auto desc = DescribePath(runtime, "/MyRoot/Transfer");
+          TestDescribeResult(desc, {NLs::PathExist});
+      }
+
+      TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
+          Name: "Transfer"
+          State {
+            Paused {
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+          }
+      )");
 
-        TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
-            Name: "Transfer"
-            State {
-              Done {
-                FailoverMode: FAILOVER_MODE_FORCE
-              }
+      TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
+          Name: "Transfer"
+          State {
+            StandBy {
             }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {
-            NLs::PathExist,
-            NLs::ReplicationState(NKikimrReplication::TReplicationState::kDone),
-        });
-
-        TestAlterTransfer(runtime, ++txId, "/MyRoot", R"(
-            Name: "Transfer"
-            State {
-              StandBy {
-              }
-            }
-        )", {NKikimrScheme::StatusInvalidParameter});
-    }
+          }
+      )");
+  }
 
 } // TTransferTests

@@ -1,5 +1,8 @@
 LIBRARY()
 
+ADDINCL(
+    ydb/public/sdk/cpp
+)
 
 SRCS(
     auth_factory.cpp
@@ -22,6 +25,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/grpc
     contrib/restricted/nlohmann_json
     ydb/library/actors/http
     ydb/library/actors/core
@@ -36,10 +40,11 @@ PEERDIR(
     ydb/library/ycloud/api
     ydb/library/ycloud/impl
     ydb/library/naming_conventions
-    ydb/public/sdk/cpp/client/ydb_datastreams
-    ydb/public/sdk/cpp/client/ydb_persqueue_core
-    ydb/public/sdk/cpp/client/ydb_topic/codecs
-    ydb/public/sdk/cpp/client/iam_private
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/datastreams
+    ydb/public/sdk/cpp/src/client/persqueue_public
+    ydb/public/sdk/cpp/src/client/topic/codecs
+    ydb/public/sdk/cpp/src/client/iam_private
     ydb/services/datastreams
     ydb/services/persqueue_v1/actors
     ydb/services/ymq

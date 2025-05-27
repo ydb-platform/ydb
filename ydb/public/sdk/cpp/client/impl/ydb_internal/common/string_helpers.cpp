@@ -3,7 +3,7 @@
 #include <algorithm>
 
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 bool StringStartsWith(const TStringType& line, const TStringType& pattern) {
     return std::equal(pattern.begin(), pattern.end(), line.begin());

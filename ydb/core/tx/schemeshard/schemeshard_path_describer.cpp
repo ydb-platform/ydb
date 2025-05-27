@@ -42,6 +42,10 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRangeReads(tableStats.RangeReads);
     stats->SetRangeReadRows(tableStats.RangeReadRows);
 
+    stats->SetLocksAcquired(tableStats.LocksAcquired);
+    stats->SetLocksWholeShard(tableStats.LocksWholeShard);
+    stats->SetLocksBroken(tableStats.LocksBroken);
+
     stats->SetPartCount(tableStats.PartCount);
     stats->SetHasSchemaChanges(tableStats.HasSchemaChanges);
 
@@ -174,6 +178,11 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
     descr->SetCreateTxId(ui64(pathEl->CreateTxId));
     if (createFinished) {
         descr->SetCreateStep(ui64(pathEl->StepCreated));
+    }
+
+    if (pathEl->PathType != NKikimrSchemeOp::EPathTypeSubDomain
+        && pathEl->PathType != NKikimrSchemeOp::EPathTypeExtSubDomain) {
+        descr->SetChildrenExist(pathEl->GetAliveChildren() > 0);
     }
 
     if (pathEl->PathType == NKikimrSchemeOp::EPathTypePersQueueGroup) {
@@ -808,6 +817,15 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
         }
     }
 
+    if (solomonVolumeInfo->Partitions.size() > 0) {
+        auto shardId = solomonVolumeInfo->Partitions.begin()->first;
+        auto shardInfo = Self->ShardInfos.FindPtr(shardId);
+        Y_ABORT_UNLESS(shardInfo);
+        for (const auto& channel : shardInfo->BindedChannels) {
+            entry->AddBoundChannels()->CopyFrom(channel);
+        }
+    }
+
     Sort(entry->MutablePartitions()->begin(),
          entry->MutablePartitions()->end(),
          [] (auto& part1, auto& part2) {
@@ -1025,7 +1043,7 @@ void TPathDescriber::DescribeExternalTable(const TActorContext& ctx, TPathId pat
 
     auto entry = Result->Record.MutablePathDescription()->MutableExternalTableDescription();
     entry->SetName(pathEl->Name);
-    PathIdFromPathId(pathId, entry->MutablePathId());
+    pathId.ToProto(entry->MutablePathId());
     entry->SetSourceType(externalTableInfo->SourceType);
     entry->SetDataSourcePath(externalTableInfo->DataSourcePath);
     entry->SetLocation(externalTableInfo->Location);
@@ -1058,13 +1076,8 @@ void TPathDescriber::DescribeExternalDataSource(const TActorContext&, TPathId pa
 
     auto entry = Result->Record.MutablePathDescription()->MutableExternalDataSourceDescription();
     entry->SetName(pathEl->Name);
-    PathIdFromPathId(pathId, entry->MutablePathId());
-    entry->SetVersion(externalDataSourceInfo->AlterVersion);
-    entry->SetSourceType(externalDataSourceInfo->SourceType);
-    entry->SetLocation(externalDataSourceInfo->Location);
-    entry->SetInstallation(externalDataSourceInfo->Installation);
-    entry->MutableAuth()->CopyFrom(externalDataSourceInfo->Auth);
-    entry->MutableProperties()->CopyFrom(externalDataSourceInfo->Properties);
+    pathId.ToProto(entry->MutablePathId());
+    externalDataSourceInfo->FillProto(*entry);
 }
 
 void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl) {
@@ -1074,7 +1087,7 @@ void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathEle
 
     auto entry = Result->Record.MutablePathDescription()->MutableViewDescription();
     entry->SetName(pathEl->Name);
-    PathIdFromPathId(pathId, entry->MutablePathId());
+    pathId.ToProto(entry->MutablePathId());
     entry->SetVersion(viewInfo->AlterVersion);
     entry->SetQueryText(viewInfo->QueryText);
     *entry->MutableCapturedContext() = viewInfo->CapturedContext;
@@ -1087,7 +1100,7 @@ void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pat
 
     auto entry = Result->Record.MutablePathDescription()->MutableResourcePoolDescription();
     entry->SetName(pathEl->Name);
-    PathIdFromPathId(pathId, entry->MutablePathId());
+    pathId.ToProto(entry->MutablePathId());
     entry->SetVersion(resourcePoolInfo->AlterVersion);
     entry->MutableProperties()->CopyFrom(resourcePoolInfo->Properties);
 }
@@ -1099,9 +1112,19 @@ void TPathDescriber::DescribeBackupCollection(TPathId pathId, TPathElement::TPtr
 
     auto entry = Result->Record.MutablePathDescription()->MutableBackupCollectionDescription();
     entry->SetName(pathEl->Name);
-    PathIdFromPathId(pathId, entry->MutablePathId());
+    pathId.ToProto(entry->MutablePathId());
     entry->SetVersion(backupCollectionInfo->AlterVersion);
     entry->CopyFrom(backupCollectionInfo->Description);
+}
+
+void TPathDescriber::DescribeSysView(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->SysViews.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "SysView is not found");
+    TSysViewInfo::TPtr sysViewInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableSysViewDescription();
+    entry->SetName(pathEl->Name);
+    entry->SetType(sysViewInfo->Type);
 }
 
 static bool ConsiderAsDropped(const TPath& path) {
@@ -1265,6 +1288,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeDir(path);
             DescribeBackupCollection(base->PathId, base);
             break;
+        case NKikimrSchemeOp::EPathTypeSysView:
+            DescribeSysView(ctx, base->PathId, base);
+            break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
         }
@@ -1302,6 +1328,29 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return DescribePath(self, ctx, pathId, options);
 }
 
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path,
+    const NKikimrSchemeOp::TDescribeOptions& opts
+) {
+    NKikimrSchemeOp::TDescribePath params;
+    params.SetPath(path);
+    params.MutableOptions()->CopyFrom(opts);
+
+    return TPathDescriber(self, std::move(params)).Describe(ctx);
+}
+
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path
+) {
+    NKikimrSchemeOp::TDescribeOptions options;
+    options.SetShowPrivateTable(true);
+    return DescribePath(self, ctx, path, options);
+}
+
 void TSchemeShard::DescribeTable(
         const TTableInfo& tableInfo,
         const NScheme::TTypeRegistry* typeRegistry,
@@ -1332,6 +1381,7 @@ void TSchemeShard::DescribeTable(
     }
 
     entry->SetIsBackup(tableInfo.IsBackup);
+    entry->SetIsRestore(tableInfo.IsRestore);
 }
 
 void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name,
@@ -1368,12 +1418,6 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     const auto* indexPathPtr = PathsById.FindPtr(pathId);
     Y_ABORT_UNLESS(indexPathPtr);
     const auto& indexPath = *indexPathPtr->Get();
-    if (const auto size = indexPath.GetChildren().size(); indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        // For vector index we have 2 impl tables and 2 build impl tables
-        Y_VERIFY_S(2 <= size && size <= 4, size);
-    } else {
-        Y_VERIFY_S(size == 1, size);
-    }
 
     ui64 dataSize = 0;
     for (const auto& indexImplTablePathId : indexPath.GetChildren()) {
@@ -1432,7 +1476,7 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
     desc.SetVirtualTimestamps(info->VirtualTimestamps);
     desc.SetResolvedTimestampsIntervalMs(info->ResolvedTimestamps.MilliSeconds());
     desc.SetAwsRegion(info->AwsRegion);
-    PathIdFromPathId(pathId, desc.MutablePathId());
+    pathId.ToProto(desc.MutablePathId());
     desc.SetState(info->State);
     desc.SetSchemaVersion(info->AlterVersion);
 
@@ -1476,7 +1520,7 @@ void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, 
     }
 
     desc.SetName(name);
-    PathIdFromPathId(pathId, desc.MutablePathId());
+    pathId.ToProto(desc.MutablePathId());
     desc.SetVersion(info->AlterVersion);
 
     if (info->Sharding.SequenceShardsSize() > 0) {
@@ -1530,7 +1574,7 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
     ClearSensitiveFields(&desc);
 
     desc.SetName(name);
-    PathIdFromPathId(pathId, desc.MutablePathId());
+    pathId.ToProto(desc.MutablePathId());
     desc.SetVersion(info->AlterVersion);
 
     if (const auto& shardIdx = info->ControllerShardIdx; shardIdx != InvalidShardIdx) {
@@ -1548,7 +1592,7 @@ void TSchemeShard::DescribeBlobDepot(const TPathId& pathId, const TString& name,
     Y_ABORT_UNLESS(it != BlobDepots.end());
     desc = it->second->Description;
     desc.SetName(name);
-    PathIdFromPathId(pathId, desc.MutablePathId());
+    pathId.ToProto(desc.MutablePathId());
     desc.SetVersion(it->second->AlterVersion);
     desc.SetTabletId(static_cast<ui64>(it->second->BlobDepotTabletId));
 }

@@ -141,8 +141,16 @@ public:
     }
 
     void RegisterDependencies() const override {
-        for (auto arg : Args_) {
-            this->DependsOn(arg);
+        if (Type == NYql::TExprNode::Lambda) {
+            this->DependsOn(Args_.front());
+            for (size_t i = 1; i < Args_.size() - 1; ++i) {
+                this->Own(dynamic_cast<IComputationExternalNode*>(Args_[i]));
+            }
+            this->DependsOn(Args_.back());
+        } else {
+            for (auto arg : Args_) {
+                this->DependsOn(arg);
+            }
         }
     }
 

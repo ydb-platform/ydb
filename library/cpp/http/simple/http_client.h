@@ -12,6 +12,7 @@
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/openssl/io/stream.h>
+#include <library/cpp/threading/cancellation/cancellation_token.h>
 
 class TNetworkAddress;
 class IOutputStream;
@@ -54,14 +55,16 @@ public:
     THttpCode DoGet(const TStringBuf relativeUrl,
                     IOutputStream* output = nullptr,
                     const THeaders& headers = THeaders(),
-                    THttpHeaders* outHeaders = nullptr);
+                    THttpHeaders* outHeaders = nullptr,
+                    NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default());
 
     // builds post request from headers and body
     THttpCode DoPost(const TStringBuf relativeUrl,
                      const TStringBuf body,
                      IOutputStream* output = nullptr,
                      const THeaders& headers = THeaders(),
-                     THttpHeaders* outHeaders = nullptr);
+                     THttpHeaders* outHeaders = nullptr,
+                     NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default());
 
     // builds request with any HTTP method from headers and body
     THttpCode DoRequest(const TStringBuf method,
@@ -69,12 +72,14 @@ public:
                         const TStringBuf body,
                         IOutputStream* output = nullptr,
                         const THeaders& inHeaders = THeaders(),
-                        THttpHeaders* outHeaders = nullptr);
+                        THttpHeaders* outHeaders = nullptr,
+                        NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default());
 
     // requires already well-formed request
     THttpCode DoRequestRaw(const TStringBuf raw,
                            IOutputStream* output = nullptr,
-                           THttpHeaders* outHeaders = nullptr);
+                           THttpHeaders* outHeaders = nullptr,
+                           NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default());
 
     void DisableVerificationForHttps();
     void SetClientCertificate(const TOpenSslClientIO::TOptions::TClientCert& options);
@@ -93,7 +98,8 @@ private:
     template <class T>
     THttpCode DoRequestReliable(const T& raw,
                                 IOutputStream* output,
-                                THttpHeaders* outHeaders);
+                                THttpHeaders* outHeaders,
+                                NThreading::TCancellationToken cancellation);
 
     TVector<IOutputStream::TPart> FormRequest(TStringBuf method, const TStringBuf relativeUrl,
                                               TStringBuf body,
@@ -166,13 +172,13 @@ public:
 
     void EnableVerificationForHttps();
 
-    void DoGet(const TStringBuf relativeUrl, IOutputStream* output, const THeaders& headers = THeaders()) const;
+    void DoGet(const TStringBuf relativeUrl, IOutputStream* output, const THeaders& headers = THeaders(), THttpHeaders* outHeaders = nullptr, NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
 
     // builds post request from headers and body
-    void DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THeaders& headers = THeaders()) const;
+    void DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THeaders& headers = THeaders(), THttpHeaders* outHeaders = nullptr, NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
 
     // requires already well-formed post request
-    void DoPostRaw(const TStringBuf relativeUrl, TStringBuf rawRequest, IOutputStream* output) const;
+    void DoPostRaw(const TStringBuf relativeUrl, TStringBuf rawRequest, IOutputStream* output, THttpHeaders* outHeaders = nullptr, NThreading::TCancellationToken cancellation = NThreading::TCancellationToken::Default()) const;
 
     virtual ~TSimpleHttpClient();
 
@@ -227,6 +233,10 @@ namespace NPrivate {
             return HttpIn.Get();
         }
 
+        void Shutdown() {
+            Socket.ShutDown(SHUT_RDWR);
+        }
+
     private:
         static TNetworkAddress Resolve(const TString& host, ui32 port);
 
@@ -250,11 +260,19 @@ namespace NPrivate {
 template <class T>
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T& raw,
                                                                         IOutputStream* output,
-                                                                        THttpHeaders* outHeaders) {
+                                                                        THttpHeaders* outHeaders,
+                                                                        NThreading::TCancellationToken cancellation) {
+
     for (int i = 0; i < 2; ++i) {
         const bool haveNewConnection = CreateNewConnectionIfNeeded();
         const bool couldRetry = !haveNewConnection && i == 0; // Actually old connection could be already closed by server,
                                                               // so we should try one more time in this case.
+        TManualEvent cancellationEndEvent;
+        cancellation.Future().Subscribe([&](auto&) {
+            Connection->Shutdown();
+            cancellationEndEvent.Signal();
+        });
+
         try {
             Connection->Write(raw);
 
@@ -264,16 +282,28 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestReliable(const T&
             }
             return code;
         } catch (const TSystemError& e) {
+            if (cancellation.IsCancellationRequested()) {
+                cancellationEndEvent.WaitI();
+                cancellation.ThrowIfCancellationRequested();
+            }
             Connection.Reset();
             if (!couldRetry || e.Status() != EPIPE) {
                 throw;
             }
         } catch (const THttpReadException&) { // Actually old connection is already closed by server
+            if (cancellation.IsCancellationRequested()) {
+                cancellationEndEvent.WaitI();
+                cancellation.ThrowIfCancellationRequested();
+            }
             Connection.Reset();
             if (!couldRetry) {
                 throw;
             }
         } catch (const std::exception&) {
+            if (cancellation.IsCancellationRequested()) {
+                cancellationEndEvent.WaitI();
+                cancellation.ThrowIfCancellationRequested();
+            }
             Connection.Reset();
             throw;
         }

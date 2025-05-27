@@ -9,8 +9,8 @@ SELECT
 SELECT
     EvaluateCode(
         FuncCode(
-            "EvaluateCode",
-            FuncCode("ReprCode", ReprCode(1))
+            'EvaluateCode',
+            FuncCode('ReprCode', ReprCode(1))
         )
     )
 ;
@@ -18,12 +18,12 @@ SELECT
 SELECT
     EvaluateCode(
         FuncCode(
-            "EvaluateCode",
+            'EvaluateCode',
             FuncCode(
-                "ReprCode",
+                'ReprCode',
                 FuncCode(
-                    "EvaluateCode",
-                    FuncCode("ReprCode", ReprCode(1))
+                    'EvaluateCode',
+                    FuncCode('ReprCode', ReprCode(1))
                 )
             )
         )
@@ -33,7 +33,7 @@ SELECT
 SELECT
     EvaluateCode(
         FuncCode(
-            "EvaluateExpr",
+            'EvaluateExpr',
             QuoteCode(1 + 2)
         )
     )

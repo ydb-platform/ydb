@@ -3,12 +3,12 @@ PRAGMA DisableSimpleColumns;
 /* postgres can not */
 $i = (
     SELECT
-        AsList("foo") AS x
+        AsList('foo') AS x
 );
 
 $j = (
     SELECT
-        Just(AsList("foo")) AS y
+        Just(AsList('foo')) AS y
 );
 
 SELECT

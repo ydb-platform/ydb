@@ -1,6 +1,5 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
-ENV(SQS_CLIENT_BINARY="ydb/core/ymq/client/bin/sqs")
 
 TEST_SRCS(
     test_multinode_cluster.py
@@ -9,14 +8,13 @@ TEST_SRCS(
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 DEPENDS(
     ydb/apps/ydbd
-    ydb/core/ymq/client/bin
 )
 
 PEERDIR(

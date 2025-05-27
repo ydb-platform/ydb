@@ -8,9 +8,9 @@ $a = AsList(
 );
 
 $b = AsList(
-    AsStruct(Int8("-1") AS K, 1 AS V),
-    AsStruct(Int8("127") AS K, 2 AS V),
-    AsStruct(Int8("0") AS K, 3 AS V)
+    AsStruct(Int8('-1') AS K, 1 AS V),
+    AsStruct(Int8('127') AS K, 2 AS V),
+    AsStruct(Int8('0') AS K, 3 AS V)
 );
 
 SELECT

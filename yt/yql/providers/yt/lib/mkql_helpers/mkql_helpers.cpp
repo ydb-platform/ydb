@@ -69,7 +69,11 @@ void TRecordsRange::Fill(const TExprNode& settingsNode) {
         if (settingName != TStringBuf("take") && settingName != TStringBuf("skip")) {
             continue;
         }
-        YQL_ENSURE(setting->Child(1)->IsCallable("Uint64"));
+        if (!setting->Child(1)->IsCallable("Uint64")) {
+            Offset.Clear();
+            Limit.Clear();
+            return;
+        }
         if (!UpdateRecordsRange(*this, settingName, NYql::FromString<ui64>(*setting->Child(1)->Child(0), NUdf::EDataSlot::Uint64))) {
             break;
         }

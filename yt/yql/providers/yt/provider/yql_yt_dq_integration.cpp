@@ -157,7 +157,7 @@ public:
     {
     }
 
-    TVector<TVector<ui64>> EstimateColumnStats(TExprContext& ctx, const TString& cluster, const TVector<TVector<TYtPathInfo::TPtr>>& groupIdPathInfos, ui64& sumAllTableSizes) {
+    TVector<TVector<ui64>> EstimateColumnStats(TExprContext& ctx, const TVector<TVector<TYtPathInfo::TPtr>>& groupIdPathInfos, ui64& sumAllTableSizes) {
         TVector<TVector<ui64>> groupIdColumnarStats;
         groupIdColumnarStats.reserve(groupIdPathInfos.size());
         TVector<bool> lookupsInfo;
@@ -175,7 +175,7 @@ public:
                 flattenPaths.push_back(pathInfo);
             }
         }
-        auto result = EstimateDataSize(cluster, flattenPaths, Nothing(), *State_, ctx);
+        auto result = EstimateDataSize(flattenPaths, Nothing(), *State_, ctx);
         size_t statIdx = 0;
         size_t pathIdx = 0;
         for (const auto& [idx, pathInfos]: Enumerate(groupIdPathInfos)) {
@@ -302,7 +302,7 @@ public:
         } else {
             TVector<TVector<std::tuple<ui64, ui64, NYT::TRichYPath>>> partitionTuplesArr;
             ui64 sumAllTableSizes = 0;
-            TVector<TVector<ui64>> groupIdColumnarStats = EstimateColumnStats(ctx, cluster, {groupIdPathInfos}, sumAllTableSizes);
+            TVector<TVector<ui64>> groupIdColumnarStats = EstimateColumnStats(ctx, {groupIdPathInfos}, sumAllTableSizes);
             ui64 parts = (sumAllTableSizes + dataSizePerJob - 1) / dataSizePerJob;
             if (settings.CanFallback && hasErasure && parts > maxTasks) {
                 auto message = DqFallbackErrorMessageWrap("too big table with erasure codec");
@@ -420,6 +420,7 @@ public:
                 return false;
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
+            const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
             ui64 chunksCount = 0ull;
             for (auto section: maybeRead.Cast().Input()) {
                 if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings) || HasNonEmptyKeyFilter(maybeRead.Cast().Input().Item(0))) {
@@ -466,6 +467,9 @@ public:
                             return false;
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddMessage(ctx, "dynamic table", skipIssues, State_->PassiveExecution);
+                            return false;
+                        } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
+                            AddMessage(ctx, "dynamic store read", skipIssues, State_->PassiveExecution);
                             return false;
                         }
 
@@ -521,6 +525,17 @@ public:
             auto section = sectionList.Item(i);
             auto paths = section.Paths();
             for (const auto& path : section.Paths()) {
+                auto rowSpec = TYtTableBaseInfo::GetRowSpec(path.Table());
+                if (!rowSpec) {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "table without rowspec");
+                    return false;
+                }
+
+                if (rowSpec->GetNativeYtTypeFlags() & NTCF_JSON) {
+                    BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), "native json is not supported yet by arrow encoder at YT side");
+                    return false;
+                }
+
                 if (!IsYtTableSuitableForArrowInput(path.Table(), [&ctx, &node](const TString& msg) {
                     BlockReaderAddInfo(ctx, ctx.GetPosition(node.Pos()), msg);
                 })) {
@@ -576,6 +591,7 @@ public:
                 auto& groupIdPathInfo = clusterToGroups[cluster];
 
                 const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
+                const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
 
                 auto input = maybeRead.Cast().Input();
                 for (auto section: input) {
@@ -591,6 +607,9 @@ public:
                             return Nothing();
                         } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
                             AddErrorWrap(ctx, node_->Pos(), "dynamic table");
+                            return Nothing();
+                        } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
+                            AddErrorWrap(ctx, node_->Pos(), "dynamic store read");
                             return Nothing();
                         } else { //
                             if (tableInfo->Meta->Attrs.Value("erasure_codec", "none") != "none") {
@@ -615,7 +634,7 @@ public:
         }
         ui64 dataSize = 0;
         for (auto& [cluster, info]: clusterToNodesAndErasure) {
-            auto res = EstimateColumnStats(ctx, cluster, clusterToGroups[cluster], dataSize);
+            auto res = EstimateColumnStats(ctx, clusterToGroups[cluster], dataSize);
             auto codecCpu = State_->Configuration->ErasureCodecCpuForDq.Get(cluster);
             if (!codecCpu) {
                 continue;
@@ -825,7 +844,7 @@ public:
         YQL_CLOG(INFO, ProviderYt) << "DQ annotate: adding yt.write=" << param;
     }
 
-    bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams) override {
+    bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams, const TMaybe<TColumnOrder>& order) override {
         const auto resOrPull = TResOrPullBase(&root);
 
         if (FromString<bool>(resOrPull.Discard().Value())) {
@@ -853,8 +872,9 @@ public:
         }
 
         const auto type = GetSequenceItemType(input->Pos(), input->GetTypeAnn(), false, ctx);
+
         YQL_ENSURE(type);
-        TYtOutTableInfo outTableInfo(type->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+        TYtOutTableInfo outTableInfo(type->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE, order);
 
         const auto res = State_->Gateway->PrepareFullResultTable(
             IYtGateway::TFullResultTableOptions(State_->SessionId)
@@ -869,7 +889,7 @@ public:
             if (res.ExternalTransactionId) {
                 param("external_tx", *res.ExternalTransactionId);
             }
-        } else if (auto externalTx = State_->Configuration->ExternalTx.Get().GetOrElse(TGUID())) {
+        } else if (auto externalTx = State_->Configuration->ExternalTx.Get(cluster).GetOrElse(TGUID())) {
             param("external_tx", GetGuidAsString(externalTx));
         }
         TString tokenName;

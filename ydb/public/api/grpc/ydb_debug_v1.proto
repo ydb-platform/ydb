@@ -11,4 +11,5 @@ service DebugService {
     rpc PingKqpProxy(Debug.KqpProxyRequest) returns (Debug.KqpProxyResponse);
     rpc PingSchemeCache(Debug.SchemeCacheRequest) returns (Debug.SchemeCacheResponse);
     rpc PingTxProxy(Debug.TxProxyRequest) returns (Debug.TxProxyResponse);
+    rpc PingActorChain(Debug.ActorChainRequest) returns (Debug.ActorChainResponse);
 }

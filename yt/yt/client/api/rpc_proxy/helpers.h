@@ -2,8 +2,6 @@
 
 #include "public.h"
 
-#include <library/cpp/yt/memory/ref.h>
-
 #include <yt/yt/library/re2/re2.h>
 
 #include <yt/yt/core/rpc/public.h>
@@ -12,13 +10,11 @@
 
 #include <yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
 
+#include <library/cpp/yt/memory/ref.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-void SetTimeoutOptions(
-    NRpc::TClientRequest& request,
-    const NApi::TTimeoutOptions& options);
 
 [[noreturn]] void ThrowUnimplemented(const TString& method);
 
@@ -200,6 +196,10 @@ void ToProto(
     NProto::TMultiTablePartition* protoMultiTablePartition,
     const NApi::TMultiTablePartition& multiTablePartition);
 
+void ToProto(
+    TProtobufString* protoCookie,
+    const TTablePartitionCookiePtr& cookie);
+
 void FromProto(
     NApi::TMultiTablePartition* multiTablePartition,
     const NProto::TMultiTablePartition& protoMultiTablePartition);
@@ -207,6 +207,10 @@ void FromProto(
 void FromProto(
     NApi::TMultiTablePartitions* multiTablePartitions,
     const NProto::TRspPartitionTables& protoRspPartitionTables);
+
+void FromProto(
+    TTablePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie);
 
 void ToProto(
     NProto::TRowBatchReadOptions* proto,
@@ -300,11 +304,11 @@ void ParseRequest(
 
 void FillRequest(
     TReqFinishDistributedWriteSession* req,
-    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options);
 
 void ParseRequest(
-    TDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionWithResults* mutableSessionWithResults,
     TDistributedWriteSessionFinishOptions* mutableOptions,
     const TReqFinishDistributedWriteSession& req);
 
@@ -312,12 +316,12 @@ void ParseRequest(
 
 void FillRequest(
     TReqWriteTableFragment* req,
-    const TFragmentWriteCookiePtr& cookie,
-    const TFragmentTableWriterOptions& options);
+    const TSignedWriteFragmentCookiePtr& cookie,
+    const TTableFragmentWriterOptions& options);
 
 void ParseRequest(
-    TFragmentWriteCookiePtr* mutableCookie,
-    TFragmentTableWriterOptions* mutableOptions,
+    TSignedWriteFragmentCookiePtr* mutableCookie,
+    TTableFragmentWriterOptions* mutableOptions,
     const TReqWriteTableFragment& req);
 
 } // namespace NProto

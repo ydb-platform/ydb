@@ -93,6 +93,7 @@ YT_DEFINE_ERROR_ENUM(
     ((BundleIsBanned)                         (1739))
     ((TabletServantIsNotActive)               (1740))
     ((UniqueIndexConflict)                    (1741))
+    ((TabletReplicationEraMismatch)           (1742))
 );
 
 DEFINE_ENUM(EInMemoryMode,
@@ -240,14 +241,21 @@ DEFINE_ENUM(ESecondaryIndexKind,
 
 struct TIndexInfo;
 
+DEFINE_ENUM(ETableToIndexCorrespondence,
+    ((Invalid)                  (0))
+    ((Injective)                (1))
+    ((Bijective)                (2))
+    ((Unknown)                  (3))
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheConfig)
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TRemoteDynamicStoreReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TRetryingRemoteDynamicStoreReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TReplicatedTableOptions)
-DECLARE_REFCOUNTED_CLASS(TReplicationCollocationOptions)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TRemoteDynamicStoreReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TRetryingRemoteDynamicStoreReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TReplicatedTableOptions)
+DECLARE_REFCOUNTED_STRUCT(TReplicationCollocationOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TTableMountInfo)
 DECLARE_REFCOUNTED_STRUCT(TTabletInfo)

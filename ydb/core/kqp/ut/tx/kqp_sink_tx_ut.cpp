@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
             auto result = session.ExecuteQuery(Q_(R"(
                 UPSERT INTO `/Root/KV` (Key, Value) VALUES (10u, "New");
-            )"), TTxControl::Tx(tx.GetId())).ExtractValueSync();
+            )"), TTxControl::Tx(tx)).ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
 
             result = session.ExecuteQuery(Q_(R"(
@@ -143,11 +143,9 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
             result = session.ExecuteQuery(Q_(R"(
                 UPDATE `/Root/KV` SET Value = "third" WHERE Key = 4;
-            )"), TTxControl::Tx(tx->GetId())).ExtractValueSync();
+            )"), TTxControl::Tx(*tx)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
             auto commitResult = tx->Commit().ExtractValueSync();
-
             UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::ABORTED, commitResult.GetIssues().ToString());
         }
     };
@@ -177,14 +175,13 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
             auto result = session.ExecuteQuery(Q_(R"(
                 INSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");
-                SELECT COUNT(*) FROM `/Root/KV`;
-            )"), TTxControl::Tx(tx.GetId())).ExtractValueSync();
+            )"), TTxControl::Tx(tx)).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
 
             result = session.ExecuteQuery(Q_(R"(
                 UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");
-            )"), TTxControl::Tx(tx.GetId())).ExtractValueSync();
+            )"), TTxControl::Tx(tx)).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToString());
         }
@@ -215,12 +212,12 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
             auto result = session.ExecuteQuery(R"(
                 SELECT * FROM `/Root/KV`
-            )", TTxControl::Tx(tx.GetId())).ExtractValueSync();
+            )", TTxControl::Tx(tx)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             result = session.ExecuteQuery(R"(
                 UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, "New");
-            )", TTxControl::Tx(tx.GetId()).CommitTx()).ExtractValueSync();
+            )", TTxControl::Tx(tx).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             result = session.ExecuteQuery(R"(
@@ -320,7 +317,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             result = session.ExecuteQuery(readQuery,
-                TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
+                TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(readResult, FormatResultSetYson(result.GetResultSet(0)));
         }
@@ -358,7 +355,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             UNIT_ASSERT(tx.IsActive());
 
             auto result = session.ExecuteQuery(readQuery,
-                TTxControl::Tx(tx.GetId())).ExtractValueSync();
+                TTxControl::Tx(tx)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(readResult, FormatResultSetYson(result.GetResultSet(0)));
 
@@ -369,7 +366,7 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             result = session.ExecuteQuery(readQuery,
-                TTxControl::Tx(tx.GetId())).ExtractValueSync();
+                TTxControl::Tx(tx)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(readResult, FormatResultSetYson(result.GetResultSet(0)));
 

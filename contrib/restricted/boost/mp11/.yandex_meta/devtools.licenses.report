@@ -87,6 +87,7 @@ BELONGS ya.make
         include/boost/mp11/detail/mp_void.hpp [6:9]
         include/boost/mp11/detail/mp_with_index.hpp [6:9]
         include/boost/mp11/integral.hpp [6:9]
+        include/boost/mp11/lambda.hpp [6:9]
         include/boost/mp11/list.hpp [6:9]
         include/boost/mp11/map.hpp [6:9]
         include/boost/mp11/tuple.hpp [6:9]

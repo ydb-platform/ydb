@@ -1,40 +1,27 @@
 #include "agent_impl.h"
-#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvGetBlock>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvGetBlock>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TGetBlockQuery : public TBlobStorageQuery<TEvBlobStorage::TEvGetBlock> {
             ui32 BlockedGeneration = 0;
-            ui32 RetriesRemain = 10;
-
-        private:
-            void TryGetBlock() {
-                const auto status = Agent.BlocksManager.CheckBlockForTablet(Request.TabletId, std::nullopt, this, &BlockedGeneration);
-                if (status == NKikimrProto::OK) {
-                    EndWithSuccess(std::make_unique<TEvBlobStorage::TEvGetBlockResult>(NKikimrProto::OK, Request.TabletId, BlockedGeneration));
-                } else if (status != NKikimrProto::UNKNOWN) {
-                    EndWithError(status, "BlobDepot tablet is unreachable");
-                }
-            }
 
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                TryGetBlock();
+                if (CheckBlockForTablet(Request.TabletId, std::nullopt, &BlockedGeneration) == NKikimrProto::OK) {
+                    EndWithSuccess(std::make_unique<TEvBlobStorage::TEvGetBlockResult>(NKikimrProto::OK,
+                        Request.TabletId, BlockedGeneration));
+                }
             }
 
             void OnUpdateBlock() override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA52, "OnUpdateBlock", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()));
-
-                if (!--RetriesRemain) {
-                    EndWithError(NKikimrProto::ERROR, "too many retries to get blocked generation");
-                    return;
-                }
-                TryGetBlock();
+                Initiate();
             }
 
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr /*context*/, TResponse /*response*/) override {
@@ -55,7 +42,7 @@ namespace NKikimr::NBlobDepot {
                 return Request.TabletId;
             }
         };
-        return new TGetBlockQuery(*this, std::move(ev));
+        return new TGetBlockQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

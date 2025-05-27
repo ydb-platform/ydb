@@ -9,7 +9,7 @@ namespace NYdb {
 namespace NConsoleClient {
 
 
-TAdaptiveTabbedTable::TAdaptiveTabbedTable(const TVector<NScheme::TSchemeEntry>& entries)
+TAdaptiveTabbedTable::TAdaptiveTabbedTable(const std::vector<NScheme::TSchemeEntry>& entries)
     : Entries(entries)
 {
     CalculateColumns();

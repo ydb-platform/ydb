@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:1:13: Warning: Binary operation + will return NULL here
+    	select NULL + 1, NULL + NULL;
+	            ^
+    <tmp_path>/program.sql:<main>:1:23: Warning: Binary operation + will return NULL here
+    	select NULL + 1, NULL + NULL;
+	                      ^

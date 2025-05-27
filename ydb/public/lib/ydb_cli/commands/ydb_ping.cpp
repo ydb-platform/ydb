@@ -1,7 +1,7 @@
 #include "ydb_ping.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_debug/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/debug/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/time_provider/monotonic.h>
 
@@ -20,7 +20,32 @@ const TVector<TString> PingKindDescriptions = {
     "ping executes a very simple 'SELECT 1;' query",
     "ping goes through GRPC layer to SchemeCache and returns",
     "ping goes through GRPC layer to TxProxy and allocates TxId",
+    "ping goes through GRPC layer including GRPC proxy and creates dummy actors chain to process request",
 };
+
+bool CheckResult(const TStatus& status) {
+    if (status.IsSuccess()) {
+        return true;
+    }
+
+    for (const auto& issue: status.GetIssues()) {
+        Cerr << "Error: " << issue.ToString(true) << Endl;
+    }
+
+    return false;
+}
+
+void PrintPercentilesUsec(std::vector<int>& durations) {
+    std::sort(durations.begin(), durations.end());
+
+    const auto& percentiles = {0.5, 0.9, 0.95, 0.99};
+
+    for (double percentile: percentiles) {
+        size_t index = (size_t)(durations.size() * percentile);
+        std::cout << (int)(percentile * 100) << "%: "
+            << durations[index] << " us" << std::endl;
+    }
+}
 
 } // anonymous
 
@@ -79,40 +104,76 @@ int TCommandPing::RunCommand(TConfig& config) {
     durations.reserve(Count);
     size_t failedCount = 0;
 
+    std::vector<int> durationsTillGrpc;
+    std::vector<int> durationsAfterGrpc;
+    if (PingKind == EPingKind::PlainGrpc) {
+        durationsTillGrpc.reserve(Count);
+        durationsAfterGrpc.reserve(Count);
+
+    }
+
     const TString query = "SELECT 1;";
 
     for (int i = 0; i < Count && !IsInterrupted(); ++i) {
         bool isOk;
         auto start = NMonotonic::TMonotonic::Now();
+        ui64 deltaUs = 0;
 
-        switch (PingKind) {
-        case EPingKind::PlainGrpc:
-            isOk = PingPlainGrpc(pingClient);
-            break;
-        case EPingKind::PlainKqp:
-            isOk = PingPlainKqp(pingClient);
-            break;
-        case EPingKind::GrpcProxy:
-            isOk = PingGrpcProxy(pingClient);
-            break;
-        case EPingKind::Select1:
-            isOk = PingKqpSelect1(queryClient, query);
-            break;
-        case EPingKind::SchemeCache:
-            isOk = PingSchemeCache(pingClient);
-            break;
-        case EPingKind::TxProxy:
-            isOk = PingTxProxy(pingClient);
-            break;
-        default:
-            std::cerr << "Unknown ping kind" << std::endl;
-            return EXIT_FAILURE;
+        if (PingKind == EPingKind::PlainGrpc) {
+            auto startWall = TInstant::Now();
+            auto result = pingClient.PingPlainGrpc(NDebug::TPlainGrpcPingSettings()).GetValueSync();
+            auto end = NMonotonic::TMonotonic::Now();
+            auto endWall = TInstant::Now();
+            deltaUs = (end - start).MicroSeconds();
+
+            isOk = CheckResult(result);
+
+            std::cout << i << (isOk ? " ok" : " failed") << " " << " in " << deltaUs << " us";
+
+            if (result.CallBackTs) {
+                auto callbackWall = TInstant::MicroSeconds(result.CallBackTs);
+                if (callbackWall >= startWall && endWall >= callbackWall) {
+                    auto tillCallbackUs = (callbackWall - startWall).MicroSeconds();
+                    auto tillClient = (endWall - callbackWall).MicroSeconds();
+                    durationsTillGrpc.push_back(tillCallbackUs);
+                    durationsAfterGrpc.push_back(tillClient);
+
+                    std::cout << ", till GRPC callback " << tillCallbackUs
+                        << " us, till this client " << tillClient << " us";
+                }
+            }
+
+            std::cout << std::endl;
+        } else {
+            switch (PingKind) {
+            case EPingKind::PlainKqp:
+                isOk = PingPlainKqp(pingClient);
+                break;
+            case EPingKind::GrpcProxy:
+                isOk = PingGrpcProxy(pingClient);
+                break;
+            case EPingKind::Select1:
+                isOk = PingKqpSelect1(queryClient, query);
+                break;
+            case EPingKind::SchemeCache:
+                isOk = PingSchemeCache(pingClient);
+                break;
+            case EPingKind::TxProxy:
+                isOk = PingTxProxy(pingClient);
+                break;
+            case EPingKind::ActorChain:
+                isOk = PingActorChain(pingClient, NDebug::TActorChainPingSettings());
+                break;
+            default:
+                std::cerr << "Unknown ping kind" << std::endl;
+                return EXIT_FAILURE;
+            }
+
+            auto end = NMonotonic::TMonotonic::Now();
+            deltaUs = (end - start).MicroSeconds();
+
+            std::cout << i << (isOk ? " ok" : " failed") << " in " << deltaUs << " us" << std::endl;
         }
-
-        auto end = NMonotonic::TMonotonic::Now();
-        auto deltaUs = (end - start).MicroSeconds();
-
-        std::cout << i << (isOk ? " ok" : " failed") << " in " << deltaUs << " us" << std::endl;
 
         if (!isOk) {
             ++failedCount;
@@ -123,16 +184,20 @@ int TCommandPing::RunCommand(TConfig& config) {
         Sleep(TDuration::MilliSeconds(IntervalMs));
     }
 
-    std::sort(durations.begin(), durations.end());
-
     std::cout << std::endl;
     std::cout << "Total: " << durations.size() << ", failed: " << failedCount << std::endl;
-    const auto& percentiles = {0.5, 0.9, 0.95, 0.99};
+    PrintPercentilesUsec(durations);
 
-    for (double percentile: percentiles) {
-        size_t index = (size_t)(durations.size() * percentile);
-        std::cout << (int)(percentile * 100) << "%: "
-            << durations[index] << " us" << std::endl;
+    if (!durationsTillGrpc.empty()) {
+        std::cout << std::endl;
+        std::cout << "Till server side GRPC callback:" << std::endl;
+        PrintPercentilesUsec(durationsTillGrpc);
+    }
+
+    if (!durationsAfterGrpc.empty()) {
+        std::cout << std::endl;
+        std::cout << "From GRPC callback to this client:" << std::endl;
+        PrintPercentilesUsec(durationsAfterGrpc);
     }
 
     return 0;
@@ -140,53 +205,44 @@ int TCommandPing::RunCommand(TConfig& config) {
 
 bool TCommandPing::PingPlainGrpc(NDebug::TDebugClient& client) {
     auto asyncResult = client.PingPlainGrpc(NDebug::TPlainGrpcPingSettings());
-    asyncResult.GetValueSync();
+    auto result = asyncResult.GetValueSync();
 
-    return true;
+    return CheckResult(result);
 }
 
 bool TCommandPing::PingPlainKqp(NDebug::TDebugClient& client) {
     auto asyncResult = client.PingKqpProxy(NDebug::TKqpProxyPingSettings());
     auto result = asyncResult.GetValueSync();
 
-    if (result.IsSuccess()) {
-        return true;
-    }
-
-    return false;
+    return CheckResult(result);
 }
 
 bool TCommandPing::PingGrpcProxy(NDebug::TDebugClient& client) {
     auto asyncResult = client.PingGrpcProxy(NDebug::TGrpcProxyPingSettings());
     auto result = asyncResult.GetValueSync();
 
-    if (result.IsSuccess()) {
-        return true;
-    }
-
-    return false;
+    return CheckResult(result);
 }
 
 bool TCommandPing::PingSchemeCache(NDebug::TDebugClient& client) {
     auto asyncResult = client.PingSchemeCache(NDebug::TSchemeCachePingSettings());
     auto result = asyncResult.GetValueSync();
 
-    if (result.IsSuccess()) {
-        return true;
-    }
-
-    return false;
+    return CheckResult(result);
 }
 
 bool TCommandPing::PingTxProxy(NDebug::TDebugClient& client) {
     auto asyncResult = client.PingTxProxy(NDebug::TTxProxyPingSettings());
     auto result = asyncResult.GetValueSync();
 
-    if (result.IsSuccess()) {
-        return true;
-    }
+    return CheckResult(result);
+}
 
-    return false;
+bool TCommandPing::PingActorChain(NDebug::TDebugClient& client, const NDebug::TActorChainPingSettings& settings) {
+    auto asyncResult = client.PingActorChain(settings);
+    auto result = asyncResult.GetValueSync();
+
+    return CheckResult(result);
 }
 
 bool TCommandPing::PingKqpSelect1(NQuery::TQueryClient& client, const TString& query) {
@@ -222,6 +278,26 @@ bool TCommandPing::PingKqpSelect1(NQuery::TQueryClient& client, const TString& q
     }
 
     return false;
+}
+
+bool TCommandPing::PingKqpSelect1(NQuery::TSession& session, const TString& query) {
+    NQuery::TExecuteQuerySettings settings;
+
+    // Execute query
+    settings.ExecMode(NQuery::EExecMode::Execute);
+    settings.StatsMode(NQuery::EStatsMode::None);
+
+    settings.Syntax(NQuery::ESyntax::YqlV1);
+
+    // Execute query without parameters
+    auto asyncResult = session.ExecuteQuery(
+        query,
+        NQuery::TTxControl::NoTx(),
+        settings
+    );
+
+    auto result = asyncResult.GetValueSync();
+    return result.IsSuccess();
 }
 
 } // NYdb::NConsoleClient

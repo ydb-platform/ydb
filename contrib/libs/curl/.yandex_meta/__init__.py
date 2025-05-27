@@ -83,9 +83,6 @@ def post_install(self):
 
         # add ifaddrs implementation if needed
         m.PEERDIR.add("contrib/libs/libc_compat")
-        m.PEERDIR.add("contrib/libs/openssl")
-        m.PEERDIR.add("contrib/libs/ngtcp2")
-        m.PEERDIR.add("contrib/libs/nghttp3")
 
         # make c-ares dependency conditional,
         # but leave ADDINCL in place to make CONFIGURE work
@@ -156,7 +153,6 @@ curl = GNUMakeNixProject(
         "cipher.mih",
         "config-*",
         "curl_gssapi.h",
-        "curl_path.h",
         "curlmsg_vms.h",
         "exec/execbase.h",
         "exec/types.h",
@@ -172,8 +168,6 @@ curl = GNUMakeNixProject(
         "libpsl.h",
         "librtmp/rtmp.h",
         "libssh/",
-        "libssh2.h",
-        "libssh2_sftp.h",
         "lwip/",
         "mbedtls/",
         "mbedtls_threadlock.h",

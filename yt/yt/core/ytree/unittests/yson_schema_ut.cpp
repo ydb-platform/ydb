@@ -8,7 +8,6 @@
 
 #include <yt/yt/core/ytree/unittests/proto/test.pb.h>
 
-
 namespace NYT::NYTree {
 namespace {
 
@@ -85,7 +84,7 @@ struct TTestYsonStruct
         registrar.Parameter("int_map", &TThis::IntMap)
             .Default();
         registrar.Parameter("my_string_list", &TThis::MyStringList)
-                .Default();
+            .Default();
         registrar.Parameter("nullable_int", &TThis::NullableInt)
             .Default();
         registrar.Parameter("my_uint", &TThis::MyUint)
@@ -125,6 +124,33 @@ struct TTestStructWithProtobuf
     }
 };
 
+struct TTestStructWithProtobufAsYson
+    : public TYsonStruct
+{
+    std::optional<TProtoSerializedAsYson<NProto::TTestMessage>> MyMessage;
+
+    REGISTER_YSON_STRUCT(TTestStructWithProtobufAsYson);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("my_message", &TThis::MyMessage)
+            .Optional();
+    }
+};
+
+struct TTestStructWithProtobufAsString
+    : public TYsonStruct
+{
+    std::optional<TProtoSerializedAsString<NProto::TTestMessage>> MyMessage;
+
+    REGISTER_YSON_STRUCT(TTestStructWithProtobufAsString);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("my_message", &TThis::MyMessage)
+            .Optional();
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -168,6 +194,34 @@ struct TTestStructWithUndefinedType
     {
         registrar.Parameter("undefined_type_field", &TThis::UndefinedTypeField)
             .Optional();
+    }
+};
+
+struct TTestStructWithTuples
+    : public TYsonStruct
+{
+    std::tuple<TString, ui64, double> Tuple;
+    std::pair<TString, TString> Pair;
+
+    REGISTER_YSON_STRUCT(TTestStructWithTuples)
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("tuple", &TThis::Tuple);
+        registrar.Parameter("pair", &TThis::Pair);
+    }
+};
+
+struct TTestStructWithArray
+    : public TYsonStruct
+{
+    std::array<TString, 3> StringArray;
+
+    REGISTER_YSON_STRUCT(TTestStructWithArray)
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("string_array", &TThis::StringArray);
     }
 };
 
@@ -217,7 +271,7 @@ TEST(TYsonStructSchemaTest, TestYsonStruct)
             ];})");
 }
 
-TEST(TYsonStructSchemaTest, TestSchemaForProtobufMessage)
+TEST(TYsonStructSchemaTest, TestSchemaForProtobuf)
 {
     CheckSchema(
         New<TTestStructWithProtobuf>(),
@@ -235,6 +289,46 @@ TEST(TYsonStructSchemaTest, TestSchemaForProtobufMessage)
                                 {name="string_field";"type"="utf8";};
                             ];
                         };
+                    };
+                };
+            ];})");
+}
+
+TEST(TYsonStructSchemaTest, TestSchemaForProtobufAsYson)
+{
+    CheckSchema(
+        New<TTestStructWithProtobufAsYson>(),
+        R"({
+            type_name="struct";
+            members=[
+                {
+                    name="my_message";
+                    type={
+                        type_name="optional";
+                        item={
+                            type_name="struct";
+                            members=[
+                                {name="int32_field";type="int32";};
+                                {name="string_field";"type"="utf8";};
+                            ];
+                        };
+                    };
+                };
+            ];})");
+}
+
+TEST(TYsonStructSchemaTest, TestSchemaForProtobufAsString)
+{
+    CheckSchema(
+        New<TTestStructWithProtobufAsString>(),
+        R"({
+            type_name="struct";
+            members=[
+                {
+                    name="my_message";
+                    type={
+                        "type_name"="optional";
+                        "item"="string";
                     };
                 };
             ];})");
@@ -270,6 +364,48 @@ TEST(TYsonStructSchemaTest, TestYsonStructWithUndefinedType)
                 {
                     name="undefined_type_field";
                     type={type_name="optional";item={type_name="struct";members=[{name="my_uint";type="uint32";}]}};
+                };
+            ]})");
+}
+
+TEST(TYsonStructSchemaTest, TestYsonStructWithTuples)
+{
+    CheckSchema(
+        New<TTestStructWithTuples>(),
+        R"({type_name="struct";
+            members=[
+                {
+                    name="pair";
+                    required=%true;
+                    type={
+                        type_name="tuple";
+                        elements=[{"type"="string"};{"type"="string"};];
+                    };
+                };
+                {
+                    name="tuple";
+                    required=%true;
+                    type={
+                        type_name="tuple";
+                        elements=[{"type"="string"};{"type"="uint64"};{"type"="double"};];
+                    };
+                };
+            ]})");
+}
+
+TEST(TYsonStructSchemaTest, TestYsonStructWithArray)
+{
+    CheckSchema(
+        New<TTestStructWithArray>(),
+        R"({type_name="struct";
+            members=[
+                {
+                    name="string_array";
+                    required=%true;
+                    type={
+                        type_name="tuple";
+                        elements=[{"type"="string"};{"type"="string"};{"type"="string"};];
+                    };
                 };
             ]})");
 }

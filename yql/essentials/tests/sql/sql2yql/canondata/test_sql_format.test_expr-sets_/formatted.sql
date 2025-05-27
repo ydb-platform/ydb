@@ -38,8 +38,8 @@ SELECT
 SELECT
     $nd(
         SetIntersection(
-            AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
-            AsDict(AsTuple(1, "baz"), AsTuple(2, "qwe")),
+            AsDict(AsTuple(1, 'foo'), AsTuple(3, 'bar')),
+            AsDict(AsTuple(1, 'baz'), AsTuple(2, 'qwe')),
             ($_k, $a, $b) -> {
                 RETURN AsTuple($a, $b);
             }
@@ -78,8 +78,8 @@ SELECT
 SELECT
     $nd(
         SetUnion(
-            AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
-            AsDict(AsTuple(1, "baz"), AsTuple(2, "qwe")),
+            AsDict(AsTuple(1, 'foo'), AsTuple(3, 'bar')),
+            AsDict(AsTuple(1, 'baz'), AsTuple(2, 'qwe')),
             ($_k, $a, $b) -> {
                 RETURN AsTuple($a, $b);
             }
@@ -94,8 +94,8 @@ SELECT
 SELECT
     $nd(
         SetSymmetricDifference(
-            AsDict(AsTuple(1, "foo"), AsTuple(3, "bar")),
-            AsDict(AsTuple(1, "baz"), AsTuple(2, "qwe")),
+            AsDict(AsTuple(1, 'foo'), AsTuple(3, 'bar')),
+            AsDict(AsTuple(1, 'baz'), AsTuple(2, 'qwe')),
             ($_k, $a, $b) -> {
                 RETURN AsTuple($a, $b);
             }

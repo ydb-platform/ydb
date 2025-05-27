@@ -1,0 +1,20 @@
+--- a/include/boost/detail/utf8_codecvt_facet.hpp	(index)
++++ b/include/boost/detail/utf8_codecvt_facet.hpp	(working tree)
+@@ -185,7 +185,7 @@ protected:
+         std::size_t max_limit
+     ) const
+ #if BOOST_WORKAROUND(__IBMCPP__, BOOST_TESTED_AT(600))
+-    throw()
++    noexcept
+ #endif
+     ;
+ 
+@@ -197,7 +197,7 @@ protected:
+         std::size_t max_limit
+     ) const
+ #if BOOST_WORKAROUND(__IBMCPP__, BOOST_TESTED_AT(600))
+-    throw()
++    noexcept
+ #endif
+     {
+         return do_length(

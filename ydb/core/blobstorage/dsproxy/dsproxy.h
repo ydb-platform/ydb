@@ -39,7 +39,7 @@ const ui64 UnconfiguredBufferSizeLimit = 32 << 20;
 
 const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(100);
 
-const TDuration DsMinimumDelayBetweenPutWakeups = TDuration::MilliSeconds(1);
+const ui64 DsPutWakeupMs = 60000;
 
 const ui64 BufferSizeThreshold = 1 << 20;
 
@@ -91,24 +91,6 @@ struct TEvLatencyReport : public TEventLocal<TEvLatencyReport, TEvBlobStorage::E
     {}
 };
 
-struct TNodeLayoutInfo : TThrRefBase {
-    // indexed by NodeId
-    TNodeLocation SelfLocation;
-    TVector<TNodeLocation> LocationPerOrderNumber;
-
-    TNodeLayoutInfo(const TNodeLocation& selfLocation, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
-            std::unordered_map<ui32, TNodeLocation>& map)
-        : SelfLocation(selfLocation)
-        , LocationPerOrderNumber(info->GetTotalVDisksNum())
-    {
-        for (ui32 i = 0; i < LocationPerOrderNumber.size(); ++i) {
-            LocationPerOrderNumber[i] = map[info->GetActorId(i).NodeId()];
-        }
-    }
-};
-
-using TNodeLayoutInfoPtr = TIntrusivePtr<TNodeLayoutInfo>;
-
 inline TStoragePoolCounters::EHandleClass HandleClassToHandleClass(NKikimrBlobStorage::EGetHandleClass handleClass) {
     switch (handleClass) {
         case NKikimrBlobStorage::FastRead:
@@ -150,6 +132,7 @@ NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus sta
     XX(TEvBlobStorage::TEvStatus) \
     XX(TEvBlobStorage::TEvPatch) \
     XX(TEvBlobStorage::TEvAssimilate) \
+    XX(TEvBlobStorage::TEvCheckIntegrity) \
 //
 
 #define DSPROXY_ENUM_DISK_EVENTS(XX) \
@@ -445,6 +428,16 @@ struct TBlobStorageGroupRestoreGetParameters {
 };
 IActor* CreateBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters params);
 
+struct TBlobStorageGroupCheckIntegrityParameters {
+    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvCheckIntegrity> Common;
+    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+        .LogComponent = NKikimrServices::BS_PROXY_CHECKINTEGRITY,
+        .Name = "DSProxy.CheckIntegrity",
+        .Activity = NKikimrServices::TActivity::BS_PROXY_CHECKINTEGRITY_ACTOR,
+    };
+};
+IActor* CreateBlobStorageGroupCheckIntegrityRequest(TBlobStorageGroupCheckIntegrityParameters params);
+
 struct TBlobStorageGroupDiscoverParameters {
     TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvDiscover> Common;
     TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
@@ -545,7 +538,7 @@ struct TBlobStorageProxyParameters {
     TBlobStorageProxyControlWrappers Controls;
 };
 
-IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
+IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info, TNodeLayoutInfoPtr nodeLayoutInfo,
     bool forceWaitAllDrives, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
     TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters, const TBlobStorageProxyParameters& params);
 

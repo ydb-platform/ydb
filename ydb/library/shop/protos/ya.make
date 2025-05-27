@@ -1,0 +1,9 @@
+PROTO_LIBRARY()
+
+SRCS(
+    shop.proto
+)
+
+EXCLUDE_TAGS(GO_PROTO)
+
+END()

@@ -35,7 +35,7 @@ public:
     void Finalize();
 
 private:
-    THolder<TNodeBuilder> Builder_;
+    std::unique_ptr<TNodeBuilder> Builder_;
     TRowElement Row_;
     int Depth_ = 0;
     bool Started_ = false;
@@ -143,7 +143,7 @@ void TRowBuilder::SaveResultRow()
         *ResultRow_ = std::move(Row_);
     }
     Row_.Reset();
-    Builder_.Reset(new TNodeBuilder(&Row_.Node));
+    Builder_ = std::make_unique<TNodeBuilder>(&Row_.Node);
 }
 
 void TRowBuilder::Finalize()
@@ -346,8 +346,8 @@ bool TNodeTableReader::IsRawReaderExhausted() const
 void TNodeTableReader::PrepareParsing()
 {
     NextRow_.Clear();
-    Builder_.Reset(new TRowBuilder(&NextRow_));
-    Parser_.Reset(new ::NYson::TYsonListParser(Builder_.Get(), &Input_));
+    Builder_ = std::make_unique<TRowBuilder>(&NextRow_);
+    Parser_ = std::make_unique<::NYson::TYsonListParser>(Builder_.get(), &Input_);
 }
 
 void TNodeTableReader::OnStreamError(std::exception_ptr exception, TString error)

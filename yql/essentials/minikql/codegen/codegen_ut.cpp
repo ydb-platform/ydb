@@ -8,6 +8,12 @@
 using namespace NYql::NCodegen;
 using namespace llvm;
 
+#ifdef _win_
+constexpr bool SupportsBitCode = false;
+#else
+constexpr bool SupportsBitCode = true;
+#endif
+
 extern "C" int mul(int x, int y) {
     return x * y;
 }
@@ -194,8 +200,6 @@ Function *CreateUseExternalFromGeneratedFunction128(const ICodegen::TPtr& codege
     llvm::Argument* retArg = nullptr;
     if (codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
         retArg = &*args++;
-        retArg->addAttr(Attribute::StructRet);
-        retArg->addAttr(Attribute::NoAlias);
     }
 
     auto ArgX = args++;   // Get the arg 1.
@@ -270,6 +274,10 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     }
 
     Y_UNIT_TEST(FibFromBitCode) {
+        if (!SupportsBitCode) {
+            return;
+        }
+
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -283,6 +291,10 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     }
 
     Y_UNIT_TEST(LinkWithNativeFunction) {
+        if (!SupportsBitCode) {
+            return;
+        }
+
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -297,6 +309,10 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     }
 
     Y_UNIT_TEST(LinkWithGeneratedFunction) {
+        if (!SupportsBitCode) {
+            return;
+        }
+
         auto codegen = ICodegen::Make(ETarget::Native);
         auto mulFunc = CreateMulFunction(codegen->GetModule(), codegen->GetContext());
         Y_UNUSED(mulFunc);
@@ -312,6 +328,10 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     }
 
     Y_UNIT_TEST(ReuseExternalCode) {
+        if (!SupportsBitCode) {
+            return;
+        }
+
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -325,6 +345,10 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     }
 
     Y_UNIT_TEST(UseObjectReference) {
+        if (!SupportsBitCode) {
+            return;
+        }
+
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -351,6 +375,10 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     }
 
     Y_UNIT_TEST(UseExternalFromGeneratedFunction) {
+        if (!SupportsBitCode) {
+            return;
+        }
+
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -365,6 +393,10 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     }
 
     Y_UNIT_TEST(UseExternalFromGeneratedFunction_128bit_Compiled) {
+        if (!SupportsBitCode) {
+            return;
+        }
+
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");
@@ -391,6 +423,10 @@ Y_UNIT_TEST_SUITE(TCodegenTests) {
     }
 
     Y_UNIT_TEST(UseExternalFromGeneratedFunction_128bit_Bitcode) {
+        if (!SupportsBitCode) {
+            return;
+        }
+
         auto codegen = ICodegen::Make(ETarget::Native);
         auto bitcode = NResource::Find("/llvm_bc/Funcs");
         codegen->LoadBitCode(bitcode, "Funcs");

@@ -40,7 +40,7 @@ void DeserializeVector(T& value, TYsonPullParserCursor* cursor)
 {
     int index = 0;
     auto itemVisitor = [&] (TYsonPullParserCursor* cursor) {
-        if (index < static_cast<int>(value.size())) {
+        if (index < std::ssize(value)) {
             Deserialize(value[index], cursor);
         } else {
             value.emplace_back();
@@ -248,8 +248,16 @@ void Deserialize(T& value, TYsonPullParserCursor* cursor)
     static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
 
     MaybeSkipAttributes(cursor);
-    EnsureYsonToken("enum", *cursor, EYsonItemType::Int64Value);
-    value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>((*cursor)->UncheckedAsInt64()));
+    switch ((*cursor)->GetType()) {
+        case EYsonItemType::Int64Value:
+            value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>((*cursor)->UncheckedAsInt64()));
+            break;
+        case EYsonItemType::Uint64Value:
+            value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>((*cursor)->UncheckedAsUint64()));
+            break;
+        default:
+            ThrowUnexpectedYsonTokenException("enum", *cursor, {EYsonItemType::Int64Value, EYsonItemType::Uint64Value});
+    }
     cursor->Next();
 }
 

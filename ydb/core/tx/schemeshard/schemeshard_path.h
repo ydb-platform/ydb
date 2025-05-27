@@ -78,6 +78,8 @@ public:
         const TChecker& IsCdcStream(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsLikeDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
+        const TChecker& IsSysViewDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
+        const TChecker& IsRtmrVolume(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsTheSameDomain(const TPath& another, EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const;
         const TChecker& FailOnWrongType(TPathElement::EPathType expectedType) const;
@@ -104,6 +106,8 @@ public:
         const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusPreconditionFailed) const;
         const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsBackupCollection(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsSupportedInExports(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsSysView(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:
@@ -181,6 +185,7 @@ public:
     bool IsValidLeafName(TString& explain) const;
     TString GetEffectiveACL() const;
     ui64 GetEffectiveACLVersion() const;
+    bool IsLocked() const;
     TTxId LockedBy() const;
 
     bool IsActive() const;

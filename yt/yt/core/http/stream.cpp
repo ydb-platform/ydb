@@ -18,13 +18,13 @@ using namespace NNet;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
 
-using TFilteredHeaderMap = THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
+using TFilteredHeaderMap = THashSet<std::string, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
 YT_DEFINE_GLOBAL(const TFilteredHeaderMap, FilteredHeaders, {
     "transfer-encoding",
     "content-length",
@@ -258,7 +258,7 @@ THttpInput::THttpInput(
     , MessageType_(messageType)
     , Config_(std::move(config))
     , ReadInvoker_(std::move(readInvoker))
-    , InputBuffer_(TSharedMutableRef::Allocate<THttpParserTag>(Config_->ReadBufferSize))
+    , InputBuffer_(TSharedMutableRef::Allocate<THttpParserTag>(Config_->ReadBufferSize, {.InitializeStorage = false}))
     , Parser_(messageType == EMessageType::Request ? HTTP_REQUEST : HTTP_RESPONSE)
     , StartByteCount_(Connection_->GetReadByteCount())
     , StartStatistics_(Connection_->GetReadStatistics())
@@ -562,9 +562,9 @@ std::optional<TString> THttpInput::TryGetRedirectUrl()
 {
     EnsureHeadersReceived();
     if (IsRedirectCode(GetStatusCode())) {
-        auto url = Headers_->Find("Location");
-        if (url) {
-            return *url;
+        if (auto url = Headers_->Find("Location")) {
+            // TODO(babenko): switch to std::string
+            return TString(*url);
         }
     }
     return std::nullopt;

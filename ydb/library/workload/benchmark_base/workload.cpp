@@ -35,10 +35,27 @@ const TString TWorkloadGeneratorBase::CsvFormatString = [] () {
     return settings.SerializeAsString();
 } ();
 
-void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, bool single) const {
+namespace {
+
+    TString KeysList(const NJson::TJsonValue& table, const TString& key) {
+        TVector<TStringBuf> keysV;
+        for (const auto& k: table[key].GetArray()) {
+            keysV.emplace_back(k.GetString());
+        }
+        return JoinSeq(", ", keysV);
+    }
+
+}
+
+ui32 TWorkloadGeneratorBase::GetDefaultPartitionsCount(const TString& /*tableName*/) const {
+    return 64;
+}
+
+void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, const NJson::TJsonValue& common, bool single) const {
     auto specialTypes = GetSpecialDataTypes();
     specialTypes["string_type"] = Params.GetStringType();
     specialTypes["date_type"] = Params.GetDateType();
+    specialTypes["datetime_type"] = Params.GetDatetimeType();
     specialTypes["timestamp_type"] = Params.GetTimestampType();
 
     const auto& tableName = table["name"].GetString();
@@ -65,11 +82,7 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
         }
     }
     result << JoinSeq(",\n", columns);
-    TVector<TStringBuf> keysV;
-    for (const auto& k: table["primary_key"].GetArray()) {
-        keysV.emplace_back(k.GetString());
-    }
-    const TString keys = JoinSeq(", ", keysV);
+    const auto keys = KeysList(table, "primary_key");
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
         result << Endl;
     } else {
@@ -78,27 +91,38 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
     result << ")" << Endl;
 
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::Column) {
-        result << "PARTITION BY HASH (" << keys << ")" << Endl;
+        result << "PARTITION BY HASH (" <<  (table.Has("partition_by") ? KeysList(table, "partition_by") : keys) << ")" << Endl;
     }
 
+    const ui64 partitioning = table["partitioning"].GetUIntegerSafe(
+        common["partitioning"].GetUIntegerSafe(GetDefaultPartitionsCount(tableName)));
+
     result << "WITH (" << Endl;
-    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
+    switch (Params.GetStoreType()) {
+    case TWorkloadBaseParams::EStoreType::ExternalS3:
         result << "    DATA_SOURCE = \""+ Params.GetFullTableName(nullptr) + "_s3_external_source\", FORMAT = \"parquet\", LOCATION = \"" << Params.GetS3Prefix()
             << "/" << (single ? TFsPath(Params.GetPath()).GetName() : (tableName + "/")) << "\"" << Endl;
-    } else {
-        if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::Column) {
-            result << "    STORE = COLUMN," << Endl;
-        }
-        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << Endl;
+        break;
+    case TWorkloadBaseParams::EStoreType::Column:
+        result << "    STORE = COLUMN," << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partitioning << Endl;
+        break;
+    case TWorkloadBaseParams::EStoreType::Row:
+        result << "    STORE = ROW," << Endl;
+        result << "    AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.GetPartitionSizeMb() << ", " << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partitioning << Endl;
     }
     result << ");" << Endl;
+    if (TString actions = table["actions"].GetStringSafe(common["actions"].GetStringSafe(""))) {
+        SubstGlobal(actions, "{table}", path);
+        result << actions << Endl;
+    }
 }
 
 std::string TWorkloadGeneratorBase::GetDDLQueries() const {
     const auto json = GetTablesJson();
 
     TStringBuilder result;
-    result << "--!syntax_v1" << Endl;
     if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
         result << "CREATE EXTERNAL DATA SOURCE `" << Params.GetFullTableName(nullptr) << "_s3_external_source` WITH (" << Endl
             << "    SOURCE_TYPE=\"ObjectStorage\"," << Endl
@@ -108,16 +132,22 @@ std::string TWorkloadGeneratorBase::GetDDLQueries() const {
     }
 
     for (const auto& table: json["tables"].GetArray()) {
-        GenerateDDLForTable(result.Out, table, false);
+        GenerateDDLForTable(result.Out, table, json["every_table"], false);
     }
     if (json.Has("table")) {
-        GenerateDDLForTable(result.Out, json["table"], true);
+        GenerateDDLForTable(result.Out, json["table"], json["every_table"], true);
+    }
+    if (result) {
+        return "--!syntax_v1\n" + result;
     }
     return result;
 }
 
 NJson::TJsonValue TWorkloadGeneratorBase::GetTablesJson() const {
     const auto tablesYaml = GetTablesYaml();
+    if (!tablesYaml) {
+        return NJson::JSON_NULL;
+    }
     const auto yaml = YAML::Load(tablesYaml.c_str());
     return NKikimr::NYaml::Yaml2Json(yaml, true);
 }
@@ -169,7 +199,9 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
             .StoreResult(&S3Endpoint);
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
         opts.AddLongOption("datetime", "Use Date and Timestamp types in tables instead Date32 and Timestamp64 ones.").NoArgument()
-            .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp");
+            .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp").StoreValue(&DatetimeType, "Datetime");
+        opts.AddLongOption("partition-size", "Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables.")
+            .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
         break;
     case TWorkloadParams::ECommandType::Root:
         opts.AddLongOption('p', "path", "Path where benchmark tables are located")
@@ -185,7 +217,7 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
 }
 
 TString TWorkloadBaseParams::GetFullTableName(const char* table) const {
-    return TFsPath(DbPath) / Path / table;
+    return DbPath + "/" + Path + (TStringBuf(table) ? "/" + TString(table) : TString());
 }
 
 TWorkloadGeneratorBase::TWorkloadGeneratorBase(const TWorkloadBaseParams& params)

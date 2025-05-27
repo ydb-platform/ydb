@@ -11,14 +11,14 @@
 
 namespace NKafka {
 
-class TKafkaAlterConfigsRequest: public TKafkaTopicModificationRequest {
+class TKafkaAlterConfigsRequest: public TKafkaTopicRequestCtx {
 public:
     TKafkaAlterConfigsRequest(
             TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             TString topicPath,
             TString databaseName,
-            const std::function<void(const EKafkaErrors, const TString&)> sendResultCallback)
-        : TKafkaTopicModificationRequest(userToken, topicPath, databaseName, sendResultCallback)
+            const std::function<void(const EKafkaErrors, const std::string&, const google::protobuf::Message&)> sendResultCallback)
+        : TKafkaTopicRequestCtx(userToken, topicPath, databaseName, sendResultCallback)
     {
     };
 
@@ -26,7 +26,7 @@ protected:
     EKafkaErrors Convert(Ydb::StatusIds::StatusCode& status) override {
         return status == Ydb::StatusIds::BAD_REQUEST
                 ? INVALID_CONFIG
-                : TKafkaTopicModificationRequest::Convert(status);
+                : TKafkaTopicRequestCtx::Convert(status);
     }
 };
 

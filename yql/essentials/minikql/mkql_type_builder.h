@@ -2,8 +2,11 @@
 
 #include "mkql_node.h"
 
+#include <yql/essentials/core/sql_types/block.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 #include <yql/essentials/public/udf/arrow/block_type_helper.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
 
 #include <util/generic/size_literals.h>
@@ -33,32 +36,10 @@ inline size_t CalcBlockLen(size_t maxBlockItemSize) {
 using TArrowConvertFailedCallback = std::function<void(TType*)>;
 bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& = {});
 bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
+bool ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& = {});
+bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
 
-template<NUdf::EDataSlot slot>
-std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
-    static_assert(slot == NUdf::EDataSlot::TzDate || slot == NUdf::EDataSlot::TzDatetime || slot == NUdf::EDataSlot::TzTimestamp
-        || slot == NUdf::EDataSlot::TzDate32 || slot == NUdf::EDataSlot::TzDatetime64 || slot == NUdf::EDataSlot::TzTimestamp64,
-        "Expected tz date type slot");
-
-    if constexpr (slot == NUdf::EDataSlot::TzDate) {
-        return arrow::uint16();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzDatetime) {
-        return arrow::uint32();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzTimestamp) {
-        return arrow::uint64();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzDate32) {
-        return arrow::int32();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzDatetime64) {
-        return arrow::int64();
-    }
-    if constexpr (slot == NUdf::EDataSlot::TzTimestamp64) {
-        return arrow::int64();
-    }
-}
+using NYql::NUdf::MakeTzLayoutArrowType;
 
 template<NUdf::EDataSlot slot>
 std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {
@@ -100,6 +81,8 @@ struct TFunctionTypeInfo
     bool Deterministic = true;
     bool SupportsBlocks = false;
     bool IsStrict = false;
+    NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
+    NYql::TLangVersion MaxLangVer = NYql::UnknownLangVersion;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -118,12 +101,14 @@ class TFunctionTypeInfoBuilder: public NUdf::IFunctionTypeInfoBuilder
 {
 public:
     TFunctionTypeInfoBuilder(
-            const TTypeEnvironment& env,
-            NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-            const TStringBuf& moduleName,
-            NUdf::ICountersProvider* countersProvider,
-            const NUdf::TSourcePosition& pos,
-            const NUdf::ISecureParamsProvider* provider = nullptr);
+        NYql::TLangVersion langver,
+        const TTypeEnvironment& env,
+        NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
+        const TStringBuf& moduleName,
+        NUdf::ICountersProvider* countersProvider,
+        const NUdf::TSourcePosition& pos,
+        const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
+        const NUdf::ILogProvider* logProvider = nullptr);
 
     NUdf::IFunctionTypeInfoBuilder1& ImplementationImpl(
             NUdf::TUniquePtr<NUdf::IBoxedValue> impl) override;
@@ -204,8 +189,13 @@ public:
     const NUdf::IBlockTypeHelper& IBlockTypeHelper() const override;
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;
+    NUdf::TLoggerPtr MakeLogger(bool synchronized) const override;
+    void SetMinLangVer(ui32 langver) override;
+    void SetMaxLangVer(ui32 langver) override;
+    ui32 GetCurrentLangVer() const override;
 
 private:
+    const NYql::TLangVersion LangVer_;
     const TTypeEnvironment& Env_;
     NUdf::TUniquePtr<NUdf::IBoxedValue> Implementation_;
     const TType* ReturnType_;
@@ -221,11 +211,14 @@ private:
     NUdf::ICountersProvider* CountersProvider_;
     NUdf::TSourcePosition Pos_;
     const NUdf::ISecureParamsProvider* SecureParamsProvider_;
+    const NUdf::ILogProvider* LogProvider_;
     TString ModuleIR_;
     TString ModuleIRUniqID_;
     TString IRFunctionName_;
     bool SupportsBlocks_ = false;
     bool IsStrict_ = false;
+    ui32 MinLangVer_ = NYql::UnknownLangVersion;
+    ui32 MaxLangVer_ = NYql::UnknownLangVersion;
 };
 
 class TTypeInfoHelper : public NUdf::ITypeInfoHelper
@@ -275,7 +268,7 @@ ui64 CalcMaxBlockLength(T beginIt, T endIt, const NUdf::ITypeInfoHelper& helper)
 
 class TTypeBuilder : public TMoveOnly {
 public:
-    TTypeBuilder(const TTypeEnvironment& env) 
+    TTypeBuilder(const TTypeEnvironment& env)
         : Env(env)
     {}
 
@@ -319,6 +312,9 @@ public:
 
     TType* NewResourceType(const std::string_view& tag) const;
     TType* NewVariantType(TType* underlyingType) const;
+
+    TType* BuildBlockStructType(const TStructType* structType) const;
+    TType* ValidateBlockStructType(const TStructType* structType) const;
 
 protected:
     const TTypeEnvironment& Env;

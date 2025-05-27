@@ -1,4 +1,4 @@
-PRAGMA warning("disable", "4510");
+PRAGMA warning('disable', '4510');
 
 $init = ListCreate(Struct<n: Int32>);
 

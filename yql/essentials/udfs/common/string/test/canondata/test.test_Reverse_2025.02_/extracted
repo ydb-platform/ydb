@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	select String::Reverse('ab')
+	^
+        <tmp_path>/program.sql:<main>:2:16: Error: At function: Apply, At function: Udf
+        	select String::Reverse('ab')
+	               ^
+            <tmp_path>/program.sql:<main>:2:16: Error: UDF 'String.Reverse' is not available after version 2025.01
+            	select String::Reverse('ab')
+	               ^

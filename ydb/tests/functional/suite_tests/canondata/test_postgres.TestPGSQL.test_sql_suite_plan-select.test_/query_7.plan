@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": ""
+                                                "TopSortBy": "[row.unique1,row.string4]"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -50,6 +50,7 @@
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableRangeScan",
+                                                        "Path": "/Root/postgres_select.test_plan/onek",
                                                         "ReadColumns": [
                                                             "string4",
                                                             "unique1"

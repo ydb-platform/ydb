@@ -16,11 +16,12 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     , SchedulerGroup(Counters->GetSubgroup("subsystem", "scheduler"))
     , BandwidthGroup(Counters->GetSubgroup("subsystem", "bandwidth"))
     , PDiskGroup(Counters->GetSubgroup("subsystem", "pdisk"))
+    , CounterGroup(Counters->GetSubgroup("subsystem", "counter"))
 {
     using EVisibility = NMonitoring::TCountableBase::EVisibility;
 
     bool extendedPDiskSensors = NActors::TlsActivationContext
-        && NActors::TlsActivationContext->ExecutorThread.ActorSystem
+        && NActors::TActivationContext::ActorSystem()
         && AppData()->FeatureFlags.GetExtendedPDiskSensors();
 
     EVisibility visibilityForExtended = extendedPDiskSensors
@@ -215,6 +216,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPChunkReadPayload, Bandwidth/PDisk/ChunkRead/Payload);
     NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPChunkReadSectorFooter, Bandwidth/PDisk/ChunkRead/SectorFooter);
 
+    COUNTER_INIT_IF_EXTENDED(PDiskGroup, WriteBufferCompactedBytes, true);
+
     // pdisk (interface)
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardInit, YardInit);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, CheckSpace, YardCheckSpace);
@@ -225,11 +228,17 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardSlay, YardSlay);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardControl, YardControl);
 
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ShredPDisk, ShredPDisk);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, PreShredCompactVDisk, PreShredCompactVDisk);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ShredVDiskResult, ShredVDiskResult);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, MarkDirty, MarkDirty);
+
     IO_REQ_INIT(PDiskGroup, WriteSyncLog, WriteSyncLog);
     IO_REQ_INIT(PDiskGroup, WriteFresh, WriteFresh);
     IO_REQ_INIT(PDiskGroup, WriteHuge, WriteHuge);
     IO_REQ_INIT(PDiskGroup, WriteComp, WriteComp);
     IO_REQ_INIT(PDiskGroup, Trim, WriteTrim);
+    IO_REQ_INIT(PDiskGroup, ChunkShred, WriteShred);
 
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadSyncLog, ReadSyncLog);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadComp, ReadComp);
@@ -249,6 +258,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(PDiskGroup, GetThreadCPU, true);
     COUNTER_INIT(PDiskGroup, TrimThreadCPU, true);
     COUNTER_INIT(PDiskGroup, CompletionThreadCPU, true);
+
+    COUNTER_INIT(CounterGroup, PDiskCount, false);
 }
 
 ::NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) {
@@ -458,4 +469,3 @@ TPDiskMon::TIoCounters *TPDiskMon::GetReadCounter(ui8 priority) {
 }
 
 } // NKikimr
-

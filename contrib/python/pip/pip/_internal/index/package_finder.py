@@ -6,7 +6,17 @@ import itertools
 import logging
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, FrozenSet, Iterable, List, Optional, Set, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
 from pip._vendor.packaging import specifiers
 from pip._vendor.packaging.tags import Tag
@@ -334,44 +344,30 @@ class CandidatePreferences:
     allow_all_prereleases: bool = False
 
 
+@dataclass(frozen=True)
 class BestCandidateResult:
     """A collection of candidates, returned by `PackageFinder.find_best_candidate`.
 
     This class is only intended to be instantiated by CandidateEvaluator's
     `compute_best_candidate()` method.
+
+    :param all_candidates: A sequence of all available candidates found.
+    :param applicable_candidates: The applicable candidates.
+    :param best_candidate: The most preferred candidate found, or None
+        if no applicable candidates were found.
     """
 
-    def __init__(
-        self,
-        candidates: List[InstallationCandidate],
-        applicable_candidates: List[InstallationCandidate],
-        best_candidate: Optional[InstallationCandidate],
-    ) -> None:
-        """
-        :param candidates: A sequence of all available candidates found.
-        :param applicable_candidates: The applicable candidates.
-        :param best_candidate: The most preferred candidate found, or None
-            if no applicable candidates were found.
-        """
-        assert set(applicable_candidates) <= set(candidates)
+    all_candidates: List[InstallationCandidate]
+    applicable_candidates: List[InstallationCandidate]
+    best_candidate: Optional[InstallationCandidate]
 
-        if best_candidate is None:
-            assert not applicable_candidates
+    def __post_init__(self) -> None:
+        assert set(self.applicable_candidates) <= set(self.all_candidates)
+
+        if self.best_candidate is None:
+            assert not self.applicable_candidates
         else:
-            assert best_candidate in applicable_candidates
-
-        self._applicable_candidates = applicable_candidates
-        self._candidates = candidates
-
-        self.best_candidate = best_candidate
-
-    def iter_all(self) -> Iterable[InstallationCandidate]:
-        """Iterate through all candidates."""
-        return iter(self._candidates)
-
-    def iter_applicable(self) -> Iterable[InstallationCandidate]:
-        """Iterate through the applicable candidates."""
-        return iter(self._applicable_candidates)
+            assert self.best_candidate in self.applicable_candidates
 
 
 class CandidateEvaluator:
@@ -528,11 +524,7 @@ class CandidateEvaluator:
                 )
             if self._prefer_binary:
                 binary_preference = 1
-            if wheel.build_tag is not None:
-                match = re.match(r"^(\d+)(.*)$", wheel.build_tag)
-                assert match is not None, "guaranteed by filename validation"
-                build_tag_groups = match.groups()
-                build_tag = (int(build_tag_groups[0]), build_tag_groups[1])
+            build_tag = wheel.build_tag
         else:  # sdist
             pri = -(support_num)
         has_allowed_hash = int(link.is_hash_allowed(self._hashes))
@@ -619,6 +611,13 @@ class PackageFinder:
         # These are boring links that have already been logged somehow.
         self._logged_links: Set[Tuple[Link, LinkType, str]] = set()
 
+        # Cache of the result of finding candidates
+        self._all_candidates: Dict[str, List[InstallationCandidate]] = {}
+        self._best_candidates: Dict[
+            Tuple[str, Optional[specifiers.BaseSpecifier], Optional[Hashes]],
+            BestCandidateResult,
+        ] = {}
+
     # Don't include an allow_yanked default value to make sure each call
     # site considers whether yanked releases are allowed. This also causes
     # that decision to be made explicit in the calling code, which helps
@@ -676,9 +675,27 @@ class PackageFinder:
         return self.search_scope.index_urls
 
     @property
+    def proxy(self) -> Optional[str]:
+        return self._link_collector.session.pip_proxy
+
+    @property
     def trusted_hosts(self) -> Iterable[str]:
         for host_port in self._link_collector.session.pip_trusted_origins:
             yield build_netloc(*host_port)
+
+    @property
+    def custom_cert(self) -> Optional[str]:
+        # session.verify is either a boolean (use default bundle/no SSL
+        # verification) or a string path to a custom CA bundle to use. We only
+        # care about the latter.
+        verify = self._link_collector.session.verify
+        return verify if isinstance(verify, str) else None
+
+    @property
+    def client_cert(self) -> Optional[str]:
+        cert = self._link_collector.session.cert
+        assert not isinstance(cert, tuple), "pip only supports PEM client certs"
+        return cert
 
     @property
     def allow_all_prereleases(self) -> bool:
@@ -795,7 +812,6 @@ class PackageFinder:
 
         return package_links
 
-    @functools.lru_cache(maxsize=None)
     def find_all_candidates(self, project_name: str) -> List[InstallationCandidate]:
         """Find all available InstallationCandidate for project_name
 
@@ -805,6 +821,9 @@ class PackageFinder:
         See LinkEvaluator.evaluate_link() for details on which files
         are accepted.
         """
+        if project_name in self._all_candidates:
+            return self._all_candidates[project_name]
+
         link_evaluator = self.make_link_evaluator(project_name)
 
         collected_sources = self._link_collector.collect_sources(
@@ -846,7 +865,9 @@ class PackageFinder:
             logger.debug("Local files found: %s", ", ".join(paths))
 
         # This is an intentional priority ordering
-        return file_candidates + page_candidates
+        self._all_candidates[project_name] = file_candidates + page_candidates
+
+        return self._all_candidates[project_name]
 
     def make_candidate_evaluator(
         self,
@@ -865,7 +886,6 @@ class PackageFinder:
             hashes=hashes,
         )
 
-    @functools.lru_cache(maxsize=None)
     def find_best_candidate(
         self,
         project_name: str,
@@ -880,13 +900,20 @@ class PackageFinder:
 
         :return: A `BestCandidateResult` instance.
         """
+        if (project_name, specifier, hashes) in self._best_candidates:
+            return self._best_candidates[project_name, specifier, hashes]
+
         candidates = self.find_all_candidates(project_name)
         candidate_evaluator = self.make_candidate_evaluator(
             project_name=project_name,
             specifier=specifier,
             hashes=hashes,
         )
-        return candidate_evaluator.compute_best_candidate(candidates)
+        self._best_candidates[project_name, specifier, hashes] = (
+            candidate_evaluator.compute_best_candidate(candidates)
+        )
+
+        return self._best_candidates[project_name, specifier, hashes]
 
     def find_requirement(
         self, req: InstallRequirement, upgrade: bool
@@ -897,9 +924,12 @@ class PackageFinder:
         Returns a InstallationCandidate if found,
         Raises DistributionNotFound or BestVersionAlreadyInstalled otherwise
         """
+        name = req.name
+        assert name is not None, "find_requirement() called with no name"
+
         hashes = req.hashes(trust_internet=False)
         best_candidate_result = self.find_best_candidate(
-            req.name,
+            name,
             specifier=req.specifier,
             hashes=hashes,
         )
@@ -929,7 +959,7 @@ class PackageFinder:
                 "Could not find a version that satisfies the requirement %s "
                 "(from versions: %s)",
                 req,
-                _format_versions(best_candidate_result.iter_all()),
+                _format_versions(best_candidate_result.all_candidates),
             )
 
             raise DistributionNotFound(f"No matching distribution found for {req}")
@@ -963,7 +993,7 @@ class PackageFinder:
             logger.debug(
                 "Using version %s (newest of versions: %s)",
                 best_candidate.version,
-                _format_versions(best_candidate_result.iter_applicable()),
+                _format_versions(best_candidate_result.applicable_candidates),
             )
             return best_candidate
 
@@ -971,7 +1001,7 @@ class PackageFinder:
         logger.debug(
             "Installed version (%s) is most up-to-date (past versions: %s)",
             installed_version,
-            _format_versions(best_candidate_result.iter_applicable()),
+            _format_versions(best_candidate_result.applicable_candidates),
         )
         raise BestVersionAlreadyInstalled
 

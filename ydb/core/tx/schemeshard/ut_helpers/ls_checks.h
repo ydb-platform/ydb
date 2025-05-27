@@ -23,7 +23,24 @@ struct TPathVersion {
     TPathId PathId = TPathId();
     ui64 Version = Max<ui64>();
 };
-using TApplyIf = TVector<TPathVersion>;
+
+struct TApplyIfUnit : TPathVersion {
+    std::vector<NKikimrSchemeOp::EPathType> PathTypes;
+
+    TApplyIfUnit() {}
+
+    TApplyIfUnit(const TPathVersion& pathVersion) {
+        PathId = pathVersion.PathId;
+        Version = pathVersion.Version;
+    }
+
+    TApplyIfUnit(TPathVersion&& pathVersion) {
+        PathId = std::move(pathVersion.PathId);
+        Version = std::move(pathVersion.Version);
+    }
+};
+
+using TApplyIf = TVector<TApplyIfUnit>;
 
 using TUserAttrs = TVector<std::pair<TString, TString>>;
 
@@ -97,6 +114,7 @@ namespace NLs {
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsSysView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -169,11 +187,14 @@ namespace NLs {
     TCheckFunc StreamAwsRegion(const TString& value);
     TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed);
     TCheckFunc RetentionPeriod(const TDuration& value);
+    TCheckFunc ConsumerExist(const TString& name);
 
     TCheckFunc HasBackupInFly(ui64 txId);
     void NoBackupInFly(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc BackupHistoryCount(ui64 count);
 
+    TCheckFunc HasGroup(const TString& group, const TSet<TString> members);
+    TCheckFunc HasNoGroup(const TString& group);
     TCheckFunc HasOwner(const TString& owner);
     TCheckFunc HasRight(const TString& right);
     TCheckFunc HasNoRight(const TString& right);

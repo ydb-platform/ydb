@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    control.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
     kqp_lwtrace_probes.cpp
@@ -28,6 +29,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/common/simple
+    ydb/core/kqp/common/batch
     ydb/core/kqp/common/compilation
     ydb/core/kqp/common/events
     ydb/core/kqp/common/shutdown
@@ -42,8 +44,8 @@ PEERDIR(
     ydb/library/yql/dq/common
     yql/essentials/core/dq_integration
     yql/essentials/parser/pg_wrapper/interface
-    ydb/public/lib/operation_id
-    ydb/public/lib/operation_id/protos
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id/protos
     ydb/core/grpc_services/cancelation
     library/cpp/lwtrace
     #library/cpp/lwtrace/protos
@@ -57,6 +59,7 @@ GENERATE_ENUM_SERIALIZATION(kqp_yql.h)
 END()
 
 RECURSE(
+    batch
     compilation
     events
     simple

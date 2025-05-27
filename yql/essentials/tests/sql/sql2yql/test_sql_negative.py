@@ -3,13 +3,14 @@ import pytest
 import yatest.common
 from yql_utils import get_supported_providers, get_param
 
-from test_utils import pytest_generate_tests_for_run, get_config, SQLRUN_PATH, DATA_PATH
+from test_utils import pytest_generate_tests_for_run, get_config, SQLRUN_PATH
 
 NEGATIVE_TEMPLATE = '.sqlx'
+DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 
 
 def pytest_generate_tests(metafunc):
-    pytest_generate_tests_for_run(metafunc, NEGATIVE_TEMPLATE)
+    pytest_generate_tests_for_run(metafunc, NEGATIVE_TEMPLATE, data_path=DATA_PATH)
 
 
 def run_sql2yql(program_sql, out_dir, err_file_path):
@@ -39,7 +40,7 @@ def run_sql2yql(program_sql, out_dir, err_file_path):
 
 
 def test(suite, case, cfg, tmpdir):
-    config = get_config(suite, case, cfg)
+    config = get_config(suite, case, cfg, DATA_PATH)
 
     if 'yt' not in get_supported_providers(config):
         pytest.skip('YT provider is not supported here')

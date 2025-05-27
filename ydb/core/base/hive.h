@@ -705,12 +705,26 @@ namespace NKikimr {
                 Record.SetStatus(status);
                 Record.SetStatusMessage(statusMessage);
             }
+
+            TString ToString() const override {
+                TStringStream str;
+                str << ToStringHeader() << "{Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+                str << " TabletID: " << Record.GetTabletID();
+                str << " Message: " << Record.GetStatusMessage();
+                str << "}";
+                return str.Str();
+            }
         };
 
         struct TEvLockTabletExecutionLost : public TEventPB<TEvLockTabletExecutionLost,
                 NKikimrHive::TEvLockTabletExecutionLost, EvLockTabletExecutionLost>
         {
             TEvLockTabletExecutionLost() = default;
+
+            TEvLockTabletExecutionLost(ui64 tabletId, NKikimrHive::ELockLostReason reason) {
+                Record.SetTabletID(tabletId);
+                Record.SetReason(reason);
+            }
 
             explicit TEvLockTabletExecutionLost(ui64 tabletId) {
                 Record.SetTabletID(tabletId);

@@ -1,0 +1,12 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NFq.NConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+////////////////////////////////////////////////////////////
+
+message TTaskControllerConfig {
+    string PingPeriod = 1;
+    string AggrPeriod = 2;
+}

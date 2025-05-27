@@ -1,18 +1,16 @@
 Metadata-Version: 2.3
 Name: Twisted
-Version: 24.10.0
+Version: 24.11.0
 Summary: An asynchronous networking framework written in Python
 Project-URL: Changelog, https://github.com/twisted/twisted/blob/HEAD/NEWS.rst
 Project-URL: Documentation, https://docs.twisted.org/
 Project-URL: Homepage, https://twisted.org/
 Project-URL: Issues, https://github.com/twisted/twisted/issues
 Project-URL: Source, https://github.com/twisted/twisted
-Project-URL: Twitter, https://twitter.com/twistedmatrix
 Project-URL: Funding-PSF, https://psfmember.org/civicrm/contribute/transact/?reset=1&id=44
 Project-URL: Funding-GitHub, https://github.com/sponsors/twisted
 Author-email: Twisted Matrix Community <twisted@python.org>
 License: MIT License
-License-File: LICENSE
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
 Classifier: Programming Language :: Python :: 3.8
@@ -293,7 +291,7 @@ If you'd like to join them, please consider `sponsoring Twisted's <https://docs.
 What is this?
 -------------
 
-Twisted is an event-based framework for internet applications, supporting Python 3.6+.
+Twisted is a Python event-based framework for internet applications.
 It includes modules for many different purposes, including the following:
 
 - ``twisted.web``: HTTP clients and servers, HTML templating, and a WSGI server

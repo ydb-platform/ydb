@@ -42,6 +42,7 @@ struct TDomainInfo {
     TString Path;
     TTabletId HiveId = 0;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+    bool Stopped = false;
 
     ui64 TabletsTotal = 0;
     ui64 TabletsAlive = 0;

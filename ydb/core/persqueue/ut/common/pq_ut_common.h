@@ -127,7 +127,6 @@ struct TTestContext {
 
     static bool RequestTimeoutFilter(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration duration, TInstant& deadline) {
         if (event->GetTypeRewrite() == TEvents::TSystem::Wakeup) {
-            Cerr << "Captured TEvents::TSystem::Wakeup to " << runtime.FindActorName(event->GetRecipientRewrite()) << Endl;
             if (runtime.FindActorName(event->GetRecipientRewrite()) == "PERSQUEUE_ANS_ACTOR") {
                 return true;
             }
@@ -277,13 +276,17 @@ void PQBalancerPrepare(
     ui64 tabletId,
     TActorId edge,
     const bool requireAuth = false,
-    bool kill = true);
+    bool kill = true,
+    const THashSet<TString>& xtraConsumers = {});
 
 void PQTabletRestart(
     TTestActorRuntime& runtime,
     ui64 tabletId,
     TActorId edge);
 
+THashSet<TString> GetTabletKeys(TTestActorRuntime& runtime,
+                                ui64 tabletId,
+                                const TActorId& edge);
 
 /*
 ** TTestContext requiring functions
@@ -300,9 +303,12 @@ void PQBalancerPrepare(
     const ui64 ssId,
     TTestContext& context,
     const bool requireAuth = false,
-    bool kill = true);
+    bool kill = true,
+    const THashSet<TString>& xtraConsumers = {});
 
 void PQTabletRestart(TTestContext& context);
+
+THashSet<TString> GetTabletKeys(TTestContext& context);
 
 TActorId RegisterReadSession(
    const TString& session,
@@ -443,11 +449,12 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     ui32 MaxTimeLagMs = 0;
     ui32 ReadTimestampMs = 0;
     ui64 DirectReadId = 0;
+    i64 LastOffset = 0;
     TActorId Pipe;
     TPQCmdReadSettings() = default;
     TPQCmdReadSettings(const TString& session, ui32 partition, i64 offset, ui32 count, ui32 size, ui32 resCount, bool timeout = false,
                        TVector<i32> offsets = {}, const ui32 maxTimeLagMs = 0, const ui64 readTimestampMs = 0,
-                       const TString user = "user")
+                       const TString user = "user", const i64 lastOffset = 0)
 
         : TPQCmdSettingsBase{partition, user, session, 0, offset, false}
         , Count(count)
@@ -457,6 +464,7 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
         , Offsets (offsets)
         , MaxTimeLagMs(maxTimeLagMs)
         , ReadTimestampMs(readTimestampMs)
+        , LastOffset(lastOffset)
     {}
 };
 
@@ -516,6 +524,9 @@ void CmdRead(
 void CmdRead(
     const TPQCmdReadSettings& settings,
     TTestContext& tc);
+
+void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);
+bool EndCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);
 
 void CmdPublishRead(const TCmdDirectReadSettings& settings, TTestContext& tc);
 void CmdForgetRead(const TCmdDirectReadSettings& settings, TTestContext& tc);

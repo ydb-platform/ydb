@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yt/yt/core/misc/configurable_singleton_decl.h>
+
 #include <yt/yt/core/actions/callback.h>
 
 #include <yt/yt/core/concurrency/public.h>
@@ -106,30 +108,37 @@ using TTypedServiceContext = TGenericTypedServiceContext<
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(THistogramExponentialBounds)
-DECLARE_REFCOUNTED_CLASS(TTimeHistogramConfig)
-DECLARE_REFCOUNTED_CLASS(TServerConfig)
-DECLARE_REFCOUNTED_CLASS(TServiceCommonConfig)
-DECLARE_REFCOUNTED_CLASS(TServerDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TServiceCommonDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TServiceConfig)
-DECLARE_REFCOUNTED_CLASS(TMethodConfig)
-DECLARE_REFCOUNTED_CLASS(TRetryingChannelConfig)
-DECLARE_REFCOUNTED_CLASS(TViablePeerRegistryConfig)
-DECLARE_REFCOUNTED_CLASS(TDynamicChannelPoolConfig)
-DECLARE_REFCOUNTED_CLASS(TServiceDiscoveryEndpointsConfig)
-DECLARE_REFCOUNTED_CLASS(TBalancingChannelConfigBase)
-DECLARE_REFCOUNTED_CLASS(TBalancingChannelConfig)
-DECLARE_REFCOUNTED_CLASS(TThrottlingChannelConfig)
-DECLARE_REFCOUNTED_CLASS(TThrottlingChannelDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TResponseKeeperConfig)
-DECLARE_REFCOUNTED_CLASS(TDispatcherConfig)
-DECLARE_REFCOUNTED_CLASS(TDispatcherDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(THistogramExponentialBounds)
+DECLARE_REFCOUNTED_STRUCT(TTimeHistogramConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceCommonConfig)
+DECLARE_REFCOUNTED_STRUCT(TServerDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceCommonDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceConfig)
+DECLARE_REFCOUNTED_STRUCT(TMethodConfig)
+DECLARE_REFCOUNTED_STRUCT(TRetryingChannelConfig)
+DECLARE_REFCOUNTED_STRUCT(TViablePeerRegistryConfig)
+DECLARE_REFCOUNTED_STRUCT(TDynamicChannelPoolConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceDiscoveryEndpointsConfig)
+DECLARE_REFCOUNTED_STRUCT(TBalancingChannelConfigBase)
+DECLARE_REFCOUNTED_STRUCT(TBalancingChannelConfig)
+DECLARE_REFCOUNTED_STRUCT(TThrottlingChannelConfig)
+DECLARE_REFCOUNTED_STRUCT(TThrottlingChannelDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TResponseKeeperConfig)
+DECLARE_REFCOUNTED_STRUCT(TDispatcherConfig)
+DECLARE_REFCOUNTED_STRUCT(TDispatcherDynamicConfig)
 
 struct TRequestQueueThrottlerConfigs
 {
     NConcurrency::TThroughputThrottlerConfigPtr WeightThrottlerConfig;
     NConcurrency::TThroughputThrottlerConfigPtr BytesThrottlerConfig;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTimeoutOptions
+{
+    std::optional<TDuration> Timeout;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -149,18 +158,21 @@ extern const std::string RootUserName;
 
 constexpr int TypicalMessagePartCount = 8;
 
+// COMPAT(nadya02): remove it when all timeouts are set
+constexpr TDuration DefaultRpcRequestTimeout = TDuration::Hours(24);
+
 using TFeatureIdFormatter = const std::function<std::optional<TStringBuf>(int featureId)>*;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString RequestIdAnnotation;
-extern const TString EndpointAnnotation;
-extern const TString RequestInfoAnnotation;
-extern const TString RequestUser;
-extern const TString ResponseInfoAnnotation;
+extern const std::string RequestIdAnnotation;
+extern const std::string EndpointAnnotation;
+extern const std::string RequestInfoAnnotation;
+extern const std::string RequestUser;
+extern const std::string ResponseInfoAnnotation;
 
-extern const TString FeatureIdAttributeKey;
-extern const TString FeatureNameAttributeKey;
+extern const std::string FeatureIdAttributeKey;
+extern const std::string FeatureNameAttributeKey;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -188,7 +200,7 @@ YT_DEFINE_ERROR_ENUM(
     ((SslError)                     (static_cast<int>(NBus::EErrorCode::SslError)))
     ((RequestMemoryPressure)        (120)) // There is no enough memory to handle RPC request.
     ((GlobalDiscoveryError)         (121)) // Single peer discovery interrupts discovery session.
-    ((ResponseMemoryPressure)       (122)) // There is no enouth memory to handle RPC response.
+    ((ResponseMemoryPressure)       (122)) // There is no enough memory to handle RPC response.
 );
 
 DEFINE_ENUM(EMessageFormat,
@@ -196,6 +208,8 @@ DEFINE_ENUM(EMessageFormat,
     ((Json)        (1))
     ((Yson)        (2))
 );
+
+YT_DECLARE_RECONFIGURABLE_SINGLETON(TDispatcherConfig, TDispatcherDynamicConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

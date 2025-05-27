@@ -10,8 +10,9 @@ namespace NKikimr::NOlap {
 class TPortionInfoConstructor;
 struct TIndexInfo;
 
-class TPortionMetaConstructor {
+class TPortionMetaConstructor: public TPortionMetaBase {
 private:
+    using TBase = TPortionMetaBase;
     std::optional<NArrow::TFirstLastSpecialKeys> FirstAndLastPK;
     std::optional<TString> TierName;
     std::optional<TSnapshot> RecordSnapshotMin;
@@ -27,8 +28,6 @@ private:
 
     std::optional<ui32> DeletionsCount;
 
-    std::vector<TUnifiedBlobId> BlobIds;
-
     friend class TPortionInfoConstructor;
     friend class TPortionAccessorConstructor;
     void FillMetaInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const ui32 deletionsCount,
@@ -38,17 +37,14 @@ public:
     TPortionMetaConstructor() = default;
     TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs);
 
+    ui64 GetTotalBlobBytes() const {
+        AFL_VERIFY(ColumnBlobBytes);
+        AFL_VERIFY(IndexBlobBytes);
+        return *ColumnBlobBytes + *IndexBlobBytes;
+    }
+
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
-    }
-
-    ui32 GetBlobIdsCount() const {
-        return BlobIds.size();
-    }
-
-    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        AFL_VERIFY(linkId < BlobIds.size());
-        return BlobIds[linkId];
     }
 
     TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {

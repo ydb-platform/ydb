@@ -9,6 +9,7 @@
 #include "flat_part_slice.h"
 #include "flat_table_committed.h"
 #include "flat_page_data.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -27,7 +28,7 @@ namespace NTable {
         {
         }
 
-        EReady Seek(TRowId rowId) noexcept {
+        EReady Seek(TRowId rowId) {
             // Fast path, check if we already have the needed data page
             if (Data) {
                 TRowId minRowId = Page.BaseRow();
@@ -39,7 +40,7 @@ namespace NTable {
                     TRowId endRowId = minRowId + Data.End();
                     if (rowId < endRowId) {
                         Data = Page->Begin() + (rowId - minRowId);
-                        Y_ABORT_UNLESS(Data, "Unexpected failure to find column group record for RowId=%lu", rowId);
+                        Y_ENSURE(Data, "Unexpected failure to find column group record for RowId=" << rowId);
                         return EReady::Data;
                     }
                 }
@@ -59,7 +60,7 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(Page.BaseRow() <= rowId, "Index and row have an unexpected relation");
 
             Data = Page->Begin() + (rowId - Page.BaseRow());
-            Y_ABORT_UNLESS(Data, "Unexpected failure to find record for RowId=%lu", rowId);
+            Y_ENSURE(Data, "Unexpected failure to find record for RowId=" << rowId);
             return EReady::Data;
         }
 
@@ -77,7 +78,7 @@ namespace NTable {
         }
 
     protected:
-        bool LoadPage(TPageId pageId, TRowId baseRow) noexcept
+        bool LoadPage(TPageId pageId, TRowId baseRow)
         {
             if (PageId != pageId) {
                 Data = { };
@@ -120,7 +121,7 @@ namespace NTable {
         {
         }
 
-        void SetBounds(TRowId beginRowId, TRowId endRowId) noexcept
+        void SetBounds(TRowId beginRowId, TRowId endRowId)
         {
             BeginRowId = beginRowId;
             EndRowId = Min(endRowId, Index.GetEndRowId());
@@ -130,7 +131,7 @@ namespace NTable {
         }
 
         EReady Seek(const TCells key, ESeek seek,
-                const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* keyDefaults) noexcept
+                const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* keyDefaults)
         {
             Y_DEBUG_ABORT_UNLESS(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
@@ -186,6 +187,11 @@ namespace NTable {
                 return EReady::Data;
             }
 
+            if (Page.BaseRow() + Page->Count >= EndRowId) {
+                // Row is outside of bounds
+                return Exhausted();
+            }
+
             if (seek != ESeek::Exact) {
                 // The row we seek is on the next page
 
@@ -210,7 +216,7 @@ namespace NTable {
         }
 
         EReady SeekReverse(const TCells key, ESeek seek,
-                const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* keyDefaults) noexcept
+                const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* keyDefaults)
         {
             Y_DEBUG_ABORT_UNLESS(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
@@ -280,7 +286,7 @@ namespace NTable {
             return Exhausted();
         }
 
-        EReady Seek(TRowId rowId) noexcept
+        EReady Seek(TRowId rowId)
         {
             if (Y_UNLIKELY(rowId < BeginRowId || rowId >= EndRowId)) {
                 return Exhausted();
@@ -298,12 +304,12 @@ namespace NTable {
             return EReady::Data;
         }
 
-        EReady SeekToSliceFirstRow() noexcept
+        EReady SeekToSliceFirstRow()
         {
             return Seek(BeginRowId);
         }
 
-        EReady SeekToSliceLastRow() noexcept
+        EReady SeekToSliceLastRow()
         {
             return Seek(EndRowId - 1);
         }
@@ -313,7 +319,7 @@ namespace NTable {
          * 
          * If doesn't have Data, loads the current row
          */
-        EReady Next() noexcept
+        EReady Next()
         {
             if (Y_UNLIKELY(RowId == Max<TRowId>())) {
                 return EReady::Gone;
@@ -351,7 +357,7 @@ namespace NTable {
                 return ready;
             }
 
-            Y_ABORT_UNLESS(Index.Next() == EReady::Gone, "Unexpected failure to seek in a non-final data page");
+            Y_ENSURE(Index.Next() == EReady::Gone, "Unexpected failure to seek in a non-final data page");
             return Exhausted();
         }
 
@@ -360,7 +366,7 @@ namespace NTable {
          * 
          * If doesn't have Data, loads the current row
          */
-        EReady Prev() noexcept
+        EReady Prev()
         {
             if (Y_UNLIKELY(RowId == Max<TRowId>())) {
                 return EReady::Gone;
@@ -398,7 +404,7 @@ namespace NTable {
                 return ready;
             }
 
-            Y_ABORT("Unexpected failure to seek in a non-final data page");
+            Y_TABLET_ERROR("Unexpected failure to seek in a non-final data page");
         }
 
         using TPartGroupRowIter::IsValid;
@@ -415,19 +421,19 @@ namespace NTable {
         }
 
     private:
-        Y_FORCE_INLINE EReady Exhausted() noexcept
+        Y_FORCE_INLINE EReady Exhausted()
         {
             return Terminate(EReady::Gone);
         }
         
-        Y_FORCE_INLINE EReady Terminate(EReady ready) noexcept
+        Y_FORCE_INLINE EReady Terminate(EReady ready)
         {
             Data = { };
             RowId = Max<TRowId>();
             return ready;
         }
 
-        EReady LoadRowData() noexcept
+        EReady LoadRowData()
         {
             Y_DEBUG_ABORT_UNLESS(Index.IsValid() && Index.GetRowId() <= RowId,
                 "Called without a valid index record");
@@ -443,7 +449,7 @@ namespace NTable {
             return EReady::Gone;
         }
 
-        EReady SeekIndex(TRowId rowId) noexcept
+        EReady SeekIndex(TRowId rowId)
         {
             auto ready = Index.Seek(rowId);
             Y_DEBUG_ABORT_UNLESS(ready != EReady::Gone,
@@ -470,7 +476,7 @@ namespace NTable {
             : TPartGroupRowIter(part, env, NPage::TGroupId(0, /* historic */ true))
         { }
 
-        EReady Seek(TRowId rowId, const TRowVersion& rowVersion) noexcept
+        EReady Seek(TRowId rowId, const TRowVersion& rowVersion)
         {
             Y_DEBUG_ABORT_UNLESS(rowId != Max<TRowId>());
 
@@ -582,7 +588,7 @@ namespace NTable {
                 }
 
                 // This lambda has to be terminated
-                Y_ABORT_UNLESS(false, "Data binary search bug");
+                Y_ENSURE(false, "Data binary search bug");
             };
 
             // Special case when we already have data with the same row id
@@ -622,7 +628,7 @@ namespace NTable {
 
                 Data = Page->Begin();
 
-                Y_ABORT_UNLESS(checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
+                Y_ENSURE(checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
 
                 return EReady::Data;
             }
@@ -662,7 +668,7 @@ namespace NTable {
                     return EReady::Gone;
                 }
 
-                Y_ABORT_UNLESS(RowVersion <= rowVersion, "Data binary search bug");
+                Y_ENSURE(RowVersion <= rowVersion, "Data binary search bug");
 
                 // Save an estimate for MaxVersion
                 MaxVersion = rowVersion;
@@ -687,7 +693,7 @@ namespace NTable {
 
                 // The above binary search failed, but since we started with
                 // an index search the first row must be the one we want.
-                Y_ABORT_UNLESS(RowVersion <= rowVersion, "Index binary search bug");
+                Y_ENSURE(RowVersion <= rowVersion, "Index binary search bug");
             } else {
                 // No information about the current index row
                 RowId = Max<TRowId>();
@@ -705,18 +711,18 @@ namespace NTable {
             }
 
             Data = Page->Begin();
-            Y_ABORT_UNLESS(Data);
+            Y_ENSURE(Data);
 
             if (Index.GetKeyCellsCount()) {
                 // Must have rowId as we have checked index
-                Y_ABORT_UNLESS(checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
+                Y_ENSURE(checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
 
                 // Save an estimate for MaxVersion
                 MaxVersion = rowVersion;
                 return EReady::Data;
             } else {
                 if (checkData()) {
-                    Y_ABORT_UNLESS(RowVersion <= rowVersion, "Index and Data are out of sync");
+                    Y_ENSURE(RowVersion <= rowVersion, "Index and Data are out of sync");
 
                     // Save an estimate for MaxVersion
                     MaxVersion = rowVersion;
@@ -749,12 +755,12 @@ namespace NTable {
         }
 
     private:
-        Y_FORCE_INLINE EReady Exhausted() noexcept
+        Y_FORCE_INLINE EReady Exhausted()
         {
             return Terminate(EReady::Gone);
         }
 
-        Y_FORCE_INLINE EReady Terminate(EReady ready) noexcept
+        Y_FORCE_INLINE EReady Terminate(EReady ready)
         {
             Data = { };
             RowId = Max<TRowId>();
@@ -801,53 +807,53 @@ namespace NTable {
             }
         }
 
-        void SetBounds(const TSlice& slice) noexcept
+        void SetBounds(const TSlice& slice)
         {
             Main.SetBounds(slice.BeginRowId(), slice.EndRowId());
         }
 
-        void SetBounds(TRowId beginRowId, TRowId endRowId) noexcept
+        void SetBounds(TRowId beginRowId, TRowId endRowId)
         {
             Main.SetBounds(beginRowId, endRowId);
         }
 
-        EReady Seek(const TCells key, ESeek seek) noexcept
+        EReady Seek(const TCells key, ESeek seek)
         {
             ClearKey();
             return Main.Seek(key, seek, Part->Scheme->Groups[0], &*KeyCellDefaults);
         }
 
-        EReady SeekReverse(const TCells key, ESeek seek) noexcept
+        EReady SeekReverse(const TCells key, ESeek seek)
         {
             ClearKey();
             return Main.SeekReverse(key, seek, Part->Scheme->Groups[0], &*KeyCellDefaults);
         }
 
-        EReady Seek(TRowId rowId) noexcept
+        EReady Seek(TRowId rowId)
         {
             ClearKey();
             return Main.Seek(rowId);
         }
 
-        EReady SeekToSliceFirstRow() noexcept
+        EReady SeekToSliceFirstRow()
         {
             ClearKey();
             return Main.SeekToSliceFirstRow();
         }
 
-        EReady SeekToSliceLastRow() noexcept
+        EReady SeekToSliceLastRow()
         {
             ClearKey();
             return Main.SeekToSliceLastRow();
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             ClearKey();
             return Main.Next();
         }
 
-        EReady Prev() noexcept
+        EReady Prev()
         {
             ClearKey();
             return Main.Prev();
@@ -869,7 +875,7 @@ namespace NTable {
             return Main.GetRowId();
         }
 
-        TDbTupleRef GetKey() const noexcept
+        TDbTupleRef GetKey() const
         {
             InitKey();
 
@@ -881,21 +887,21 @@ namespace NTable {
             return Main.GetPageData();
         }
 
-        TCells GetRawKey() const noexcept
+        TCells GetRawKey() const
         {
             InitKey();
 
             return TCells(Key).Slice(0, Part->Scheme->Groups[0].ColsKeyData.size());
         }
 
-        TRowVersion GetRowVersion() const noexcept
+        TRowVersion GetRowVersion() const
         {
             Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to get invalid row version");
 
             if (!SkipMainVersion) {
                 const auto& info = Part->Scheme->Groups[0];
                 const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
-                Y_ABORT_UNLESS(!data->IsDelta(), "GetRowVersion cannot be called on deltas");
+                Y_ENSURE(!data->IsDelta(), "GetRowVersion cannot be called on deltas");
 
                 if (!SkipEraseVersion && data->IsErased()) {
                     return data->GetMaxVersion(info);
@@ -924,8 +930,11 @@ namespace NTable {
         EReady SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
                                 NTable::ITransactionMapSimplePtr committedTransactions,
                                 NTable::ITransactionObserverSimplePtr transactionObserver,
-                                const NTable::ITransactionSet& decidedTransactions) noexcept
+                                const NTable::ITransactionSet& decidedTransactions)
         {
+            // Temporary: we don't cache erases when there are uncompacted deltas
+            Y_UNUSED(decidedTransactions);
+
             Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Attempt to use an invalid iterator");
 
             // We cannot use min/max hints when part has uncommitted deltas
@@ -940,7 +949,7 @@ namespace NTable {
                     if (!SkipMainVersion) {
                         const auto& info = Part->Scheme->Groups[0];
                         const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
-                        Y_ABORT_UNLESS(!data->IsDelta(), "Unexpected delta without TxIdStats");
+                        Y_ENSURE(!data->IsDelta(), "Unexpected delta without TxIdStats");
                         if (!SkipEraseVersion && data->IsErased()) {
                             transactionObserver.OnSkipCommitted(data->GetMaxVersion(info));
                         } else if (data->IsVersioned()) {
@@ -962,31 +971,22 @@ namespace NTable {
                 const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
 
                 while (data->IsDelta()) {
+                    // We cannot cache when there are uncompacted deltas
+                    stats.UncertainErase = true;
+
                     ui64 txId = data->GetDeltaTxId(info);
                     const auto* commitVersion = committedTransactions.Find(txId);
                     if (commitVersion && *commitVersion <= rowVersion) {
                         // Already committed and correct version
-                        if (!decidedTransactions.Contains(txId)) {
-                            // This change may rollback and change the iteration result
-                            stats.UncertainErase = true;
-                        }
                         return EReady::Data;
                     }
                     if (commitVersion) {
                         // Skipping a newer committed delta
                         transactionObserver.OnSkipCommitted(*commitVersion, txId);
                         stats.InvisibleRowSkips++;
-                        if (data->GetRop() != ERowOp::Erase) {
-                            // Skipping non-erase delta, so any erase below cannot be trusted
-                            stats.UncertainErase = true;
-                        }
                     } else {
                         // Skipping an uncommitted delta
                         transactionObserver.OnSkipUncommitted(txId);
-                        if (data->GetRop() != ERowOp::Erase && !decidedTransactions.Contains(txId)) {
-                            // This change may commit and change the iteration result
-                            stats.UncertainErase = true;
-                        }
                     }
                     data = Main.GetRecord()->GetAltRecord(++SkipMainDeltas);
                     if (!data) {
@@ -1092,10 +1092,10 @@ namespace NTable {
         }
 
         std::optional<TRowVersion> SkipToCommitted(NTable::ITransactionMapSimplePtr committedTransactions,
-                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
+                NTable::ITransactionObserverSimplePtr transactionObserver)
         {
             Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Attempt to use an invalid iterator");
-            Y_ABORT_UNLESS(!SkipMainVersion, "Cannot use SkipToCommitted after positioning to history");
+            Y_ENSURE(!SkipMainVersion, "Cannot use SkipToCommitted after positioning to history");
 
             const auto& info = Part->Scheme->Groups[0];
             const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
@@ -1150,7 +1150,7 @@ namespace NTable {
             return data->GetDeltaTxId(info);
         }
 
-        void ApplyDelta(TRowState& row) const noexcept
+        void ApplyDelta(TRowState& row) const
         {
             Y_DEBUG_ABORT_UNLESS(!SkipMainVersion, "Current record is not a delta record");
             Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Cannot use unpositioned iterators");
@@ -1168,7 +1168,7 @@ namespace NTable {
             }
         }
 
-        EReady SkipDelta() noexcept
+        EReady SkipDelta()
         {
             Y_DEBUG_ABORT_UNLESS(!SkipMainVersion, "Current record is not a delta record");
             Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Cannot use unpositioned iterators");
@@ -1187,7 +1187,7 @@ namespace NTable {
 
         void Apply(TRowState& row,
                    NTable::ITransactionMapSimplePtr committedTransactions,
-                   NTable::ITransactionObserverSimplePtr transactionObserver) const noexcept
+                   NTable::ITransactionObserverSimplePtr transactionObserver) const
         {
             Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to apply an invalid row");
 
@@ -1249,7 +1249,7 @@ namespace NTable {
         }
 
     private:
-        Y_FORCE_INLINE void ClearKey() noexcept
+        Y_FORCE_INLINE void ClearKey()
         {
             KeyInitialized = false;
             SkipMainDeltas = 0;
@@ -1257,7 +1257,7 @@ namespace NTable {
             SkipEraseVersion = false;
         }
 
-        Y_FORCE_INLINE void InitKey() const noexcept
+        Y_FORCE_INLINE void InitKey() const
         {
             Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Attempt to get an invalid key");
             if (KeyInitialized)
@@ -1273,7 +1273,7 @@ namespace NTable {
             }
         }
 
-        void Apply(TRowState& row, TPinout::TPin pin, const NPage::TDataPage::TRecord* mainRecord, ui32 altIndex) const noexcept
+        void Apply(TRowState& row, TPinout::TPin pin, const NPage::TDataPage::TRecord* mainRecord, ui32 altIndex) const
         {
             auto& col = SkipMainVersion ? Part->Scheme->HistoryColumns[pin.From] : Part->Scheme->AllColumns[pin.From];
 
@@ -1297,8 +1297,8 @@ namespace NTable {
                         row.Set(pin.To, TCellOp(ECellOp::Null, ELargeObj::Outer), { } /* no useful data */);
                         return;
                     case EReady::Gone:
-                        Y_ABORT("Unexpected failure to find RowId=%" PRIu64 " in group %" PRIu32 "%s",
-                                altRowId, col.Group, SkipMainVersion ? "/history" : "");
+                        Y_TABLET_ERROR("Unexpected failure to find RowId=" << altRowId
+                            << " in group " << col.Group << (SkipMainVersion ? "/history" : ""));
                 }
             }
 
@@ -1306,24 +1306,25 @@ namespace NTable {
         }
 
         void Apply(TRowState& row, TPinout::TPin pin, const NPage::TDataPage::TRecord* data,
-                const TPartScheme::TColumn& info) const noexcept
+                const TPartScheme::TColumn& info) const
         {
             auto op = data->GetCellOp(info);
 
             if (op == ECellOp::Empty) {
-                Y_ABORT_UNLESS(!info.IsKey(), "Got an absent key cell");
+                Y_ENSURE(!info.IsKey(), "Got an absent key cell");
             } else if (op == ELargeObj::Inline) {
                 row.Set(pin.To, op, data->Cell(info));
             } else if (op == ELargeObj::Extern || op == ELargeObj::Outer) {
                 const auto ref = data->Cell(info).AsValue<ui64>();
 
-                if (ref >> (sizeof(ui32) * 8))
-                    Y_ABORT("Upper bits of ELargeObj ref now isn't used");
+                if (ref >> (sizeof(ui32) * 8)) {
+                    Y_TABLET_ERROR("Upper bits of ELargeObj ref now isn't used");
+                }
 
                 if (auto blob = Env->Locate(Part, ref, op)) {
                     const auto got = NPage::TLabelWrapper().Read(**blob);
 
-                    Y_ABORT_UNLESS(got == NPage::ECodec::Plain && got.Version == 0);
+                    Y_ENSURE(got == NPage::ECodec::Plain && got.Version == 0);
 
                     row.Set(pin.To, { ECellOp(op), ELargeObj::Inline }, TCell(*got));
                 } else if (op == ELargeObj::Outer) {
@@ -1331,7 +1332,7 @@ namespace NTable {
 
                     row.Set(pin.To, op, { } /* cannot put some useful data */);
                 } else {
-                    Y_ABORT_UNLESS(ref < (*Part->Blobs)->size(), "out of blobs catalog");
+                    Y_ENSURE(ref < (*Part->Blobs)->size(), "out of blobs catalog");
 
                     op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::GlobId);
 
@@ -1342,7 +1343,7 @@ namespace NTable {
                     row.Set(pin.To, op, TCell::Make((**Part->Blobs)[ref]));
                 }
             } else {
-                Y_ABORT("Got an unknown blob placement reference type");
+                Y_TABLET_ERROR("Got an unknown blob placement reference type");
             }
         }
 
@@ -1402,7 +1403,7 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(!Run.empty(), "Cannot iterate over an empty run");
         }
 
-        EReady Seek(const TCells key, ESeek seek) noexcept
+        EReady Seek(const TCells key, ESeek seek)
         {
             bool seekToSliceFirstRow = false;
             TRun::const_iterator pos;
@@ -1444,7 +1445,7 @@ namespace NTable {
                     break;
 
                 default:
-                    Y_ABORT("Unsupported iterator seek mode");
+                    Y_TABLET_ERROR("Unsupported iterator seek mode");
             }
 
             if (pos == Run.end()) {
@@ -1481,7 +1482,7 @@ namespace NTable {
             return SeekToSliceFirstRow();
         }
 
-        EReady SeekReverse(const TCells key, ESeek seek) noexcept
+        EReady SeekReverse(const TCells key, ESeek seek)
         {
             bool seekToSliceLastRow = false;
             TRun::const_iterator pos;
@@ -1524,7 +1525,7 @@ namespace NTable {
                     break;
 
                 default:
-                    Y_ABORT("Unsupported iterator seek mode");
+                    Y_TABLET_ERROR("Unsupported iterator seek mode");
             }
 
             if (pos == Run.end()) {
@@ -1563,7 +1564,7 @@ namespace NTable {
             return SeekToSliceLastRow();
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             if (Y_UNLIKELY(Current == Run.end())) {
                 // Calling Next on an exhausted iterator (e.g. from tests)
@@ -1593,7 +1594,7 @@ namespace NTable {
             return ready;
         }
 
-        EReady Prev() noexcept
+        EReady Prev()
         {
             if (Y_UNLIKELY(Current == Run.end())) {
                 // Calling Prev on an exhausted iterator (e.g. from tests)
@@ -1649,7 +1650,7 @@ namespace NTable {
             return CurrentIt ? CurrentIt->GetRowId() : Max<TRowId>();
         }
 
-        TDbTupleRef GetKey() const noexcept
+        TDbTupleRef GetKey() const
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->GetKey();
@@ -1663,13 +1664,13 @@ namespace NTable {
 
         void Apply(TRowState& row,
                    NTable::ITransactionMapSimplePtr committedTransactions,
-                   NTable::ITransactionObserverSimplePtr transactionObserver) const noexcept
+                   NTable::ITransactionObserverSimplePtr transactionObserver) const
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
             CurrentIt->Apply(row, committedTransactions, transactionObserver);
         }
 
-        TRowVersion GetRowVersion() const noexcept
+        TRowVersion GetRowVersion() const
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->GetRowVersion();
@@ -1678,7 +1679,7 @@ namespace NTable {
         EReady SkipToRowVersion(TRowVersion rowVersion, TIteratorStats& stats,
                                 NTable::ITransactionMapSimplePtr committedTransactions,
                                 NTable::ITransactionObserverSimplePtr transactionObserver,
-                                const NTable::ITransactionSet& decidedTransactions) noexcept
+                                const NTable::ITransactionSet& decidedTransactions)
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
             auto ready = CurrentIt->SkipToRowVersion(rowVersion, stats, committedTransactions, transactionObserver, decidedTransactions);
@@ -1697,20 +1698,20 @@ namespace NTable {
             return CurrentIt->GetDeltaTxId();
         }
 
-        void ApplyDelta(TRowState& row) const noexcept
+        void ApplyDelta(TRowState& row) const
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->ApplyDelta(row);
         }
 
-        EReady SkipDelta() noexcept
+        EReady SkipDelta()
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->SkipDelta();
         }
 
     private:
-        Y_FORCE_INLINE void InitCurrent() noexcept
+        Y_FORCE_INLINE void InitCurrent()
         {
             const auto* part = Current->Part.Get();
             auto it = Cache.find(part);
@@ -1723,14 +1724,14 @@ namespace NTable {
             CurrentIt->SetBounds(Current->Slice);
         }
 
-        Y_FORCE_INLINE void DropCurrent() noexcept
+        Y_FORCE_INLINE void DropCurrent()
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt, "Dropping non-existant current iterator");
             const auto* part = CurrentIt->Part;
             Cache[part] = std::move(CurrentIt);
         }
 
-        Y_FORCE_INLINE void UpdateCurrent() noexcept
+        Y_FORCE_INLINE void UpdateCurrent()
         {
             if (CurrentIt) {
                 if (CurrentIt->Part == Current->Part.Get()) {
@@ -1745,18 +1746,18 @@ namespace NTable {
             InitCurrent();
         }
 
-        Y_FORCE_INLINE EReady SeekToSliceFirstRow() noexcept
+        Y_FORCE_INLINE EReady SeekToSliceFirstRow()
         {
             auto ready = CurrentIt->SeekToSliceFirstRow();
-            Y_ABORT_UNLESS(ready != EReady::Gone,
+            Y_ENSURE(ready != EReady::Gone,
                 "Unexpected slice without the first row");
             return ready;
         }
 
-        Y_FORCE_INLINE EReady SeekToSliceLastRow() noexcept
+        Y_FORCE_INLINE EReady SeekToSliceLastRow()
         {
             auto ready = CurrentIt->SeekToSliceLastRow();
-            Y_ABORT_UNLESS(ready != EReady::Gone,
+            Y_ENSURE(ready != EReady::Gone,
                 "Unexpected slice without the last row");
             return ready;
         }

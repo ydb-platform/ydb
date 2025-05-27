@@ -1,1 +1,29 @@
-{% include [index.md](_includes/index.md) %}
+# Структура кластера
+
+В разделе собраны описания сущностей схемы кластера, которыми оперирует {{ ydb-short-name }}.
+
+## Схема кластера {{ ydb-short-name }} {#cluster-scheme}
+
+Схема кластера {{ ydb-short-name }} — это иерархическое пространство имён кластера {{ ydb-short-name }}. Верхнеуровневым элементом этого пространства имён является **корень схемы кластера**. Дочерними элементами корня схемы кластера выступают [базы данных](../../concepts/glossary.md#database). Внутри каждой базы данных можно создавать произвольную иерархию с помощью вложенных директорий.
+
+![cluster scheme diagram](_assets/cluster-scheme.png =500x)
+
+## Схемные объекты {{ ydb-short-name }}
+
+В {{ ydb-short-name }} поддерживается следующий перечень схемных объектов:
+
+* [Директории](dir.md)
+* [Таблицы](table.md)
+
+{% if feature_view %}
+* [Представления (VIEW)](view.md)
+{% endif %}
+
+* [Топики](../topic.md)
+* [Секреты](secrets.md)
+* [Подключения к внешним БД](external_data_source.md)
+* [Внешние источники данных](external_table.md)
+
+Все схемные объекты в {{ ydb-short-name }} имеют одинаковые требования к своим наименованиям.
+
+{% include [object naming rules](./_includes/object-naming-rules.md) %}

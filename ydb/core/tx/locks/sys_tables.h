@@ -199,7 +199,7 @@ struct TSysTables {
         }
 
         static bool ExtractKey(const TArrayRef<const TCell>& key, EColumns columnId, ui64& value) {
-            Y_ABORT_UNLESS(columnId == EColumns::LockId ||
+            Y_ENSURE(columnId == EColumns::LockId ||
                      columnId == EColumns::DataShard ||
                      columnId == EColumns::SchemeShard ||
                      columnId == EColumns::PathId);
@@ -212,7 +212,7 @@ struct TSysTables {
             if (cell.IsNull())
                 return false;
 
-            Y_ABORT_UNLESS(cell.Size() == sizeof(ui64));
+            Y_ENSURE(cell.Size() == sizeof(ui64));
             value = ReadUnaligned<ui64>(reinterpret_cast<const ui64*>(cell.Data()));
             return true;
         }

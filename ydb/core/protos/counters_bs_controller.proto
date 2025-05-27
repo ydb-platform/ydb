@@ -28,6 +28,7 @@ enum ESimpleCounters {
     COUNTER_DISK_SCRUB_CUR_DISKS = 18 [(CounterOpts) = {Name: "CurrentlyScrubbedDisks"}];
     COUNTER_DISK_SCRUB_CUR_GROUPS = 19 [(CounterOpts) = {Name: "CurrentlyScrubbedGroups"}];
     COUNTER_SELF_HEAL_UNREASSIGNABLE_GROUPS = 20 [(CounterOpts) = {Name: "SelfHealUnreassignableGroups"}];
+    COUNTER_GROUP_LAYOUT_SANITIZER_INVALID_GROUPS = 21 [(CounterOpts) = {Name: "GroupLayoutSanitizerInvlaidGroups"}];
 }
 
 enum ECumulativeCounters {
@@ -275,4 +276,6 @@ enum ETxTypes {
     TXTYPE_DECOMMIT_GROUP = 26 [(TxTypeOpts) = {Name: "TTxDecommitGroup"}];
     TXTYPE_UPDATE_GROUP = 27 [(TxTypeOpts) = {Name: "TTxUpdateGroup"}];
     TXTYPE_DELETE_BLOB_DEPOT = 28 [(TxTypeOpts) = {Name: "TTxDeleteBlobDepot"}];
+    TXTYPE_COMMIT_CONFIG = 29 [(TxTypeOpts) = {Name: "TTxCommitConfig"}];
+    TXTYPE_UPDATE_SHRED = 30 [(TxTypeOpts) = {Name: "TTxUpdateShred"}];
 }

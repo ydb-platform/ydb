@@ -14,8 +14,6 @@ PEERDIR(
     contrib/libs/libjpeg-turbo
     contrib/libs/libtiff
     contrib/libs/libwebp
-    contrib/libs/libwebp/demux
-    contrib/libs/libwebp/mux
     contrib/libs/openjpeg
     contrib/libs/python
     contrib/libs/zlib

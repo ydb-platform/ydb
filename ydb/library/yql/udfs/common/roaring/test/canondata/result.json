@@ -1,4 +1,9 @@
 {
+    "test.test[aggregation]": [
+        {
+            "uri": "file://test.test_aggregation_/results.txt"
+        }
+    ],
     "test.test[cardinality]": [
         {
             "uri": "file://test.test_cardinality_/results.txt"
@@ -7,6 +12,11 @@
     "test.test[intersect]": [
         {
             "uri": "file://test.test_intersect_/results.txt"
+        }
+    ],
+    "test.test[run_optimize]": [
+        {
+            "uri": "file://test.test_run_optimize_/results.txt"
         }
     ],
     "test.test[serialize_deserialize]": [

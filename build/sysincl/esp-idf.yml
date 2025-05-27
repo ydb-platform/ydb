@@ -1,4 +1,5 @@
-- includes:
+- source_filter: "^contrib/libs/esp-idf|contrib/libs/connectedhomeip|taxi"
+  includes:
   # freertos
   - freertos/FreeRTOS.h: contrib/libs/esp-idf/components/freertos/include/freertos/FreeRTOS.h
   - freertos/semphr.h: contrib/libs/esp-idf/components/freertos/include/freertos/semphr.h

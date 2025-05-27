@@ -185,7 +185,7 @@ if __name__ == "__main__":
 
         # In original script there are targets kikimr/docs/ru/docs_oss ydb ydb/tests/oss/launch library/cpp/actors tools/rescompiler/bin
         generate_graph_command = f'{ymake_binary_path} --build-root "{ydb_tmp_folder_path}" --config "{dump_export_path}"\
-            --plugins-root "{plugins_folder_path}" --xs --xx --sem-graph --keep-going\
+            --plugins-root "{plugins_folder_path}" --xs --xx --sem-graph --keep-going --foreign-on-nosem\
             ydb ydb/tests/oss/launch tools/rescompiler/bin > {graph_export_path}'
         print(f"Generate graph command {generate_graph_command}")
 

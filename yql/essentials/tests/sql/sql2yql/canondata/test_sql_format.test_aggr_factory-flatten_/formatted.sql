@@ -1,6 +1,6 @@
 /* syntax version 1 */
 /* postgres can not */
-$f = AGGREGATION_FACTORY("sum");
+$f = AGGREGATION_FACTORY('sum');
 $g = AggregateFlatten($f);
 
 SELECT
@@ -14,7 +14,7 @@ SELECT
     ListAggregate([[1, 2], ListCreate(Int32)], $g)
 ;
 
-$i = AGGREGATION_FACTORY("AGGREGATE_LIST_DISTINCT");
+$i = AGGREGATION_FACTORY('AGGREGATE_LIST_DISTINCT');
 $j = AggregateFlatten($i);
 
 SELECT

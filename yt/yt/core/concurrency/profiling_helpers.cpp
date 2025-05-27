@@ -7,7 +7,7 @@ using namespace NProfiling;
 ////////////////////////////////////////////////////////////////////////////////
 
 TTagSet GetThreadTags(
-    const TString& threadName)
+    const std::string& threadName)
 {
     TTagSet tags;
     tags.AddTag(TTag("thread", threadName));
@@ -15,8 +15,8 @@ TTagSet GetThreadTags(
 }
 
 TTagSet GetBucketTags(
-    const TString& threadName,
-    const TString& bucketName)
+    const std::string& threadName,
+    const std::string& bucketName)
 {
     TTagSet tags;
 
@@ -27,9 +27,9 @@ TTagSet GetBucketTags(
 }
 
 TTagSet GetQueueTags(
-    const TString& threadName,
-    const TString& bucketName,
-    const TString& queueName)
+    const std::string& threadName,
+    const std::string& bucketName,
+    const std::string& queueName)
 {
     TTagSet tags;
 
@@ -43,4 +43,3 @@ TTagSet GetQueueTags(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NConcurrency
-

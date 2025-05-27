@@ -1,0 +1,11 @@
+items:
+- name: Проблемы с производительностью
+  href: performance/index.md
+  include:
+    mode: link
+    path: performance/toc_p.yaml
+- name: Примеры диагностики
+  items:
+    - name: Перегруженный шард
+      href: examples/schemas/overloaded-shard-simple-case.md
+

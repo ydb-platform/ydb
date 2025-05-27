@@ -199,6 +199,9 @@ private:
     TInstant AttributesUpdateTime_ = TInstant::Zero();
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
 
+    // tags cache
+    TMaybe<NJson::TJsonMap> QueueTags_;
+
     // counters
     TIntrusivePtr<TQueueCounters> Counters_;
     TIntrusivePtr<TUserCounters> UserCounters_;

@@ -9,7 +9,7 @@ using namespace NTable;
 void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
         TArrayRef<const TRawTypeValue> in, TArrayRef<const TTag> tags)
 {
-    Y_VERIFY_S(in.size() == tags.size(), "Count doesn't match"
+    Y_ENSURE(in.size() == tags.size(), "Count doesn't match"
         << ": in# " << in.size()
         << ", tags# " << tags.size());
 
@@ -31,7 +31,7 @@ void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
 
     TVector<TCell> cells(Reserve(in.size()));
     for (const auto& op : in) {
-        Y_VERIFY_S(op.Op == ECellOp::Set, "Unexpected cell op: " << op.Op.Raw());
+        Y_ENSURE(op.Op == ECellOp::Set, "Unexpected cell op: " << op.Op.Raw());
 
         out.AddTags(op.Tag);
         cells.emplace_back(op.AsCell());
@@ -43,7 +43,7 @@ void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
 void TChangeRecordBodySerializer::SerializeCells(TSerializedCells& out,
         const TRowState& state, TArrayRef<const TTag> tags)
 {
-    Y_VERIFY_S(state.Size() == tags.size(), "Count doesn't match"
+    Y_ENSURE(state.Size() == tags.size(), "Count doesn't match"
         << ": state# " << state.Size()
         << ", tags# " << tags.size());
 
@@ -72,7 +72,7 @@ void TChangeRecordBodySerializer::Serialize(TDataChange& out, ERowOp rop,
         SerializeCells(*out.MutableReset(), updates);
         break;
     default:
-        Y_FAIL_S("Unsupported row op: " << static_cast<ui8>(rop));
+        Y_ENSURE(false, "Unsupported row op: " << static_cast<ui8>(rop));
     }
 }
 

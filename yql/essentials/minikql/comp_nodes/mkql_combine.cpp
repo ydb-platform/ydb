@@ -272,12 +272,12 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
 
-        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block, context), block);
         block = make;
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TCombineCoreFlowWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCombineCoreFlowWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -295,7 +295,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto result = PHINode::Create(valueType, 3U, "result", over);
 
-        const auto isEmptyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::IsEmpty));
+        const auto isEmptyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::IsEmpty>());
         const auto isEmptyFuncType = FunctionType::get(Type::getInt1Ty(context), { statePtrType }, false);
         const auto isEmptyFuncPtr = CastInst::Create(Instruction::IntToPtr, isEmptyFunc, PointerType::getUnqual(isEmptyFuncType), "cast", block);
         const auto empty = CallInst::Create(isEmptyFuncType, isEmptyFuncPtr, { stateArg }, "empty", block);
@@ -338,8 +338,8 @@ public:
 
             const auto item = GetNodeValue(Flow, ctx, block);
 
-            const auto finsh = IsFinish(item, block);
-            const auto yield = IsYield(item, block);
+            const auto finsh = IsFinish(item, block, context);
+            const auto yield = IsYield(item, block, context);
             const auto special = BinaryOperator::CreateOr(finsh, yield, "special", block);
 
             const auto fin = SelectInst::Create(finsh, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Finish)), ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "fin", block);
@@ -354,14 +354,9 @@ public:
             const auto key = GetNodeValue(Nodes.KeyResultNode, ctx, block);
             codegenKeyArg->CreateSetValue(ctx, block, key);
 
-            const auto keyParam = NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget() ?
-                new AllocaInst(key->getType(), 0U, "key_param", &main->back()) : key;
+            const auto keyParam = key;
 
-            if (NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget()) {
-                new StoreInst(key, keyParam, block);
-            }
-
-            const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::At));
+            const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::At>());
             const auto atType = FunctionType::get(ptrValueType, {stateArg->getType(), keyParam->getType()}, false);
             const auto atPtr = CastInst::Create(Instruction::IntToPtr, atFunc, PointerType::getUnqual(atType), "function", block);
             const auto place = CallInst::Create(atType, atPtr, {stateArg, keyParam}, "place", block);
@@ -370,7 +365,7 @@ public:
             const auto next = BasicBlock::Create(context, "next", ctx.Func);
             const auto test = BasicBlock::Create(context, "test", ctx.Func);
 
-            BranchInst::Create(init, next, IsInvalid(place, block), block);
+            BranchInst::Create(init, next, IsInvalid(place, block, context), block);
 
             block = init;
             GetNodeValue(place, Nodes.InitResultNode, ctx, block);
@@ -389,7 +384,7 @@ public:
             block = done;
 
             const auto stat = ctx.GetStat();
-            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::PushStat));
+            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::PushStat>());
             const auto statType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), stat->getType()}, false);
             const auto statPtr = CastInst::Create(Instruction::IntToPtr, statFunc, PointerType::getUnqual(statType), "stat", block);
             CallInst::Create(statType, statPtr, {stateArg, stat}, "", block);
@@ -402,7 +397,7 @@ public:
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Extract));
+            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Extract>());
             const auto extractType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType(), onePtr->getType(), twoPtr->getType()}, false);
             const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
             const auto has = CallInst::Create(extractType, extractPtr, {stateArg, onePtr, twoPtr}, "has", block);
@@ -421,7 +416,7 @@ public:
             } else if constexpr (StateContainerOpt) {
                 const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-                BranchInst::Create(more, exit, IsEmpty(value, block), block);
+                BranchInst::Create(more, exit, IsEmpty(value, block, context), block);
                 block = exit;
 
                 const auto strip = GetOptionalValue(context, value, block);
@@ -429,7 +424,7 @@ public:
                 BranchInst::Create(over, block);
             } else {
                 result->addIncoming(value, block);
-                BranchInst::Create(more, over, IsEmpty(value, block), block);
+                BranchInst::Create(more, over, IsEmpty(value, block, context), block);
             }
         }
 
@@ -457,7 +452,7 @@ public:
         block = more;
 
         const auto current = new LoadInst(valueType, currentPtr, "current", block);
-        BranchInst::Create(pull, skip, HasValue(current, block), block);
+        BranchInst::Create(pull, skip, HasValue(current, block, context), block);
 
         {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -495,7 +490,7 @@ public:
 
             const auto list = DoGenerateGetValue(ctx, statePtr, block);
             result->addIncoming(list, block);
-            BranchInst::Create(over, good, IsSpecial(list, block),  block);
+            BranchInst::Create(over, good, IsSpecial(list, block, context),  block);
 
             block = good;
             if constexpr (StateContainerOpt) {
@@ -722,7 +717,7 @@ private:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(ptrValueType) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
 
@@ -738,7 +733,6 @@ private:
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         DISubprogramAnnotator annotator(ctx, ctx.Func);
-        
 
         auto args = ctx.Func->arg_begin();
 
@@ -768,7 +762,7 @@ private:
             const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
 
             const auto current = new LoadInst(valueType, currArg, "current", block);
-            BranchInst::Create(skip, pull, IsEmpty(current, block), block);
+            BranchInst::Create(skip, pull, IsEmpty(current, block, context), block);
 
             block = pull;
 
@@ -792,7 +786,7 @@ private:
             block = skip;
         }
 
-        const auto isEmptyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::IsEmpty));
+        const auto isEmptyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::IsEmpty>());
         const auto isEmptyFuncType = FunctionType::get(Type::getInt1Ty(context), { statePtrType }, false);
         const auto isEmptyFuncPtr = CastInst::Create(Instruction::IntToPtr, isEmptyFunc, PointerType::getUnqual(isEmptyFuncType), "cast", block);
         const auto empty = CallInst::Create(isEmptyFuncType, isEmptyFuncPtr, { stateArg }, "empty", block);
@@ -831,8 +825,7 @@ private:
 
             const auto used = GetMemoryUsed(MemLimit, ctx, block);
 
-            const auto stream = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-                new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            const auto stream = static_cast<Value*>(containerArg);
 
             BranchInst::Create(loop, block);
 
@@ -851,14 +844,9 @@ private:
             const auto key = GetNodeValue(Nodes.KeyResultNode, ctx, block);
             codegenKeyArg->CreateSetValue(ctx, block, key);
 
-            const auto keyParam = NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget() ?
-                new AllocaInst(key->getType(), 0U, "key_param", &main->back()) : key;
+            const auto keyParam = key;
 
-            if (NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget()) {
-                new StoreInst(key, keyParam, block);
-            }
-
-            const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::At));
+            const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::At>());
             const auto atType = FunctionType::get(ptrValueType, {stateArg->getType(), keyParam->getType()}, false);
             const auto atPtr = CastInst::Create(Instruction::IntToPtr, atFunc, PointerType::getUnqual(atType), "function", block);
             const auto place = CallInst::Create(atType, atPtr, {stateArg, keyParam}, "place", block);
@@ -867,7 +855,7 @@ private:
             const auto next = BasicBlock::Create(context, "next", ctx.Func);
             const auto test = BasicBlock::Create(context, "test", ctx.Func);
 
-            BranchInst::Create(init, next, IsInvalid(place, block), block);
+            BranchInst::Create(init, next, IsInvalid(place, block, context), block);
 
             block = init;
             GetNodeValue(place, Nodes.InitResultNode, ctx, block);
@@ -886,7 +874,7 @@ private:
             block = done;
 
             const auto stat = ctx.GetStat();
-            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::PushStat));
+            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::PushStat>());
             const auto statType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), stat->getType()}, false);
             const auto statPtr = CastInst::Create(Instruction::IntToPtr, statFunc, PointerType::getUnqual(statType), "stat", block);
             CallInst::Create(statType, statPtr, {stateArg, stat}, "", block);
@@ -899,7 +887,7 @@ private:
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Extract));
+            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Extract>());
             const auto extractType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType(), onePtr->getType(), twoPtr->getType()}, false);
             const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
             const auto has = CallInst::Create(extractType, extractPtr, {stateArg, onePtr, twoPtr}, "has", block);
@@ -923,12 +911,12 @@ private:
                     BranchInst::Create(more, block);
                 }
             } else {
-                SafeUnRefUnboxed(valuePtr, ctx, block);
+                SafeUnRefUnboxedOne(valuePtr, ctx, block);
                 GetNodeValue(valuePtr, Nodes.FinishResultNode, ctx, block);
                 const auto value = new LoadInst(valueType, valuePtr, "value", block);
 
                 const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
-                BranchInst::Create(more, exit, IsEmpty(value, block), block);
+                BranchInst::Create(more, exit, IsEmpty(value, block, context), block);
 
                 block = exit;
 

@@ -1,7 +1,7 @@
+#include <ydb/core/metering/metering.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
-
-#include <ydb/core/metering/metering.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -13,9 +13,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
     Y_UNIT_TEST(Fake) {
     }
 
-    Y_UNIT_TEST(BaseCase) {
+    Y_UNIT_TEST_FLAG(BaseCase, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
         ui64 txId = 100;
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
@@ -106,7 +106,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(0)});
 
-        ui64 sharedHiveTablets = TTestTxConfig::FakeHiveTablets + NKikimr::TFakeHiveState::TABLETS_PER_CHILD_HIVE;
+        // Check that shards of ServerLess0 db are gone after its deletion.
+        //
+        // SharedDB contains:
+        //  - 3 of its own shards: SchemeShard, Coordinator, Mediator
+        //  - 4 of ServerLess0's shards: SchemeShard, Coordinator, Mediator, 1 x DataShard of the table0
+        //
+
+        //NOTE: AlterDatabaseCreateHiveFirst create system tablets in a tenant hive, otherwise they are created in the root hive
+        ui64 sharedHiveTablets = TTestTxConfig::FakeHiveTablets + (AlterDatabaseCreateHiveFirst ? TFakeHiveState::TABLETS_PER_CHILD_HIVE : 1)
+            + 3  // shards of SharedDB
+        ;
         env.TestWaitTabletDeletion(runtime, xrange(sharedHiveTablets, sharedHiveTablets + 4), sharedHive);
     }
 
@@ -231,7 +241,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         waitMeteringMessage();
 
         {
-            TString meteringData = R"({"usage":{"start":1600452120,"quantity":59,"finish":1600452179,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":11664},"id":"72057594046678944-3-1600452120-1600452179-11664","cloud_id":"CLOUD_ID_VAL","source_wt":1600452180,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
+            TString meteringData = R"({"usage":{"start":1600452120,"quantity":59,"finish":1600452179,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":13280},"id":"72057594046678944-3-1600452120-1600452179-13280","cloud_id":"CLOUD_ID_VAL","source_wt":1600452180,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
             meteringData += "\n";
             UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
         }
@@ -251,6 +261,72 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             meteringData += "\n";
             UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
         }
+    }
+
+    Y_UNIT_TEST(StorageBillingLabels) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetAllowServerlessStorageBilling(&runtime, true);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "SharedDB"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "SharedDB"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", Sprintf(R"(
+            Name: "ServerlessDB"
+            ResourcesDomainKey {
+                SchemeShard: %lu
+                PathId: 2
+            }
+        )", TTestTxConfig::SchemeShard));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "ServerlessDB"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "ServerlessDB", AlterUserAttrs({
+            {"cloud_id", "CLOUD_ID_VAL"},
+            {"folder_id", "FOLDER_ID_VAL"},
+            {"database_id", "DATABASE_ID_VAL"},
+            {"label_k", "v"},
+            {"not_a_label_x", "y"},
+        }));
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> block(runtime);
+        runtime.WaitFor("metering", [&]{ return block.size() >= 1; });
+
+        const auto& jsonStr = block[0]->Get()->MeteringJson;
+        UNIT_ASSERT_C(jsonStr.Contains(R"("labels":{"k":"v"})"), jsonStr);
+        UNIT_ASSERT_C(!jsonStr.Contains("not_a_label"), jsonStr);
     }
 
     Y_UNIT_TEST(TestServerlessComputeResourcesMode) {
@@ -299,7 +375,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         UNIT_ASSERT(sharedDbSchemeShard != 0
                     && sharedDbSchemeShard != (ui64)-1
                     && sharedDbSchemeShard != TTestTxConfig::SchemeShard);
-                    
+
         TestDescribeResult(DescribePath(runtime, sharedDbSchemeShard, "/MyRoot/SharedDB"),
                            {NLs::PathExist,
                             NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeUnspecified)});
@@ -308,7 +384,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2 
+                    PathId: 2
                 }
                 Name: "ServerLess0"
             )",
@@ -348,7 +424,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLess0"),
                            {NLs::PathExist,
                             NLs::ServerlessComputeResourcesMode(EServerlessComputeResourcesModeShared)});
-        
+
         auto checkServerlessComputeResourcesMode = [&](EServerlessComputeResourcesMode serverlessComputeResourcesMode) {
             TString alterData = Sprintf(
                 R"(
@@ -406,7 +482,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2 
+                    PathId: 2
                 }
                 Name: "ServerLess0"
             )",
@@ -487,7 +563,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             R"(
                 ResourcesDomainKey {
                     SchemeShard: %lu
-                    PathId: 2 
+                    PathId: 2
                 }
                 Name: "ServerLess0"
             )",

@@ -523,6 +523,9 @@ struct TOperationSpecBase
     /// If operation doesn't finish in time it will be aborted.
     FLUENT_FIELD_OPTION(TDuration, TimeLimit);
 
+    /// @brief Alias for searching for an operation in the future.
+    FLUENT_FIELD_OPTION(TString, Alias);
+
     /// @brief Title to be shown in web interface.
     FLUENT_FIELD_OPTION(TString, Title);
 
@@ -542,6 +545,12 @@ struct TOperationSpecBase
 
     /// How many jobs can fail before operation is failed.
     FLUENT_FIELD_OPTION(ui64, MaxFailedJobCount);
+
+    // Arbitrary structured information related to the operation.
+    FLUENT_FIELD_OPTION(TNode, Annotations);
+
+    // Similar to Annotations, shown on the operation page. Recommends concise, human-readable entries to prevent clutter.
+    FLUENT_FIELD_OPTION(TNode, Description);
 };
 
 ///
@@ -764,6 +773,9 @@ struct TUserJobSpec
     /// @brief Porto layers to use in the job. Layers are listed from top to bottom.
     FLUENT_VECTOR_FIELD(TYPath, Layer);
 
+    /// @brief Docker image to use in the job.
+    FLUENT_FIELD_OPTION(TString, DockerImage);
+
     ///
     /// @brief MemoryLimit specifies how much memory job process can use.
     ///
@@ -776,7 +788,7 @@ struct TUserJobSpec
     /// @note
     /// When @ref NYT::TOperationOptions::MountSandboxInTmpfs is enabled library will compute
     /// total size of all files used by this job and add this total size to MemoryLimit.
-    /// Thus you shouldn't include size of your files (e.g. binary file) into MemoryLimit.
+    /// Thus, you shouldn't include size of your files (e.g. binary file) into MemoryLimit.
     ///
     /// @note
     /// Final memory memory_limit passed to YT is calculated as follows:
@@ -878,6 +890,15 @@ struct TUserJobSpec
     ///
     /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/operations-options#disk_request
     FLUENT_FIELD_OPTION(TDiskRequest, DiskRequest);
+
+    ///
+    /// @brief Activates the RPC proxy within the job proxy.
+    ///
+    /// By enabling this option, the environment variable YT_JOB_PROXY_SOCKET_PATH will be set.
+    /// You can use this variable to obtain the unix domain socket path and then construct a client for sending requests.
+    ///
+    /// @note Do not enable this option without prior discussion with the YTsaurus team.
+    FLUENT_FIELD_DEFAULT(bool, EnableRpcProxyInJobProxy, false);
 
 private:
     TVector<std::tuple<TLocalFilePath, TAddLocalFileOptions>> LocalFiles_;
@@ -2386,6 +2407,31 @@ enum class EOperationBriefState : int
     Failed        /* "failed" */,
 };
 
+
+///
+/// @brief Operation state.
+enum class EOperationState : int
+{
+    None                /* "none" */,
+    Starting            /* "starting" */,
+    Orphaned            /* "orphaned" */,
+    WaitingForAgent     /* "waiting_for_agent" */,
+    Initializing        /* "initializing" */,
+    Preparing           /* "preparing" */,
+    Materializing       /* "orphaned" */,
+    ReviveInitializing  /* "revive_initializing" */,
+    Reviving            /* "reviving" */,
+    RevivingJobs        /* "reviving_jobs" */,
+    Pending             /* "pending" */,
+    Running             /* "running" */,
+    Completing          /* "completing" */,
+    Completed           /* "completed" */,
+    Aborting            /* "aborting" */,
+    Aborted             /* "aborted" */,
+    Failing             /* "failing" */,
+    Failed              /* "failed" */,
+};
+
 ///
 /// @brief Operation type.
 enum class EOperationType : int
@@ -2422,13 +2468,13 @@ struct TOperationProgress
 /// @brief Brief operation progress (numbers of jobs in these states).
 struct TOperationBriefProgress
 {
-    ui64 Aborted = 0;
-    ui64 Completed = 0;
-    ui64 Failed = 0;
-    ui64 Lost = 0;
-    ui64 Pending = 0;
-    ui64 Running = 0;
-    ui64 Total = 0;
+    i64 Aborted = 0;
+    i64 Completed = 0;
+    i64 Failed = 0;
+    i64 Lost = 0;
+    i64 Pending = 0;
+    i64 Running = 0;
+    i64 Total = 0;
 };
 
 ///
@@ -2597,7 +2643,7 @@ struct TListOperationsOptions
 
     ///
     /// @brief Choose operations with given @ref NYT::TOperationAttributes::State.
-    FLUENT_FIELD_OPTION(TString, State);
+    FLUENT_FIELD_OPTION(EOperationState, State);
 
     ///
     /// @brief Choose operations with given @ref NYT::TOperationAttributes::Type.
@@ -2694,7 +2740,6 @@ enum class EListJobsDataSource : int
 /// @brief Job type.
 enum class EJobType : int
 {
-    SchedulerFirst    /* "scheduler_first" */,
     Map               /* "map" */,
     PartitionMap      /* "partition_map" */,
     SortedMerge       /* "sorted_merge" */,
@@ -2712,13 +2757,14 @@ enum class EJobType : int
     JoinReduce        /* "join_reduce" */,
     Vanilla           /* "vanilla" */,
     SchedulerUnknown  /* "scheduler_unknown" */,
-    SchedulerLast     /* "scheduler_last" */,
-    ReplicatorFirst   /* "replicator_first" */,
     ReplicateChunk    /* "replicate_chunk" */,
     RemoveChunk       /* "remove_chunk" */,
     RepairChunk       /* "repair_chunk" */,
     SealChunk         /* "seal_chunk" */,
-    ReplicatorLast    /* "replicator_last" */,
+    ShallowMerge      /* "shallow_merge" */,
+    MergeChunks       /* "merge_chunks" */,
+    AutotomizeChunk   /* "autotomize_chunk" */,
+    ReincarnateChunk  /* "reincarnate_chunk" */,
 };
 
 ///
@@ -2812,6 +2858,45 @@ enum class EJobSortDirection : int
 };
 
 ///
+/// @brief Attributes to request for a job.
+enum class EJobAttribute : int
+{
+    Id                /* "id" */,
+    Type              /* "type" */,
+    State             /* "state" */,
+    Address           /* "address" */,
+    TaskName          /* "task_name" */,
+    StartTime         /* "start_time" */,
+    FinishTime        /* "finish_time" */,
+    Progress          /* "progress" */,
+    StderrSize        /* "stderr_size" */,
+    Error             /* "error" */,
+    Result            /* "result" */,
+    BriefStatistics   /* "brief_statistics" */,
+    InputPaths        /* "input_paths" */,
+    CoreInfos         /* "core_infos" */,
+};
+
+///
+/// @brief A class that specifies which attributes to request when using @ref NYT::IClient::GetJob or @ref NYT::IClient::ListJobs.
+struct TJobAttributeFilter
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TJobAttributeFilter;
+    /// @endcond
+
+    THashSet<EJobAttribute> Attributes_;
+
+    ///
+    /// @brief Add attribute to the filter. Calls are supposed to be chained.
+    TSelf& Add(EJobAttribute attribute)
+    {
+        Attributes_.insert(attribute);
+        return *this;
+    }
+};
+
+///
 /// @brief Options for @ref NYT::IClient::ListJobs.
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#list_jobs
@@ -2856,6 +2941,14 @@ struct TListJobsOptions
     FLUENT_FIELD_OPTION(bool, WithMonitoringDescriptor);
 
     ///
+    /// @brief Return only jobs with interruption info.
+    FLUENT_FIELD_OPTION(bool, WithInterruptionInfo);
+
+    ///
+    /// @brief Return only jobs with given operation incarnation.
+    FLUENT_FIELD_OPTION(TString, OperationIncarnation);
+
+    ///
     /// @brief Search for jobs with start time >= `FromTime`.
     FLUENT_FIELD_OPTION(TInstant, FromTime);
 
@@ -2866,6 +2959,10 @@ struct TListJobsOptions
     ///
     /// @brief Search for jobs with filters encoded in token.
     FLUENT_FIELD_OPTION(TString, ContinuationToken);
+
+    ///
+    /// @brief Return only requested job attributes.
+    FLUENT_FIELD_OPTION(TJobAttributeFilter, AttributeFilter);
 
     /// @}
 
@@ -3011,6 +3108,10 @@ struct TGetJobOptions
     /// @cond Doxygen_Suppress
     using TSelf = TGetJobOptions;
     /// @endcond
+
+    ///
+    /// @brief Return only requested job attributes.
+    FLUENT_FIELD_OPTION(TJobAttributeFilter, AttributeFilter);
 };
 
 ///

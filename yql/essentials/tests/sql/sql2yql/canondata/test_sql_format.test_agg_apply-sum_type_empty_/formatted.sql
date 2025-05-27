@@ -2,17 +2,17 @@
 /* postgres can not */
 PRAGMA EmitAggApply;
 
-$p =
+$p = (
     SELECT
         sum(value) AS a
     FROM
         AS_TABLE([<|key: 1, value: 2|>])
     LIMIT 0
-;
+);
 
-$p =
+$p = (
     PROCESS $p
-;
+);
 
 SELECT
     FormatType(TypeOf($p))

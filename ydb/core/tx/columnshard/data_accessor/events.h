@@ -3,6 +3,7 @@
 #include "abstract/collector.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -59,35 +60,32 @@ public:
 
     explicit TEvRegisterController(std::unique_ptr<IGranuleDataAccessor>&& accessor, const bool isUpdate)
         : Controller(std::move(accessor))
-        , IsUpdateFlag(isUpdate)
-    {
+        , IsUpdateFlag(isUpdate) {
     }
 };
 
 class TEvUnregisterController
     : public NActors::TEventLocal<TEvUnregisterController, NColumnShard::TEvPrivate::EEv::EvUnregisterGranuleDataAccessor> {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
 
 public:
-    explicit TEvUnregisterController(const ui64 pathId)
+    explicit TEvUnregisterController(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 };
 
-class TEvAskTabletDataAccessors: public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
+class TEvAskTabletDataAccessors
+    : public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
 private:
-    using TPortions = THashMap<ui64, TPortionInfo::TConstPtr>;
+    using TPortions = THashMap<TInternalPathId, TPortionsByConsumer>;
     YDB_ACCESSOR_DEF(TPortions, Portions);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IAccessorCallback>, Callback);
-    YDB_READONLY_DEF(TString, Consumer);
 
 public:
-    explicit TEvAskTabletDataAccessors(const THashMap<ui64, TPortionInfo::TConstPtr>& portions,
-        const std::shared_ptr<NDataAccessorControl::IAccessorCallback>& callback, const TString& consumer)
-        : Portions(portions)
-        , Callback(callback)
-        , Consumer(consumer) {
+    explicit TEvAskTabletDataAccessors(TPortions&& portions, const std::shared_ptr<NDataAccessorControl::IAccessorCallback>& callback)
+        : Portions(std::move(portions))
+        , Callback(callback) {
     }
 };
 

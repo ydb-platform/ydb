@@ -41,13 +41,17 @@ namespace NKikimr::NBlobDepot {
                     const TData::TValue *value = Data->FindKey(key);
                     Y_ABORT_UNLESS(value); // key must exist
                     ui32 numDataBytes = 0;
-                    EnumerateBlobsForValueChain(value->ValueChain, TabletID(), [&](TLogoBlobID id, ui32, ui32 size) {
-                        const ui32 groupId = Info()->GroupFor(id.Channel(), id.Generation());
-                        const auto state = overseer.GetBlobState(groupId, id);
-                        Y_VERIFY_S(state == NTesting::EBlobState::CERTAINLY_WRITTEN,
-                            "UserId# " << userId.ToString() << " UserState# " << (int)userState
-                            << " Id# " << id.ToString() << " State# " << (int)state);
-                        numDataBytes += size;
+                    EnumerateBlobsForValueChain(value->ValueChain, TabletID(), TOverloaded {
+                        [&](TLogoBlobID id, ui32, ui32 size) {
+                            const ui32 groupId = Info()->GroupFor(id.Channel(), id.Generation());
+                            const auto state = overseer.GetBlobState(groupId, id);
+                            Y_VERIFY_S(state == NTesting::EBlobState::CERTAINLY_WRITTEN,
+                                "UserId# " << userId.ToString() << " UserState# " << (int)userState
+                                << " Id# " << id.ToString() << " State# " << (int)state);
+                            numDataBytes += size;
+                        },
+                        [&](TS3Locator) {
+                        }
                     });
                     Y_ABORT_UNLESS(numDataBytes == userId.BlobSize());
                     break;

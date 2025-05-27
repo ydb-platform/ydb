@@ -91,6 +91,7 @@ struct TTestEnvOpts {
     bool EnableSentinel;
     bool EnableCMSRequestPriorities;
     bool EnableSingleCompositeActionGroup;
+    bool EnableDynamicGroups;
 
     using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
     TNodeLocationCallback NodeLocationCallback;
@@ -112,6 +113,7 @@ struct TTestEnvOpts {
         , EnableSentinel(false)
         , EnableCMSRequestPriorities(true)
         , EnableSingleCompositeActionGroup(true)
+        , EnableDynamicGroups(false)
     {
     }
 
@@ -135,6 +137,10 @@ struct TTestEnvOpts {
         return *this;
     }
 
+    TTestEnvOpts& WithDynamicGroups() {
+        EnableDynamicGroups = true;
+        return *this;
+    }
 };
 
 class TCmsTestEnv : public TTestBasicRuntime {
@@ -405,6 +411,42 @@ public:
     {
         auto req = MakeResetMarkerRequest(marker, userToken, args...);
         return CheckResetMarker(req, code);
+    }
+
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskRefresh(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code) 
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvRefreshMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
+    }
+
+    Ydb::Maintenance::GetMaintenanceTaskResult CheckMaintenanceTaskGet(
+        const TString &taskUid,
+        Ydb::StatusIds::StatusCode code) 
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvGetMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvGetMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
     }
 
     template <typename... Ts>

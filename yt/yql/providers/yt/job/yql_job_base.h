@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_validate.h>
 #include <yql/essentials/public/udf/udf_counter.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
@@ -70,6 +71,14 @@ public:
         TableNames = tableNames;
     }
 
+    void SetRuntimeLogLevel(NUdf::ELogLevel level) {
+        RuntimeLogLevel = level;
+    }
+
+    void SetLangVer(TLangVersion langver) {
+        LangVer = langver;
+    }
+
     void Do(const NYT::TRawJobContext& jobContext) override;
     void Save(IOutputStream& stream) const override;
     void Load(IInputStream& stream) override;
@@ -88,6 +97,8 @@ protected:
     NKikimr::NUdf::EValidateMode UdfValidateMode = NKikimr::NUdf::EValidateMode::None;
     TString OptLLVM;
     TVector<TString> TableNames;
+    NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;
+    TLangVersion LangVer = UnknownLangVersion;
     // End serializable part
 
     ui64 StartCycles = 0;
@@ -100,6 +111,7 @@ protected:
     NKikimr::NMiniKQL::IStatsRegistryPtr JobStats;
     TJobCountersProvider JobCountersProvider;
     THolder<NKikimr::NUdf::ISecureParamsProvider> SecureParamsProvider;
+    NUdf::TUniquePtr<NUdf::ILogProvider> LogProvider;
     THolder<NCommon::TCodecContext> CodecCtx;
 };
 

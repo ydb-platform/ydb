@@ -31,6 +31,7 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpExplain.CreateTableAs+Stats
 ydb/core/kqp/ut/query KqpExplain.CreateTableAs-Stats
+ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/runtime KqpScanSpilling.HandleErrorsCorrectly
@@ -70,14 +71,19 @@ ydb/tests/compatibility [test_statistics.py */*] chunk chunk
 ydb/tests/compatibility sole chunk chunk
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[last_stable_to_current-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[last_stable_to_current_mixed-column]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[24-4_to_25-1-column-date64]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[24-4_to_25-1-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[24-4_to_25-1-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_24-4-column-date64]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_24-4-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_24-4-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_25-1-column-date64]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_25-1-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_25-1-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_current-column-date64]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_current-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[25-1_to_current-row]
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_25-1-column-date64]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_25-1-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_25-1-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_current-row]
@@ -87,6 +93,8 @@ ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current_mixed-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[last_stable_to_current_mixed-row]
+ydb/tests/compatibility test_datetime2.py.TestDatetime2.test_all[25-1_and_24-4]
+ydb/tests/compatibility test_datetime2.py.TestDatetime2.test_all[current_and_25-1]
 ydb/tests/compatibility test_datetime2.py.TestDatetime2Format.test_simple[25-1_and_24-4]
 ydb/tests/compatibility test_datetime2.py.TestDatetime2Format.test_simple[current_and_25-1]
 ydb/tests/compatibility test_example.py.TestExampleRollingUpdate.test_example
@@ -96,6 +104,7 @@ ydb/tests/compatibility test_followers.py.TestFollowersCompatibility.test_follow
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[24-4_to_25-1-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[24-4_to_25-1-row]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[25-1_to_current-column]
+ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[25-1_to_current-row]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[column]
 ydb/tests/compatibility test_statistics.py.TestStatisticsFollowers.test_statistics_followers[24-4_to_25-1]
 ydb/tests/compatibility test_statistics.py.TestStatisticsFollowers.test_statistics_followers[25-1_to_24-4]
@@ -108,9 +117,12 @@ ydb/tests/compatibility test_stress.py.TestStress.test_log[current_and_25-1-colu
 ydb/tests/compatibility test_stress.py.TestStress.test_log[current_and_last_stable-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed-row]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1-row]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1_and_24-4-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[25-1_and_24-4-column]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_25-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_25-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_25-1-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[current_and_last_stable-column]
@@ -150,6 +162,7 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
 ydb/tests/functional/tpc/large sole chunk chunk
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args3-column]
 ydb/tests/olap [*/*] chunk chunk
 ydb/tests/olap sole chunk chunk

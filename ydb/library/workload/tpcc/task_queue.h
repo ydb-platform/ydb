@@ -1,11 +1,12 @@
 #pragma once
 
+#include "histogram.h"
+
 #include <library/cpp/threading/future/future.h>
 
 #include <exception>
 #include <coroutine>
 #include <memory>
-#include <stop_token>
 #include <utility>
 
 class TLog;
@@ -19,10 +20,10 @@ using Clock = std::chrono::steady_clock;
 //-----------------------------------------------------------------------------
 
 // We have two types of coroutines:
-// * Terminal task. It can sleep (co_awaiting) or wait for another task representing transaction.
-// * Transaction task. It performs async requests to YDB. When it is finished, it should continue terminal's task.
-// For now we allocate transaction coroutine each time we need it. However, we could try to reuse the coroutine and
-// avoid extra allocation / deallocation (in SDK/gRPC there will be allocations anyway).
+// * Outter or Internal (in TPC-C this is a terminal task). It can sleep (co_awaiting) or wait for another "inner" task.
+// * Inner or External (in TPC-C this is a transaction task). E.g. it might perform async requests to YDB.
+// when it is finished, terminal task continues. It is called external, because usually it has to use
+// thread-safe interface of ITaskQueue (future used to co_await is normally set by another thread).
 
 template <typename T>
 struct TTask {
@@ -210,6 +211,43 @@ struct TTask<void> {
 
 class ITaskQueue {
 public:
+    struct TThreadStats {
+        TThreadStats() = default;
+
+        TThreadStats(const TThreadStats& other) = delete;
+        TThreadStats(TThreadStats&& other) = delete;
+        TThreadStats& operator=(const TThreadStats& other) = delete;
+        TThreadStats& operator=(TThreadStats&& other) = delete;
+
+        void Collect(TThreadStats& dst) {
+            dst.InternalTasksSleeping.fetch_add(InternalTasksSleeping.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.InternalTasksWaitingInflight.fetch_add(InternalTasksWaitingInflight.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.InternalTasksReady.fetch_add(InternalTasksReady.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.ExternalTasksReady.fetch_add(ExternalTasksReady.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.InternalTasksResumed.fetch_add(InternalTasksResumed.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.ExternalTasksResumed.fetch_add(ExternalTasksResumed.load(std::memory_order_relaxed), std::memory_order_relaxed);
+
+            TGuard guard(HistLock);
+            dst.InternalInflightWaitTimeMs.Add(InternalInflightWaitTimeMs);
+            dst.InternalQueueTimeMs.Add(InternalQueueTimeMs);
+            dst.ExternalQueueTimeMs.Add(ExternalQueueTimeMs);
+        }
+
+        std::atomic<ui64> InternalTasksSleeping{0};
+        std::atomic<ui64> InternalTasksWaitingInflight{0};
+
+        std::atomic<ui64> InternalTasksReady{0};
+        std::atomic<ui64> ExternalTasksReady{0};
+
+        std::atomic<ui64> InternalTasksResumed{0};
+        std::atomic<ui64> ExternalTasksResumed{0};
+
+        TSpinLock HistLock;
+        THistogram InternalInflightWaitTimeMs{128, 512};
+        THistogram InternalQueueTimeMs{128, 512};
+        THistogram ExternalQueueTimeMs{128, 512};
+    };
+
     ITaskQueue() = default;
     virtual ~ITaskQueue() = default;
 
@@ -224,35 +262,37 @@ public:
 
     // functions are called from the thread executing the coroutine, no locks needed
 
-    virtual void TaskReady(std::coroutine_handle<> handle, size_t terminalId) = 0;
-    virtual void AsyncSleep(std::coroutine_handle<> handle, size_t terminalId, std::chrono::milliseconds delay) = 0;
+    virtual void TaskReady(std::coroutine_handle<> handle, size_t threadHint) = 0;
+    virtual void AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::milliseconds delay) = 0;
 
     // returns true if task must be suspeded
-    virtual bool IncInflight(std::coroutine_handle<> handle, size_t terminalId) = 0;
+    virtual bool IncInflight(std::coroutine_handle<> handle, size_t threadHint) = 0;
     virtual void DecInflight() = 0;
 
     // functions called by other threads
 
-    virtual void TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t terminalId) = 0;
+    virtual void TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t threadHint) = 0;
 
     // Check if current thread is one of the task queue threads
     virtual bool CheckCurrentThread() const = 0;
+
+    virtual void CollectStats(size_t threadIndex, TThreadStats& dst) = 0;
 };
 
 std::unique_ptr<ITaskQueue> CreateTaskQueue(
     size_t threadCount,
-    size_t maxRunningTerminals,
-    size_t maxReadyTerminals,
-    size_t maxReadyTransactions,
+    size_t maxRunningInternal,
+    size_t maxReadyInternal,
+    size_t maxReadyExternal,
     std::shared_ptr<TLog> log);
 
 //-----------------------------------------------------------------------------
 
 // used to implement AsyncSleep()
 struct TSuspend {
-    TSuspend(ITaskQueue& taskQueue, size_t terminalId, std::chrono::milliseconds delay)
+    TSuspend(ITaskQueue& taskQueue, size_t threadHint, std::chrono::milliseconds delay)
         : TaskQueue(taskQueue)
-        , TerminalId(terminalId)
+        , ThreadHint(threadHint)
         , Delay(delay)
     {
     }
@@ -262,13 +302,13 @@ struct TSuspend {
     }
 
     void await_suspend(std::coroutine_handle<> handle) {
-        TaskQueue.AsyncSleep(handle, TerminalId, Delay);
+        TaskQueue.AsyncSleep(handle, ThreadHint, Delay);
     }
 
     void await_resume() {}
 
     ITaskQueue& TaskQueue;
-    size_t TerminalId;
+    size_t ThreadHint;
     std::chrono::milliseconds Delay;
 };
 
@@ -279,10 +319,10 @@ struct TSuspend {
 // by SDK thread who set the promise value.
 template <typename T>
 struct TSuspendWithFuture {
-    TSuspendWithFuture(NThreading::TFuture<T>& future, ITaskQueue& taskQueue, size_t terminalId)
+    TSuspendWithFuture(NThreading::TFuture<T>& future, ITaskQueue& taskQueue, size_t threadHint)
         : Future(future)
         , TaskQueue(taskQueue)
-        , TerminalId(terminalId)
+        , ThreadHint(threadHint)
     {}
 
     TSuspendWithFuture() = delete;
@@ -296,7 +336,7 @@ struct TSuspendWithFuture {
     void await_suspend(std::coroutine_handle<> handle) {
         // we use subscribe as async wait and don't handle result here: resumed task will
         Future.NoexceptSubscribe([this, handle](const NThreading::TFuture<T>&) {
-            TaskQueue.TaskReadyThreadSafe(handle, TerminalId);
+            TaskQueue.TaskReadyThreadSafe(handle, ThreadHint);
         });
     }
 
@@ -306,15 +346,15 @@ struct TSuspendWithFuture {
 
     NThreading::TFuture<T>& Future;
     ITaskQueue& TaskQueue;
-    size_t TerminalId;
+    size_t ThreadHint;
 };
 
 template <>
 struct TSuspendWithFuture<void> {
-    TSuspendWithFuture(NThreading::TFuture<void>& future, ITaskQueue& taskQueue, size_t terminalId)
+    TSuspendWithFuture(NThreading::TFuture<void>& future, ITaskQueue& taskQueue, size_t threadHint)
         : Future(future)
         , TaskQueue(taskQueue)
-        , TerminalId(terminalId)
+        , ThreadHint(threadHint)
     {}
 
     TSuspendWithFuture() = delete;
@@ -328,7 +368,7 @@ struct TSuspendWithFuture<void> {
     void await_suspend(std::coroutine_handle<> handle) {
         // we use subscribe as async wait and don't handle result here: resumed task will
         Future.NoexceptSubscribe([this, handle](const NThreading::TFuture<void>&) {
-            TaskQueue.TaskReadyThreadSafe(handle, TerminalId);
+            TaskQueue.TaskReadyThreadSafe(handle, ThreadHint);
         });
     }
 
@@ -338,14 +378,14 @@ struct TSuspendWithFuture<void> {
 
     NThreading::TFuture<void>& Future;
     ITaskQueue& TaskQueue;
-    size_t TerminalId;
+    size_t ThreadHint;
 };
 
 // used by coroutine which might be started outside TaskQueue to await, when it is in TaskQueue
 struct TTaskReady {
-    TTaskReady(ITaskQueue& taskQueue, size_t terminalId)
+    TTaskReady(ITaskQueue& taskQueue, size_t threadHint)
         : TaskQueue(taskQueue)
-        , TerminalId(terminalId)
+        , ThreadHint(threadHint)
     {}
 
     bool await_ready() { return false; }
@@ -354,32 +394,32 @@ struct TTaskReady {
         if (TaskQueue.CheckCurrentThread()) {
             return false;
         }
-        TaskQueue.TaskReadyThreadSafe(h, TerminalId);
+        TaskQueue.TaskReadyThreadSafe(h, ThreadHint);
         return true;
     }
 
     void await_resume() {}
 
     ITaskQueue& TaskQueue;
-    size_t TerminalId;
+    size_t ThreadHint;
 };
 
 struct TTaskHasInflight {
-    TTaskHasInflight(ITaskQueue& taskQueue, size_t terminalId)
+    TTaskHasInflight(ITaskQueue& taskQueue, size_t threadHint)
         : TaskQueue(taskQueue)
-        , TerminalId(terminalId)
+        , ThreadHint(threadHint)
     {}
 
     bool await_ready() { return false; }
 
     bool await_suspend(std::coroutine_handle<> h) {
-        return TaskQueue.IncInflight(h, TerminalId);
+        return TaskQueue.IncInflight(h, ThreadHint);
     }
 
     void await_resume() {}
 
     ITaskQueue& TaskQueue;
-    size_t TerminalId;
+    size_t ThreadHint;
 };
 
 } // namespace NYdb::NTPCC

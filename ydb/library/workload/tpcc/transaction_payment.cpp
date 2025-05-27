@@ -266,11 +266,13 @@ NThreading::TFuture<TStatus> GetPaymentTask(TTransactionContext& context,
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;
-    LOG_T("Terminal " << context.TerminalID << " started Payment transaction");
 
     const int warehouseID = context.WarehouseID;
     const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
     const double paymentAmount = static_cast<double>(RandomNumber(100, 500000)) / 100.0;
+
+    LOG_T("Terminal " << context.TerminalID << " started Payment transaction in "
+        << warehouseID << ", " << districtID);
 
     // Update warehouse YTD
 

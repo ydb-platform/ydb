@@ -533,11 +533,13 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
     auto& Log = context.Log;
-    LOG_T("Terminal " << context.TerminalID << " started NewOrder transaction");
 
     const int warehouseID = context.WarehouseID;
     const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
     const int customerID = GetRandomCustomerID();
+
+    LOG_T("Terminal " << context.TerminalID << " started NewOrder transaction in "
+        << warehouseID << ", " << districtID << " for " << customerID);
 
     // Generate order line items
 

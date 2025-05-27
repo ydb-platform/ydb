@@ -7,6 +7,9 @@
 {%- endif -%}
 
 {%- set publish = all_targets|selectattr('publish', 'eq', true)|length -%}
+{%- if not output_root -%}
+{%-     set output_root = arcadia_root -%}
+{%- endif -%}
 
 {#- Kotlin -#}
 {%- set with_kotlin = all_targets|selectattr('with_kotlin', 'eq', true)|length -%}

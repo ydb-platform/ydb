@@ -6,20 +6,23 @@
 {#- Always replace (arcadia_root) === (SOURCE_ROOT in ymake) to $arcadia_root in Gradle -#}
 {%-     if depend -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to $arcadia_root in Gradle, because prebuilt tools in arcadia, not in build_root -#}
-"{{ arg|replace(export_root, "$arcadia_root")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root") }}"
+"{{ arg|replace(export_root, "$output_root")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root") }}"
 {%-     elif output and arg[0] != '/' -%}
 {#- Relative outputs in buildDir -#}
 "$buildDir/{{ arg }}"
+{%-     elif output -%}
+{#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
+"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
 {%-     else -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
-"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root") }}"
+"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root")|replace(output_root, "$output_root") }}"
 {%-     endif -%}
 {%- endmacro -%}
 
 {%- if proto_template -%}
 {%-     macro PatchGeneratedProto(arg, relative = false) -%}
 {%-         if relative -%}
-"{{ arg|replace(export_root + "/", "")|replace(arcadia_root + "/", "") }}"
+"{{ arg|replace(export_root + "/", "")|replace(arcadia_root + "/", "")|replace(output_root + "/", "") }}"
 {%-         else -%}
 "{{ arg|replace(export_root, "$baseBuildDir")|replace(arcadia_root, "$baseBuildDir") }}"
 {%-         endif -%}
@@ -34,7 +37,7 @@
 {%-     include "[generator]/proto_import.jinja" -%}
 {%-     include "[generator]/proto_builddir.jinja" -%}
 {%-     include "[generator]/proto_plugins.jinja" -%}
-{%-     include "[generator]/proto_configuration.jinja" -%}
+{%-     include "[generator]/configuration.jinja" -%}
 {%-     include "[generator]/protobuf.jinja" -%}
 {%-     include "[generator]/proto_prepare.jinja" -%}
 {%-     include "[generator]/build.gradle.kts.common.jinja" -%}

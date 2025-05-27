@@ -12,7 +12,7 @@
   * Добавлены параметры диапазона дат (`--date-to`, `--date-from`) в операции `{{ ydb-cli }} workload log run` для поддержки равномерного распределения первичных ключей.
 * Улучшена функциональность резервного копирования и восстановления:
   * Добавлена опция `--replace` в [команду](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) `{{ ydb-cli }} tools restore` для удаления существующих объектов, совпадающих с объектами в резервной копии, перед восстановлением.
-  * Улучшена [команда](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) `{{ ydb-cli }} tools dump`: таблицы назначения у ASYNC REPLICATION и их потоки изменений не сохраняются в локальные резервные копии. Это предотвращает дублирование потоков изменений и уменьшает размер резервной копии на диске.
+  * Улучшена [команда](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) `{{ ydb-cli }} tools dump`: [таблицы-реплики](./concepts/async-replication.md) у ASYNC REPLICATION и их [потоки изменений](./concepts/glossary.md#changefeed) не сохраняются в локальные резервные копии. Это предотвращает дублирование потоков изменений и уменьшает размер резервной копии на диске.
 * Улучшена удобство использования CLI:
   * Улучшены сообщения справки с лучшим разделением между подробной (`-hh`) и краткой (`-h`) справкой.
   * Добавлена автоматическая вставка парных скобок в интерактивном режиме `{{ ydb-cli }}`.
@@ -68,7 +68,7 @@
 
 ### Функциональность
 
-* Добавлена поддержка [потоков изменений (changefeeds)](./concepts/cdc.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
+* Добавлена поддержка [потоков изменений (changefeeds)](./concepts/glossary.md#changefeed) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
 * Добавлена рекомендация с текстом `CREATE TABLE` при схемной ошибке во время выполнения [команды](./reference/ydb-cli/export-import/import-file.md) `{{ ydb-cli }} import file csv`.
 * Добавлен вывод статистики для текущего процесса при выполнении [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload`.
 * Добавлен текст запроса к сообщению, если запрос завершился ошибкой при выполнении [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload run`.

@@ -49,10 +49,10 @@ class SimpleQueueBase(LoadSuiteBase):
     def test_workload_simple_queue(self, table_type: str):
         self.save_nodes_state()
         # Распаковываем бинарный файл из ресурсов
-        binary_path = self._unpack_workload_binary(WORKLOAD_BINARY_NAME) + self._unpack_workload_binary(YDB_CLI_BINARY_NAME)
+        binary_path = [self._unpack_workload_binary(WORKLOAD_BINARY_NAME), self._unpack_workload_binary(YDB_CLI_BINARY_NAME)]
         
         # Разворачиваем бинарный файл на всех нодах кластера
-        deploy_results = YdbCluster.deploy_binaries_to_nodes([binary_path], STRESS_BINARIES_DEPLOY_PATH)
+        deploy_results = YdbCluster.deploy_binaries_to_nodes(binary_path, STRESS_BINARIES_DEPLOY_PATH)
        
         # Для каждой ноды в кластере
         nodes = YdbCluster.get_cluster_nodes() #role=YdbCluster.Node.Role.STORAGE надо получить ROle storage = stat nodes

@@ -18,16 +18,14 @@
 - **Администратор** даёт право на выполнение административных действий с базами данных или кластером:
 
     - управление кластером:
-        - изменение динамической конфигурации кластера;
-        - управление пулами ресурсов;
+        - [изменение динамической конфигурации кластера](../devops/configuration-management/configuration-v2/update-config.md);
+        - [управление пулами ресурсов](../dev/resource-consumption-management.md);
 
        [//]: # (TODO: Удаляем?)
         - управление конфигурацией тарификации (metering config);
 
         [//]: # (TODO: Что за настройки?)
         - изменение настроек таблетки [Console](../concepts/glossary.md#console);
-
-        [//]: # (TODO: Что за сервис?)
         - запросы к сервису [maintenance](../devops/deployment-options/manual/maintenance.md) (list cluster nodes, манипуляции maintenance-задачами);
         - выполнение drain/fill узла {{ ydb-short-name }} через [YDB DSTool](../reference/ydb-dstool/index.md);
         - изменение статуса таблеток с помощью [minikql](../concepts/glossary.md#minikql)-запросов через CLI;

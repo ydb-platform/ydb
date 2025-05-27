@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/library/yql/providers/generic/provider)
 
 SRCS(
     pushdown_ut.cpp
+    re2_udf.cpp
 )
 
 PEERDIR(

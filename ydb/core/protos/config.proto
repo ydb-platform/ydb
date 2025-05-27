@@ -1048,9 +1048,15 @@ message TSqsConfig {
         }
     }
 
+    message TCloudEventsConfig {
+        optional bool EnableCloudEvents = 1 [default = false];
+        optional bool TenantMode = 2 [default = false];
+    }
+
     optional TYcSearchEventsConfig YcSearchEventsConfig = 66;
     optional TYdbAuthConfig AuthConfig = 67;
     optional uint64 StartLocalLeaderInflightMax = 71 [default = 500];
+    optional TCloudEventsConfig CloudEventsConfig = 73;
 }
 
 message TConfigsDispatcherConfig {

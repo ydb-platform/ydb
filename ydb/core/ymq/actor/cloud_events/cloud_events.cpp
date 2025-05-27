@@ -70,7 +70,7 @@ namespace NCloudEvents {
 
     template<typename TProtoEvent>
     void TFiller<TProtoEvent>::FillDetails() {
-        Ev.mutable_details()->set_name(EventInfo.Name);
+        Ev.mutable_details()->set_name(EventInfo.QueueName);
 
         for (const auto& [k, jsonValue] : EventInfo.Labels) {
             Ev.mutable_details()->mutable_labels()->insert({TString(k), jsonValue.GetStringRobust()});
@@ -91,8 +91,8 @@ namespace NCloudEvents {
 
     template<typename TProtoEvent>
     void TAuditSender::Send(const TProtoEvent& ev) {
-        Y_UNUSED(ev);
-        std::cerr << "I got the audit message!!!" << std::endl;
+        std::cerr << "cloud_events.cpp: I got the audit message!!!" << std::endl;
+        std::cerr << "cloud_events.cpp: auditsender: type: " << ev.event_metadata().event_type() << std::endl;
     }
 
     template void TAuditSender::Send<TCreateQueueEvent>(const TCreateQueueEvent&);
@@ -101,21 +101,17 @@ namespace NCloudEvents {
 
 // ===============================================================
     TString TProcessor::GetFullTablePath() const {
-        if (!Root.empty()) {
-            return TStringBuilder() << Root << "/" << EventTableName;
-        } else {
-            return TString(EventTableName);
-        }
+        return TStringBuilder() << Root << "/" << EventTableName;
     }
 
     TString TProcessor::GetInitSelectQuery() const {
         return TStringBuilder()
             << "--!syntax_v1" << "\n"
-            << "SELECT"
+            << "SELECT" << "\n"
             << "Id,"
             << "QueueName,"
-            << "Type,"
             << "CreatedAt,"
+            << "Type,"
             << "CloudId,"
             << "FolderId,"
             << "UserSID,"
@@ -124,17 +120,17 @@ namespace NCloudEvents {
             << "PeerName,"
             << "RequestId,"
             << "IdempotencyId,"
-            << "Labels"
-            << "FROM `" << GetFullTablePath() << "`\n";
+            << "Labels" << "\n"
+            << "FROM `" << GetFullTablePath() << "`;\n";
     }
 
     TString TProcessor::GetInitDeleteQuery() const {
         return TStringBuilder()
             << "--!syntax_v1" << "\n"
-            << "DECLARE $Events AS List<Struct<Id:Uint64, Name:String>>;" << "\n"
-            << "$EventsSource = (SELECT item.Id AS Id, item.Name AS Name"
+            << "DECLARE $Events AS List<Struct<Id:Uint64, QueueName:Utf8>>;" << "\n"
+            << "$EventsSource = (SELECT item.Id AS Id, item.QueueName AS QueueName" << "\n"
                              << "FROM (SELECT $Events AS events) FLATTEN LIST BY events as item);" << "\n"
-            << "DELETE FROM `" << GetFullTablePath() << "`"
+            << "DELETE FROM `" << GetFullTablePath() << "`" << "\n"
             << "ON SELECT * FROM $EventsSource;" << "\n";
     }
 
@@ -147,13 +143,18 @@ namespace NCloudEvents {
         , Database(database)
         , SelectQuery(GetInitSelectQuery())
         , DeleteQuery(GetInitDeleteQuery())
-    {}
+    {
+    }
 
-    void TProcessor::RunQuery(TString query, std::unique_ptr<NYdb::TParams> params) {
+    void TProcessor::RunQuery(TString query, std::unique_ptr<NYdb::TParams> params, bool readOnly) {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         auto* request = ev->Record.MutableRequest();
 
         request->SetKeepSession(true);
+
+        if (!SessionId.empty()) {
+            request->SetSessionId(SessionId);
+        }
 
         if (!Database.empty()) {
             request->SetDatabase(Database);
@@ -164,7 +165,13 @@ namespace NCloudEvents {
         request->SetQuery(query);
 
         request->MutableQueryCachePolicy()->set_keep_in_cache(true);
-        request->MutableTxControl()->mutable_begin_tx()->mutable_online_read_only();
+
+        if (readOnly) {
+            request->MutableTxControl()->mutable_begin_tx()->mutable_online_read_only();
+        } else {
+            request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        }
+
         request->MutableTxControl()->set_commit_tx(true);
 
         if (params) {
@@ -175,6 +182,7 @@ namespace NCloudEvents {
     }
 
     void TProcessor::Bootstrap() {
+        Schedule(DefaultRetryTimeout, new TEvents::TEvWakeup);
         Become(&TProcessor::StateWaitWakeUp);
     }
 
@@ -222,21 +230,24 @@ namespace NCloudEvents {
         while (parser.TryNextRow()) {
             result.push_back({});
             auto& cloudEvent = result.back();
-            uint_fast64_t id = *parser.ColumnParser(0).GetOptionalUint64();
-            TString type = *parser.ColumnParser(1).GetOptionalString();
+
+            cloudEvent.OriginalId = *parser.ColumnParser(0).GetOptionalUint64();
+            TString type = *parser.ColumnParser(1).GetOptionalUtf8();
             cloudEvent.Type = DefaultEventTypePrefix + type;
             cloudEvent.CreatedAt = *parser.ColumnParser(2).GetOptionalUint64();
-            cloudEvent.Id = convertId(id, cloudEvent.Type, cloudEvent.CreatedAt);
-            cloudEvent.CloudId = *parser.ColumnParser(3).GetOptionalString();
-            cloudEvent.FolderId = *parser.ColumnParser(4).GetOptionalString();
-            cloudEvent.UserSID = *parser.ColumnParser(5).GetOptionalString();
-            cloudEvent.UserSanitizedToken = *parser.ColumnParser(6).GetOptionalString();
-            cloudEvent.AuthType = *parser.ColumnParser(7).GetOptionalString();
-            cloudEvent.RemoteAddress = *parser.ColumnParser(8).GetOptionalString();
-            cloudEvent.RequestId = *parser.ColumnParser(9).GetOptionalString();
-            cloudEvent.IdempotencyId = *parser.ColumnParser(10).GetOptionalString();
-            cloudEvent.Name = *parser.ColumnParser(11).GetOptionalString();
-            cloudEvent.Labels = convertLabels(*parser.ColumnParser(12).GetOptionalString());
+
+            cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
+
+            cloudEvent.CloudId = *parser.ColumnParser(3).GetOptionalUtf8();
+            cloudEvent.FolderId = *parser.ColumnParser(4).GetOptionalUtf8();
+            cloudEvent.UserSID = *parser.ColumnParser(5).GetOptionalUtf8();
+            cloudEvent.UserSanitizedToken = *parser.ColumnParser(6).GetOptionalUtf8();
+            cloudEvent.AuthType = *parser.ColumnParser(7).GetOptionalUtf8();
+            cloudEvent.RemoteAddress = *parser.ColumnParser(8).GetOptionalUtf8();
+            cloudEvent.RequestId = *parser.ColumnParser(9).GetOptionalUtf8();
+            cloudEvent.IdempotencyId = *parser.ColumnParser(10).GetOptionalUtf8();
+            cloudEvent.QueueName = *parser.ColumnParser(11).GetOptionalUtf8();
+            cloudEvent.Labels = convertLabels(*parser.ColumnParser(12).GetOptionalUtf8());
         }
 
         return result;
@@ -253,8 +264,14 @@ namespace NCloudEvents {
     void TProcessor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-            // LOG_ERROR_S(this->ActorContext(), NKikimrServices::SQS,
-            //                 "YC Cloud event processor: Got error trying to perform create request:" << record);
+            TString error = "DeleteResponse: Failed.\n";
+            for (const auto& issue : record.GetResponse().GetQueryIssues()) {
+                error += issue.message() + "\n";
+            }
+
+            std::cerr << error << std::endl;
+            // LOG_ERROR_S(this->ActorContext(), NKikimrServices::SQS, error);
+
             ProcessFailure();
             return;
         }
@@ -266,16 +283,42 @@ namespace NCloudEvents {
         UpdateSessionId(ev);
 
         LastQuery = ELastQueryType::Delete;
-        // TODO: Add params
-        RunQuery(DeleteQuery);
+
+        NYdb::TParamsBuilder paramsBuilder;
+
+        auto& param = paramsBuilder.AddParam("$Events");
+        param.BeginList();
+
+        for (const auto& cloudEv : EventsList) {
+            param.AddListItem()
+                .BeginStruct()
+                .AddMember("Id")
+                    .Uint64(cloudEv.OriginalId)
+                .AddMember("QueueName")
+                    .Utf8(cloudEv.QueueName)
+                .EndStruct();
+        }
+
+        param.EndList();
+        param.Build();
+
+        auto params = paramsBuilder.Build();
+
+        RunQuery(DeleteQuery, std::make_unique<decltype(params)>(params), false);
         Become(&TProcessor::StateWaitDeleteResponse);
     }
 
     void TProcessor::HandleDeleteResponse(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-            // LOG_ERROR_S(this->ActorContext(), NKikimrServices::SQS,
-            //                 "YC Cloud event processor: Got error trying to perform delete request: " << record);
+            TString error = "DeleteResponse: Failed.\n";
+            for (const auto& issue : record.GetResponse().GetQueryIssues()) {
+                error += issue.message() + "\n";
+            }
+
+            std::cerr << error << std::endl;
+            // LOG_ERROR_S(this->ActorContext(), NKikimrServices::SQS, error);
+
             ProcessFailure();
             return;
         }
@@ -283,23 +326,24 @@ namespace NCloudEvents {
         UpdateSessionId(ev);
 
         for (const auto& cloudEvent : EventsList) {
-            if (cloudEvent.Type.substr(DefaultEventTypePrefix.size()) == "CreateMessageQueue") {
+            std::string_view typeView(cloudEvent.Type.begin() + DefaultEventTypePrefix.size(), cloudEvent.Type.end());
+
+            if (typeView == "CreateMessageQueue") {
                 TCreateQueueEvent ev;
                 TFiller<TCreateQueueEvent> filler(cloudEvent, ev);
                 filler.Fill();
                 TAuditSender::Send<TCreateQueueEvent>(ev);
-            } else if (cloudEvent.Type.substr(DefaultEventTypePrefix.size()) == "UpdateMessageQueue") {
+            } else if (typeView == "UpdateMessageQueue") {
                 TUpdateQueueEvent ev;
                 TFiller<TUpdateQueueEvent> filler(cloudEvent, ev);
                 filler.Fill();
                 TAuditSender::Send<TUpdateQueueEvent>(ev);
-            } else if (cloudEvent.Type.substr(DefaultEventTypePrefix.size()) == "DeleteMessageQueue") {
+            } else if (typeView == "DeleteMessageQueue") {
                 TDeleteQueueEvent ev;
                 TFiller<TDeleteQueueEvent> filler(cloudEvent, ev);
                 filler.Fill();
                 TAuditSender::Send<TDeleteQueueEvent>(ev);
             } else {
-                std::cerr << "TYPE = " << cloudEvent.type << std::endl;
                 // Y_UNREACHABLE();
             }
         }

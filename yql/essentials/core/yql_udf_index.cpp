@@ -53,6 +53,9 @@ TVector<TResourceInfo::TPtr> ConvertResolveResultToResources(const TResolveResul
             newFunction.Messages.push_back(m);
         }
 
+        newFunction.MinLangVer = udf.GetMinLangVer();
+        newFunction.MaxLangVer = udf.GetMaxLangVer();
+
         functionIndex[package].push_back(newFunction);
     }
 

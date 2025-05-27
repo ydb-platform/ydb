@@ -133,6 +133,10 @@ public:
     TTerminal(TTerminal&&) = delete;
     TTerminal& operator=(TTerminal&&) = delete;
 
+    size_t GetID() const {
+        return Context.TerminalID;
+    }
+
     void Start();
 
     bool IsDone() const;

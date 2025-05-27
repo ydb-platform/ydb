@@ -259,6 +259,7 @@ public:
 
     virtual void Run() = 0;
     virtual void Join() = 0;
+    virtual void WakeupAndNeverSleep() = 0;
 
     // functions are called from the thread executing the coroutine, no locks needed
 
@@ -277,6 +278,8 @@ public:
     virtual bool CheckCurrentThread() const = 0;
 
     virtual void CollectStats(size_t threadIndex, TThreadStats& dst) = 0;
+
+    virtual size_t GetRunningCount() const = 0;
 };
 
 std::unique_ptr<ITaskQueue> CreateTaskQueue(

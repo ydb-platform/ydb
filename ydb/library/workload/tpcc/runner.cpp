@@ -27,6 +27,7 @@ namespace {
 
 constexpr auto SleepMsEveryIterationMainLoop = std::chrono::milliseconds(50);
 constexpr auto DisplayUpdateInterval = std::chrono::seconds(15);
+constexpr auto GracefulShutdownTimeout = std::chrono::seconds(5);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
 
@@ -145,9 +146,6 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     , Config(runConfig)
     , Log(std::make_shared<TLog>(CreateLogBackend("cerr", Config.LogPriority, true)))
 {
-    signal(SIGINT, InterruptHandler);
-    signal(SIGTERM, InterruptHandler);
-
     ConnectionConfig.IsNetworkIntensive = true;
     ConnectionConfig.UsePerChannelTcpConnection = true;
 
@@ -214,6 +212,11 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         Terminals.emplace_back(std::move(terminalPtr));
     }
 
+    // we set handler as late as possible to overwrite
+    // any handlers set deeply inside
+    signal(SIGINT, InterruptHandler);
+    signal(SIGTERM, InterruptHandler);
+
     // we want to have even load distribution and not start terminals from first INFLIGHT warehouses,
     // then next, etc. Long warmup resolves this, but we want to have a good start even without warmup
     std::random_shuffle(Terminals.begin(), Terminals.end());
@@ -233,10 +236,34 @@ void TPCCRunner::Join() {
     }
 
     LOG_I("Stopping the terminals...");
-    TerminalsStopSource.request_stop();
 
-    // we don't have to wait terminals to finish suspended coroutines, just stop
-    // threads executing coroutines
+    // to gracefully shutdown, we must wait for all termianls
+    // and especially running queries to finish
+    TerminalsStopSource.request_stop();
+    TaskQueue->WakeupAndNeverSleep();
+
+    auto shutdownTs = Clock::now();
+    for (const auto& terminal: Terminals) {
+        // terminals should wait for their query coroutines to finish
+        if (!terminal->IsDone()) {
+            LOG_T("Waiting for terminal " << terminal->GetID());
+        }
+        while (!terminal->IsDone()) {
+            std::this_thread::sleep_for(SleepMsEveryIterationMainLoop);
+            auto now = Clock::now();
+            auto delta = now - shutdownTs;
+            if (delta >= GracefulShutdownTimeout) {
+                LOG_E("Graceful shutdown timeout on terminal " << terminal->GetID());
+                break;
+            }
+        }
+        auto now = Clock::now();
+        auto delta = now - shutdownTs;
+        if (delta >= GracefulShutdownTimeout) {
+            break;
+        }
+    }
+
     LOG_I("Stopping task queue");
     TaskQueue->Join();
     LOG_I("Runner stopped");
@@ -328,7 +355,8 @@ void TPCCRunner::UpdateDisplayDeveloperMode() {
                   << std::endl;
     }
 
-    std::cout << "\ntpmC: " << std::fixed << std::setprecision(2) << LastStatisticsSnapshot->Tpmc << std::endl;
+    std::cout << "\nRunning terminals: " << TaskQueue->GetRunningCount();
+    std::cout << "\nCurrent tpmC: " << std::fixed << std::setprecision(2) << LastStatisticsSnapshot->Tpmc << std::endl;
 }
 
 std::unique_ptr<TAllStatistics> TPCCRunner::CollectStatistics(Clock::time_point now) {

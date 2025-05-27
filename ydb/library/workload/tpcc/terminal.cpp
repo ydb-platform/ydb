@@ -109,6 +109,10 @@ TTerminalTask TTerminal::Run() {
             }
 
             co_await TTaskHasInflight(TaskQueue, Context.TerminalID);
+            if (StopToken.stop_requested()) {
+                TaskQueue.DecInflight();
+                break;
+            }
 
             LOG_T("Terminal " << Context.TerminalID << " starting " << transaction.Name << " transaction");
 

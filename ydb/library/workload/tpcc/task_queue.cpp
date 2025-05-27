@@ -66,6 +66,7 @@ public:
 
     void Run() override;
     void Join() override;
+    void WakeupAndNeverSleep() override;
 
     void TaskReady(std::coroutine_handle<>, size_t threadHint) override;
     void AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::milliseconds delay) override;
@@ -78,8 +79,15 @@ public:
 
     void CollectStats(size_t threadIndex, TThreadStats& dst) override;
 
+    size_t GetRunningCount() const override {
+        return RunningInternalCount.load(std::memory_order_relaxed);
+    }
+
 private:
     void RunThread(size_t threadId);
+    void ProcessSleepingTasks(size_t threadId, TPerThreadContext& context, Clock::time_point now);
+    void ProcessInflightQueue(size_t threadId, TPerThreadContext& context, std::optional<ui64>& internalInflightWaitTimeMs);
+
     void HandleQueueFull(const char* queueType);
 
 private:
@@ -92,6 +100,7 @@ private:
     std::atomic<size_t> RunningInternalCount{0};
 
     std::stop_source ThreadsStopSource;
+    std::atomic_flag WakeupAll;
     std::vector<std::thread> Threads;
     std::vector<std::unique_ptr<TPerThreadContext>> PerThreadContext;
 };
@@ -151,6 +160,10 @@ void TTaskQueue::Join() {
     }
 }
 
+void TTaskQueue::WakeupAndNeverSleep() {
+    WakeupAll.test_and_set(std::memory_order_relaxed);
+}
+
 void TTaskQueue::HandleQueueFull(const char* queueType) {
     LOG_E("Failed to push ready " << queueType << ", queue is full");
     throw std::runtime_error(std::string("Task queue is full: ") + queueType);
@@ -172,14 +185,19 @@ void TTaskQueue::AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, s
 }
 
 bool TTaskQueue::IncInflight(std::coroutine_handle<> handle, size_t threadHint) {
+    auto prevRunningCount = RunningInternalCount.fetch_add(1, std::memory_order_relaxed);
+
+    // no limit
     if (MaxRunningInternal == 0) {
         return false;
     }
 
-    auto runningCount = RunningInternalCount.fetch_add(1, std::memory_order_relaxed);
-    if (runningCount < MaxRunningInternal) {
-        return false; // do not suspend
+    // if we are within the limit, do not suspend
+    if (prevRunningCount < MaxRunningInternal) {
+        return false;
     }
+
+    // blocked by inflight limit, decrese back and put task to the queue
 
     RunningInternalCount.fetch_sub(1, std::memory_order_relaxed);
 
@@ -193,9 +211,6 @@ bool TTaskQueue::IncInflight(std::coroutine_handle<> handle, size_t threadHint) 
 }
 
 void TTaskQueue::DecInflight() {
-    if (MaxRunningInternal == 0) {
-        return;
-    }
     RunningInternalCount.fetch_sub(1, std::memory_order_relaxed);
 }
 
@@ -209,6 +224,46 @@ void TTaskQueue::TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t thre
     }
 }
 
+void TTaskQueue::ProcessSleepingTasks(size_t, TPerThreadContext& context, Clock::time_point now) {
+    while (!context.SleepingTasks.Empty() &&
+            (context.SleepingTasks.GetNextDeadline() <= now || WakeupAll.test(std::memory_order_relaxed) )) {
+        auto handle = context.SleepingTasks.PopFront().Value;
+        if (!context.ReadyTasksInternal.TryPush({std::move(handle), THPTimer()})) {
+            HandleQueueFull("internal (awakened)");
+        }
+    }
+}
+
+void TTaskQueue::ProcessInflightQueue(
+    size_t threadId,
+    TPerThreadContext& context,
+    std::optional<ui64>& internalInflightWaitTimeMs)
+{
+    if (MaxRunningInternal == 0) {
+        return;
+    }
+
+    auto& stats = context.Stats;
+    while (!context.InflightWaitingTasksInternal.Empty()
+            && RunningInternalCount.load(std::memory_order_relaxed) < MaxRunningInternal) {
+        auto runningCount = RunningInternalCount.fetch_add(1, std::memory_order_relaxed);
+        if (runningCount >= MaxRunningInternal) {
+            RunningInternalCount.fetch_sub(1, std::memory_order_relaxed);
+            break;
+        }
+
+        THandleWithTs internalTask;
+        if (context.InflightWaitingTasksInternal.TryPop(internalTask)) {
+            if (internalTask.Handle && !internalTask.Handle.done()) {
+                LOG_D("Thread " << threadId << " resumed task waited for inflight (internal)");
+                internalInflightWaitTimeMs = int(internalTask.Timer.Passed() * 1000);
+                stats.InternalTasksResumed.fetch_add(1, std::memory_order_relaxed);
+                internalTask.Handle.resume();
+            }
+        }
+    }
+}
+
 void TTaskQueue::RunThread(size_t threadId) {
     TaskQueueThreadId = static_cast<int>(threadId);
     TThread::SetCurrentThreadName((TStringBuilder() << "task_queue_" << threadId).c_str());
@@ -218,44 +273,17 @@ void TTaskQueue::RunThread(size_t threadId) {
     auto& context = *PerThreadContext[threadId];
     auto& stats = context.Stats;
 
-    std::optional<ui64> internalInflightWaitTimeMs;
-    std::optional<ui64> internalQueueTimeMs;
-    std::optional<ui64> externalQueueTimeMs;
-
     while (!ThreadsStopSource.stop_requested()) {
+        std::optional<ui64> internalInflightWaitTimeMs;
+        std::optional<ui64> internalQueueTimeMs;
+        std::optional<ui64> externalQueueTimeMs;
+
         auto now = Clock::now();
 
-        stats.InternalTasksSleeping.store(context.SleepingTasks.Size(), std::memory_order_relaxed);
-        stats.InternalTasksWaitingInflight.store(context.InflightWaitingTasksInternal.Size(), std::memory_order_relaxed);
-        stats.InternalTasksReady.store(context.ReadyTasksInternal.Size(), std::memory_order_relaxed);
+        ProcessInflightQueue(threadId, context, internalInflightWaitTimeMs);
+        ProcessSleepingTasks(threadId, context, now);
 
-        if (MaxRunningInternal != 0) {
-            while (!context.InflightWaitingTasksInternal.Empty()
-                    && RunningInternalCount.load(std::memory_order_relaxed) < MaxRunningInternal) {
-                auto runningCount = RunningInternalCount.fetch_add(1, std::memory_order_relaxed);
-                if (runningCount >= MaxRunningInternal) {
-                    RunningInternalCount.fetch_sub(1, std::memory_order_relaxed);
-                    break;
-                }
-
-                THandleWithTs internalTask;
-                if (context.InflightWaitingTasksInternal.TryPop(internalTask)) {
-                    if (internalTask.Handle && !internalTask.Handle.done()) {
-                        LOG_D("Thread " << threadId << " resumed task waited for inflight (internal)");
-                        internalInflightWaitTimeMs = int(internalTask.Timer.Passed() * 1000);
-                        stats.InternalTasksResumed.fetch_add(1, std::memory_order_relaxed);
-                        internalTask.Handle.resume();
-                    }
-                }
-            }
-        }
-
-        while (!context.SleepingTasks.Empty() && context.SleepingTasks.GetNextDeadline() <= now) {
-            auto handle = context.SleepingTasks.PopFront().Value;
-            if (!context.ReadyTasksInternal.TryPush({std::move(handle), THPTimer()})) {
-                HandleQueueFull("internal (awakened)");
-            }
-        }
+        // External task
 
         std::optional<THandleWithTs> externalTask;
         {
@@ -274,6 +302,8 @@ void TTaskQueue::RunThread(size_t threadId) {
             externalTask->Handle.resume();
         }
 
+        // Internal task
+
         THandleWithTs internalTask;
         if (context.ReadyTasksInternal.TryPop(internalTask)) {
             if (internalTask.Handle && !internalTask.Handle.done()) {
@@ -284,6 +314,11 @@ void TTaskQueue::RunThread(size_t threadId) {
             }
         }
 
+        // Update stats
+
+        stats.InternalTasksSleeping.store(context.SleepingTasks.Size(), std::memory_order_relaxed);
+        stats.InternalTasksWaitingInflight.store(context.InflightWaitingTasksInternal.Size(), std::memory_order_relaxed);
+        stats.InternalTasksReady.store(context.ReadyTasksInternal.Size(), std::memory_order_relaxed);
         {
             TGuard guard(stats.HistLock);
             if (internalInflightWaitTimeMs) {

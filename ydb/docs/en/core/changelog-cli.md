@@ -12,7 +12,7 @@
   * Added date range parameters (`--date-to`, `--date-from`) to the `{{ ydb-cli }} workload log run` command to support uniform primary key distribution.
 * Enhanced backup and restore functionality:
   * Added the `--replace` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) to remove existing objects that match those in the backup before restoration.
-  * Improved the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) by not saving tables with ASYNC REPLICATION and their changefeeds to local backups. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
+  * Improved the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) by not saving destination tables with ASYNC REPLICATION and their changefeeds to local backups. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
 * Enhanced CLI usability:
   * Improved help messages with better distinction between detailed (`-hh`) and brief (`-h`) help.
   * Added automatic pair insertion for brackets in `{{ ydb-cli }}` interactive mode.

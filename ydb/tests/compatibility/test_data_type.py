@@ -11,7 +11,8 @@ TABLE_NAME = "table"
 
 
 class TestDataType(RestartToAnotherVersionFixture):
-    def setup_method(self):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
         self.table_name = TABLE_NAME
         self.count_rows = 30
         self.all_types = {**pk_types, **non_pk_types}
@@ -19,10 +20,6 @@ class TestDataType(RestartToAnotherVersionFixture):
             "pk_": pk_types.keys(),
             "col_": self.all_types.keys(),
         }
-
-    @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-
         yield from self.setup_cluster(
             extra_feature_flags={
                 "enable_parameterized_decimal": True,

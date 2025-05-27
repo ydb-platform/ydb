@@ -194,6 +194,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields) {
         if (updateFields) {
+            if (auto error = UpdateClusterState(config)) {
+                return FinishWithError(TResult::ERROR, *error);
+            }
             config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
             config->MutablePrevConfig()->ClearPrevConfig();
             UpdateFingerprint(config);

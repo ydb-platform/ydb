@@ -752,6 +752,8 @@ namespace NKikimr::NStorage {
     std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
         ui64 *mainConfigVersion, TString *mainConfigFetchYaml);
 
+    std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config);
+
 } // NKikimr::NStorage
 
 template<>
